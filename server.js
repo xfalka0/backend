@@ -132,7 +132,7 @@ app.put('/api/users/:id/profile', async (req, res) => {
 
         // 1. Create Base Tables (Bootstrap)
         await db.query(`CREATE TABLE IF NOT EXISTS users (
-            id SERIAL PRIMARY KEY,
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
             username VARCHAR(255) UNIQUE NOT NULL,
             password VARCHAR(255) NOT NULL,
             is_admin BOOLEAN DEFAULT FALSE,
@@ -148,6 +148,7 @@ app.put('/api/users/:id/profile', async (req, res) => {
 
         await db.query(`CREATE TABLE IF NOT EXISTS operators (
             id SERIAL PRIMARY KEY,
+            user_id UUID REFERENCES users(id),
             name VARCHAR(255) NOT NULL,
             image TEXT,
             is_online BOOLEAN DEFAULT TRUE,
@@ -156,8 +157,8 @@ app.put('/api/users/:id/profile', async (req, res) => {
 
         await db.query(`CREATE TABLE IF NOT EXISTS chats (
             id SERIAL PRIMARY KEY,
-            user_id INTEGER REFERENCES users(id),
-            operator_id INTEGER REFERENCES users(id),
+            user_id UUID REFERENCES users(id),
+            operator_id UUID REFERENCES users(id),
             last_message TEXT,
             unread_count INTEGER DEFAULT 0,
             last_message_at TIMESTAMP DEFAULT NOW(),
@@ -167,7 +168,7 @@ app.put('/api/users/:id/profile', async (req, res) => {
         await db.query(`CREATE TABLE IF NOT EXISTS messages (
             id SERIAL PRIMARY KEY,
             chat_id INTEGER REFERENCES chats(id),
-            sender_id INTEGER,
+            sender_id UUID REFERENCES users(id),
             content TEXT,
             content_type VARCHAR(50) DEFAULT 'text',
             is_read BOOLEAN DEFAULT FALSE,
@@ -316,7 +317,7 @@ app.get('/api/setup-admin', async (req, res) => {
         // Create Activities Table (Real-time logs)
         await db.query(`CREATE TABLE IF NOT EXISTS activities (
             id SERIAL PRIMARY KEY,
-            user_id INTEGER REFERENCES users(id),
+            user_id UUID REFERENCES users(id),
             action_type VARCHAR(50),
             description TEXT,
             created_at TIMESTAMP DEFAULT NOW()
@@ -325,7 +326,7 @@ app.get('/api/setup-admin', async (req, res) => {
         // Create Pending Photos Table (Moderation)
         await db.query(`CREATE TABLE IF NOT EXISTS pending_photos (
             id SERIAL PRIMARY KEY,
-            user_id INTEGER REFERENCES users(id),
+            user_id UUID REFERENCES users(id),
             type VARCHAR(50),
             url TEXT,
             status VARCHAR(50) DEFAULT 'pending',

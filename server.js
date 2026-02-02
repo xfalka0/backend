@@ -419,6 +419,48 @@ app.get('/api/setup-admin', async (req, res) => {
     }
 });
 
+// TEMP: Manual Seeding Route
+app.get('/api/seed-data', async (req, res) => {
+    const secret = req.query.secret;
+    if (secret !== 'falka_setup_2024') return res.status(403).send('Forbidden');
+
+    try {
+        const opCount = await db.query('SELECT COUNT(*) FROM operators');
+        if (parseInt(opCount.rows[0].count) > 0) {
+            return res.send('<h1>Database already populated</h1><p>Operators exist. Skipping seed.</p>');
+        }
+
+        const dummyOps = [
+            { name: 'Selin', bio: 'Merhaba, ben Selin. Sohbet etmeyi severim.', cat: 'Eğlenceli', img: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=400' },
+            { name: 'Merve', bio: 'Dertleşmek istersen buradayım.', cat: 'Dert Ortağı', img: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=400' },
+            { name: 'Aslı', bio: 'Moda ve alışveriş tutkunuyum.', cat: 'Moda', img: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=400' },
+            { name: 'Zeynep', bio: 'Kitaplar ve kahve...', cat: 'Kültür', img: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=400' }
+        ];
+
+        for (const op of dummyOps) {
+            // 1. Create User
+            const uniqueUsername = op.name.toLowerCase() + '_' + Date.now();
+            const uniqueEmail = uniqueUsername + '@test.com';
+            const userRes = await db.query(
+                "INSERT INTO users (username, email, password, password_hash, role, avatar_url, display_name, gender) VALUES ($1, $2, 'pass123', 'pass123', 'operator', $3, $4, 'kadin') RETURNING id",
+                [uniqueUsername, uniqueEmail, op.img, op.name]
+            );
+            const userId = userRes.rows[0].id;
+
+            // 2. Create Operator
+            await db.query(
+                "INSERT INTO operators (user_id, category, bio, photos, is_online, rating) VALUES ($1, $2, $3, $4, true, 5.0)",
+                [userId, op.cat, op.bio, [op.img]]
+            );
+        }
+
+        res.send('<h1>Seeding Complete!</h1><p>Created 4 dummy operators.</p>');
+
+    } catch (err) {
+        res.status(500).send(`Error: ${err.message}`);
+    }
+});
+
 // GET ADMIN STATS (Dashboard)
 app.get('/api/admin/stats', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
     try {

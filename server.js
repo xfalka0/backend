@@ -202,20 +202,33 @@ app.get('/', (req, res) => {
 
 // --- ADMIN USER MANAGEMENT ---
 
-// TEMP: One-time Setup Route for Production
+// TEMP: One-time Setup Route for Production with Auto-Migration
 app.get('/api/setup-admin', async (req, res) => {
     const secret = req.query.secret;
     if (secret !== 'falka_setup_2024') return res.status(403).send('Forbidden');
 
     try {
+        // 1. Auto-Migration: Ensure account_status column exists
+        try {
+            await db.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS account_status VARCHAR(20) DEFAULT 'active'");
+        } catch (migErr) {
+            console.error("Migration warning:", migErr.message);
+            // Continue, maybe it exists or error is harmless
+        }
+
+        // 2. Create Admin
         const hashedPassword = await bcrypt.hash('admin123', 10);
         await db.query(
             "INSERT INTO users (username, email, password_hash, role, balance, account_status) VALUES ($1, $2, $3, 'admin', 0, 'active') ON CONFLICT (username) DO NOTHING",
             ['admin', 'admin@falka.com', hashedPassword]
         );
-        res.send('Admin user created/verified. Login: admin@falka.com / admin123');
+
+        // 3. Ensure existing users have status if null
+        await db.query("UPDATE users SET account_status = 'active' WHERE account_status IS NULL");
+
+        res.send('Database updated & Admin user created. Login: admin@falka.com / admin123');
     } catch (err) {
-        res.status(500).send(err.message);
+        res.status(500).send("Setup Error: " + err.message);
     }
 });
 

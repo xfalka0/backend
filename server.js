@@ -228,7 +228,9 @@ app.get('/api/setup-admin', async (req, res) => {
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS is_vip BOOLEAN DEFAULT FALSE",
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_url TEXT DEFAULT 'https://via.placeholder.com/150'",
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS display_name VARCHAR(255)",
-            "ALTER TABLE users ADD COLUMN IF NOT EXISTS gender VARCHAR(10) DEFAULT 'kadin'"
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS gender VARCHAR(10) DEFAULT 'kadin'",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login_at TIMESTAMP",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT NOW()"
         ];
 
         for (const query of migrations) {

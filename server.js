@@ -100,6 +100,60 @@ app.put('/api/users/:id/profile', async (req, res) => {
 (async () => {
     try {
         console.log('🔄 [MIGRATION] Checking database connection and schema...');
+
+        // 1. Create Base Tables (Bootstrap)
+        await db.query(`CREATE TABLE IF NOT EXISTS users (
+            id SERIAL PRIMARY KEY,
+            username VARCHAR(255) UNIQUE NOT NULL,
+            password VARCHAR(255) NOT NULL,
+            is_admin BOOLEAN DEFAULT FALSE,
+            balance INTEGER DEFAULT 0,
+            profile_image TEXT,
+            gender VARCHAR(10) DEFAULT 'kadin',
+            display_name VARCHAR(255),
+            total_spent DECIMAL(10, 2) DEFAULT 0,
+            vip_level INTEGER DEFAULT 0,
+            account_status VARCHAR(50) DEFAULT 'active',
+            created_at TIMESTAMP DEFAULT NOW()
+        )`);
+
+        await db.query(`CREATE TABLE IF NOT EXISTS operators (
+            id SERIAL PRIMARY KEY,
+            name VARCHAR(255) NOT NULL,
+            image TEXT,
+            is_online BOOLEAN DEFAULT TRUE,
+            job VARCHAR(100)
+        )`);
+
+        await db.query(`CREATE TABLE IF NOT EXISTS chats (
+            id SERIAL PRIMARY KEY,
+            user_id INTEGER REFERENCES users(id),
+            operator_id INTEGER REFERENCES operators(id),
+            last_message TEXT,
+            unread_count INTEGER DEFAULT 0,
+            last_message_at TIMESTAMP DEFAULT NOW(),
+            created_at TIMESTAMP DEFAULT NOW()
+        )`);
+
+        await db.query(`CREATE TABLE IF NOT EXISTS messages (
+            id SERIAL PRIMARY KEY,
+            chat_id INTEGER REFERENCES chats(id),
+            sender_id INTEGER,
+            content TEXT,
+            content_type VARCHAR(50) DEFAULT 'text',
+            is_read BOOLEAN DEFAULT FALSE,
+            created_at TIMESTAMP DEFAULT NOW()
+        )`);
+
+        await db.query(`CREATE TABLE IF NOT EXISTS pending_photos (
+            id SERIAL PRIMARY KEY,
+            user_id INTEGER REFERENCES users(id),
+            photo_url TEXT NOT NULL,
+            status VARCHAR(20) DEFAULT 'pending',
+            created_at TIMESTAMP DEFAULT NOW()
+        )`);
+
+        // 2. Apply Alterations (For existing local DBs that might lack new columns)
         await db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS gender VARCHAR(10) DEFAULT 'kadin'`);
         await db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS display_name VARCHAR(255)`);
         await db.query(`ALTER TABLE operators ADD COLUMN IF NOT EXISTS job VARCHAR(100)`);

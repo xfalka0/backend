@@ -133,7 +133,12 @@ app.put('/api/users/:id/profile', async (req, res) => {
 // Auto-Migration: Ensure necessary columns exist
 (async () => {
     try {
+        console.log("Database initialization starting...");
         console.log('🔄 [MIGRATION] Checking database connection and schema...');
+
+        // 0. Enable Extensions
+        await db.query('CREATE EXTENSION IF NOT EXISTS "pgcrypto"');
+        console.log("[DB] pgcrypto extension ensured.");
 
         // 1. Create Base Tables (Bootstrap)
         await db.query(`CREATE TABLE IF NOT EXISTS users (
@@ -293,11 +298,10 @@ app.get('/api/setup-admin', async (req, res) => {
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS gender VARCHAR(10) DEFAULT 'kadin'",
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login_at TIMESTAMP",
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT NOW()",
-            "ALTER TABLE operators ADD COLUMN IF NOT EXISTS user_id INTEGER",
+            "ALTER TABLE operators ADD COLUMN IF NOT EXISTS user_id UUID REFERENCES users(id)",
             "ALTER TABLE operators ADD COLUMN IF NOT EXISTS category VARCHAR(100)",
             "ALTER TABLE operators ADD COLUMN IF NOT EXISTS bio TEXT",
             "ALTER TABLE operators ADD COLUMN IF NOT EXISTS photos TEXT[]",
-            "ALTER TABLE operators ADD COLUMN IF NOT EXISTS rating DECIMAL(3, 1) DEFAULT 5.0",
             "ALTER TABLE operators ADD COLUMN IF NOT EXISTS rating DECIMAL(3, 1) DEFAULT 5.0",
             "ALTER TABLE operators ALTER COLUMN name DROP NOT NULL",
             "DO $$ BEGIN IF EXISTS(SELECT * FROM information_schema.columns WHERE table_name='pending_photos' AND column_name='photo_url') THEN ALTER TABLE pending_photos RENAME COLUMN photo_url TO url; END IF; END $$",
@@ -328,8 +332,10 @@ app.get('/api/setup-admin', async (req, res) => {
             created_at TIMESTAMP DEFAULT NOW()
         )`);
 
-        // Create Pending Photos Table (Moderation)
-        await db.query(`CREATE TABLE IF NOT EXISTS pending_photos (
+        // Drop and Recreate Pending Photos Table to ensure schema match (Safe for now as it's just moderation data)
+        console.log("[DB] Recreating pending_photos table to fix schema mismatch...");
+        await db.query(`DROP TABLE IF EXISTS pending_photos CASCADE`);
+        await db.query(`CREATE TABLE pending_photos (
             id SERIAL PRIMARY KEY,
             user_id UUID REFERENCES users(id),
             type VARCHAR(50),
@@ -337,8 +343,7 @@ app.get('/api/setup-admin', async (req, res) => {
             status VARCHAR(50) DEFAULT 'pending',
             created_at TIMESTAMP DEFAULT NOW()
         )`);
-
-
+        console.log("[DB] pending_photos table recreated successfully.");
 
         for (const query of migrations) {
             try {
@@ -1427,8 +1432,7 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
 
         console.log(`[UPLOAD] Processing file: ${req.file.filename}, ext: ${ext}, path: ${filePath}`);
 
-        // --- SHARP TEMPORARILY DISABLED TO PREVENT MEMORY CRASHES ---
-        /*
+        // Optimize if it's an image
         if (['.jpg', '.jpeg', '.png', '.webp'].includes(ext)) {
             try {
                 console.log(`[UPLOAD] Starting Sharp optimization for ${filePath}`);
@@ -1445,9 +1449,9 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
                 }
             } catch (optimizeErr) {
                 console.error('[UPLOAD] Sharp optimization error:', optimizeErr.message);
+                // Continue with original file if optimization fails
             }
         }
-        */
 
         const relativePath = `/uploads/${req.file.filename}`;
         const protocol = req.protocol;
@@ -1469,6 +1473,7 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
 // Submit a photo for moderation
 app.post('/api/moderation/submit', async (req, res) => {
     const { userId, type, url } = req.body; // type: 'avatar' or 'album'
+    console.log(`[MODERATION] Submit from ${userId}, type: ${type}, url: ${url}`);
     try {
         const result = await db.query(
             'INSERT INTO pending_photos (user_id, type, url) VALUES ($1, $2, $3) RETURNING *',

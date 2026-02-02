@@ -4,6 +4,9 @@ const { Server } = require('socket.io');
 const cors = require('cors');
 const db = require('./db');
 require('dotenv').config();
+const bcrypt = require('bcrypt');
+const { authenticateToken, authorizeRole, SECRET_KEY } = require('./middleware/auth');
+const jwt = require('jsonwebtoken');
 
 const app = express();
 const multer = require('multer');
@@ -197,6 +200,84 @@ app.get('/', (req, res) => {
 
 // ... (existing routes) ...
 
+// --- ADMIN USER MANAGEMENT ---
+
+// GET ALL USERS (Manager/Admin Only)
+app.get('/api/admin/users', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
+    try {
+        const result = await db.query('SELECT id, username, email, role, account_status, created_at, last_login_at FROM users ORDER BY created_at DESC');
+        res.json(result.rows);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// CREATE NEW ADMIN/MODERATOR (Manager/Admin Only)
+app.post('/api/admin/users', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
+    const { username, email, password, role } = req.body;
+
+    // Validate role
+    if (!['admin', 'moderator', 'operator', 'user'].includes(role)) {
+        return res.status(400).json({ error: 'Geçersiz rol.' });
+    }
+
+    try {
+        // Hash password
+        const hashedPassword = await bcrypt.hash(password, 10);
+
+        const result = await db.query(
+            "INSERT INTO users (username, email, password_hash, role, balance) VALUES ($1, $2, $3, $4, 0) RETURNING id, username, email, role",
+            [username, email, hashedPassword, role]
+        );
+
+        res.status(201).json(result.rows[0]);
+    } catch (err) {
+        if (err.code === '23505') { // Unique violation
+            return res.status(400).json({ error: 'Kullanıcı adı veya e-posta zaten mevcut.' });
+        }
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// UPDATE USER ROLE (Manager/Admin Only)
+app.put('/api/admin/users/:id/role', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
+    const { id } = req.params;
+    const { role } = req.body;
+
+    if (!['admin', 'moderator', 'operator', 'user'].includes(role)) {
+        return res.status(400).json({ error: 'Geçersiz rol.' });
+    }
+
+    try {
+        const result = await db.query(
+            'UPDATE users SET role = $1 WHERE id = $2 RETURNING id, username, role',
+            [role, id]
+        );
+
+        if (result.rows.length === 0) return res.status(404).json({ error: 'Kullanıcı bulunamadı.' });
+
+        res.json(result.rows[0]);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// DELETE USER (Manager/Admin Only)
+app.delete('/api/admin/users/:id', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
+    const { id } = req.params;
+    // Prevent deleting self? Frontend should handle, but backend safeguard nice-to-have.
+    if (req.user.id === id) {
+        return res.status(400).json({ error: 'Kendinizi silemezsiniz.' });
+    }
+
+    try {
+        await db.query('DELETE FROM users WHERE id = $1', [id]);
+        res.json({ success: true, message: 'Kullanıcı silindi.' });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // REPORT USER
 app.post('/api/report', async (req, res) => {
     const { reporterId, reportedId, reason, details } = req.body;
@@ -304,20 +385,66 @@ app.post('/api/login', async (req, res) => {
 
     try {
         const result = await db.query('SELECT * FROM users WHERE email = $1', [email]);
-        if (result.rows.length > 0) {
-            // Found real user
-            return res.json({ user: result.rows[0], token: 'fake-jwt-token' });
-        } else if (email === 'user@test.com' && password === 'pass123') {
-            // Fallback mock ONLY if not in DB (should be in DB from seed)
-            const mockUser = { id: 'c917f7d6-cc44-4b04-8917-1dbbed0b1e9b', username: 'testuser', email, role: 'user', hearts: 100, avatar_url: 'https://i.pravatar.cc/150?img=3' };
-            return res.json({ user: mockUser, token: 'mock-token' });
-        } else {
-            res.status(401).json({ error: 'User not found' });
+        if (result.rows.length === 0) {
+            return res.status(401).json({ error: 'Kullanıcı bulunamadı veya şifre yanlış.' });
         }
+
+        const user = result.rows[0];
+
+        // Verify Password
+        // Note: For existing plain text passwords in dev, you might want a fallback or reset DB.
+        // Assuming new users or admin created via script will have hashed passwords.
+        // For dev purposes, if password doesn't start with $2b$, compare plain text (TEMPORARY FIX FOR DEV)
+        let validPassword = false;
+        if (user.password_hash.startsWith('$2b$')) {
+            validPassword = await bcrypt.compare(password, user.password_hash);
+        } else {
+            validPassword = (password === user.password_hash); // Fallback for legacy dev data
+        }
+
+        if (!validPassword) {
+            return res.status(401).json({ error: 'Kullanıcı bulunamadı veya şifre yanlış.' });
+        }
+
+        if (user.account_status !== 'active') {
+            return res.status(403).json({ error: 'Hesabınız askıya alınmış.' });
+        }
+
+        // Generate Token
+        const token = jwt.sign(
+            { id: user.id, username: user.username, role: user.role },
+            SECRET_KEY,
+            { expiresIn: '24h' }
+        );
+
+        res.json({
+            user: {
+                id: user.id,
+                username: user.username,
+                email: user.email,
+                role: user.role,
+                avatar_url: user.avatar_url,
+                display_name: user.display_name
+            },
+            token
+        });
+
     } catch (err) {
-        console.error("DB Login Error:", err.message);
+        console.error("Login Error:", err.message);
         res.status(500).json({ error: err.message });
     }
+});
+
+// ME (Token Verification)
+app.get('/api/me', authenticateToken, (req, res) => {
+    res.json({
+        id: req.user.id,
+        username: req.user.username,
+        email: req.user.email,
+        role: req.user.role,
+        avatar_url: req.user.avatar_url,
+        display_name: req.user.display_name
+    });
 });
 
 // GET OPERATORS
@@ -375,7 +502,7 @@ app.get('/api/operators', async (req, res) => {
 });
 
 // CREATE OPERATOR (Admin Profile)
-app.post('/api/operators', async (req, res) => {
+app.post('/api/operators', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
     const { name, avatar_url, category, bio, photos, gender } = req.body;
 
     try {
@@ -410,7 +537,7 @@ app.post('/api/operators', async (req, res) => {
 });
 
 // UPDATE OPERATOR
-app.put('/api/operators/:id', async (req, res) => {
+app.put('/api/operators/:id', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
     const { id } = req.params;
     const { name, avatar_url, category, bio, photos, gender } = req.body;
 
@@ -629,7 +756,7 @@ app.get('/api/moderation/pending', async (req, res) => {
 });
 
 // Approve a photo
-app.post('/api/moderation/approve', async (req, res) => {
+app.post('/api/moderation/approve', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
     const { photoId } = req.body;
     try {
         // 1. Get photo details
@@ -659,7 +786,7 @@ app.post('/api/moderation/approve', async (req, res) => {
 });
 
 // Reject a photo
-app.post('/api/moderation/reject', async (req, res) => {
+app.post('/api/moderation/reject', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
     const { photoId } = req.body;
     try {
         await db.query('UPDATE pending_photos SET status = \'rejected\' WHERE id = $1', [photoId]);

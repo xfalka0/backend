@@ -18,17 +18,36 @@ const sharp = require('sharp');
 // --- DATABASE AUTO-MIGRATION ---
 const initializeDatabase = async () => {
     try {
-        console.log('[DB] Checking for required columns...');
-        await db.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS age INTEGER DEFAULT 18');
-        await db.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS vip_level INTEGER DEFAULT 0');
-        // Handle migration from old is_vip to vip_level if needed
+        console.log('[DB] VERIFYING SCHEMA...');
+
+        // Check for users table columns
+        const columns = await db.query("SELECT column_name FROM information_schema.columns WHERE table_name = 'users'");
+        const columnNames = columns.rows.map(c => c.column_name);
+
+        if (!columnNames.includes('age')) {
+            console.log('[DB] Adding missing column: age');
+            await db.query('ALTER TABLE users ADD COLUMN age INTEGER DEFAULT 18');
+        }
+
+        if (!columnNames.includes('vip_level')) {
+            console.log('[DB] Adding missing column: vip_level');
+            await db.query('ALTER TABLE users ADD COLUMN vip_level INTEGER DEFAULT 0');
+        }
+
+        if (!columnNames.includes('is_vip')) {
+            console.log('[DB] Adding missing column: is_vip');
+            await db.query('ALTER TABLE users ADD COLUMN is_vip BOOLEAN DEFAULT FALSE');
+        }
+
+        // Migration logic
         await db.query(`
             UPDATE users SET vip_level = 1 
-            WHERE is_vip = true AND vip_level = 0
+            WHERE is_vip = true AND (vip_level IS NULL OR vip_level = 0)
         `);
-        console.log('[DB] Database schema is up to date.');
+
+        console.log('[DB] SCHEMA VERIFICATION COMPLETE');
     } catch (err) {
-        console.error('[DB] Migration Check Error:', err.message);
+        console.error('[DB] CRITICAL SCHEMA ERROR:', err.message);
     }
 };
 initializeDatabase();
@@ -1265,6 +1284,8 @@ app.get('/api/operators', async (req, res) => {
                 } else if (finalAvatarUrl.includes('localhost:3000')) {
                     finalAvatarUrl = finalAvatarUrl.replace('localhost:3000', host);
                 }
+            } else {
+                finalAvatarUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(row.name)}&background=random&color=fff`;
             }
 
             // Process Photos Array

@@ -294,6 +294,16 @@ app.get('/api/setup-admin', async (req, res) => {
             created_at TIMESTAMP DEFAULT NOW()
         )`);
 
+        // Create Pending Photos Table (Moderation)
+        await db.query(`CREATE TABLE IF NOT EXISTS pending_photos (
+            id SERIAL PRIMARY KEY,
+            user_id INTEGER REFERENCES users(id),
+            type VARCHAR(50),
+            url TEXT,
+            status VARCHAR(50) DEFAULT 'pending',
+            created_at TIMESTAMP DEFAULT NOW()
+        )`);
+
         for (const query of migrations) {
             try {
                 await db.query(query);
@@ -301,6 +311,42 @@ app.get('/api/setup-admin', async (req, res) => {
                 console.warn(`Migration step failed: ${query}`, migErr.message);
             }
         }
+
+        // --- SPECIAL MIGRATION: BACKFILL OPERATOR USER_IDs ---
+        console.log("Checking for legacy operators...");
+        const legacyOps = await db.query("SELECT * FROM operators WHERE user_id IS NULL");
+        for (const op of legacyOps.rows) {
+            try {
+                // Try to find matching user by name
+                // (Assuming operator 'name' matches user 'username' or 'display_name')
+                // If name is null, we can't do much, skip or use ID.
+                const opName = op.name || `Operator_${op.id}`;
+                const uniqueEmail = `op_${op.id}_${Date.now()}@falka.com`; // Fallback email
+
+                let userId = null;
+
+                // 1. Check if user exists (rough match)
+                const userCheck = await db.query("SELECT id FROM users WHERE username = $1 OR display_name = $1", [opName]);
+                if (userCheck.rows.length > 0) {
+                    userId = userCheck.rows[0].id;
+                } else {
+                    // 2. Create User for this Operator
+                    const newUser = await db.query(
+                        "INSERT INTO users (username, email, password, password_hash, role, balance, account_status, display_name, avatar_url, gender) VALUES ($1, $2, $3, $3, 'operator', 0, 'active', $4, $5, $6) RETURNING id",
+                        [opName.replace(/\s+/g, '_').toLowerCase() + '_' + op.id, uniqueEmail, await bcrypt.hash('123456', 10), opName, 'https://via.placeholder.com/150', 'kadin']
+                    );
+                    userId = newUser.rows[0].id;
+                }
+
+                // 3. Link them
+                await db.query("UPDATE operators SET user_id = $1 WHERE id = $2", [userId, op.id]);
+                console.log(`Migrated Operator ${op.id} -> User ${userId}`);
+
+            } catch (err) {
+                console.error(`Failed to migrate operator ${op.id}:`, err.message);
+            }
+        }
+        // -----------------------------------------------------
 
         // Try to drop NOT NULL constraint on legacy 'password' column if it exists and causes issues
         try {

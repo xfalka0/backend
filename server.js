@@ -265,10 +265,14 @@ app.get('/api/debug/db-check', async (req, res) => {
         const legacyChats = await db.query('SELECT COUNT(*) FROM chats WHERE operator_id > 10000'); // Rough check for un-migrated chats (ids usually small, old IDs were small too but new user_ids might be different? actually just check raw count)
         const sampleOps = await db.query('SELECT * FROM operators LIMIT 3');
 
+        // Check schema of pending_photos
+        const pendingPhotosCols = await db.query("SELECT column_name, data_type FROM information_schema.columns WHERE table_name = 'pending_photos'");
+
         res.json({
             users: users.rows[0].count,
             operators: ops.rows[0].count,
             null_user_id_ops: nullOps.rows[0].count,
+            pending_photos_schema: pendingPhotosCols.rows,
             sample_ops: sampleOps.rows
         });
     } catch (err) {

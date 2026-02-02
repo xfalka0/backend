@@ -253,7 +253,7 @@ app.put('/api/users/:id/profile', async (req, res) => {
 
 // Health Check
 app.get('/', (req, res) => {
-    res.send('Chat System Backend is Running (FIX_V2)');
+    res.send('Chat System Backend is Running (FIX_V4)');
 });
 
 // DEBUG: DB Check
@@ -1781,6 +1781,82 @@ io.on('connection', (socket) => {
     socket.on('disconnect', () => {
         console.log('User disconnected:', socket.id);
     });
+});
+
+// MANUAL EMERGENCY FIX V2: Chameleon Fix (UUID/INT Adaptive)
+app.get('/api/admin/force-fix-schema-v2', async (req, res) => {
+    const logs = [];
+    const log = (msg) => { console.log(msg); logs.push(msg); };
+
+    // 1. Basic security check
+    if (req.query.secret !== 'falka_fix_now') {
+        return res.json({ status: 'error', message: 'Access Denied', logs });
+    }
+
+    try {
+        log("⚠️ [MANUAL V2] Starting Smart Schema Repair (Type Adaptive)...");
+
+        // 2. DETECT USERS ID TYPE (Crucial!)
+        let userIdType = 'UUID'; // Default
+        try {
+            const userTypeCheck = await db.query(`
+                SELECT data_type 
+                FROM information_schema.columns 
+                WHERE table_name = 'users' AND column_name = 'id'
+            `);
+            if (userTypeCheck.rows.length > 0) {
+                const type = userTypeCheck.rows[0].data_type.toUpperCase();
+                log(`ℹ️ [MANUAL V2] Detected users.id type: ${type}`);
+                if (type === 'INTEGER' || type === 'INT') {
+                    userIdType = 'INTEGER';
+                }
+            } else {
+                log("⚠️ [MANUAL V2] Could not detect users.id type, defaulting to UUID.");
+            }
+        } catch (e) {
+            log(`❌ [MANUAL V2] Failed to check users type: ${e.message}`);
+        }
+
+        // 3. Try Create if not exists with MATCHING TYPE
+        try {
+            await db.query(`CREATE TABLE IF NOT EXISTS pending_photos (
+                id SERIAL PRIMARY KEY,
+                user_id ${userIdType} REFERENCES users(id),
+                type VARCHAR(50),
+                url TEXT,
+                status VARCHAR(50) DEFAULT 'pending',
+                created_at TIMESTAMP DEFAULT NOW()
+            )`);
+            log(`✅ [MANUAL V2] 'CREATE TABLE IF NOT EXISTS' executed with user_id: ${userIdType}.`);
+        } catch (e) { log(`❌ [MANUAL V2] Create failed: ${e.message}`); }
+
+        // 4. Force Add Columns (Safe, idempotent)
+        const addCol = async (col, type) => {
+            try {
+                await db.query(`ALTER TABLE pending_photos ADD COLUMN IF NOT EXISTS ${col} ${type}`);
+                log(`✅ [MANUAL V2] Checked/Added column: ${col}`);
+            } catch (e) { log(`❌ [MANUAL V2] Failed to add ${col}: ${e.message}`); }
+        };
+
+        await addCol('type', 'VARCHAR(50)');
+        await addCol('url', 'TEXT');
+        await addCol('status', "VARCHAR(50) DEFAULT 'pending'");
+
+        // 5. Verify Schema
+        const check = await db.query(`SELECT column_name, data_type FROM information_schema.columns WHERE table_name='pending_photos'`);
+
+        res.json({
+            status: 'success',
+            message: 'Smart repair complete (V2).',
+            logs: logs,
+            detected_id_type: userIdType,
+            final_schema: check.rows
+        });
+
+    } catch (err) {
+        log(`❌ [MANUAL V2] Critical Error: ${err.message}`);
+        res.json({ status: 'error', error: err.message, logs: logs });
+    }
 });
 
 // Global Error Handler for Multer/Other

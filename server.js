@@ -186,6 +186,13 @@ app.put('/api/users/:id/profile', async (req, res) => {
             created_at TIMESTAMP DEFAULT NOW()
         )`);
 
+        // Try to relax password constraint if it exists
+        try {
+            await db.query(`ALTER TABLE users ALTER COLUMN password DROP NOT NULL`);
+        } catch (e) {
+            // Ignore if column doesn't exist or other error
+        }
+
         console.log('✅ [MIGRATION] Schema check/update successfully.');
     } catch (err) {
         console.error('❌ [MIGRATION] CRITICAL ERROR:', err.message);
@@ -232,14 +239,22 @@ app.get('/api/setup-admin', async (req, res) => {
             }
         }
 
+        // Try to drop NOT NULL constraint on legacy 'password' column if it exists and causes issues
+        try {
+            await db.query("ALTER TABLE users ALTER COLUMN password DROP NOT NULL");
+        } catch (migErr) {
+            console.warn("Could not drop NOT NULL on password (maybe okay):", migErr.message);
+        }
+
         // 2. Create Admin
         const hashedPassword = await bcrypt.hash('admin123', 10);
 
         // Check if admin exists
         const check = await db.query("SELECT * FROM users WHERE username = 'admin' OR email = 'admin@falka.com'");
         if (check.rows.length === 0) {
+            // FIX: Include 'password' column (legacy) to satisfy potential NOT NULL constraint
             await db.query(
-                "INSERT INTO users (username, email, password_hash, role, balance, account_status) VALUES ($1, $2, $3, 'admin', 0, 'active')",
+                "INSERT INTO users (username, email, password, password_hash, role, balance, account_status) VALUES ($1, $2, $3, $3, 'admin', 0, 'active')",
                 ['admin', 'admin@falka.com', hashedPassword]
             );
             res.send('<h1>Success!</h1><p>Database columns repaired.</p><p>Admin user created.</p><p>Login: admin@falka.com / admin123</p>');
@@ -277,8 +292,9 @@ app.post('/api/admin/users', authenticateToken, authorizeRole('admin', 'super_ad
         // Hash password
         const hashedPassword = await bcrypt.hash(password, 10);
 
+        // Include legacy 'password' field in INSERT for compatibility
         const result = await db.query(
-            "INSERT INTO users (username, email, password_hash, role, balance) VALUES ($1, $2, $3, $4, 0) RETURNING id, username, email, role",
+            "INSERT INTO users (username, email, password, password_hash, role, balance) VALUES ($1, $2, $3, $3, $4, 0) RETURNING id, username, email, role",
             [username, email, hashedPassword, role]
         );
 
@@ -420,7 +436,7 @@ app.post('/api/register', async (req, res) => {
         // Create User
         // Note: In production use bcrypt for passwords!
         const newUser = await db.query(
-            "INSERT INTO users (username, email, password_hash, role, balance, avatar_url) VALUES ($1, $2, $3, 'user', 100, 'https://via.placeholder.com/150') RETURNING *",
+            "INSERT INTO users (username, email, password, password_hash, role, balance, avatar_url) VALUES ($1, $2, $3, $3, 'user', 100, 'https://via.placeholder.com/150') RETURNING *",
             [email.split('@')[0], email, password]
         );
 
@@ -448,10 +464,10 @@ app.post('/api/login', async (req, res) => {
         // Assuming new users or admin created via script will have hashed passwords.
         // For dev purposes, if password doesn't start with $2b$, compare plain text (TEMPORARY FIX FOR DEV)
         let validPassword = false;
-        if (user.password_hash.startsWith('$2b$')) {
+        if (user.password_hash && user.password_hash.startsWith('$2b$')) {
             validPassword = await bcrypt.compare(password, user.password_hash);
-        } else {
-            validPassword = (password === user.password_hash); // Fallback for legacy dev data
+        } else if (user.password) { // Fallback to legacy password
+            validPassword = (password === user.password);
         }
 
         if (!validPassword) {
@@ -566,9 +582,10 @@ app.post('/api/operators', authenticateToken, authorizeRole('admin', 'super_admi
         const uniqueUsername = `${name}_${ts}`;
 
         // 1. Create a User entry for the operator
+        // FIX: Provide legacy password for non-null constraint
         const userResult = await db.query(
-            'INSERT INTO users (username, email, password_hash, role, avatar_url, gender, display_name) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id',
-            [uniqueUsername, uniqueEmail, 'hashed_password', 'operator', avatar_url, gender || 'kadin', name]
+            "INSERT INTO users (username, email, password, password_hash, role, avatar_url, gender, display_name) VALUES ($1, $2, $3, $3, 'operator', $4, $5, $6) RETURNING id",
+            [uniqueUsername, uniqueEmail, 'hashed_password', avatar_url, gender || 'kadin', name]
         );
 
         const userId = userResult.rows[0].id;

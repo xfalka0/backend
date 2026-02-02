@@ -204,31 +204,53 @@ app.get('/', (req, res) => {
 
 // TEMP: One-time Setup Route for Production with Auto-Migration
 app.get('/api/setup-admin', async (req, res) => {
+    // Basic secret check
     const secret = req.query.secret;
     if (secret !== 'falka_setup_2024') return res.status(403).send('Forbidden');
 
     try {
-        // 1. Auto-Migration: Ensure account_status column exists
-        try {
-            await db.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS account_status VARCHAR(20) DEFAULT 'active'");
-        } catch (migErr) {
-            console.error("Migration warning:", migErr.message);
-            // Continue, maybe it exists or error is harmless
+        console.log("Starting Auto-Migration...");
+
+        // 1. Comprehensive Auto-Migration: Add ALL potentially missing columns
+        const migrations = [
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS email VARCHAR(255) UNIQUE",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash VARCHAR(255)",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS role VARCHAR(50) DEFAULT 'user'",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS account_status VARCHAR(20) DEFAULT 'active'",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS balance INT DEFAULT 0",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS is_vip BOOLEAN DEFAULT FALSE",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_url TEXT DEFAULT 'https://via.placeholder.com/150'",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS display_name VARCHAR(255)",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS gender VARCHAR(10) DEFAULT 'kadin'"
+        ];
+
+        for (const query of migrations) {
+            try {
+                await db.query(query);
+            } catch (migErr) {
+                console.warn(`Migration step failed: ${query}`, migErr.message);
+            }
         }
 
         // 2. Create Admin
         const hashedPassword = await bcrypt.hash('admin123', 10);
-        await db.query(
-            "INSERT INTO users (username, email, password_hash, role, balance, account_status) VALUES ($1, $2, $3, 'admin', 0, 'active') ON CONFLICT (username) DO NOTHING",
-            ['admin', 'admin@falka.com', hashedPassword]
-        );
 
-        // 3. Ensure existing users have status if null
-        await db.query("UPDATE users SET account_status = 'active' WHERE account_status IS NULL");
+        // Check if admin exists
+        const check = await db.query("SELECT * FROM users WHERE username = 'admin' OR email = 'admin@falka.com'");
+        if (check.rows.length === 0) {
+            await db.query(
+                "INSERT INTO users (username, email, password_hash, role, balance, account_status) VALUES ($1, $2, $3, 'admin', 0, 'active')",
+                ['admin', 'admin@falka.com', hashedPassword]
+            );
+            res.send('<h1>Success!</h1><p>Database columns repaired.</p><p>Admin user created.</p><p>Login: admin@falka.com / admin123</p>');
+        } else {
+            await db.query("UPDATE users SET password_hash = $1, role = 'admin', account_status = 'active', email = 'admin@falka.com' WHERE username = 'admin'", [hashedPassword]);
+            res.send('<h1>Success!</h1><p>Database columns repaired.</p><p>Admin user verified and updated.</p><p>Login: admin@falka.com / admin123</p>');
+        }
 
-        res.send('Database updated & Admin user created. Login: admin@falka.com / admin123');
     } catch (err) {
-        res.status(500).send("Setup Error: " + err.message);
+        console.error("Setup Error:", err);
+        res.status(500).send(`<h1>Error</h1><p>${err.message}</p><pre>${JSON.stringify(err, null, 2)}</pre>`);
     }
 });
 

@@ -285,6 +285,46 @@ app.get('/api/debug/db-check', async (req, res) => {
 
 // --- ADMIN USER MANAGEMENT ---
 
+// MANUAL EMERGENCY FIX: Force Schema Recreation
+app.get('/api/admin/force-fix-schema', async (req, res) => {
+    // 1. Basic security check
+    if (req.query.secret !== 'falka_fix_now') {
+        return res.status(403).json({ error: 'Access Denied' });
+    }
+
+    try {
+        console.log("⚠️ [MANUAL] Forcing pending_photos schema fix...");
+
+        // 2. Drop Table
+        await db.query(`DROP TABLE IF EXISTS pending_photos CASCADE`);
+        console.log("✅ [MANUAL] Dropped table.");
+
+        // 3. Recreate Table (Correct Schema)
+        await db.query(`CREATE TABLE pending_photos (
+            id SERIAL PRIMARY KEY,
+            user_id UUID REFERENCES users(id),
+            type VARCHAR(50),
+            url TEXT,
+            status VARCHAR(50) DEFAULT 'pending',
+            created_at TIMESTAMP DEFAULT NOW()
+        )`);
+        console.log("✅ [MANUAL] Recreated table.");
+
+        // 4. Verify Column
+        const check = await db.query(`SELECT column_name, data_type FROM information_schema.columns WHERE table_name='pending_photos'`);
+
+        res.json({
+            status: 'success',
+            message: 'pending_photos table forced recreation complete.',
+            new_schema: check.rows
+        });
+
+    } catch (err) {
+        console.error("❌ [MANUAL] Fix failed:", err.message);
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // TEMP: One-time Setup Route for Production with Auto-Migration
 app.get('/api/setup-admin', async (req, res) => {
     // Basic secret check

@@ -112,11 +112,11 @@ app.get('/api/users/:id', async (req, res) => {
 // UPDATE USER PROFILE
 app.put('/api/users/:id/profile', async (req, res) => {
     const { id } = req.params;
-    const { display_name } = req.body;
+    const { display_name, bio, avatar_url } = req.body;
     try {
         const result = await db.query(
-            'UPDATE users SET display_name = $1 WHERE id = $2 RETURNING *',
-            [display_name, id]
+            'UPDATE users SET display_name = COALESCE($1, display_name), bio = COALESCE($2, bio), avatar_url = COALESCE($3, avatar_url) WHERE id = $4 RETURNING *',
+            [display_name, bio, avatar_url, id]
         );
         if (result.rows.length === 0) return res.status(404).json({ error: 'User not found' });
         res.json(result.rows[0]);
@@ -198,6 +198,8 @@ app.put('/api/users/:id/profile', async (req, res) => {
 
         // Report & Block System migration
         await db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS account_status VARCHAR(50) DEFAULT 'active'`);
+        await db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS bio TEXT`);
+        await db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_url TEXT`);
         await db.query(`CREATE TABLE IF NOT EXISTS reports (
             id SERIAL PRIMARY KEY,
             reporter_id INTEGER,
@@ -222,7 +224,11 @@ app.put('/api/users/:id/profile', async (req, res) => {
             // Ignore if column doesn't exist or other error
         }
 
-        console.log('✅ [MIGRATION] Schema check/update successfully.');
+        // Fix chats table constraint (operator_id should point to users table)
+        await db.query(`ALTER TABLE chats DROP CONSTRAINT IF EXISTS chats_operator_id_fkey`);
+        await db.query(`ALTER TABLE chats ADD CONSTRAINT chats_operator_id_fkey FOREIGN KEY (operator_id) REFERENCES users(id)`);
+
+        console.log('✅ [MIGRATION] Schema check complete.');
     } catch (err) {
         console.error('❌ [MIGRATION] CRITICAL ERROR:', err.message);
         console.error('Check if database "dating" exists and postgres user has permissions.');

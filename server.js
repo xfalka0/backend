@@ -157,7 +157,7 @@ app.put('/api/users/:id/profile', async (req, res) => {
         await db.query(`CREATE TABLE IF NOT EXISTS chats (
             id SERIAL PRIMARY KEY,
             user_id INTEGER REFERENCES users(id),
-            operator_id INTEGER REFERENCES operators(id),
+            operator_id INTEGER REFERENCES users(id),
             last_message TEXT,
             unread_count INTEGER DEFAULT 0,
             last_message_at TIMESTAMP DEFAULT NOW(),
@@ -1030,8 +1030,8 @@ app.post('/api/register', async (req, res) => {
         // Create User
         // Note: In production use bcrypt for passwords!
         const newUser = await db.query(
-            "INSERT INTO users (username, email, password, password_hash, role, balance, avatar_url) VALUES ($1, $2, $3, $3, 'user', 100, 'https://via.placeholder.com/150') RETURNING *",
-            [email.split('@')[0], email, password]
+            "INSERT INTO users (username, email, password, password_hash, role, balance, avatar_url, display_name) VALUES ($1, $2, $3, $3, 'user', 100, 'https://via.placeholder.com/150', $4) RETURNING *",
+            [email.split('@')[0], email, password, email.split('@')[0]]
         );
 
         // Log Register Activity
@@ -1097,7 +1097,7 @@ app.post('/api/login', async (req, res) => {
 
         // Generate Token
         const token = jwt.sign(
-            { id: user.id, username: user.username, role: user.role },
+            { id: user.id, username: user.username, role: user.role, display_name: user.display_name, avatar_url: user.avatar_url },
             SECRET_KEY,
             { expiresIn: '24h' }
         );

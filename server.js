@@ -228,7 +228,7 @@ app.put('/api/users/:id/profile', async (req, res) => {
 
 // Health Check
 app.get('/', (req, res) => {
-    res.send('Chat System Backend is Running (V2)');
+    res.send('Chat System Backend is Running (V3)');
 });
 
 // DEBUG: DB Check
@@ -287,7 +287,8 @@ app.get('/api/setup-admin', async (req, res) => {
             "ALTER TABLE operators ALTER COLUMN name DROP NOT NULL",
             "DO $$ BEGIN IF EXISTS(SELECT * FROM information_schema.columns WHERE table_name='pending_photos' AND column_name='photo_url') THEN ALTER TABLE pending_photos RENAME COLUMN photo_url TO url; END IF; END $$",
             "ALTER TABLE pending_photos ADD COLUMN IF NOT EXISTS type VARCHAR(50)",
-            "ALTER TABLE pending_photos ALTER COLUMN url DROP NOT NULL"
+            "ALTER TABLE pending_photos ALTER COLUMN url DROP NOT NULL",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS ban_expires_at TIMESTAMP"
         ];
 
         // Create Transactions Table
@@ -508,11 +509,133 @@ app.get('/api/admin/payments', authenticateToken, authorizeRole('admin', 'super_
     }
 });
 
+// GET ALL STAFF (Admins, Moderators, Operators)
+app.get('/api/admin/staff', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
+    try {
+        const result = await db.query("SELECT id, username, email, role, created_at FROM users WHERE role IN ('admin', 'moderator', 'operator') ORDER BY created_at DESC");
+        res.json(result.rows);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// CREATE STAFF
+app.post('/api/admin/staff', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
+    const { username, email, password, role } = req.body;
+    if (!['admin', 'moderator', 'operator'].includes(role)) return res.status(400).json({ error: 'Geçersiz rol.' });
+
+    try {
+        const hashedPassword = await bcrypt.hash(password, 10);
+        const result = await db.query(
+            "INSERT INTO users (username, email, password, password_hash, role, balance) VALUES ($1, $2, $3, $3, $4, 0) RETURNING id, username, email, role",
+            [username, email, hashedPassword, role]
+        );
+
+        // If Operator, add to operators table too
+        if (role === 'operator') {
+            await db.query(
+                "INSERT INTO operators (user_id, category, bio, photos, is_online, rating) VALUES ($1, 'Genel', 'Merhaba!', '{}', false, 5.0)",
+                [result.rows[0].id]
+            );
+        }
+
+        res.status(201).json(result.rows[0]);
+    } catch (err) {
+        if (err.code === '23505') return res.status(400).json({ error: 'Kullanıcı adı/E-posta kullanımda.' });
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// DELETE STAFF
+app.delete('/api/admin/staff/:id', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
+    const { id } = req.params;
+    if (req.user.id === parseInt(id)) return res.status(400).json({ error: 'Kendinizi silemezsiniz.' });
+
+    try {
+        await db.query('DELETE FROM users WHERE id = $1', [id]);
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // GET ALL USERS (Manager/Admin Only)
 app.get('/api/admin/users', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
     try {
-        const result = await db.query('SELECT id, username, email, role, account_status, created_at, last_login_at FROM users ORDER BY created_at DESC');
+        const result = await db.query(`
+            SELECT id, username, email, role, account_status, balance, 
+                   is_vip, created_at, last_login_at, ban_expires_at, avatar_url 
+            FROM users 
+            WHERE role = 'user' 
+            ORDER BY created_at DESC
+        `);
         res.json(result.rows);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// BAN USER
+app.post('/api/admin/users/:id/ban', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
+    const { id } = req.params;
+    const { duration } = req.body; // 'permanent' or number (hours)
+
+    try {
+        let banExpiresAt = null;
+        let accountStatus = 'banned';
+
+        if (duration !== 'permanent') {
+            const hours = parseInt(duration);
+            if (!isNaN(hours)) {
+                const date = new Date();
+                date.setHours(date.getHours() + hours);
+                banExpiresAt = date;
+            }
+        }
+
+        await db.query(
+            'UPDATE users SET account_status = $1, ban_expires_at = $2 WHERE id = $3',
+            [accountStatus, banExpiresAt, id]
+        );
+
+        res.json({ success: true, message: 'Kullanıcı banlandı.' });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// UNBAN USER
+app.post('/api/admin/users/:id/unban', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
+    const { id } = req.params;
+    try {
+        await db.query(
+            "UPDATE users SET account_status = 'active', ban_expires_at = NULL WHERE id = $1",
+            [id]
+        );
+        res.json({ success: true, message: 'Ban kaldırıldı.' });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// MANAGE BALANCE
+app.post('/api/admin/users/:id/balance', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
+    const { id } = req.params;
+    const { amount } = req.body; // Can be positive or negative
+
+    try {
+        const result = await db.query(
+            'UPDATE users SET balance = balance + $1 WHERE id = $2 RETURNING balance',
+            [amount, id]
+        );
+
+        // Log transaction
+        await db.query(
+            'INSERT INTO transactions (user_id, amount, package_name, status) VALUES ($1, $2, $3, $4)',
+            [id, amount, amount > 0 ? 'Admin Ekleme' : 'Admin Ceza', 'completed']
+        );
+
+        res.json({ success: true, newBalance: result.rows[0].balance });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
@@ -710,6 +833,12 @@ app.post('/api/register', async (req, res) => {
         // Log Register Activity
         logActivity(newUser.rows[0].id, 'register', 'Yeni kullanıcı kayıt oldu.');
 
+        // EMIT REAL-TIME EVENT
+        io.emit('new_user', {
+            ...newUser.rows[0],
+            is_online: true
+        });
+
         res.json({ user: newUser.rows[0], token: 'fake-jwt-token' });
     } catch (err) {
         console.error("Registration Error:", err.message);
@@ -745,7 +874,21 @@ app.post('/api/login', async (req, res) => {
         }
 
         if (user.account_status !== 'active') {
-            return res.status(403).json({ error: 'Hesabınız askıya alınmış.' });
+            // Check Ban Duration
+            if (user.account_status === 'banned' && user.ban_expires_at) {
+                const now = new Date();
+                const expire = new Date(user.ban_expires_at);
+                if (now > expire) {
+                    // Auto-Unban
+                    await db.query("UPDATE users SET account_status = 'active', ban_expires_at = NULL WHERE id = $1", [user.id]);
+                } else {
+                    return res.status(403).json({ error: `Hesabınız şu tarihe kadar banlı: ${expire.toLocaleDateString()} ${expire.toLocaleTimeString()}` });
+                }
+            } else if (user.account_status === 'banned') {
+                return res.status(403).json({ error: 'Hesabınız süresiz olarak kapatılmıştır.' });
+            } else {
+                return res.status(403).json({ error: 'Hesabınız askıya alınmış.' });
+            }
         }
 
         // Generate Token

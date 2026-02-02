@@ -239,6 +239,16 @@ app.get('/api/setup-admin', async (req, res) => {
             "ALTER TABLE operators ALTER COLUMN name DROP NOT NULL"
         ];
 
+        // Create Transactions Table
+        await db.query(`CREATE TABLE IF NOT EXISTS transactions (
+            id SERIAL PRIMARY KEY,
+            user_id INTEGER REFERENCES users(id),
+            amount DECIMAL(10, 2) NOT NULL,
+            package_name VARCHAR(255),
+            status VARCHAR(50) DEFAULT 'completed',
+            created_at TIMESTAMP DEFAULT NOW()
+        )`);
+
         for (const query of migrations) {
             try {
                 await db.query(query);
@@ -260,20 +270,66 @@ app.get('/api/setup-admin', async (req, res) => {
         // Check if admin exists
         const check = await db.query("SELECT * FROM users WHERE username = 'admin' OR email = 'admin@falka.com'");
         if (check.rows.length === 0) {
-            // FIX: Include 'password' column (legacy) to satisfy potential NOT NULL constraint
             await db.query(
                 "INSERT INTO users (username, email, password, password_hash, role, balance, account_status) VALUES ($1, $2, $3, $3, 'admin', 0, 'active')",
                 ['admin', 'admin@falka.com', hashedPassword]
             );
-            res.send('<h1>Success!</h1><p>Database columns repaired.</p><p>Admin user created.</p><p>Login: admin@falka.com / admin123</p>');
+            res.send('<h1>Success!</h1><p>Database columns repaired.</p><p>Transactions table created.</p><p>Admin user created.</p>');
         } else {
             await db.query("UPDATE users SET password_hash = $1, role = 'admin', account_status = 'active', email = 'admin@falka.com' WHERE username = 'admin'", [hashedPassword]);
-            res.send('<h1>Success!</h1><p>Database columns repaired.</p><p>Admin user verified and updated.</p><p>Login: admin@falka.com / admin123</p>');
+            res.send('<h1>Success!</h1><p>Database columns repaired.</p><p>Transactions table checked.</p><p>Admin user verified.</p>');
         }
 
     } catch (err) {
         console.error("Setup Error:", err);
         res.status(500).send(`<h1>Error</h1><p>${err.message}</p><pre>${JSON.stringify(err, null, 2)}</pre>`);
+    }
+});
+
+// GET ADMIN STATS (Dashboard)
+app.get('/api/admin/stats', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
+    try {
+        // 1. Total Revenue
+        const revResult = await db.query('SELECT SUM(total_spent) as total FROM users');
+        const totalRevenue = revResult.rows[0].total || 0;
+
+        // 2. Active Users (Just total users for now, or users connected recently)
+        const userResult = await db.query('SELECT COUNT(*) as count FROM users WHERE role = \'user\'');
+        const activeUsers = userResult.rows[0].count;
+
+        // 3. Messages Sent (Total)
+        const msgResult = await db.query('SELECT COUNT(*) as count FROM messages');
+        const totalMessages = msgResult.rows[0].count;
+
+        // 4. Online Operators
+        const opResult = await db.query('SELECT COUNT(*) as count FROM operators WHERE is_online = true');
+        const onlineOperators = opResult.rows[0].count;
+
+        res.json({
+            revenue: parseFloat(totalRevenue).toFixed(2),
+            activeUsers: parseInt(activeUsers),
+            messages: parseInt(totalMessages),
+            onlineOperators: parseInt(onlineOperators)
+        });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// GET ADMIN PAYMENTS
+app.get('/api/admin/payments', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
+    try {
+        const query = `
+            SELECT t.*, u.username as user_name, u.email 
+            FROM transactions t
+            LEFT JOIN users u ON t.user_id = u.id
+            ORDER BY t.created_at DESC
+            LIMIT 100
+        `;
+        const result = await db.query(query);
+        res.json(result.rows);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
     }
 });
 
@@ -380,11 +436,11 @@ app.post('/api/block', async (req, res) => {
     }
 });
 
-// ... (existing routes) ...
+// ... (existing admin routes) ...
 
-// SIMULATED PURCHASE (Update VIP & Balance)
+// SIMULATED PURCHASE (Update VIP & Balance) - UPDATED WITH TRANSACTION LOG
 app.post('/api/purchase', async (req, res) => {
-    const { userId, amount, coins } = req.body;
+    const { userId, amount, coins, packageName } = req.body;
     const price = parseFloat(amount); // Ensure float
 
     try {
@@ -409,10 +465,16 @@ app.post('/api/purchase', async (req, res) => {
         else if (newTotal >= 1000) newVipLevel = 2;
         else if (newTotal >= 500) newVipLevel = 1;
 
-        // 4. Update Database
+        // 4. Update User Data
         await db.query(
             'UPDATE users SET total_spent = $1, vip_level = $2, balance = $3 WHERE id = $4',
             [newTotal, newVipLevel, newBalance, userId]
+        );
+
+        // 5. Log Transaction
+        await db.query(
+            'INSERT INTO transactions (user_id, amount, package_name, status) VALUES ($1, $2, $3, $4)',
+            [userId, price, packageName || 'Coin Pack', 'completed']
         );
 
         await db.query('COMMIT');

@@ -230,7 +230,13 @@ app.get('/api/setup-admin', async (req, res) => {
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS display_name VARCHAR(255)",
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS gender VARCHAR(10) DEFAULT 'kadin'",
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login_at TIMESTAMP",
-            "ALTER TABLE users ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT NOW()"
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT NOW()",
+            "ALTER TABLE operators ADD COLUMN IF NOT EXISTS user_id INTEGER",
+            "ALTER TABLE operators ADD COLUMN IF NOT EXISTS category VARCHAR(100)",
+            "ALTER TABLE operators ADD COLUMN IF NOT EXISTS bio TEXT",
+            "ALTER TABLE operators ADD COLUMN IF NOT EXISTS photos TEXT[]",
+            "ALTER TABLE operators ADD COLUMN IF NOT EXISTS rating DECIMAL(3, 1) DEFAULT 5.0",
+            "ALTER TABLE operators ALTER COLUMN name DROP NOT NULL"
         ];
 
         for (const query of migrations) {

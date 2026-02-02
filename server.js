@@ -176,7 +176,8 @@ app.put('/api/users/:id/profile', async (req, res) => {
         await db.query(`CREATE TABLE IF NOT EXISTS pending_photos (
             id SERIAL PRIMARY KEY,
             user_id INTEGER REFERENCES users(id),
-            photo_url TEXT NOT NULL,
+            url TEXT NOT NULL,
+            type VARCHAR(50),
             status VARCHAR(20) DEFAULT 'pending',
             created_at TIMESTAMP DEFAULT NOW()
         )`);
@@ -282,7 +283,11 @@ app.get('/api/setup-admin', async (req, res) => {
             "ALTER TABLE operators ADD COLUMN IF NOT EXISTS bio TEXT",
             "ALTER TABLE operators ADD COLUMN IF NOT EXISTS photos TEXT[]",
             "ALTER TABLE operators ADD COLUMN IF NOT EXISTS rating DECIMAL(3, 1) DEFAULT 5.0",
-            "ALTER TABLE operators ALTER COLUMN name DROP NOT NULL"
+            "ALTER TABLE operators ADD COLUMN IF NOT EXISTS rating DECIMAL(3, 1) DEFAULT 5.0",
+            "ALTER TABLE operators ALTER COLUMN name DROP NOT NULL",
+            "DO $$ BEGIN IF EXISTS(SELECT * FROM information_schema.columns WHERE table_name='pending_photos' AND column_name='photo_url') THEN ALTER TABLE pending_photos RENAME COLUMN photo_url TO url; END IF; END $$",
+            "ALTER TABLE pending_photos ADD COLUMN IF NOT EXISTS type VARCHAR(50)",
+            "ALTER TABLE pending_photos ALTER COLUMN url DROP NOT NULL"
         ];
 
         // Create Transactions Table

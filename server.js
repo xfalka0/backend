@@ -314,15 +314,7 @@ app.get('/api/setup-admin', async (req, res) => {
             created_at TIMESTAMP DEFAULT NOW()
         )`);
 
-        // Create Pending Photos Table (Moderation)
-        await db.query(`CREATE TABLE IF NOT EXISTS pending_photos (
-            id SERIAL PRIMARY KEY,
-            user_id INTEGER REFERENCES users(id),
-            type VARCHAR(50),
-            url TEXT,
-            status VARCHAR(50) DEFAULT 'pending',
-            created_at TIMESTAMP DEFAULT NOW()
-        )`);
+
 
         for (const query of migrations) {
             try {

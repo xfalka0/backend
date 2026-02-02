@@ -15,6 +15,24 @@ const os = require('os');
 const fs = require('fs');
 const sharp = require('sharp');
 
+// --- DATABASE AUTO-MIGRATION ---
+const initializeDatabase = async () => {
+    try {
+        console.log('[DB] Checking for required columns...');
+        await db.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS age INTEGER DEFAULT 18');
+        await db.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS vip_level INTEGER DEFAULT 0');
+        // Handle migration from old is_vip to vip_level if needed
+        await db.query(`
+            UPDATE users SET vip_level = 1 
+            WHERE is_vip = true AND vip_level = 0
+        `);
+        console.log('[DB] Database schema is up to date.');
+    } catch (err) {
+        console.error('[DB] Migration Check Error:', err.message);
+    }
+};
+initializeDatabase();
+
 const server = http.createServer(app);
 
 const getLocalIpAddress = () => {

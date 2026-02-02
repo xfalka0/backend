@@ -70,6 +70,31 @@ app.get('/admin/*', (req, res) => {
     res.sendFile(path.join(__dirname, 'public/admin', 'index.html'));
 });
 
+// Helper: Log Activity & Emit Socket Event
+const logActivity = async (userId, actionType, description) => {
+    try {
+        // 1. Insert into DB
+        const result = await db.query(
+            'INSERT INTO activities (user_id, action_type, description) VALUES ($1, $2, $3) RETURNING *',
+            [userId, actionType, description]
+        );
+
+        // 2. Fetch User Details for UI
+        const act = result.rows[0];
+        const userRes = await db.query('SELECT username, avatar_url FROM users WHERE id = $1', [userId]);
+        const user = userRes.rows[0] || { username: 'Unknown', avatar_url: '' };
+
+        const fullActivity = { ...act, user_name: user.username, user_avatar: user.avatar_url };
+
+        // 3. Emit Real-time Event
+        io.emit('new_activity', fullActivity);
+
+        return fullActivity;
+    } catch (err) {
+        console.error("Log Activity Error:", err.message);
+    }
+};
+
 // --- REST API ROUTES ---
 
 // GET USER PROFILE
@@ -249,6 +274,26 @@ app.get('/api/setup-admin', async (req, res) => {
             created_at TIMESTAMP DEFAULT NOW()
         )`);
 
+        // Create Activities Table (Real-time logs)
+        await db.query(`CREATE TABLE IF NOT EXISTS activities (
+            id SERIAL PRIMARY KEY,
+            user_id INTEGER REFERENCES users(id),
+            action_type VARCHAR(50),
+            description TEXT,
+            description TEXT,
+            created_at TIMESTAMP DEFAULT NOW()
+        )`);
+
+        // Create Pending Photos Table (Moderation)
+        await db.query(`CREATE TABLE IF NOT EXISTS pending_photos (
+            id SERIAL PRIMARY KEY,
+            user_id INTEGER REFERENCES users(id),
+            type VARCHAR(50),
+            url TEXT,
+            status VARCHAR(50) DEFAULT 'pending',
+            created_at TIMESTAMP DEFAULT NOW()
+        )`);
+
         for (const query of migrations) {
             try {
                 await db.query(query);
@@ -337,6 +382,25 @@ app.get('/api/admin/payments', authenticateToken, authorizeRole('admin', 'super_
 app.get('/api/admin/users', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
     try {
         const result = await db.query('SELECT id, username, email, role, account_status, created_at, last_login_at FROM users ORDER BY created_at DESC');
+        res.json(result.rows);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+
+
+// GET ADMIN ACTIVITIES
+app.get('/api/admin/activities', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
+    try {
+        const query = `
+            SELECT a.*, u.username as user_name, u.avatar_url as user_avatar 
+            FROM activities a
+            LEFT JOIN users u ON a.user_id = u.id
+            ORDER BY a.created_at DESC
+            LIMIT 20
+        `;
+        const result = await db.query(query);
         res.json(result.rows);
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -477,6 +541,9 @@ app.post('/api/purchase', async (req, res) => {
             [userId, price, packageName || 'Coin Pack', 'completed']
         );
 
+        // Log Purchase Activity
+        logActivity(userId, 'purchase', `${price} TL tutarında ${packageName || 'paket'} satın aldı.`);
+
         await db.query('COMMIT');
 
         res.json({
@@ -509,6 +576,9 @@ app.post('/api/register', async (req, res) => {
             "INSERT INTO users (username, email, password, password_hash, role, balance, avatar_url) VALUES ($1, $2, $3, $3, 'user', 100, 'https://via.placeholder.com/150') RETURNING *",
             [email.split('@')[0], email, password]
         );
+
+        // Log Register Activity
+        logActivity(newUser.rows[0].id, 'register', 'Yeni kullanıcı kayıt oldu.');
 
         res.json({ user: newUser.rows[0], token: 'fake-jwt-token' });
     } catch (err) {
@@ -554,6 +624,12 @@ app.post('/api/login', async (req, res) => {
             SECRET_KEY,
             { expiresIn: '24h' }
         );
+
+
+
+        // Log Login Activity (Only log if not recent? for now log every login)
+        // Check if last login was > 1 min ago to avoid spam? No, simple is fine.
+        logActivity(user.id, 'login', 'Kullanıcı giriş yaptı.');
 
         res.json({
             user: {
@@ -918,10 +994,16 @@ app.post('/api/moderation/approve', authenticateToken, authorizeRole('admin', 's
             );
         }
 
-        res.json({ success: true });
+            );
+        }
+
+// Log Activity
+logActivity(photo.user_id, 'admin', `${photo.type === 'avatar' ? 'Profil' : 'Albüm'} fotoğrafı onaylandı.`);
+
+res.json({ success: true });
     } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
+    res.status(500).json({ error: err.message });
+}
 });
 
 // Reject a photo
@@ -929,6 +1011,15 @@ app.post('/api/moderation/reject', authenticateToken, authorizeRole('admin', 'su
     const { photoId } = req.body;
     try {
         await db.query('UPDATE pending_photos SET status = \'rejected\' WHERE id = $1', [photoId]);
+        await db.query('UPDATE pending_photos SET status = \'rejected\' WHERE id = $1', [photoId]);
+
+        // Fetch user id for logging (optional, need extra query if not passed)
+        // Ideally we should select user_id from pending_photos first, but for now skip or do simple query
+        const photoRes = await db.query('SELECT user_id FROM pending_photos WHERE id = $1', [photoId]);
+        if (photoRes.rows.length > 0) {
+            logActivity(photoRes.rows[0].user_id, 'admin', 'Fotoğrafı reddedildi.');
+        }
+
         res.json({ success: true });
     } catch (err) {
         res.status(500).json({ error: err.message });

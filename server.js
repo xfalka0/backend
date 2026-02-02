@@ -253,7 +253,7 @@ app.put('/api/users/:id/profile', async (req, res) => {
 
 // Health Check
 app.get('/', (req, res) => {
-    res.send('Chat System Backend is Running (FIX_V15)');
+    res.send('Chat System Backend is Running (FIX_V16)');
 });
 
 // DEBUG: DB Check
@@ -1724,36 +1724,46 @@ io.on('connection', (socket) => {
         let savedMsg = { ...data, id: Date.now() };
 
         try {
-            // Calculate Cost
-            let cost = 10; // Default text message cost
-            if (type === 'gift' && giftId) {
-                cost = GIFT_PRICES[giftId] || 10;
-            } else if (type === 'image') {
-                cost = 50;
-            } else if (type === 'audio') {
-                cost = 30;
+            // Check if sender is an operator (bypass coin cost for operators)
+            const operatorCheck = await db.query('SELECT user_id FROM operators WHERE user_id = $1', [senderId]);
+            const isOperator = operatorCheck.rows.length > 0;
+
+            let cost = 0;
+            let userBalance = 0;
+
+            // Only charge coins if sender is NOT an operator
+            if (!isOperator) {
+                // Calculate Cost
+                cost = 10; // Default text message cost
+                if (type === 'gift' && giftId) {
+                    cost = GIFT_PRICES[giftId] || 10;
+                } else if (type === 'image') {
+                    cost = 50;
+                } else if (type === 'audio') {
+                    cost = 30;
+                }
+
+                // 1. Check Balance
+                const userResult = await db.query('SELECT balance FROM users WHERE id = $1', [senderId]);
+                if (userResult.rows.length === 0) return;
+
+                userBalance = userResult.rows[0].balance;
+
+                if (userBalance < cost) {
+                    // Insufficient funds
+                    io.to(socket.id).emit('message_error', {
+                        message: `Yetersiz bakiye. Bu işlem için ${cost} coin gerekli.`,
+                        required: cost
+                    });
+                    return;
+                }
+
+                // 2. Deduct Coin
+                await db.query('UPDATE users SET balance = balance - $2 WHERE id = $1', [senderId, cost]);
+
+                // 3. Emit new balance
+                io.to(socket.id).emit('balance_update', { newBalance: userBalance - cost });
             }
-
-            // 1. Check Balance
-            const userResult = await db.query('SELECT balance FROM users WHERE id = $1', [senderId]);
-            if (userResult.rows.length === 0) return;
-
-            const userBalance = userResult.rows[0].balance;
-
-            if (userBalance < cost) {
-                // Insufficient funds
-                io.to(socket.id).emit('message_error', {
-                    message: `Yetersiz bakiye. Bu işlem için ${cost} coin gerekli.`,
-                    required: cost
-                });
-                return;
-            }
-
-            // 2. Deduct Coin
-            await db.query('UPDATE users SET balance = balance - $2 WHERE id = $1', [senderId, cost]);
-
-            // 3. Emit new balance
-            io.to(socket.id).emit('balance_update', { newBalance: userBalance - cost });
 
             // 4. Save Message
             // If gift, content might be the gift ID or a description. Let's use content passed from client.

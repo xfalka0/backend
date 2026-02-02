@@ -1,16 +1,398 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="tr">
 
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Chat Admin System</title>
-  <script type="module" crossorigin src="/admin/assets/app-v8.js"></script>
-  <link rel="stylesheet" crossorigin href="/admin/assets/style-v8.css">
+  <title>Moderasyon Paneli</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      padding: 20px;
+    }
+
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+
+    .header {
+      background: white;
+      padding: 20px;
+      border-radius: 10px;
+      margin-bottom: 20px;
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .header h1 {
+      color: #667eea;
+      font-size: 24px;
+    }
+
+    .btn {
+      padding: 10px 20px;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+      font-weight: bold;
+      transition: all 0.3s;
+    }
+
+    .btn-primary {
+      background: #667eea;
+      color: white;
+    }
+
+    .btn-primary:hover {
+      background: #5568d3;
+    }
+
+    .btn-success {
+      background: #10b981;
+      color: white;
+    }
+
+    .btn-success:hover {
+      background: #059669;
+    }
+
+    .btn-danger {
+      background: #ef4444;
+      color: white;
+    }
+
+    .btn-danger:hover {
+      background: #dc2626;
+    }
+
+    .login-box {
+      background: white;
+      padding: 40px;
+      border-radius: 10px;
+      max-width: 400px;
+      margin: 100px auto;
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+    }
+
+    .login-box h2 {
+      color: #667eea;
+      margin-bottom: 20px;
+      text-align: center;
+    }
+
+    .form-group {
+      margin-bottom: 15px;
+    }
+
+    .form-group label {
+      display: block;
+      margin-bottom: 5px;
+      color: #374151;
+      font-weight: 500;
+    }
+
+    .form-group input {
+      width: 100%;
+      padding: 10px;
+      border: 2px solid #e5e7eb;
+      border-radius: 5px;
+      font-size: 14px;
+    }
+
+    .form-group input:focus {
+      outline: none;
+      border-color: #667eea;
+    }
+
+    .error {
+      color: #ef4444;
+      margin-top: 10px;
+      text-align: center;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+      gap: 20px;
+    }
+
+    .card {
+      background: white;
+      border-radius: 10px;
+      overflow: hidden;
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    }
+
+    .card img {
+      width: 100%;
+      height: 300px;
+      object-fit: cover;
+      cursor: pointer;
+    }
+
+    .card-body {
+      padding: 15px;
+    }
+
+    .card-body h3 {
+      color: #1f2937;
+      margin-bottom: 5px;
+    }
+
+    .card-body p {
+      color: #6b7280;
+      font-size: 14px;
+      margin-bottom: 10px;
+    }
+
+    .card-actions {
+      display: flex;
+      gap: 10px;
+    }
+
+    .card-actions button {
+      flex: 1;
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-size: 12px;
+      font-weight: bold;
+      margin-bottom: 10px;
+    }
+
+    .badge-avatar {
+      background: #dbeafe;
+      color: #1e40af;
+    }
+
+    .badge-album {
+      background: #fce7f3;
+      color: #be185d;
+    }
+
+    .loading {
+      text-align: center;
+      color: white;
+      font-size: 18px;
+      padding: 40px;
+    }
+
+    .empty {
+      background: white;
+      padding: 60px;
+      border-radius: 10px;
+      text-align: center;
+      color: #6b7280;
+    }
+
+    .empty svg {
+      width: 64px;
+      height: 64px;
+      margin-bottom: 20px;
+      opacity: 0.3;
+    }
+  </style>
 </head>
 
-<body class="bg-gray-900 text-white">
-  <div id="root"></div>
+<body>
+  <div id="app"></div>
+
+  <script>
+    const API_URL = window.location.origin + '/api';
+    let token = localStorage.getItem('admin_token');
+    let currentUser = null;
+
+    function render(html) {
+      document.getElementById('app').innerHTML = html;
+    }
+
+    function showLogin() {
+      render(`
+                <div class="login-box">
+                    <h2>🔐 Admin Girişi</h2>
+                    <form onsubmit="handleLogin(event)">
+                        <div class="form-group">
+                            <label>Email</label>
+                            <input type="email" id="email" value="admin@falka.com" required>
+                        </div>
+                        <div class="form-group">
+                            <label>Şifre</label>
+                            <input type="password" id="password" value="admin123" required>
+                        </div>
+                        <button type="submit" class="btn btn-primary" style="width:100%">Giriş Yap</button>
+                        <div id="login-error" class="error"></div>
+                    </form>
+                </div>
+            `);
+    }
+
+    async function handleLogin(e) {
+      e.preventDefault();
+      const email = document.getElementById('email').value;
+      const password = document.getElementById('password').value;
+
+      try {
+        const res = await fetch(API_URL + '/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, password })
+        });
+        const data = await res.json();
+
+        if (data.token) {
+          token = data.token;
+          currentUser = data.user;
+          localStorage.setItem('admin_token', token);
+          showDashboard();
+        } else {
+          document.getElementById('login-error').textContent = data.error || 'Giriş başarısız';
+        }
+      } catch (err) {
+        document.getElementById('login-error').textContent = 'Bağlantı hatası: ' + err.message;
+      }
+    }
+
+    function logout() {
+      token = null;
+      currentUser = null;
+      localStorage.removeItem('admin_token');
+      showLogin();
+    }
+
+    async function showDashboard() {
+      render(`
+                <div class="container">
+                    <div class="header">
+                        <h1>📸 Fotoğraf Moderasyonu</h1>
+                        <div>
+                            <button class="btn btn-primary" onclick="loadPhotos()">🔄 Yenile</button>
+                            <button class="btn btn-danger" onclick="logout()">Çıkış</button>
+                        </div>
+                    </div>
+                    <div id="content" class="loading">Yükleniyor...</div>
+                </div>
+            `);
+      loadPhotos();
+    }
+
+    async function loadPhotos() {
+      document.getElementById('content').innerHTML = '<div class="loading">Yükleniyor...</div>';
+
+      try {
+        const res = await fetch(API_URL + '/moderation/pending');
+        const photos = await res.json();
+
+        if (photos.length === 0) {
+          document.getElementById('content').innerHTML = `
+                        <div class="empty">
+                            <svg fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
+                            </svg>
+                            <h2>Tüm fotoğraflar onaylandı!</h2>
+                            <p>Şu an bekleyen fotoğraf bulunmuyor.</p>
+                        </div>
+                    `;
+          return;
+        }
+
+        const html = `
+                    <div class="grid">
+                        ${photos.map(p => `
+                            <div class="card" id="card-${p.id}">
+                                <img src="${p.url}" onclick="window.open('${p.url}')" alt="Photo">
+                                <div class="card-body">
+                                    <span class="badge ${p.type === 'avatar' ? 'badge-avatar' : 'badge-album'}">
+                                        ${p.type === 'avatar' ? '👤 Profil' : '📷 Albüm'}
+                                    </span>
+                                    <h3>${p.username || 'Kullanıcı'}</h3>
+                                    <p>${new Date(p.created_at).toLocaleString('tr-TR')}</p>
+                                    <div class="card-actions">
+                                        <button class="btn btn-success" onclick="approve(${p.id})">✓ Onayla</button>
+                                        <button class="btn btn-danger" onclick="reject(${p.id})">✗ Reddet</button>
+                                    </div>
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+                `;
+        document.getElementById('content').innerHTML = html;
+      } catch (err) {
+        document.getElementById('content').innerHTML = `
+                    <div class="empty">
+                        <h2>Hata!</h2>
+                        <p>${err.message}</p>
+                    </div>
+                `;
+      }
+    }
+
+    async function approve(id) {
+      if (!confirm('Bu fotoğrafı onaylıyor musun?')) return;
+
+      try {
+        await fetch(API_URL + '/moderation/approve', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer ' + token
+          },
+          body: JSON.stringify({ photoId: id })
+        });
+
+        document.getElementById('card-' + id).remove();
+
+        if (document.querySelectorAll('.card').length === 0) {
+          loadPhotos();
+        }
+      } catch (err) {
+        alert('Hata: ' + err.message);
+      }
+    }
+
+    async function reject(id) {
+      if (!confirm('Bu fotoğrafı reddediyor musun?')) return;
+
+      try {
+        await fetch(API_URL + '/moderation/reject', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer ' + token
+          },
+          body: JSON.stringify({ photoId: id })
+        });
+
+        document.getElementById('card-' + id).remove();
+
+        if (document.querySelectorAll('.card').length === 0) {
+          loadPhotos();
+        }
+      } catch (err) {
+        alert('Hata: ' + err.message);
+      }
+    }
+
+    // Start app
+    if (token) {
+      showDashboard();
+    } else {
+      showLogin();
+    }
+  </script>
 </body>
 
 </html>

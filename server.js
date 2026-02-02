@@ -203,8 +203,10 @@ app.put('/api/users/:id/profile', async (req, res) => {
             reported_id INTEGER,
             reason TEXT,
             details TEXT,
+            status VARCHAR(20) DEFAULT 'pending',
             created_at TIMESTAMP DEFAULT NOW()
         )`);
+        await db.query(`ALTER TABLE reports ADD COLUMN IF NOT EXISTS status VARCHAR(20) DEFAULT 'pending'`);
         await db.query(`CREATE TABLE IF NOT EXISTS blocks (
             id SERIAL PRIMARY KEY,
             blocker_id INTEGER,
@@ -289,7 +291,9 @@ app.get('/api/setup-admin', async (req, res) => {
             "ALTER TABLE pending_photos ADD COLUMN IF NOT EXISTS type VARCHAR(50)",
             "ALTER TABLE pending_photos ALTER COLUMN url DROP NOT NULL",
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS ban_expires_at TIMESTAMP",
-            "CREATE TABLE IF NOT EXISTS coin_packages (id SERIAL PRIMARY KEY, name TEXT NOT NULL, coins INTEGER NOT NULL, price DECIMAL(10,2) NOT NULL, is_popular BOOLEAN DEFAULT false, created_at TIMESTAMP DEFAULT NOW())"
+            "CREATE TABLE IF NOT EXISTS coin_packages (id SERIAL PRIMARY KEY, name TEXT NOT NULL, coins INTEGER NOT NULL, price DECIMAL(10,2) NOT NULL, is_popular BOOLEAN DEFAULT false, created_at TIMESTAMP DEFAULT NOW())",
+            "CREATE TABLE IF NOT EXISTS gifts (id SERIAL PRIMARY KEY, name VARCHAR(100) NOT NULL, cost INTEGER NOT NULL, icon_url TEXT NOT NULL, created_at TIMESTAMP DEFAULT NOW())",
+            "CREATE TABLE IF NOT EXISTS quick_replies (id SERIAL PRIMARY KEY, title VARCHAR(100) NOT NULL, content TEXT NOT NULL, created_at TIMESTAMP DEFAULT NOW())"
         ];
 
         // Create Transactions Table
@@ -464,29 +468,53 @@ app.get('/api/seed-data', async (req, res) => {
 });
 
 // GET ADMIN STATS (Dashboard)
-app.get('/api/admin/stats', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
+app.get('/api/admin/stats', authenticateToken, authorizeRole('admin', 'super_admin', 'moderator'), async (req, res) => {
     try {
-        // 1. Total Revenue
+        // 1. Total Stats
         const revResult = await db.query('SELECT SUM(total_spent) as total FROM users');
         const totalRevenue = revResult.rows[0].total || 0;
 
-        // 2. Active Users (Just total users for now, or users connected recently)
         const userResult = await db.query('SELECT COUNT(*) as count FROM users WHERE role = \'user\'');
         const activeUsers = userResult.rows[0].count;
 
-        // 3. Messages Sent (Total)
         const msgResult = await db.query('SELECT COUNT(*) as count FROM messages');
         const totalMessages = msgResult.rows[0].count;
 
-        // 4. Online Operators
         const opResult = await db.query('SELECT COUNT(*) as count FROM operators WHERE is_online = true');
         const onlineOperators = opResult.rows[0].count;
+
+        // 2. Chart Data (Last 7 Days)
+        const revenueChartQuery = `
+            SELECT 
+                TO_CHAR(date_trunc('day', created_at), 'DD.MM') as label,
+                SUM(amount) as value
+            FROM transactions
+            WHERE created_at >= NOW() - INTERVAL '7 days'
+            GROUP BY date_trunc('day', created_at)
+            ORDER BY date_trunc('day', created_at) ASC
+        `;
+        const revenueChart = await db.query(revenueChartQuery);
+
+        const registrationChartQuery = `
+            SELECT 
+                TO_CHAR(date_trunc('day', created_at), 'DD.MM') as label,
+                COUNT(*) as value
+            FROM users
+            WHERE role = 'user' AND created_at >= NOW() - INTERVAL '7 days'
+            GROUP BY date_trunc('day', created_at)
+            ORDER BY date_trunc('day', created_at) ASC
+        `;
+        const registrationChart = await db.query(registrationChartQuery);
 
         res.json({
             revenue: parseFloat(totalRevenue).toFixed(2),
             activeUsers: parseInt(activeUsers),
             messages: parseInt(totalMessages),
-            onlineOperators: parseInt(onlineOperators)
+            onlineOperators: parseInt(onlineOperators),
+            charts: {
+                revenue: revenueChart.rows,
+                registrations: registrationChart.rows
+            }
         });
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -562,6 +590,132 @@ app.delete('/api/admin/packages/:id', authenticateToken, authorizeRole('admin', 
     const { id } = req.params;
     try {
         await db.query('DELETE FROM coin_packages WHERE id = $1', [id]);
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// GIFTS API
+app.get('/api/admin/gifts', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
+    try {
+        const result = await db.query('SELECT * FROM gifts ORDER BY cost ASC');
+        res.json(result.rows);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.post('/api/admin/gifts', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
+    const { name, cost, icon_url } = req.body;
+    try {
+        const result = await db.query(
+            'INSERT INTO gifts (name, cost, icon_url) VALUES ($1, $2, $3) RETURNING *',
+            [name, cost, icon_url]
+        );
+        res.status(201).json(result.rows[0]);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.put('/api/admin/gifts/:id', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
+    const { id } = req.params;
+    const { name, cost, icon_url } = req.body;
+    try {
+        const result = await db.query(
+            'UPDATE gifts SET name = $1, cost = $2, icon_url = $3 WHERE id = $4 RETURNING *',
+            [name, cost, icon_url, id]
+        );
+        if (result.rows.length === 0) return res.status(404).json({ error: 'Hediye bulunamadı.' });
+        res.json(result.rows[0]);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.delete('/api/admin/gifts/:id', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
+    const { id } = req.params;
+    try {
+        await db.query('DELETE FROM gifts WHERE id = $1', [id]);
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// REPORTS API
+app.get('/api/admin/reports', authenticateToken, authorizeRole('admin', 'super_admin', 'moderator'), async (req, res) => {
+    try {
+        const result = await db.query(`
+            SELECT r.*, u1.username as reporter_name, u2.username as reported_name
+            FROM reports r
+            LEFT JOIN users u1 ON r.reporter_id = u1.id
+            LEFT JOIN users u2 ON r.reported_id = u2.id
+            ORDER BY r.created_at DESC
+        `);
+        res.json(result.rows);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.put('/api/admin/reports/:id', authenticateToken, authorizeRole('admin', 'super_admin', 'moderator'), async (req, res) => {
+    const { id } = req.params;
+    const { status } = req.body;
+    try {
+        const result = await db.query(
+            'UPDATE reports SET status = $1 WHERE id = $2 RETURNING *',
+            [status, id]
+        );
+        res.json(result.rows[0]);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// QUICK REPLIES API
+app.get('/api/admin/quick-replies', authenticateToken, authorizeRole('admin', 'super_admin', 'operator'), async (req, res) => {
+    try {
+        const result = await db.query('SELECT * FROM quick_replies ORDER BY created_at DESC');
+        res.json(result.rows);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.post('/api/admin/quick-replies', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
+    const { title, content } = req.body;
+    try {
+        const result = await db.query(
+            'INSERT INTO quick_replies (title, content) VALUES ($1, $2) RETURNING *',
+            [title, content]
+        );
+        res.status(201).json(result.rows[0]);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.put('/api/admin/quick-replies/:id', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
+    const { id } = req.params;
+    const { title, content } = req.body;
+    try {
+        const result = await db.query(
+            'UPDATE quick_replies SET title = $1, content = $2 WHERE id = $3 RETURNING *',
+            [title, content, id]
+        );
+        if (result.rows.length === 0) return res.status(404).json({ error: 'Mesaj bulunamadı.' });
+        res.json(result.rows[0]);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.delete('/api/admin/quick-replies/:id', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
+    const { id } = req.params;
+    try {
+        await db.query('DELETE FROM quick_replies WHERE id = $1', [id]);
         res.json({ success: true });
     } catch (err) {
         res.status(500).json({ error: err.message });

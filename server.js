@@ -1223,7 +1223,7 @@ app.get('/api/me', authenticateToken, (req, res) => {
 app.get('/api/operators', async (req, res) => {
     try {
         const query = `
-      SELECT u.id, COALESCE(u.display_name, u.username) as name, u.avatar_url, u.gender, o.category, o.rating, o.is_online, o.bio, o.photos, u.role
+      SELECT u.id, COALESCE(u.display_name, u.username) as name, u.avatar_url, u.gender, u.age, u.vip_level, o.category, o.rating, o.is_online, o.bio, o.photos, u.role
       FROM users u
       JOIN operators o ON u.id = o.user_id
       ORDER BY u.created_at DESC
@@ -1275,7 +1275,7 @@ app.get('/api/operators', async (req, res) => {
 
 // CREATE OPERATOR (Admin Profile)
 app.post('/api/operators', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
-    const { name, avatar_url, category, bio, photos, gender } = req.body;
+    const { name, avatar_url, category, bio, photos, gender, age, vip_level } = req.body;
 
     try {
         await db.query('BEGIN');
@@ -1288,8 +1288,8 @@ app.post('/api/operators', authenticateToken, authorizeRole('admin', 'super_admi
         // 1. Create a User entry for the operator
         // FIX: Provide legacy password for non-null constraint
         const userResult = await db.query(
-            "INSERT INTO users (username, email, password, password_hash, role, avatar_url, gender, display_name) VALUES ($1, $2, $3, $3, 'operator', $4, $5, $6) RETURNING id",
-            [uniqueUsername, uniqueEmail, 'hashed_password', avatar_url, gender || 'kadin', name]
+            "INSERT INTO users (username, email, password, password_hash, role, avatar_url, gender, display_name, age, vip_level) VALUES ($1, $2, $3, $3, 'operator', $4, $5, $6, $7, $8) RETURNING id",
+            [uniqueUsername, uniqueEmail, 'hashed_password', avatar_url, gender || 'kadin', name, age || 18, vip_level || 0]
         );
 
         const userId = userResult.rows[0].id;
@@ -1312,15 +1312,15 @@ app.post('/api/operators', authenticateToken, authorizeRole('admin', 'super_admi
 // UPDATE OPERATOR
 app.put('/api/operators/:id', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
     const { id } = req.params;
-    const { name, avatar_url, category, bio, photos, gender } = req.body;
+    const { name, avatar_url, category, bio, photos, gender, age, vip_level } = req.body;
 
     try {
         await db.query('BEGIN');
 
         // 1. Update User table
         await db.query(
-            'UPDATE users SET display_name = $1, avatar_url = $2, gender = $3 WHERE id = $4',
-            [name, avatar_url, gender, id]
+            'UPDATE users SET display_name = $1, avatar_url = $2, gender = $3, age = $4, vip_level = $5 WHERE id = $6',
+            [name, avatar_url, gender, age || 18, vip_level || 0, id]
         );
 
         // 2. Update Operator table

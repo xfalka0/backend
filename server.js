@@ -1240,6 +1240,7 @@ app.get('/api/me', authenticateToken, (req, res) => {
 // GET OPERATORS
 app.get('/api/operators', async (req, res) => {
     try {
+        console.log('[DEBUG] Admin fetching operators list...');
         const query = `
       SELECT u.id, COALESCE(u.display_name, u.username) as name, u.avatar_url, u.gender, u.age, u.vip_level, o.category, o.rating, o.is_online, o.bio, o.photos, u.role
       FROM users u
@@ -1247,6 +1248,7 @@ app.get('/api/operators', async (req, res) => {
       ORDER BY u.created_at DESC
     `;
         const result = await db.query(query);
+        console.log(`[DEBUG] Found ${result.rows.length} operators in DB.`);
 
         const protocol = req.protocol;
         const host = req.get('host');

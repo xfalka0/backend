@@ -1409,18 +1409,21 @@ app.get('/api/messages/:chatId', async (req, res) => {
 
 // File Upload Endpoint with Optimization
 app.post('/api/upload', upload.single('file'), async (req, res) => {
-    console.log('Upload request received');
+    console.log('[UPLOAD] Request received');
     if (!req.file) {
-        console.log('No file in request');
+        console.error('[UPLOAD] No file in request');
         return res.status(400).json({ error: 'No file uploaded' });
     }
 
     const filePath = req.file.path;
     const ext = path.extname(req.file.originalname).toLowerCase();
 
+    console.log(`[UPLOAD] Processing file: ${req.file.filename}, ext: ${ext}`);
+
     // Optimize if it's an image
     if (['.jpg', '.jpeg', '.png', '.webp'].includes(ext)) {
         try {
+            console.log(`[UPLOAD] Starting Sharp optimization for ${filePath}`);
             const tempPath = filePath + '_temp';
             await sharp(filePath)
                 .resize(1000, 1000, { fit: 'inside', withoutEnlargement: true })
@@ -1428,11 +1431,13 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
                 .toFile(tempPath);
 
             // Replace original with optimized
-            fs.unlinkSync(filePath);
-            fs.renameSync(tempPath, filePath);
-            console.log('Image optimized:', req.file.filename);
+            if (fs.existsSync(tempPath)) {
+                fs.unlinkSync(filePath);
+                fs.renameSync(tempPath, filePath);
+                console.log('[UPLOAD] Image optimized successfully:', req.file.filename);
+            }
         } catch (optimizeErr) {
-            console.error('Optimization error:', optimizeErr.message);
+            console.error('[UPLOAD] Sharp optimization error:', optimizeErr.message);
             // Fallback: use original file if optimization fails
         }
     }
@@ -1445,6 +1450,7 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
     const host = req.get('host');
     const url = `${protocol}://${host}${relativePath}`;
 
+    console.log(`[UPLOAD] Upload complete. URL: ${url}`);
     res.json({ url, relativePath });
 });
 

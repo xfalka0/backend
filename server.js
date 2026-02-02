@@ -230,6 +230,27 @@ app.get('/', (req, res) => {
     res.send('Chat System Backend is Running');
 });
 
+// DEBUG: DB Check
+app.get('/api/debug/db-check', async (req, res) => {
+    try {
+        const users = await db.query('SELECT COUNT(*) FROM users');
+        const ops = await db.query('SELECT COUNT(*) FROM operators');
+        const nullOps = await db.query('SELECT COUNT(*) FROM operators WHERE user_id IS NULL');
+        const legacyChats = await db.query('SELECT COUNT(*) FROM chats WHERE operator_id > 10000'); // Rough check for un-migrated chats (ids usually small, old IDs were small too but new user_ids might be different? actually just check raw count)
+        const sampleOps = await db.query('SELECT * FROM operators LIMIT 3');
+
+        res.json({
+            users: users.rows[0].count,
+            operators: ops.rows[0].count,
+            null_user_id_ops: nullOps.rows[0].count,
+            sample_ops: sampleOps.rows
+        });
+    } catch (err) {
+        res.json({ error: err.message });
+    }
+});
+
+
 // ... (existing routes) ...
 
 // --- ADMIN USER MANAGEMENT ---
@@ -279,7 +300,6 @@ app.get('/api/setup-admin', async (req, res) => {
             id SERIAL PRIMARY KEY,
             user_id INTEGER REFERENCES users(id),
             action_type VARCHAR(50),
-            description TEXT,
             description TEXT,
             created_at TIMESTAMP DEFAULT NOW()
         )`);

@@ -288,7 +288,8 @@ app.get('/api/setup-admin', async (req, res) => {
             "DO $$ BEGIN IF EXISTS(SELECT * FROM information_schema.columns WHERE table_name='pending_photos' AND column_name='photo_url') THEN ALTER TABLE pending_photos RENAME COLUMN photo_url TO url; END IF; END $$",
             "ALTER TABLE pending_photos ADD COLUMN IF NOT EXISTS type VARCHAR(50)",
             "ALTER TABLE pending_photos ALTER COLUMN url DROP NOT NULL",
-            "ALTER TABLE users ADD COLUMN IF NOT EXISTS ban_expires_at TIMESTAMP"
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS ban_expires_at TIMESTAMP",
+            "CREATE TABLE IF NOT EXISTS coin_packages (id SERIAL PRIMARY KEY, name TEXT NOT NULL, coins INTEGER NOT NULL, price DECIMAL(10,2) NOT NULL, is_popular BOOLEAN DEFAULT false, created_at TIMESTAMP DEFAULT NOW())"
         ];
 
         // Create Transactions Table
@@ -514,6 +515,54 @@ app.get('/api/admin/staff', authenticateToken, authorizeRole('admin', 'super_adm
     try {
         const result = await db.query("SELECT id, username, email, role, created_at FROM users WHERE role IN ('admin', 'moderator', 'operator') ORDER BY created_at DESC");
         res.json(result.rows);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// COIN PACKAGES API
+app.get('/api/admin/packages', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
+    try {
+        const result = await db.query('SELECT * FROM coin_packages ORDER BY price ASC');
+        res.json(result.rows);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.post('/api/admin/packages', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
+    const { name, coins, price, is_popular } = req.body;
+    try {
+        const result = await db.query(
+            'INSERT INTO coin_packages (name, coins, price, is_popular) VALUES ($1, $2, $3, $4) RETURNING *',
+            [name, coins, price, is_popular || false]
+        );
+        res.status(201).json(result.rows[0]);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.put('/api/admin/packages/:id', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
+    const { id } = req.params;
+    const { name, coins, price, is_popular } = req.body;
+    try {
+        const result = await db.query(
+            'UPDATE coin_packages SET name = $1, coins = $2, price = $3, is_popular = $4 WHERE id = $5 RETURNING *',
+            [name, coins, price, is_popular, id]
+        );
+        if (result.rows.length === 0) return res.status(404).json({ error: 'Paket bulunamadı.' });
+        res.json(result.rows[0]);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.delete('/api/admin/packages/:id', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
+    const { id } = req.params;
+    try {
+        await db.query('DELETE FROM coin_packages WHERE id = $1', [id]);
+        res.json({ success: true });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }

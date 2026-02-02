@@ -285,43 +285,58 @@ app.get('/api/debug/db-check', async (req, res) => {
 
 // --- ADMIN USER MANAGEMENT ---
 
-// MANUAL EMERGENCY FIX: Force Schema Recreation
+// MANUAL EMERGENCY FIX: Smart Schema Repair
 app.get('/api/admin/force-fix-schema', async (req, res) => {
+    const logs = [];
+    const log = (msg) => { console.log(msg); logs.push(msg); };
+
     // 1. Basic security check
     if (req.query.secret !== 'falka_fix_now') {
-        return res.status(403).json({ error: 'Access Denied' });
+        return res.json({ status: 'error', message: 'Access Denied', logs });
     }
 
     try {
-        console.log("⚠️ [MANUAL] Forcing pending_photos schema fix...");
+        log("⚠️ [MANUAL] Starting Smart Schema Repair...");
 
-        // 2. Drop Table
-        await db.query(`DROP TABLE IF EXISTS pending_photos CASCADE`);
-        console.log("✅ [MANUAL] Dropped table.");
+        // 2. Try Create if not exists (Safe first step)
+        try {
+            await db.query(`CREATE TABLE IF NOT EXISTS pending_photos (
+                id SERIAL PRIMARY KEY,
+                user_id UUID REFERENCES users(id),
+                type VARCHAR(50),
+                url TEXT,
+                status VARCHAR(50) DEFAULT 'pending',
+                created_at TIMESTAMP DEFAULT NOW()
+            )`);
+            log("✅ [MANUAL] 'CREATE TABLE IF NOT EXISTS' executed.");
+        } catch (e) { log(`❌ [MANUAL] Create failed: ${e.message}`); }
 
-        // 3. Recreate Table (Correct Schema)
-        await db.query(`CREATE TABLE pending_photos (
-            id SERIAL PRIMARY KEY,
-            user_id UUID REFERENCES users(id),
-            type VARCHAR(50),
-            url TEXT,
-            status VARCHAR(50) DEFAULT 'pending',
-            created_at TIMESTAMP DEFAULT NOW()
-        )`);
-        console.log("✅ [MANUAL] Recreated table.");
+        // 3. Force Add Columns (Safe, idempotent)
+        const addCol = async (col, type) => {
+            try {
+                await db.query(`ALTER TABLE pending_photos ADD COLUMN IF NOT EXISTS ${col} ${type}`);
+                log(`✅ [MANUAL] Checked/Added column: ${col}`);
+            } catch (e) { log(`❌ [MANUAL] Failed to add ${col}: ${e.message}`); }
+        };
 
-        // 4. Verify Column
+        await addCol('type', 'VARCHAR(50)');
+        await addCol('user_id', 'UUID REFERENCES users(id)');
+        await addCol('url', 'TEXT');
+        await addCol('status', "VARCHAR(50) DEFAULT 'pending'");
+
+        // 4. Verify Schema
         const check = await db.query(`SELECT column_name, data_type FROM information_schema.columns WHERE table_name='pending_photos'`);
 
         res.json({
             status: 'success',
-            message: 'pending_photos table forced recreation complete.',
-            new_schema: check.rows
+            message: 'Smart repair complete.',
+            logs: logs,
+            final_schema: check.rows
         });
 
     } catch (err) {
-        console.error("❌ [MANUAL] Fix failed:", err.message);
-        res.status(500).json({ error: err.message });
+        log(`❌ [MANUAL] Critical Error: ${err.message}`);
+        res.json({ status: 'error', error: err.message, logs: logs });
     }
 });
 

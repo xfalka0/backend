@@ -253,7 +253,7 @@ app.put('/api/users/:id/profile', async (req, res) => {
 
 // Health Check
 app.get('/', (req, res) => {
-    res.send('Chat System Backend is Running (FIX_V4)');
+    res.send('Chat System Backend is Running (FIX_V5)');
 });
 
 // DEBUG: DB Check
@@ -1781,6 +1781,59 @@ io.on('connection', (socket) => {
     socket.on('disconnect', () => {
         console.log('User disconnected:', socket.id);
     });
+});
+
+// MANUAL ADMIN CREATION: Chameleon Fix
+app.get('/api/admin/force-create-admin', async (req, res) => {
+    const logs = [];
+    const log = (msg) => { console.log(msg); logs.push(msg); };
+
+    if (req.query.secret !== 'falka_fix_now') {
+        return res.json({ status: 'error', message: 'Access Denied' });
+    }
+
+    try {
+        log("⚠️ [MANUAL ADMIN] Starting Admin Creation/Reset...");
+
+        // 1. Hash Password
+        const hashedPassword = await bcrypt.hash('admin123', 10);
+        log("✅ Password hashed.");
+
+        // 2. Insert or Update Admin
+        // We need to handle UUID vs INT for the ID return, but mostly we just care about inserting.
+        // We will try to INSERT with ON CONFLICT DO UPDATE
+
+        // Check if admin exists by email
+        const check = await db.query("SELECT * FROM users WHERE email = 'admin@falka.com'");
+
+        if (check.rows.length > 0) {
+            log("ℹ️ Admin exists. Updating password...");
+            await db.query("UPDATE users SET password_hash = $1, role = 'admin', account_status = 'active' WHERE email = 'admin@falka.com'", [hashedPassword]);
+            log("✅ Admin updated.");
+        } else {
+            log("ℹ️ Creating new admin...");
+            // We need to know if ID is SERIAL or UUID to know if we can rely on auto-gen
+            // Actually, if we just INSERT without ID, the DB handles it.
+            // But we need to match the columns.
+
+            await db.query(`
+                INSERT INTO users (username, email, password, password_hash, role, balance, account_status, display_name) 
+                VALUES ($1, $2, $3, $3, 'admin', 0, 'active', 'Admin')
+            `, ['admin', 'admin@falka.com', hashedPassword]);
+            log("✅ Admin created.");
+        }
+
+        res.json({
+            status: 'success',
+            message: 'Admin user ready.',
+            credentials: { email: 'admin@falka.com', password: 'admin123' },
+            logs: logs
+        });
+
+    } catch (err) {
+        log(`❌ [MANUAL ADMIN] Error: ${err.message}`);
+        res.json({ status: 'error', error: err.message, logs: logs });
+    }
 });
 
 // MANUAL EMERGENCY FIX V2: Chameleon Fix (UUID/INT Adaptive)

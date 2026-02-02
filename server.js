@@ -202,6 +202,23 @@ app.get('/', (req, res) => {
 
 // --- ADMIN USER MANAGEMENT ---
 
+// TEMP: One-time Setup Route for Production
+app.get('/api/setup-admin', async (req, res) => {
+    const secret = req.query.secret;
+    if (secret !== 'falka_setup_2024') return res.status(403).send('Forbidden');
+
+    try {
+        const hashedPassword = await bcrypt.hash('admin123', 10);
+        await db.query(
+            "INSERT INTO users (username, email, password_hash, role, balance, account_status) VALUES ($1, $2, $3, 'admin', 0, 'active') ON CONFLICT (username) DO NOTHING",
+            ['admin', 'admin@falka.com', hashedPassword]
+        );
+        res.send('Admin user created/verified. Login: admin@falka.com / admin123');
+    } catch (err) {
+        res.status(500).send(err.message);
+    }
+});
+
 // GET ALL USERS (Manager/Admin Only)
 app.get('/api/admin/users', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
     try {

@@ -13,6 +13,7 @@ const multer = require('multer');
 const path = require('path');
 const os = require('os');
 const fs = require('fs');
+const sharp = require('sharp');
 
 const server = http.createServer(app);
 
@@ -1400,14 +1401,35 @@ app.get('/api/messages/:chatId', async (req, res) => {
 
 // --- MODERATION API ---
 
-// File Upload Endpoint
-app.post('/api/upload', upload.single('file'), (req, res) => {
+// File Upload Endpoint with Optimization
+app.post('/api/upload', upload.single('file'), async (req, res) => {
     console.log('Upload request received');
     if (!req.file) {
         console.log('No file in request');
         return res.status(400).json({ error: 'No file uploaded' });
     }
-    console.log('File uploaded:', req.file.filename);
+
+    const filePath = req.file.path;
+    const ext = path.extname(req.file.originalname).toLowerCase();
+
+    // Optimize if it's an image
+    if (['.jpg', '.jpeg', '.png', '.webp'].includes(ext)) {
+        try {
+            const tempPath = filePath + '_temp';
+            await sharp(filePath)
+                .resize(1000, 1000, { fit: 'inside', withoutEnlargement: true })
+                .jpeg({ quality: 80 })
+                .toFile(tempPath);
+
+            // Replace original with optimized
+            fs.unlinkSync(filePath);
+            fs.renameSync(tempPath, filePath);
+            console.log('Image optimized:', req.file.filename);
+        } catch (optimizeErr) {
+            console.error('Optimization error:', optimizeErr.message);
+            // Fallback: use original file if optimization fails
+        }
+    }
 
     // Return relative path to be more flexible
     const relativePath = `/uploads/${req.file.filename}`;
@@ -1470,8 +1492,6 @@ app.post('/api/moderation/approve', authenticateToken, authorizeRole('admin', 's
             );
         }
 
-
-
         // Log Activity
         logActivity(photo.user_id, 'admin', `${photo.type === 'avatar' ? 'Profil' : 'Albüm'} fotoğrafı onaylandı.`);
 
@@ -1485,17 +1505,96 @@ app.post('/api/moderation/approve', authenticateToken, authorizeRole('admin', 's
 app.post('/api/moderation/reject', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
     const { photoId } = req.body;
     try {
-        await db.query('UPDATE pending_photos SET status = \'rejected\' WHERE id = $1', [photoId]);
+        const photoRes = await db.query('SELECT * FROM pending_photos WHERE id = $1', [photoId]);
+        if (photoRes.rows.length === 0) return res.status(404).json({ error: 'Fotoğraf bulunamadı.' });
+
+        const photo = photoRes.rows[0];
+
         await db.query('UPDATE pending_photos SET status = \'rejected\' WHERE id = $1', [photoId]);
 
-        // Fetch user id for logging (optional, need extra query if not passed)
-        // Ideally we should select user_id from pending_photos first, but for now skip or do simple query
-        const photoRes = await db.query('SELECT user_id FROM pending_photos WHERE id = $1', [photoId]);
-        if (photoRes.rows.length > 0) {
-            logActivity(photoRes.rows[0].user_id, 'admin', 'Fotoğrafı reddedildi.');
+        // STORAGE PROTECTION: Delete the file physically if rejected
+        if (photo.url && photo.url.includes('/uploads/')) {
+            const fileName = photo.url.split('/').pop();
+            const filePath = path.join(__dirname, 'uploads', fileName);
+            if (fs.existsSync(filePath)) {
+                fs.unlinkSync(filePath);
+                console.log('Rejected photo deleted from storage:', fileName);
+            }
         }
 
+        logActivity(photo.user_id, 'admin', 'Fotoğrafı reddedildi.');
         res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// --- MAINTENANCE & OPTIMIZATION API ---
+
+app.get('/api/admin/maintenance/stats', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
+    try {
+        const msgCount = await db.query('SELECT COUNT(*) FROM messages');
+        const activityCount = await db.query('SELECT COUNT(*) FROM activities');
+        const pendingCount = await db.query('SELECT COUNT(*) FROM pending_photos WHERE status = \'pending\'');
+
+        // File stats
+        const files = fs.readdirSync(uploadsDir);
+        let totalSize = 0;
+        files.forEach(f => {
+            const stats = fs.statSync(path.join(uploadsDir, f));
+            totalSize += stats.size;
+        });
+
+        res.json({
+            messages: parseInt(msgCount.rows[0].count),
+            activities: parseInt(activityCount.rows[0].count),
+            pendingPhotos: parseInt(pendingCount.rows[0].count),
+            fileCount: files.length,
+            totalSizeMB: (totalSize / (1024 * 1024)).toFixed(2)
+        });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.post('/api/admin/maintenance/cleanup', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
+    const { type } = req.body; // 'messages', 'activities', 'orphaned_files'
+    try {
+        if (type === 'messages') {
+            // Delete messages older than 30 days
+            const result = await db.query("DELETE FROM messages WHERE created_at < NOW() - INTERVAL '30 days'");
+            res.json({ success: true, count: result.rowCount });
+        } else if (type === 'activities') {
+            // Keep only latest 500 logs
+            const result = await db.query(`
+                DELETE FROM activities 
+                WHERE id NOT IN (
+                    SELECT id FROM activities 
+                    ORDER BY created_at DESC 
+                    LIMIT 500
+                )
+            `);
+            res.json({ success: true, count: result.rowCount });
+        } else if (type === 'orphaned_files') {
+            // Complex orphaned file cleanup could be added here
+            // For now, let's just clear rejected photos and their files
+            const rejected = await db.query("SELECT url FROM pending_photos WHERE status = 'rejected'");
+            let count = 0;
+            for (const row of rejected.rows) {
+                if (row.url && row.url.includes('/uploads/')) {
+                    const fileName = row.url.split('/').pop();
+                    const filePath = path.join(uploadsDir, fileName);
+                    if (fs.existsSync(filePath)) {
+                        fs.unlinkSync(filePath);
+                        count++;
+                    }
+                }
+            }
+            await db.query("DELETE FROM pending_photos WHERE status = 'rejected'");
+            res.json({ success: true, count });
+        } else {
+            res.status(400).json({ error: 'Invalid cleanup type' });
+        }
     } catch (err) {
         res.status(500).json({ error: err.message });
     }

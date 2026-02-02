@@ -253,7 +253,7 @@ app.put('/api/users/:id/profile', async (req, res) => {
 
 // Health Check
 app.get('/', (req, res) => {
-    res.send('Chat System Backend is Running (V3)');
+    res.send('Chat System Backend is Running (FIX_V2)');
 });
 
 // DEBUG: DB Check

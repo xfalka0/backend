@@ -40,12 +40,17 @@ if (!fs.existsSync(uploadsDir)) {
 // Multer Config
 const storage = multer.diskStorage({
     destination: (req, file, cb) => {
-        console.log('Multer: Saving to', uploadsDir);
+        console.log('[MULTER] Resolving destination for:', file.originalname);
+        console.log('[MULTER] destination folder:', uploadsDir);
+        if (!fs.existsSync(uploadsDir)) {
+            console.log('[MULTER] Directory missing, creating...');
+            fs.mkdirSync(uploadsDir, { recursive: true });
+        }
         cb(null, uploadsDir);
     },
     filename: (req, file, cb) => {
-        const fname = Date.now() + path.extname(file.originalname);
-        console.log('Multer: Generated filename', fname);
+        const fname = Date.now() + '-' + Math.round(Math.random() * 1E9) + path.extname(file.originalname);
+        console.log('[MULTER] Generating filename:', fname);
         cb(null, fname);
     }
 });
@@ -63,7 +68,7 @@ const io = new Server(server, {
 
 app.use(cors());
 app.use(express.json());
-app.use('/uploads', express.static('uploads'));
+app.use('/uploads', express.static(uploadsDir));
 app.use('/admin', express.static(path.join(__dirname, 'public/admin')));
 
 // Serve Admin Panel index.html for unknown /admin routes (SPA support)
@@ -1410,49 +1415,55 @@ app.get('/api/messages/:chatId', async (req, res) => {
 
 // File Upload Endpoint with Optimization
 app.post('/api/upload', upload.single('file'), async (req, res) => {
-    console.log('[UPLOAD] Request received');
-    if (!req.file) {
-        console.error('[UPLOAD] No file in request');
-        return res.status(400).json({ error: 'No file uploaded' });
-    }
-
-    const filePath = req.file.path;
-    const ext = path.extname(req.file.originalname).toLowerCase();
-
-    console.log(`[UPLOAD] Processing file: ${req.file.filename}, ext: ${ext}`);
-
-    // Optimize if it's an image
-    if (['.jpg', '.jpeg', '.png', '.webp'].includes(ext)) {
-        try {
-            console.log(`[UPLOAD] Starting Sharp optimization for ${filePath}`);
-            const tempPath = filePath + '_temp';
-            await sharp(filePath)
-                .resize(1000, 1000, { fit: 'inside', withoutEnlargement: true })
-                .jpeg({ quality: 80 })
-                .toFile(tempPath);
-
-            // Replace original with optimized
-            if (fs.existsSync(tempPath)) {
-                fs.unlinkSync(filePath);
-                fs.renameSync(tempPath, filePath);
-                console.log('[UPLOAD] Image optimized successfully:', req.file.filename);
-            }
-        } catch (optimizeErr) {
-            console.error('[UPLOAD] Sharp optimization error:', optimizeErr.message);
-            // Fallback: use original file if optimization fails
+    try {
+        console.log('[UPLOAD] Request handler started');
+        if (!req.file) {
+            console.error('[UPLOAD] No file in request object');
+            return res.status(400).json({ error: 'No file uploaded' });
         }
+
+        const filePath = req.file.path;
+        const ext = path.extname(req.file.originalname).toLowerCase();
+
+        console.log(`[UPLOAD] Processing file: ${req.file.filename}, ext: ${ext}, path: ${filePath}`);
+
+        // --- SHARP TEMPORARILY DISABLED TO PREVENT MEMORY CRASHES ---
+        /*
+        if (['.jpg', '.jpeg', '.png', '.webp'].includes(ext)) {
+            try {
+                console.log(`[UPLOAD] Starting Sharp optimization for ${filePath}`);
+                const tempPath = filePath + '_temp';
+                await sharp(filePath)
+                    .resize(1000, 1000, { fit: 'inside', withoutEnlargement: true })
+                    .jpeg({ quality: 80 })
+                    .toFile(tempPath);
+
+                if (fs.existsSync(tempPath)) {
+                    fs.unlinkSync(filePath);
+                    fs.renameSync(tempPath, filePath);
+                    console.log('[UPLOAD] Image optimized successfully:', req.file.filename);
+                }
+            } catch (optimizeErr) {
+                console.error('[UPLOAD] Sharp optimization error:', optimizeErr.message);
+            }
+        }
+        */
+
+        const relativePath = `/uploads/${req.file.filename}`;
+        const protocol = req.protocol;
+        const host = req.get('host');
+        const url = `${protocol}://${host}${relativePath}`;
+
+        console.log(`[UPLOAD] Success! URL: ${url}`);
+        res.json({ url, relativePath });
+    } catch (err) {
+        console.error('[UPLOAD] CRITICAL ROUTE ERROR:', err);
+        res.status(500).json({
+            error: 'Internal server error during upload',
+            message: err.message,
+            stack: process.env.NODE_ENV === 'development' ? err.stack : undefined
+        });
     }
-
-    // Return relative path to be more flexible
-    const relativePath = `/uploads/${req.file.filename}`;
-
-    // Also provide an absolute URL for convenience using the request's host
-    const protocol = req.protocol;
-    const host = req.get('host');
-    const url = `${protocol}://${host}${relativePath}`;
-
-    console.log(`[UPLOAD] Upload complete. URL: ${url}`);
-    res.json({ url, relativePath });
 });
 
 // Submit a photo for moderation

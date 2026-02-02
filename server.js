@@ -346,6 +346,31 @@ app.get('/api/setup-admin', async (req, res) => {
                 console.error(`Failed to migrate operator ${op.id}:`, err.message);
             }
         }
+
+        // --- SPECIAL MIGRATION: FIX CHATS & MESSAGES ---
+        console.log("Fixing legacy chats...");
+        // 1. Update Chats: operator_id (old op id) -> operator_id (new user id)
+        // We join on operators table where id matches the chat's current operator_id
+        await db.query(`
+            UPDATE chats c
+            SET operator_id = o.user_id
+            FROM operators o
+            WHERE c.operator_id = o.id
+            AND o.user_id IS NOT NULL
+            AND c.operator_id != o.user_id
+        `);
+
+        // 2. Update Messages: sender_id (old op id) -> sender_id (new user id)
+        // We find messages where sender is NOT the user (so it's the operator)
+        // and update sender_id to match the chat's (now updated) operator_id
+        await db.query(`
+            UPDATE messages m
+            SET sender_id = c.operator_id
+            FROM chats c
+            WHERE m.chat_id = c.id
+            AND m.sender_id != c.user_id
+            AND m.sender_id != c.operator_id
+        `);
         // -----------------------------------------------------
 
         // Try to drop NOT NULL constraint on legacy 'password' column if it exists and causes issues
@@ -1040,16 +1065,15 @@ app.post('/api/moderation/approve', authenticateToken, authorizeRole('admin', 's
             );
         }
 
-            );
-        }
 
-// Log Activity
-logActivity(photo.user_id, 'admin', `${photo.type === 'avatar' ? 'Profil' : 'Albüm'} fotoğrafı onaylandı.`);
 
-res.json({ success: true });
+        // Log Activity
+        logActivity(photo.user_id, 'admin', `${photo.type === 'avatar' ? 'Profil' : 'Albüm'} fotoğrafı onaylandı.`);
+
+        res.json({ success: true });
     } catch (err) {
-    res.status(500).json({ error: err.message });
-}
+        res.status(500).json({ error: err.message });
+    }
 });
 
 // Reject a photo

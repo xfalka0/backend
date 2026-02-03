@@ -11,6 +11,7 @@ CREATE TABLE IF NOT EXISTS users (
     role VARCHAR(50) DEFAULT 'user', -- user, operator, admin, super_admin, moderator
     balance INT DEFAULT 0,
     is_vip BOOLEAN DEFAULT FALSE,
+    vip_xp INT DEFAULT 0,
     avatar_url TEXT,
     gender VARCHAR(10) DEFAULT 'kadin',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP

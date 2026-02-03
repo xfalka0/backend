@@ -6,6 +6,7 @@ const db = require('./db');
 require('dotenv').config();
 const bcrypt = require('bcrypt');
 const { authenticateToken, authorizeRole, SECRET_KEY } = require('./middleware/auth');
+const { getVipLevel, getVipProgress } = require('./utils/vipUtils');
 const jwt = require('jsonwebtoken');
 
 const app = express();
@@ -1233,7 +1234,10 @@ app.post('/api/login', async (req, res) => {
                 email: user.email,
                 role: user.role,
                 avatar_url: user.avatar_url,
-                display_name: user.display_name
+                display_name: user.display_name,
+                balance: user.balance || 0,
+                vip_xp: user.vip_xp || 0,
+                vip_level: getVipLevel(user.vip_xp || 0)
             },
             token
         });
@@ -1524,18 +1528,22 @@ app.get('/api/messages/:chatId', async (req, res) => {
 // --- MODERATION API ---
 
 // File Upload Endpoint with Optimization
-app.post('/api/upload', upload.single('file'), async (req, res) => {
+app.post('/api/upload', upload.any(), async (req, res) => {
     try {
         console.log('[UPLOAD] Request handler started');
-        if (!req.file) {
+
+        // Handle both single('file') and any() formats
+        const file = req.file || (req.files && req.files[0]);
+
+        if (!file) {
             console.error('[UPLOAD] No file in request object');
             return res.status(400).json({ error: 'No file uploaded' });
         }
 
-        const filePath = req.file.path;
-        const ext = path.extname(req.file.originalname).toLowerCase();
+        const filePath = file.path;
+        const ext = path.extname(file.originalname).toLowerCase();
 
-        console.log(`[UPLOAD] Processing file: ${req.file.filename}, ext: ${ext}, path: ${filePath}`);
+        console.log(`[UPLOAD] Processing file: ${file.filename}, ext: ${ext}, path: ${filePath}`);
 
         // Optimize if it's an image
         if (['.jpg', '.jpeg', '.png', '.webp'].includes(ext)) {
@@ -1550,7 +1558,7 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
                 if (fs.existsSync(tempPath)) {
                     fs.unlinkSync(filePath);
                     fs.renameSync(tempPath, filePath);
-                    console.log('[UPLOAD] Image optimized successfully:', req.file.filename);
+                    console.log('[UPLOAD] Image optimized successfully:', file.filename);
                 }
             } catch (optimizeErr) {
                 console.error('[UPLOAD] Sharp optimization error:', optimizeErr.message);
@@ -1558,7 +1566,7 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
             }
         }
 
-        const relativePath = `/uploads/${req.file.filename}`;
+        const relativePath = `/uploads/${file.filename}`;
         const protocol = req.protocol;
         const host = req.get('host');
         const url = `${protocol}://${host}${relativePath}`;
@@ -1730,6 +1738,97 @@ app.post('/api/admin/maintenance/cleanup', authenticateToken, authorizeRole('adm
             res.status(400).json({ error: 'Invalid cleanup type' });
         }
     } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// --- VIP PROGRESSION SYSTEM ---
+
+// VIP XP PURCHASE ENDPOINT
+// User spends coins to gain VIP XP (1 coin = 1 XP)
+app.post('/api/vip/purchase-xp', authenticateToken, async (req, res) => {
+    const { coins } = req.body;
+    const userId = req.user.id;
+
+    try {
+        // Validate input
+        if (!coins || coins <= 0) {
+            return res.status(400).json({ error: 'Geçersiz coin miktarı.' });
+        }
+
+        // Get user's current balance and vip_xp
+        const userResult = await db.query('SELECT balance, vip_xp FROM users WHERE id = $1', [userId]);
+        if (userResult.rows.length === 0) {
+            return res.status(404).json({ error: 'Kullanıcı bulunamadı.' });
+        }
+
+        const user = userResult.rows[0];
+        const currentBalance = user.balance || 0;
+        const currentVipXp = user.vip_xp || 0;
+
+        // Check if user has enough coins
+        if (currentBalance < coins) {
+            return res.status(400).json({
+                error: 'Yetersiz bakiye.',
+                required: coins,
+                available: currentBalance
+            });
+        }
+
+        // Calculate new values
+        const newBalance = currentBalance - coins;
+        const newVipXp = currentVipXp + coins; // 1:1 conversion
+        const oldVipLevel = getVipLevel(currentVipXp);
+        const newVipLevel = getVipLevel(newVipXp);
+        const leveledUp = newVipLevel > oldVipLevel;
+
+        // Update user
+        await db.query(
+            'UPDATE users SET balance = $1, vip_xp = $2 WHERE id = $3',
+            [newBalance, newVipXp, userId]
+        );
+
+        // Log activity
+        logActivity(userId, 'vip_xp_purchase', `${coins} coin harcayarak ${coins} VIP XP kazandı.`);
+
+        // Get progress info
+        const progress = getVipProgress(newVipXp);
+
+        res.json({
+            success: true,
+            coinsSpent: coins,
+            newBalance,
+            newVipXp,
+            oldVipLevel,
+            newVipLevel,
+            leveledUp,
+            progress
+        });
+
+    } catch (err) {
+        console.error('VIP XP Purchase Error:', err.message);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// GET VIP PROGRESS
+// Returns user's current VIP level and progress to next level
+app.get('/api/vip/progress', authenticateToken, async (req, res) => {
+    const userId = req.user.id;
+
+    try {
+        const userResult = await db.query('SELECT vip_xp FROM users WHERE id = $1', [userId]);
+        if (userResult.rows.length === 0) {
+            return res.status(404).json({ error: 'Kullanıcı bulunamadı.' });
+        }
+
+        const vipXp = userResult.rows[0].vip_xp || 0;
+        const progress = getVipProgress(vipXp);
+
+        res.json(progress);
+
+    } catch (err) {
+        console.error('VIP Progress Error:', err.message);
         res.status(500).json({ error: err.message });
     }
 });

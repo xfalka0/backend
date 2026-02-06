@@ -15,6 +15,14 @@ const path = require('path');
 const os = require('os');
 const fs = require('fs');
 const sharp = require('sharp');
+const cloudinary = require('cloudinary').v2;
+
+// Cloudinary Configuration
+cloudinary.config({
+    cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+    api_key: process.env.CLOUDINARY_API_KEY,
+    api_secret: process.env.CLOUDINARY_API_SECRET
+});
 
 // --- DATABASE AUTO-MIGRATION ---
 const initializeDatabase = async () => {
@@ -38,6 +46,20 @@ const initializeDatabase = async () => {
         if (!columnNames.includes('is_vip')) {
             console.log('[DB] Adding missing column: is_vip');
             await db.query('ALTER TABLE users ADD COLUMN is_vip BOOLEAN DEFAULT FALSE');
+        }
+
+        if (!columnNames.includes('onboarding_completed')) {
+            console.log('[DB] Adding missing column: onboarding_completed');
+            await db.query('ALTER TABLE users ADD COLUMN onboarding_completed BOOLEAN DEFAULT FALSE');
+        }
+        if (!columnNames.includes('phone')) {
+            console.log('[DB] Adding missing column: phone');
+            await db.query('ALTER TABLE users ADD COLUMN phone VARCHAR(20) UNIQUE');
+        }
+
+        if (!columnNames.includes('interests')) {
+            console.log('[DB] Adding missing column: interests');
+            await db.query('ALTER TABLE users ADD COLUMN interests TEXT');
         }
 
         // Migration logic
@@ -114,6 +136,35 @@ app.get('/admin/*', (req, res) => {
     res.sendFile(path.join(__dirname, 'public/admin', 'index.html'));
 });
 
+// Helper: Sanitize User (Rewrite URLs)
+const sanitizeUser = (user, req) => {
+    if (!user) return null;
+    const protocol = req.protocol;
+    const host = req.get('host');
+
+    const newUser = { ...user };
+
+    // Rewrite Avatar
+    if (newUser.avatar_url && !newUser.avatar_url.startsWith('http')) {
+        newUser.avatar_url = `${protocol}://${host}${newUser.avatar_url.startsWith('/') ? '' : '/'}${newUser.avatar_url}`;
+    }
+
+    // Pass through onboarding status
+    newUser.onboarding_completed = !!user.onboarding_completed;
+
+    // Rewrite Photos array if exists (for operators)
+    if (newUser.photos && Array.isArray(newUser.photos)) {
+        newUser.photos = newUser.photos.map(p => {
+            if (p && !p.startsWith('http')) {
+                return `${protocol}://${host}${p.startsWith('/') ? '' : '/'}${p}`;
+            }
+            return p;
+        });
+    }
+
+    return newUser;
+};
+
 // Helper: Log Activity & Emit Socket Event
 const logActivity = async (userId, actionType, description) => {
     try {
@@ -146,7 +197,7 @@ app.get('/api/users/:id', async (req, res) => {
     try {
         const result = await db.query('SELECT * FROM users WHERE id = $1', [req.params.id]);
         if (result.rows.length === 0) return res.status(404).json({ error: 'User not found' });
-        res.json(result.rows[0]);
+        res.json(sanitizeUser(result.rows[0], req));
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
@@ -155,14 +206,21 @@ app.get('/api/users/:id', async (req, res) => {
 // UPDATE USER PROFILE
 app.put('/api/users/:id/profile', async (req, res) => {
     const { id } = req.params;
-    const { display_name, bio, avatar_url } = req.body;
+    const { display_name, bio, avatar_url, gender, interests, onboarding_completed } = req.body;
     try {
         const result = await db.query(
-            'UPDATE users SET display_name = COALESCE($1, display_name), bio = COALESCE($2, bio), avatar_url = COALESCE($3, avatar_url) WHERE id = $4 RETURNING *',
-            [display_name, bio, avatar_url, id]
+            `UPDATE users SET 
+                display_name = COALESCE($1, display_name), 
+                bio = COALESCE($2, bio), 
+                avatar_url = COALESCE($3, avatar_url),
+                gender = COALESCE($4, gender),
+                interests = COALESCE($5, interests),
+                onboarding_completed = COALESCE($6, onboarding_completed)
+             WHERE id = $7 RETURNING *`,
+            [display_name, bio, avatar_url, gender, interests, onboarding_completed, id]
         );
         if (result.rows.length === 0) return res.status(404).json({ error: 'User not found' });
-        res.json(result.rows[0]);
+        res.json(sanitizeUser(result.rows[0], req));
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
@@ -1136,117 +1194,159 @@ app.post('/api/purchase', async (req, res) => {
     }
 });
 
-// REGISTER
-app.post('/api/register', async (req, res) => {
-    const { email, password } = req.body;
-    try {
-        // Check if user exists
-        const existing = await db.query('SELECT * FROM users WHERE email = $1', [email]);
-        if (existing.rows.length > 0) {
-            return res.status(400).json({ error: 'Email already in use' });
-        }
+// --- AUTH REFACTOR: OTP & PASSWORDLESS ---
 
-        // Create User
-        // Note: In production use bcrypt for passwords!
-        const newUser = await db.query(
-            "INSERT INTO users (username, email, password, password_hash, role, balance, avatar_url, display_name) VALUES ($1, $2, $3, $3, 'user', 100, 'https://via.placeholder.com/150', $4) RETURNING *",
-            [email.split('@')[0], email, password, email.split('@')[0]]
-        );
+// Temporary OTP storage (In production use Redis or a DB table with expires)
+const otpStore = new Map();
 
-        // Log Register Activity
-        logActivity(newUser.rows[0].id, 'register', 'Yeni kullanıcı kayıt oldu.');
+app.post('/api/auth/request-otp', async (req, res) => {
+    const { email, phone } = req.body;
+    const identifier = email || phone;
 
-        // EMIT REAL-TIME EVENT
-        io.emit('new_user', {
-            ...newUser.rows[0],
-            is_online: true
-        });
+    if (!identifier) return res.status(400).json({ error: 'Email veya Telefon gerekli.' });
 
-        res.json({ user: newUser.rows[0], token: 'fake-jwt-token' });
-    } catch (err) {
-        console.error("Registration Error:", err.message);
-        res.status(500).json({ error: err.message });
-    }
+    // Generate 6-digit OTP
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+
+    // Store OTP with 5 mins expiry
+    otpStore.set(identifier, { otp, expires: Date.now() + 5 * 60 * 1000 });
+
+    console.log(`[OTP] Request for ${identifier}: ${otp}`); // For dev, log it
+
+    // In production, send SMS via Twilio or Email via Nodemailer
+    // res.json({ success: true, message: 'OTP gönderildi.' });
+
+    // FOR DEV: Return OTP so we can test without SMS/Email service
+    res.json({ success: true, message: 'OTP gönderildi.', dev_otp: otp });
 });
 
-// LOGIN
-app.post('/api/login', async (req, res) => {
-    const { email, password } = req.body;
+app.post('/api/auth/verify-otp', async (req, res) => {
+    const { email, phone, otp } = req.body;
+    const identifier = email || phone;
+
+    const storedData = otpStore.get(identifier);
+
+    if (!storedData || storedData.otp !== otp || Date.now() > storedData.expires) {
+        return res.status(400).json({ error: 'Geçersiz veya süresi dolmuş kod.' });
+    }
+
+    // OTP Correct, clear it
+    otpStore.delete(identifier);
 
     try {
-        const result = await db.query('SELECT * FROM users WHERE email = $1', [email]);
+        // Find or Create User
+        let result;
+        if (email) {
+            result = await db.query('SELECT * FROM users WHERE email = $1', [email]);
+        } else {
+            result = await db.query('SELECT * FROM users WHERE phone = $1', [phone]);
+        }
+
+        let user;
         if (result.rows.length === 0) {
-            return res.status(401).json({ error: 'Kullanıcı bulunamadı veya şifre yanlış.' });
+            // Register New User (Signup)
+            const username = email ? email.split('@')[0] : `user_${Math.floor(1000 + Math.random() * 9000)}`;
+            const insertResult = await db.query(
+                "INSERT INTO users (username, email, phone, role, balance, avatar_url, display_name) VALUES ($1, $2, $3, 'user', 100, 'https://via.placeholder.com/150', $4) RETURNING *",
+                [username, email || null, phone || null, username]
+            );
+            user = insertResult.rows[0];
+            logActivity(user.id, 'register', 'Yeni kullanıcı OTP ile kayıt oldu.');
+        } else {
+            // Login Existing User
+            user = result.rows[0];
+            logActivity(user.id, 'login', 'Kullanıcı OTP ile giriş yaptı.');
         }
 
-        const user = result.rows[0];
-
-        // Verify Password
-        // Note: For existing plain text passwords in dev, you might want a fallback or reset DB.
-        // Assuming new users or admin created via script will have hashed passwords.
-        // For dev purposes, if password doesn't start with $2b$, compare plain text (TEMPORARY FIX FOR DEV)
-        let validPassword = false;
-        if (user.password_hash && user.password_hash.startsWith('$2b$')) {
-            validPassword = await bcrypt.compare(password, user.password_hash);
-        } else if (user.password) { // Fallback to legacy password
-            validPassword = (password === user.password);
-        }
-
-        if (!validPassword) {
-            return res.status(401).json({ error: 'Kullanıcı bulunamadı veya şifre yanlış.' });
-        }
-
+        // Check Account Status
         if (user.account_status !== 'active') {
-            // Check Ban Duration
-            if (user.account_status === 'banned' && user.ban_expires_at) {
-                const now = new Date();
-                const expire = new Date(user.ban_expires_at);
-                if (now > expire) {
-                    // Auto-Unban
-                    await db.query("UPDATE users SET account_status = 'active', ban_expires_at = NULL WHERE id = $1", [user.id]);
-                } else {
-                    return res.status(403).json({ error: `Hesabınız şu tarihe kadar banlı: ${expire.toLocaleDateString()} ${expire.toLocaleTimeString()}` });
-                }
-            } else if (user.account_status === 'banned') {
-                return res.status(403).json({ error: 'Hesabınız süresiz olarak kapatılmıştır.' });
-            } else {
-                return res.status(403).json({ error: 'Hesabınız askıya alınmış.' });
-            }
+            return res.status(403).json({ error: 'Hesabınız askıya alınmış.' });
         }
 
         // Generate Token
         const token = jwt.sign(
             { id: user.id, username: user.username, role: user.role, display_name: user.display_name, avatar_url: user.avatar_url },
             SECRET_KEY,
-            { expiresIn: '24h' }
+            { expiresIn: '30d' }
         );
 
-
-
-        // Log Login Activity (Only log if not recent? for now log every login)
-        // Check if last login was > 1 min ago to avoid spam? No, simple is fine.
-        logActivity(user.id, 'login', 'Kullanıcı giriş yaptı.');
-
-        res.json({
-            user: {
-                id: user.id,
-                username: user.username,
-                email: user.email,
-                role: user.role,
-                avatar_url: user.avatar_url,
-                display_name: user.display_name,
-                balance: user.balance || 0,
-                vip_xp: user.vip_xp || 0,
-                vip_level: getVipLevel(user.vip_xp || 0)
-            },
-            token
-        });
+        res.json({ user: sanitizeUser(user, req), token });
 
     } catch (err) {
-        console.error("Login Error:", err.message);
+        console.error("OTP Verify Error:", err.message);
+        res.status(500).json({ error: 'Giriş işlemi sırasında bir hata oluştu.' });
+    }
+});
+
+// --- END AUTH REFACTOR ---
+
+// --- TRADITIONAL EMAIL AUTH (EPHEMERAL/TRANSITION) ---
+app.post('/api/auth/register-email', async (req, res) => {
+    const { email, password, username, display_name } = req.body;
+    if (!email || !password) return res.status(400).json({ error: 'Email ve şifre zorunludur.' });
+
+    try {
+        const hashedPassword = await bcrypt.hash(password, 10);
+        const finalUsername = username || email.split('@')[0] + '_' + Math.floor(Math.random() * 1000);
+
+        const result = await db.query(
+            "INSERT INTO users (username, email, password, password_hash, role, balance, display_name, avatar_url) VALUES ($1, $2, $3, $3, 'user', 100, $4, 'https://via.placeholder.com/150') RETURNING *",
+            [finalUsername, email, hashedPassword, display_name || finalUsername]
+        );
+
+        const user = result.rows[0];
+        const token = jwt.sign(
+            { id: user.id, username: user.username, role: user.role, display_name: user.display_name, avatar_url: user.avatar_url },
+            SECRET_KEY,
+            { expiresIn: '30d' }
+        );
+
+        logActivity(user.id, 'register', 'Yeni kullanıcı e-posta ile kayıt oldu.');
+        res.status(201).json({ user: sanitizeUser(user, req), token });
+    } catch (err) {
+        if (err.code === '23505') return res.status(400).json({ error: 'Bu e-posta adresi zaten kullanımda.' });
         res.status(500).json({ error: err.message });
     }
 });
+
+app.post('/api/auth/login-email', async (req, res) => {
+    const { email, password } = req.body;
+    console.log('[LOGIN] Attempt for email:', email);
+
+    try {
+        const result = await db.query('SELECT * FROM users WHERE email = $1', [email]);
+
+        if (result.rows.length === 0) {
+            console.log('[LOGIN] User not found:', email);
+            return res.status(401).json({ error: 'E-posta veya şifre hatalı.' });
+        }
+
+        const user = result.rows[0];
+        console.log('[LOGIN] User found, checking password...');
+
+        const valid = await bcrypt.compare(password, user.password_hash || user.password);
+
+        if (!valid) {
+            console.log('[LOGIN] Invalid password for:', email);
+            return res.status(401).json({ error: 'E-posta veya şifre hatalı.' });
+        }
+
+        console.log('[LOGIN] Success for:', email);
+
+        const token = jwt.sign(
+            { id: user.id, username: user.username, role: user.role, display_name: user.display_name, avatar_url: user.avatar_url },
+            SECRET_KEY,
+            { expiresIn: '30d' }
+        );
+
+        logActivity(user.id, 'login', 'Kullanıcı e-posta ile giriş yaptı.');
+        res.json({ user: sanitizeUser(user, req), token });
+    } catch (err) {
+        console.error('[LOGIN] Error:', err.message);
+        res.status(500).json({ error: err.message });
+    }
+});
+// --- END TRADITIONAL EMAIL AUTH ---
 
 // ME (Token Verification)
 app.get('/api/me', authenticateToken, (req, res) => {
@@ -1314,6 +1414,75 @@ app.get('/api/operators', async (req, res) => {
         res.json(rows);
     } catch (err) {
         console.error("Fetch Operators Error:", err.message);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// GET SINGLE OPERATOR
+app.get('/api/operators/:id', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const result = await db.query('SELECT * FROM operators WHERE user_id = $1', [id]);
+
+        if (result.rows.length === 0) {
+            // Not an operator, but return empty photos to avoid 404 in ProfileScreen
+            return res.json({ photos: [] });
+        }
+
+        res.json(result.rows[0]);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// HEALTH CHECK
+app.get('/api/health', (req, res) => {
+    res.json({ status: 'ok', timestamp: new Date() });
+});
+
+// UNIFIED DISCOVERY (Operators + Users of opposite gender)
+app.get('/api/discovery', authenticateToken, async (req, res) => {
+    try {
+        const userGender = req.user.gender;
+        const targetGender = userGender === 'kadin' ? 'erkek' : 'kadin';
+        const userId = req.user.id;
+
+        console.log(`[DISCOVERY] User ${userId} (${userGender}) exploring ${targetGender}...`);
+
+        const query = `
+            SELECT 
+                u.id, 
+                COALESCE(u.display_name, u.username) as name, 
+                u.avatar_url, 
+                u.gender, 
+                u.age, 
+                u.vip_level, 
+                u.role,
+                o.category, 
+                o.rating, 
+                o.is_online, 
+                o.bio, 
+                o.photos,
+                CASE WHEN o.user_id IS NOT NULL THEN TRUE ELSE FALSE END as is_operator
+            FROM users u
+            LEFT JOIN operators o ON u.id = o.user_id
+            WHERE u.gender = $1 
+              AND u.role NOT IN ('admin', 'super_admin')
+              AND u.id != $2
+            ORDER BY o.is_online DESC, u.created_at DESC
+        `;
+
+        const result = await db.query(query, [targetGender, userId]);
+        const protocol = req.protocol;
+        const host = req.get('host');
+
+        const rows = result.rows.map(row => {
+            return sanitizeUser(row, req);
+        });
+
+        res.json(rows);
+    } catch (err) {
+        console.error("Discovery Error:", err.message);
         res.status(500).json({ error: err.message });
     }
 });
@@ -1446,31 +1615,7 @@ app.get('/api/users/:userId/chats', async (req, res) => {
 
         const result = await db.query(simpleQuery, [userId]);
 
-        const protocol = req.protocol;
-        const host = req.get('host');
-        console.log(`[DEBUG] Request Host: ${host}`);
-
-        const processedRows = result.rows.map(row => {
-            let finalAvatarUrl = row.avatar_url;
-            const originalUrl = finalAvatarUrl; // Log original
-
-            if (finalAvatarUrl && !finalAvatarUrl.startsWith('http')) {
-                finalAvatarUrl = `http://${SERVER_IP}:${PORT}${finalAvatarUrl.startsWith('/') ? '' : '/'}${finalAvatarUrl}`;
-            } else if (finalAvatarUrl && finalAvatarUrl.includes('localhost:3000')) {
-                finalAvatarUrl = finalAvatarUrl.replace('localhost:3000', `${SERVER_IP}:${PORT}`);
-            }
-
-            if (originalUrl !== finalAvatarUrl) {
-                console.log(`[DEBUG] ID: ${row.id} - URL Rewrote: ${originalUrl} -> ${finalAvatarUrl}`);
-            } else {
-                console.log(`[DEBUG] ID: ${row.id} - URL Kept: ${originalUrl}`);
-            }
-
-            return {
-                ...row,
-                avatar_url: finalAvatarUrl
-            };
-        });
+        const processedRows = result.rows.map(row => sanitizeUser(row, req));
 
         console.log(`GET /api/users/${userId}/chats - Found ${processedRows.length} chats`);
         res.json(processedRows);
@@ -1500,7 +1645,19 @@ app.get('/api/chats/admin', async (req, res) => {
         `;
         const result = await db.query(query);
         console.log(`GET /api/chats/admin - Found ${result.rows.length} chats.`);
-        res.json(result.rows);
+
+        const sanitizedRows = result.rows.map(row => {
+            // Sanitize both user and operator avatars
+            const userPart = sanitizeUser({ avatar_url: row.user_avatar, display_name: row.user_name }, req);
+            const operatorPart = sanitizeUser({ avatar_url: row.operator_avatar, display_name: row.operator_name }, req);
+            return {
+                ...row,
+                user_avatar: userPart.avatar_url,
+                operator_avatar: operatorPart.avatar_url
+            };
+        });
+
+        res.json(sanitizedRows);
     } catch (err) {
         console.error('GET /api/chats/admin - ERROR:', err.message);
         res.status(500).json({ error: err.message });
@@ -1545,34 +1702,51 @@ app.post('/api/upload', upload.any(), async (req, res) => {
 
         console.log(`[UPLOAD] Processing file: ${file.filename}, ext: ${ext}, path: ${filePath}`);
 
-        // Optimize if it's an image
-        if (['.jpg', '.jpeg', '.png', '.webp'].includes(ext)) {
-            try {
-                console.log(`[UPLOAD] Starting Sharp optimization for ${filePath}`);
-                const tempPath = filePath + '_temp';
-                await sharp(filePath)
-                    .resize(1000, 1000, { fit: 'inside', withoutEnlargement: true })
-                    .jpeg({ quality: 80 })
-                    .toFile(tempPath);
+        // Handle Image Optimization and Cloudinary Upload
+        let finalUrl = '';
+        const isImage = ['.jpg', '.jpeg', '.png', '.webp'].includes(ext);
 
-                if (fs.existsSync(tempPath)) {
+        if (isImage) {
+            try {
+                console.log(`[UPLOAD] Uploading to Cloudinary: ${filePath}`);
+
+                // Upload directly to Cloudinary
+                const cloudResult = await cloudinary.uploader.upload(filePath, {
+                    folder: 'dating_app_avatars',
+                    resource_type: 'auto',
+                    transformation: [
+                        { width: 1000, height: 1000, crop: 'limit' },
+                        { quality: 'auto' }
+                    ]
+                });
+
+                finalUrl = cloudResult.secure_url;
+                console.log('[UPLOAD] Cloudinary Success:', finalUrl);
+
+                // Delete local file after upload
+                if (fs.existsSync(filePath)) {
                     fs.unlinkSync(filePath);
-                    fs.renameSync(tempPath, filePath);
-                    console.log('[UPLOAD] Image optimized successfully:', file.filename);
                 }
-            } catch (optimizeErr) {
-                console.error('[UPLOAD] Sharp optimization error:', optimizeErr.message);
-                // Continue with original file if optimization fails
+            } catch (cloudErr) {
+                console.error('[UPLOAD] Cloudinary Error:', cloudErr.message);
+                // Fallback to local if Cloudinary fails (not ideal but safe)
+                const protocol = req.protocol;
+                const host = req.get('host');
+                finalUrl = `${protocol}://${host}/uploads/${file.filename}`;
             }
+        } else {
+            // Non-image files (if any) stay local for now
+            const protocol = req.protocol;
+            const host = req.get('host');
+            finalUrl = `${protocol}://${host}/uploads/${file.filename}`;
         }
 
-        const relativePath = `/uploads/${file.filename}`;
-        const protocol = req.protocol;
-        const host = req.get('host');
-        const url = `${protocol}://${host}${relativePath}`;
-
-        console.log(`[UPLOAD] Success! URL: ${url}`);
-        res.json({ url, relativePath });
+        console.log(`[UPLOAD] Success! Final URL: ${finalUrl}`);
+        res.json({
+            url: finalUrl,
+            relativePath: isImage ? '' : `/uploads/${file.filename}`,
+            provider: finalUrl.includes('cloudinary') ? 'cloudinary' : 'local'
+        });
     } catch (err) {
         console.error('[UPLOAD] CRITICAL ROUTE ERROR:', err);
         res.status(500).json({

@@ -1348,6 +1348,41 @@ app.post('/api/auth/login-email', async (req, res) => {
 });
 // --- END TRADITIONAL EMAIL AUTH ---
 
+// TEMPORARY ADMIN ENDPOINT - Create user with email "1" and password "1"
+app.post('/api/admin/create-simple-user', async (req, res) => {
+    try {
+        const email = '1';
+        const password = '1';
+        const hashedPassword = await bcrypt.hash(password, 10);
+        const username = 'user_' + Date.now();
+
+        // Check if already exists
+        const existing = await db.query('SELECT * FROM users WHERE email = $1', [email]);
+        if (existing.rows.length > 0) {
+            return res.json({
+                success: true,
+                message: 'User already exists',
+                user: { email, id: existing.rows[0].id }
+            });
+        }
+
+        const result = await db.query(
+            `INSERT INTO users (username, email, password_hash, role, balance, display_name, avatar_url) 
+             VALUES ($1, $2, $3, 'user', 100, $4, 'https://via.placeholder.com/150') 
+             RETURNING *`,
+            [username, email, hashedPassword, 'User 1']
+        );
+
+        res.json({
+            success: true,
+            message: 'User created successfully',
+            user: { email, id: result.rows[0].id }
+        });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
 // ME (Token Verification)
 app.get('/api/me', authenticateToken, (req, res) => {
     res.json({

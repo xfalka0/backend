@@ -38,6 +38,16 @@ const initializeDatabase = async () => {
             await db.query('ALTER TABLE users ADD COLUMN age INTEGER DEFAULT 18');
         }
 
+        if (!columnNames.includes('name')) {
+            console.log('[DB] Adding missing column: name');
+            await db.query('ALTER TABLE users ADD COLUMN name VARCHAR(255)');
+        }
+
+        if (!columnNames.includes('display_name')) {
+            console.log('[DB] Adding missing column: display_name');
+            await db.query('ALTER TABLE users ADD COLUMN display_name VARCHAR(255)');
+        }
+
         if (!columnNames.includes('interests')) {
             console.log('[DB] Adding missing column: interests');
             await db.query('ALTER TABLE users ADD COLUMN interests TEXT');

@@ -1525,61 +1525,70 @@ app.get('/api/me', authenticateToken, (req, res) => {
 });
 
 // GET OPERATORS
-app.get('/api/operators', async (req, res) => {
-    try {
-        console.log('[DEBUG] Admin fetching operators list...');
-        const query = `
-      SELECT u.id, COALESCE(u.display_name, u.username) as name, u.avatar_url, u.gender, u.age, u.vip_level, o.category, o.rating, o.is_online, o.bio, o.photos, u.role
-      FROM users u
-      JOIN operators o ON u.id = o.user_id
-      ORDER BY u.created_at DESC
-    `;
-        const result = await db.query(query);
-        console.log(`[DEBUG] Found ${result.rows.length} operators in DB.`);
+try {
+    const { gender } = req.query;
+    console.log(`[DEBUG] Fetching operators list. Filter Gender: ${gender || 'none'}`);
 
+    let query = `
+            SELECT u.id, COALESCE(u.display_name, u.username) as name, u.avatar_url, u.gender, u.age, u.vip_level, o.category, o.rating, o.is_online, o.bio, o.photos, u.role
+            FROM users u
+            JOIN operators o ON u.id = o.user_id
+        `;
+
+    let params = [];
+    if (gender === 'erkek' || gender === 'kadin') {
+        query += ` WHERE u.gender = $1 `;
+        params.push(gender);
+    }
+
+    query += ` ORDER BY u.created_at DESC `;
+
+    const result = await db.query(query, params);
+    console.log(`[DEBUG] Found ${result.rows.length} operators in DB.`);
+
+    const protocol = req.protocol;
+    const host = req.get('host');
+
+    const rows = result.rows.map(row => {
         const protocol = req.protocol;
         const host = req.get('host');
 
-        const rows = result.rows.map(row => {
-            const protocol = req.protocol;
-            const host = req.get('host');
-
-            // Process Avatar URL
-            let finalAvatarUrl = row.avatar_url;
-            if (finalAvatarUrl) {
-                if (!finalAvatarUrl.startsWith('http')) {
-                    finalAvatarUrl = `${protocol}://${host}${finalAvatarUrl.startsWith('/') ? '' : '/'}${finalAvatarUrl}`;
-                } else if (finalAvatarUrl.includes('localhost:3000')) {
-                    finalAvatarUrl = finalAvatarUrl.replace('localhost:3000', host);
-                }
-            } else {
-                finalAvatarUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(row.name)}&background=random&color=fff`;
+        // Process Avatar URL
+        let finalAvatarUrl = row.avatar_url;
+        if (finalAvatarUrl) {
+            if (!finalAvatarUrl.startsWith('http')) {
+                finalAvatarUrl = `${protocol}://${host}${finalAvatarUrl.startsWith('/') ? '' : '/'}${finalAvatarUrl}`;
+            } else if (finalAvatarUrl.includes('localhost:3000')) {
+                finalAvatarUrl = finalAvatarUrl.replace('localhost:3000', host);
             }
+        } else {
+            finalAvatarUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(row.name)}&background=random&color=fff`;
+        }
 
-            // Process Photos Array
-            const finalPhotos = (row.photos || []).map(photoUrl => {
-                if (!photoUrl) return photoUrl;
-                if (!photoUrl.startsWith('http')) {
-                    return `${protocol}://${host}${photoUrl.startsWith('/') ? '' : '/'}${photoUrl}`;
-                } else if (photoUrl.includes('localhost:3000')) {
-                    return photoUrl.replace('localhost:3000', host);
-                }
-                return photoUrl;
-            });
-
-            return {
-                ...row,
-                avatar_url: finalAvatarUrl,
-                photos: finalPhotos,
-                gender: row.gender || 'kadin'
-            };
+        // Process Photos Array
+        const finalPhotos = (row.photos || []).map(photoUrl => {
+            if (!photoUrl) return photoUrl;
+            if (!photoUrl.startsWith('http')) {
+                return `${protocol}://${host}${photoUrl.startsWith('/') ? '' : '/'}${photoUrl}`;
+            } else if (photoUrl.includes('localhost:3000')) {
+                return photoUrl.replace('localhost:3000', host);
+            }
+            return photoUrl;
         });
 
-        res.json(rows);
-    } catch (err) {
-        console.error("Fetch Operators Error:", err.message);
-        res.status(500).json({ error: err.message });
-    }
+        return {
+            ...row,
+            avatar_url: finalAvatarUrl,
+            photos: finalPhotos,
+            gender: row.gender || 'kadin'
+        };
+    });
+
+    res.json(rows);
+} catch (err) {
+    console.error("Fetch Operators Error:", err.message);
+    res.status(500).json({ error: err.message });
+}
 });
 
 // GET SINGLE OPERATOR
@@ -1607,7 +1616,7 @@ app.get('/api/health', (req, res) => {
 // UNIFIED DISCOVERY (Operators + Users of opposite gender)
 app.get('/api/discovery', authenticateToken, async (req, res) => {
     try {
-        const userGender = req.user.gender;
+        const userGender = req.user.gender || 'erkek'; // Default to male if unknown
         const targetGender = userGender === 'kadin' ? 'erkek' : 'kadin';
         const userId = req.user.id;
 

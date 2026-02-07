@@ -287,11 +287,13 @@ app.put('/api/users/:id/profile', async (req, res) => {
         // Relaxed ID validation: Allow UUIDs or integer strings
         const isValidId = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id) || /^\d+$/.test(id);
 
+        console.log(`[PROFILE_UPDATE] Validating ID: "${id}" | isValid: ${isValidId}`);
+
         if (!id || !isValidId) {
             console.error(`[PROFILE_UPDATE] Invalid ID format received: "${id}" (Type: ${typeof id})`);
             return res.status(400).json({
                 error: 'Geçersiz Kullanıcı ID formatı.',
-                details: `Beklenen: UUID veya Sayı. Alınan: "${id}"`,
+                details: `Beklenen: UUID veya Sayı. Alınan: "${id}" [FIX_V18]`,
                 debug_id: id
             });
         }
@@ -476,7 +478,7 @@ app.put('/api/users/:id/profile', async (req, res) => {
 
 // Health Check
 app.get('/', (req, res) => {
-    res.send('Chat System Backend is Running (FIX_V17)');
+    res.send('Chat System Backend is Running (FIX_V18)');
 });
 
 // DEBUG: DB Check

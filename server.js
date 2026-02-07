@@ -1531,7 +1531,7 @@ app.get('/api/operators', async (req, res) => {
         console.log(`[DEBUG] Fetching operators list. Filter Gender: ${gender || 'none'}`);
 
         let query = `
-            SELECT u.id, COALESCE(u.display_name, u.username) as name, u.avatar_url, u.gender, u.age, u.vip_level, o.category, o.rating, o.is_online, o.bio, o.photos, u.role
+            SELECT u.id, COALESCE(u.display_name, u.username) as name, u.avatar_url, u.gender, u.age, u.vip_level, o.category, o.rating, o.is_online, COALESCE(o.bio, u.bio) as bio, o.photos, u.role
             FROM users u
             JOIN operators o ON u.id = o.user_id
         `;
@@ -1624,7 +1624,6 @@ app.get('/api/discovery', authenticateToken, async (req, res) => {
         console.log(`[DISCOVERY] User ${userId} (${userGender}) exploring ${targetGender}...`);
 
         const query = `
-            SELECT 
                 u.id, 
                 COALESCE(u.display_name, u.username) as name, 
                 u.avatar_url, 
@@ -1635,7 +1634,7 @@ app.get('/api/discovery', authenticateToken, async (req, res) => {
                 o.category, 
                 o.rating, 
                 o.is_online, 
-                o.bio, 
+                COALESCE(o.bio, u.bio) as bio, 
                 o.photos,
                 CASE WHEN o.user_id IS NOT NULL THEN TRUE ELSE FALSE END as is_operator
             FROM users u

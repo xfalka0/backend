@@ -293,7 +293,7 @@ app.put('/api/users/:id/profile', async (req, res) => {
             console.error(`[PROFILE_UPDATE] Invalid ID format received: "${id}" (Type: ${typeof id})`);
             return res.status(400).json({
                 error: 'Geçersiz Kullanıcı ID formatı.',
-                details: `Beklenen: UUID veya Sayı. Alınan: "${id}" [FIX_V18]`,
+                details: `Beklenen: UUID veya Sayı. Alınan: "${id}"`,
                 debug_id: id
             });
         }

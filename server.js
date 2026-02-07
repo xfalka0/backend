@@ -38,6 +38,26 @@ const initializeDatabase = async () => {
             await db.query('ALTER TABLE users ADD COLUMN age INTEGER DEFAULT 18');
         }
 
+        if (!columnNames.includes('interests')) {
+            console.log('[DB] Adding missing column: interests');
+            await db.query('ALTER TABLE users ADD COLUMN interests TEXT');
+        }
+
+        if (!columnNames.includes('job')) {
+            console.log('[DB] Adding missing column: job');
+            await db.query('ALTER TABLE users ADD COLUMN job VARCHAR(100)');
+        }
+
+        if (!columnNames.includes('edu')) {
+            console.log('[DB] Adding missing column: edu');
+            await db.query('ALTER TABLE users ADD COLUMN edu VARCHAR(100)');
+        }
+
+        if (!columnNames.includes('onboarding_completed')) {
+            console.log('[DB] Adding missing column: onboarding_completed');
+            await db.query('ALTER TABLE users ADD COLUMN onboarding_completed BOOLEAN DEFAULT false');
+        }
+
         if (!columnNames.includes('vip_level')) {
             console.log('[DB] Adding missing column: vip_level');
             await db.query('ALTER TABLE users ADD COLUMN vip_level INTEGER DEFAULT 0');
@@ -217,13 +237,13 @@ app.put('/api/users/:id', async (req, res) => {
             `UPDATE users 
              SET display_name = COALESCE($1, display_name),
                  name = COALESCE($2, name),
-                 age = COALESCE($3, age),
+                 age = COALESCE($3::INTEGER, age),
                  gender = COALESCE($4, gender),
                  bio = COALESCE($5, bio),
                  job = COALESCE($6, job),
                  edu = COALESCE($7, edu)
              WHERE id = $8 RETURNING *`,
-            [finalDisplayName || null, finalName || null, age || null, gender || null, bio || null, job || null, edu || null, id]
+            [finalDisplayName || null, finalName || null, age ? parseInt(age) : null, gender || null, bio || null, job || null, edu || null, id]
         );
 
         if (result.rows.length === 0) return res.status(404).json({ error: 'User not found' });
@@ -252,9 +272,9 @@ app.put('/api/users/:id/profile', async (req, res) => {
                 gender = COALESCE($5, gender),
                 interests = COALESCE($6, interests),
                 onboarding_completed = COALESCE($7, onboarding_completed),
-                age = COALESCE($8, age)
+                age = COALESCE($8::INTEGER, age)
              WHERE id = $9 RETURNING *`,
-            [finalDisplayName || null, finalName || null, bio || null, avatar_url || null, gender || null, interests || null, onboarding_completed !== undefined ? onboarding_completed : null, age || null, id]
+            [finalDisplayName || null, finalName || null, bio || null, avatar_url || null, gender || null, interests || null, onboarding_completed !== undefined ? onboarding_completed : null, req.body.age ? parseInt(req.body.age) : null, id]
         );
         if (result.rows.length === 0) return res.status(404).json({ error: 'User not found' });
         res.json(sanitizeUser(result.rows[0], req));

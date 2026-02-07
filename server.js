@@ -284,10 +284,16 @@ app.put('/api/users/:id/profile', async (req, res) => {
     const finalName = req.body.name || req.body.display_name;
 
     try {
-        // Validate ID format (basic UUID check)
-        if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
-            console.error(`[PROFILE_UPDATE] Invalid UUID format: ${id}`);
-            return res.status(400).json({ error: 'Geçersiz Kullanıcı ID formatı.' });
+        // Relaxed ID validation: Allow UUIDs or integer strings
+        const isValidId = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id) || /^\d+$/.test(id);
+
+        if (!id || !isValidId) {
+            console.error(`[PROFILE_UPDATE] Invalid ID format received: "${id}" (Type: ${typeof id})`);
+            return res.status(400).json({
+                error: 'Geçersiz Kullanıcı ID formatı.',
+                details: `Beklenen: UUID veya Sayı. Alınan: "${id}"`,
+                debug_id: id
+            });
         }
 
         console.log(`[PROFILE_UPDATE] Updating profile for user: ${id}`);

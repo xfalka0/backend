@@ -1381,6 +1381,7 @@ app.post('/api/auth/verify-otp', async (req, res) => {
             );
             user = insertResult.rows[0];
             logActivity(user.id, 'register', 'Yeni kullanıcı OTP ile kayıt oldu.');
+            io.emit('new_user', sanitizeUser(user, req));
         } else {
             // Login Existing User
             user = result.rows[0];
@@ -1431,6 +1432,7 @@ app.post('/api/auth/register-email', async (req, res) => {
         );
 
         logActivity(user.id, 'register', 'Yeni kullanıcı e-posta ile kayıt oldu.');
+        io.emit('new_user', sanitizeUser(user, req));
         res.status(201).json({ user: sanitizeUser(user, req), token });
     } catch (err) {
         if (err.code === '23505') return res.status(400).json({ error: 'Bu e-posta adresi zaten kullanımda.' });

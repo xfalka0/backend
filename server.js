@@ -274,6 +274,12 @@ app.put('/api/users/:id/profile', async (req, res) => {
     const finalName = req.body.name || req.body.display_name;
 
     try {
+        // Validate ID format (basic UUID check)
+        if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
+            console.error(`[PROFILE_UPDATE] Invalid UUID format: ${id}`);
+            return res.status(400).json({ error: 'Geçersiz Kullanıcı ID formatı.' });
+        }
+
         console.log(`[PROFILE_UPDATE] Updating profile for user: ${id}`);
         console.log('[PROFILE_UPDATE] Body:', JSON.stringify(req.body, null, 2));
 
@@ -296,23 +302,31 @@ app.put('/api/users/:id/profile', async (req, res) => {
                 req.body.gender || null,
                 req.body.interests || null,
                 req.body.onboarding_completed !== undefined ? req.body.onboarding_completed : null,
-                req.body.age ? parseInt(req.body.age) : null,
+                (req.body.age && !isNaN(parseInt(req.body.age))) ? parseInt(req.body.age) : null,
                 id
             ]
         );
-        console.log('[PROFILE_UPDATE] Success');
+        console.log('[PROFILE_UPDATE] Query executed');
         if (result.rows.length === 0) {
             console.error('[PROFILE_UPDATE] User not found during update');
-            return res.status(404).json({ error: 'User not found' });
+            return res.status(404).json({ error: 'Kullanıcı bulunamadı.' });
         }
-        res.json(sanitizeUser(result.rows[0], req));
+
+        try {
+            const sanitized = sanitizeUser(result.rows[0], req);
+            console.log('[PROFILE_UPDATE] Success');
+            res.json(sanitized);
+        } catch (sanErr) {
+            console.error('[PROFILE_UPDATE] Sanitization Error:', sanErr.message);
+            res.json(result.rows[0]); // Return raw if sanitization fails
+        }
     } catch (err) {
         console.error('[PROFILE_UPDATE] CRITICAL ERROR:', err.message);
-        console.error('[PROFILE_UPDATE] Stack:', err.stack);
+        console.error('[PROFILE_UPDATE] PG Code:', err.code);
         res.status(500).json({
             error: 'Profile update failed',
-            details: err.message,
-            code: err.code // Carry over PG error code if any
+            details: `${err.message} (PG Code: ${err.code || 'N/A'})`,
+            code: err.code
         });
     }
 });

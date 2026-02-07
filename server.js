@@ -223,7 +223,7 @@ app.put('/api/users/:id', async (req, res) => {
                  job = COALESCE($6, job),
                  edu = COALESCE($7, edu)
              WHERE id = $8 RETURNING *`,
-            [finalDisplayName, finalName, age, gender, bio, job, edu, id]
+            [finalDisplayName || null, finalName || null, age || null, gender || null, bio || null, job || null, edu || null, id]
         );
 
         if (result.rows.length === 0) return res.status(404).json({ error: 'User not found' });
@@ -253,7 +253,7 @@ app.put('/api/users/:id/profile', async (req, res) => {
                 interests = COALESCE($6, interests),
                 onboarding_completed = COALESCE($7, onboarding_completed)
              WHERE id = $8 RETURNING *`,
-            [finalDisplayName, finalName, bio, avatar_url, gender, interests, onboarding_completed, id]
+            [finalDisplayName || null, finalName || null, bio || null, avatar_url || null, gender || null, interests || null, onboarding_completed !== undefined ? onboarding_completed : null, id]
         );
         if (result.rows.length === 0) return res.status(404).json({ error: 'User not found' });
         res.json(sanitizeUser(result.rows[0], req));

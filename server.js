@@ -208,6 +208,10 @@ app.put('/api/users/:id', async (req, res) => {
     const { id } = req.params;
     const { name, display_name, age, gender, bio, job, edu } = req.body;
 
+    // Synchronize name and display_name
+    const finalName = name || display_name;
+    const finalDisplayName = display_name || name;
+
     try {
         const result = await db.query(
             `UPDATE users 
@@ -219,7 +223,7 @@ app.put('/api/users/:id', async (req, res) => {
                  job = COALESCE($6, job),
                  edu = COALESCE($7, edu)
              WHERE id = $8 RETURNING *`,
-            [display_name || name, name, age, gender, bio, job, edu, id]
+            [finalDisplayName, finalName, age, gender, bio, job, edu, id]
         );
 
         if (result.rows.length === 0) return res.status(404).json({ error: 'User not found' });
@@ -229,21 +233,27 @@ app.put('/api/users/:id', async (req, res) => {
     }
 });
 
-// UPDATE USER PROFILE
+// UPDATE USER PROFILE (LEGACY / ONBOARDING)
 app.put('/api/users/:id/profile', async (req, res) => {
     const { id } = req.params;
-    const { display_name, bio, avatar_url, gender, interests, onboarding_completed } = req.body;
+    const { display_name, name, bio, avatar_url, gender, interests, onboarding_completed } = req.body;
+
+    // Synchronize
+    const finalDisplayName = display_name || name;
+    const finalName = name || display_name;
+
     try {
         const result = await db.query(
             `UPDATE users SET 
                 display_name = COALESCE($1, display_name), 
-                bio = COALESCE($2, bio), 
-                avatar_url = COALESCE($3, avatar_url),
-                gender = COALESCE($4, gender),
-                interests = COALESCE($5, interests),
-                onboarding_completed = COALESCE($6, onboarding_completed)
-             WHERE id = $7 RETURNING *`,
-            [display_name, bio, avatar_url, gender, interests, onboarding_completed, id]
+                name = COALESCE($2, name),
+                bio = COALESCE($3, bio), 
+                avatar_url = COALESCE($4, avatar_url),
+                gender = COALESCE($5, gender),
+                interests = COALESCE($6, interests),
+                onboarding_completed = COALESCE($7, onboarding_completed)
+             WHERE id = $8 RETURNING *`,
+            [finalDisplayName, finalName, bio, avatar_url, gender, interests, onboarding_completed, id]
         );
         if (result.rows.length === 0) return res.status(404).json({ error: 'User not found' });
         res.json(sanitizeUser(result.rows[0], req));

@@ -251,9 +251,10 @@ app.put('/api/users/:id/profile', async (req, res) => {
                 avatar_url = COALESCE($4, avatar_url),
                 gender = COALESCE($5, gender),
                 interests = COALESCE($6, interests),
-                onboarding_completed = COALESCE($7, onboarding_completed)
-             WHERE id = $8 RETURNING *`,
-            [finalDisplayName || null, finalName || null, bio || null, avatar_url || null, gender || null, interests || null, onboarding_completed !== undefined ? onboarding_completed : null, id]
+                onboarding_completed = COALESCE($7, onboarding_completed),
+                age = COALESCE($8, age)
+             WHERE id = $9 RETURNING *`,
+            [finalDisplayName || null, finalName || null, bio || null, avatar_url || null, gender || null, interests || null, onboarding_completed !== undefined ? onboarding_completed : null, age || null, id]
         );
         if (result.rows.length === 0) return res.status(404).json({ error: 'User not found' });
         res.json(sanitizeUser(result.rows[0], req));
@@ -369,7 +370,12 @@ app.put('/api/users/:id/profile', async (req, res) => {
         // 4. Migrations (Isolated)
         await runQuery("Migration: Users Gender", `ALTER TABLE users ADD COLUMN IF NOT EXISTS gender VARCHAR(10) DEFAULT 'kadin'`);
         await runQuery("Migration: Users Display Name", `ALTER TABLE users ADD COLUMN IF NOT EXISTS display_name VARCHAR(255)`);
-        await runQuery("Migration: User Bio", `ALTER TABLE users ADD COLUMN IF NOT EXISTS bio TEXT`);
+        await runQuery("Migration: Users Bio", `ALTER TABLE users ADD COLUMN IF NOT EXISTS bio TEXT`);
+        await runQuery("Migration: Users Job/Edu", `ALTER TABLE users ADD COLUMN IF NOT EXISTS job VARCHAR(100), ADD COLUMN IF NOT EXISTS edu VARCHAR(100)`);
+        await runQuery("Migration: Users Age", `ALTER TABLE users ADD COLUMN IF NOT EXISTS age INTEGER`);
+        await runQuery("Migration: Users Interests", `ALTER TABLE users ADD COLUMN IF NOT EXISTS interests TEXT`);
+        await runQuery("Migration: Users Onboarding", `ALTER TABLE users ADD COLUMN IF NOT EXISTS onboarding_completed BOOLEAN DEFAULT false`);
+        await runQuery("Migration: Users Account Status", `ALTER TABLE users ADD COLUMN IF NOT EXISTS account_status VARCHAR(20) DEFAULT 'active'`);
         await runQuery("Migration: User Avatar", `ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_url TEXT`);
         await runQuery("Migration: User Account Status", `ALTER TABLE users ADD COLUMN IF NOT EXISTS account_status VARCHAR(50) DEFAULT 'active'`);
         await runQuery("Migration: Operator Job", `ALTER TABLE operators ADD COLUMN IF NOT EXISTS job VARCHAR(100)`);

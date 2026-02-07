@@ -1145,6 +1145,9 @@ app.post('/api/admin/users/:id/balance', authenticateToken, authorizeRole('admin
             [id, amount, amount > 0 ? 'Admin Ekleme' : 'Admin Ceza', 'completed']
         );
 
+        // 3. Emit Real-time Update
+        io.emit('balance_update', { userId: id, newBalance: result.rows[0].balance });
+
         res.json({ success: true, newBalance: result.rows[0].balance });
     } catch (err) {
         res.status(500).json({ error: err.message });

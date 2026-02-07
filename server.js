@@ -58,6 +58,17 @@ const initializeDatabase = async () => {
             await db.query('ALTER TABLE users ADD COLUMN onboarding_completed BOOLEAN DEFAULT false');
         }
 
+        // Fix pending_photos schema if it exists with wrong ID type or missing default
+        const photoCols = await db.query("SELECT column_name, data_type, column_default FROM information_schema.columns WHERE table_name = 'pending_photos'");
+        const photoColNames = photoCols.rows.map(c => c.column_name);
+        if (photoColNames.length > 0) {
+            const idCol = photoCols.rows.find(c => c.column_name === 'id');
+            if (idCol && idCol.data_type === 'uuid' && !idCol.column_default) {
+                console.log('[DB] Fixing pending_photos id default...');
+                await db.query('ALTER TABLE pending_photos ALTER COLUMN id SET DEFAULT gen_random_uuid()');
+            }
+        }
+
         if (!columnNames.includes('vip_level')) {
             console.log('[DB] Adding missing column: vip_level');
             await db.query('ALTER TABLE users ADD COLUMN vip_level INTEGER DEFAULT 0');
@@ -259,10 +270,13 @@ app.put('/api/users/:id/profile', async (req, res) => {
     const { display_name, name, bio, avatar_url, gender, interests, onboarding_completed } = req.body;
 
     // Synchronize
-    const finalDisplayName = display_name || name;
-    const finalName = name || display_name;
+    const finalDisplayName = req.body.display_name || req.body.name;
+    const finalName = req.body.name || req.body.display_name;
 
     try {
+        console.log(`[PROFILE_UPDATE] Updating profile for user: ${id}`);
+        console.log('[PROFILE_UPDATE] Body:', JSON.stringify(req.body, null, 2));
+
         const result = await db.query(
             `UPDATE users SET 
                 display_name = COALESCE($1, display_name), 
@@ -274,13 +288,32 @@ app.put('/api/users/:id/profile', async (req, res) => {
                 onboarding_completed = COALESCE($7, onboarding_completed),
                 age = COALESCE($8::INTEGER, age)
              WHERE id = $9 RETURNING *`,
-            [finalDisplayName || null, finalName || null, bio || null, avatar_url || null, gender || null, interests || null, onboarding_completed !== undefined ? onboarding_completed : null, req.body.age ? parseInt(req.body.age) : null, id]
+            [
+                req.body.display_name || null,
+                req.body.name || null,
+                req.body.bio || null,
+                req.body.avatar_url || null,
+                req.body.gender || null,
+                req.body.interests || null,
+                req.body.onboarding_completed !== undefined ? req.body.onboarding_completed : null,
+                req.body.age ? parseInt(req.body.age) : null,
+                id
+            ]
         );
-        if (result.rows.length === 0) return res.status(404).json({ error: 'User not found' });
+        console.log('[PROFILE_UPDATE] Success');
+        if (result.rows.length === 0) {
+            console.error('[PROFILE_UPDATE] User not found during update');
+            return res.status(404).json({ error: 'User not found' });
+        }
         res.json(sanitizeUser(result.rows[0], req));
     } catch (err) {
-        console.error('❌ PROFILE UPDATE ERROR [500]:', err.message, '| ID:', id, '| Data:', req.body);
-        res.status(500).json({ error: err.message, details: 'Check backend logs for full trace' });
+        console.error('[PROFILE_UPDATE] CRITICAL ERROR:', err.message);
+        console.error('[PROFILE_UPDATE] Stack:', err.stack);
+        res.status(500).json({
+            error: 'Profile update failed',
+            details: err.message,
+            code: err.code // Carry over PG error code if any
+        });
     }
 });
 
@@ -1873,8 +1906,12 @@ app.post('/api/moderation/submit', async (req, res) => {
         );
         res.json(result.rows[0]);
     } catch (err) {
-        console.error('❌ MODERATION SUBMIT ERROR:', err.message, '| Data:', req.body);
-        res.status(500).json({ error: err.message });
+        console.error('❌ MODERATION SUBMIT ERROR [500]:', err.message, '| Data:', JSON.stringify(req.body));
+        res.status(500).json({
+            error: 'Modernasyon kaydı başarısız oldu.',
+            details: err.message,
+            debug_info: { table: 'pending_photos', schema_fix_attempted: true }
+        });
     }
 });
 

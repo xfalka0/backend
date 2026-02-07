@@ -204,6 +204,32 @@ app.get('/api/users/:id', async (req, res) => {
 });
 
 // UPDATE USER PROFILE
+app.put('/api/users/:id', async (req, res) => {
+    const { id } = req.params;
+    const { name, display_name, age, gender, bio, job, edu } = req.body;
+
+    try {
+        const result = await db.query(
+            `UPDATE users 
+             SET display_name = COALESCE($1, display_name),
+                 name = COALESCE($2, name),
+                 age = COALESCE($3, age),
+                 gender = COALESCE($4, gender),
+                 bio = COALESCE($5, bio),
+                 job = COALESCE($6, job),
+                 edu = COALESCE($7, edu)
+             WHERE id = $8 RETURNING *`,
+            [display_name || name, name, age, gender, bio, job, edu, id]
+        );
+
+        if (result.rows.length === 0) return res.status(404).json({ error: 'User not found' });
+        res.json(sanitizeUser(result.rows[0], req));
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// UPDATE USER PROFILE
 app.put('/api/users/:id/profile', async (req, res) => {
     const { id } = req.params;
     const { display_name, bio, avatar_url, gender, interests, onboarding_completed } = req.body;

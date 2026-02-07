@@ -258,7 +258,8 @@ app.put('/api/users/:id/profile', async (req, res) => {
         if (result.rows.length === 0) return res.status(404).json({ error: 'User not found' });
         res.json(sanitizeUser(result.rows[0], req));
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        console.error('❌ PROFILE UPDATE ERROR [500]:', err.message, '| ID:', id, '| Data:', req.body);
+        res.status(500).json({ error: err.message, details: 'Check backend logs for full trace' });
     }
 });
 
@@ -376,6 +377,7 @@ app.put('/api/users/:id/profile', async (req, res) => {
         await runQuery("Migration: Chats Unread", `ALTER TABLE chats ADD COLUMN IF NOT EXISTS unread_count INTEGER DEFAULT 0`);
         await runQuery("Migration: Coin Packages", `CREATE TABLE IF NOT EXISTS coin_packages (id SERIAL PRIMARY KEY, name TEXT NOT NULL, coins INTEGER NOT NULL, price DECIMAL(10,2) NOT NULL, is_popular BOOLEAN DEFAULT false, created_at TIMESTAMP DEFAULT NOW())`);
         await runQuery("Migration: Gifts Table", `CREATE TABLE IF NOT EXISTS gifts (id SERIAL PRIMARY KEY, name VARCHAR(100) NOT NULL, cost INTEGER NOT NULL, icon_url TEXT NOT NULL, created_at TIMESTAMP DEFAULT NOW())`);
+        await runQuery("Migration: Activities Table", `CREATE TABLE IF NOT EXISTS activities (id SERIAL PRIMARY KEY, user_id UUID REFERENCES users(id), action_type VARCHAR(50), description TEXT, created_at TIMESTAMP DEFAULT NOW())`);
 
         console.log("🏁 [DB] Initialization flow completed.");
     } catch (err) {
@@ -1832,6 +1834,12 @@ app.post('/api/upload', upload.any(), async (req, res) => {
 app.post('/api/moderation/submit', async (req, res) => {
     const { userId, type, url } = req.body; // type: 'avatar' or 'album'
     console.log(`[MODERATION] Submit from ${userId}, type: ${type}, url: ${url}`);
+
+    if (!userId || !url) {
+        console.error('❌ [MODERATION] Missing data:', { userId, type, url });
+        return res.status(400).json({ error: 'User ID ve URL gereklidir.' });
+    }
+
     try {
         const result = await db.query(
             'INSERT INTO pending_photos (user_id, type, url) VALUES ($1, $2, $3) RETURNING *',
@@ -1839,6 +1847,7 @@ app.post('/api/moderation/submit', async (req, res) => {
         );
         res.json(result.rows[0]);
     } catch (err) {
+        console.error('❌ MODERATION SUBMIT ERROR:', err.message, '| Data:', req.body);
         res.status(500).json({ error: err.message });
     }
 });

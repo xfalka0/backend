@@ -1525,70 +1525,71 @@ app.get('/api/me', authenticateToken, (req, res) => {
 });
 
 // GET OPERATORS
-try {
-    const { gender } = req.query;
-    console.log(`[DEBUG] Fetching operators list. Filter Gender: ${gender || 'none'}`);
+app.get('/api/operators', async (req, res) => {
+    try {
+        const { gender } = req.query;
+        console.log(`[DEBUG] Fetching operators list. Filter Gender: ${gender || 'none'}`);
 
-    let query = `
+        let query = `
             SELECT u.id, COALESCE(u.display_name, u.username) as name, u.avatar_url, u.gender, u.age, u.vip_level, o.category, o.rating, o.is_online, o.bio, o.photos, u.role
             FROM users u
             JOIN operators o ON u.id = o.user_id
         `;
 
-    let params = [];
-    if (gender === 'erkek' || gender === 'kadin') {
-        query += ` WHERE u.gender = $1 `;
-        params.push(gender);
-    }
+        let params = [];
+        if (gender === 'erkek' || gender === 'kadin') {
+            query += ` WHERE u.gender = $1 `;
+            params.push(gender);
+        }
 
-    query += ` ORDER BY u.created_at DESC `;
+        query += ` ORDER BY u.created_at DESC `;
 
-    const result = await db.query(query, params);
-    console.log(`[DEBUG] Found ${result.rows.length} operators in DB.`);
+        const result = await db.query(query, params);
+        console.log(`[DEBUG] Found ${result.rows.length} operators in DB.`);
 
-    const protocol = req.protocol;
-    const host = req.get('host');
-
-    const rows = result.rows.map(row => {
         const protocol = req.protocol;
         const host = req.get('host');
 
-        // Process Avatar URL
-        let finalAvatarUrl = row.avatar_url;
-        if (finalAvatarUrl) {
-            if (!finalAvatarUrl.startsWith('http')) {
-                finalAvatarUrl = `${protocol}://${host}${finalAvatarUrl.startsWith('/') ? '' : '/'}${finalAvatarUrl}`;
-            } else if (finalAvatarUrl.includes('localhost:3000')) {
-                finalAvatarUrl = finalAvatarUrl.replace('localhost:3000', host);
-            }
-        } else {
-            finalAvatarUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(row.name)}&background=random&color=fff`;
-        }
+        const rows = result.rows.map(row => {
+            const protocol = req.protocol;
+            const host = req.get('host');
 
-        // Process Photos Array
-        const finalPhotos = (row.photos || []).map(photoUrl => {
-            if (!photoUrl) return photoUrl;
-            if (!photoUrl.startsWith('http')) {
-                return `${protocol}://${host}${photoUrl.startsWith('/') ? '' : '/'}${photoUrl}`;
-            } else if (photoUrl.includes('localhost:3000')) {
-                return photoUrl.replace('localhost:3000', host);
+            // Process Avatar URL
+            let finalAvatarUrl = row.avatar_url;
+            if (finalAvatarUrl) {
+                if (!finalAvatarUrl.startsWith('http')) {
+                    finalAvatarUrl = `${protocol}://${host}${finalAvatarUrl.startsWith('/') ? '' : '/'}${finalAvatarUrl}`;
+                } else if (finalAvatarUrl.includes('localhost:3000')) {
+                    finalAvatarUrl = finalAvatarUrl.replace('localhost:3000', host);
+                }
+            } else {
+                finalAvatarUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(row.name)}&background=random&color=fff`;
             }
-            return photoUrl;
+
+            // Process Photos Array
+            const finalPhotos = (row.photos || []).map(photoUrl => {
+                if (!photoUrl) return photoUrl;
+                if (!photoUrl.startsWith('http')) {
+                    return `${protocol}://${host}${photoUrl.startsWith('/') ? '' : '/'}${photoUrl}`;
+                } else if (photoUrl.includes('localhost:3000')) {
+                    return photoUrl.replace('localhost:3000', host);
+                }
+                return photoUrl;
+            });
+
+            return {
+                ...row,
+                avatar_url: finalAvatarUrl,
+                photos: finalPhotos,
+                gender: row.gender || 'kadin'
+            };
         });
 
-        return {
-            ...row,
-            avatar_url: finalAvatarUrl,
-            photos: finalPhotos,
-            gender: row.gender || 'kadin'
-        };
-    });
-
-    res.json(rows);
-} catch (err) {
-    console.error("Fetch Operators Error:", err.message);
-    res.status(500).json({ error: err.message });
-}
+        res.json(rows);
+    } catch (err) {
+        console.error("Fetch Operators Error:", err.message);
+        res.status(500).json({ error: err.message });
+    }
 });
 
 // GET SINGLE OPERATOR

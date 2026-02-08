@@ -132,7 +132,10 @@ const initializeDatabase = async () => {
         // Messages table enhancements
         await db.query('ALTER TABLE messages ADD COLUMN IF NOT EXISTS gift_id INT');
 
-        // Social Features: Posts and Stories
+        // Initial Setup: Extensions & Core Tables
+        await db.query('CREATE EXTENSION IF NOT EXISTS pgcrypto');
+
+        // Social Features: Posts and Stories (UUID based)
         await db.query(`CREATE TABLE IF NOT EXISTS posts (
             id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
             operator_id UUID REFERENCES users(id),
@@ -221,8 +224,8 @@ app.get('/admin/*', (req, res) => {
 // Helper: Sanitize User (Rewrite URLs)
 const sanitizeUser = (user, req) => {
     if (!user) return null;
-    const protocol = req.protocol;
-    const host = req.get('host');
+    const protocol = req.protocol || 'http';
+    const host = req.get ? req.get('host') : 'localhost:3000';
 
     const newUser = { ...user };
 
@@ -237,7 +240,7 @@ const sanitizeUser = (user, req) => {
     // Rewrite Photos array if exists (for operators)
     if (newUser.photos && Array.isArray(newUser.photos)) {
         newUser.photos = newUser.photos.map(p => {
-            if (p && !p.startsWith('http')) {
+            if (p && typeof p === 'string' && !p.startsWith('http')) {
                 return `${protocol}://${host}${p.startsWith('/') ? '' : '/'}${p}`;
             }
             return p;

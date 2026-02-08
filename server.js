@@ -132,6 +132,24 @@ const initializeDatabase = async () => {
         // Messages table enhancements
         await db.query('ALTER TABLE messages ADD COLUMN IF NOT EXISTS gift_id INT');
 
+        // Social Features: Posts and Stories
+        await db.query(`CREATE TABLE IF NOT EXISTS posts (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            operator_id UUID REFERENCES users(id),
+            image_url TEXT NOT NULL,
+            content TEXT,
+            likes_count INTEGER DEFAULT 0,
+            created_at TIMESTAMP DEFAULT NOW()
+        )`);
+
+        await db.query(`CREATE TABLE IF NOT EXISTS stories (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            operator_id UUID REFERENCES users(id),
+            image_url TEXT NOT NULL,
+            created_at TIMESTAMP DEFAULT NOW(),
+            expires_at TIMESTAMP DEFAULT (NOW() + INTERVAL '24 hours')
+        )`);
+
         console.log('[DB] SCHEMA VERIFICATION COMPLETE');
     } catch (err) {
         console.error('[DB] CRITICAL SCHEMA ERROR:', err.message);
@@ -409,6 +427,84 @@ app.get('/api/debug/db-check', async (req, res) => {
 
 
 // ... (existing routes) ...
+
+// --- SOCIAL / EXPLORE ROUTES ---
+
+// GET EXPLORE DATA (Stories & Posts)
+app.get('/api/social/explore', async (req, res) => {
+    try {
+        // Fetch active stories
+        const storiesRes = await db.query(`
+            SELECT s.*, u.display_name as name, u.avatar_url as avatar, u.vip_level as level
+            FROM stories s
+            JOIN users u ON s.operator_id = u.id
+            WHERE s.expires_at > NOW()
+            ORDER BY s.created_at DESC
+        `);
+
+        // Fetch latest posts
+        const postsRes = await db.query(`
+            SELECT p.*, u.display_name as userName, u.avatar_url as avatar, u.job as jobTitle, u.vip_level as level
+            FROM posts p
+            JOIN users u ON p.operator_id = u.id
+            ORDER BY p.created_at DESC
+            LIMIT 50
+        `);
+
+        res.json({
+            stories: storiesRes.rows.map(s => sanitizeUser(s, req)),
+            posts: postsRes.rows.map(p => sanitizeUser(p, req))
+        });
+    } catch (err) {
+        console.error('[SOCIAL] Explore Error:', err.message);
+        res.status(500).json({ error: 'Keşfet verileri alınamadı.' });
+    }
+});
+
+// ADMIN: Create Post
+app.post('/api/admin/social/post', async (req, res) => {
+    const { operator_id, image_url, content } = req.body;
+    if (!operator_id || !image_url) return res.status(400).json({ error: 'Operator ve görsel gerekli.' });
+
+    try {
+        const result = await db.query(
+            'INSERT INTO posts (operator_id, image_url, content) VALUES ($1, $2, $3) RETURNING *',
+            [operator_id, image_url, content]
+        );
+        res.json(result.rows[0]);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// ADMIN: Create Story
+app.post('/api/admin/social/story', async (req, res) => {
+    const { operator_id, image_url } = req.body;
+    if (!operator_id || !image_url) return res.status(400).json({ error: 'Operator ve görsel gerekli.' });
+
+    try {
+        const result = await db.query(
+            'INSERT INTO stories (operator_id, image_url) VALUES ($1, $2) RETURNING *',
+            [operator_id, image_url]
+        );
+        res.json(result.rows[0]);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// DELETE Social Content
+app.delete('/api/admin/social/:type/:id', async (req, res) => {
+    const { type, id } = req.params;
+    const table = type === 'story' ? 'stories' : 'posts';
+
+    try {
+        await db.query(`DELETE FROM ${table} WHERE id = $1`, [id]);
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
 
 // --- ADMIN USER MANAGEMENT ---
 

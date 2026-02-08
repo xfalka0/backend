@@ -53,6 +53,16 @@ const initializeDatabase = async () => {
             await db.query('ALTER TABLE users ADD COLUMN interests TEXT');
         }
 
+        if (!columnNames.includes('relationship')) {
+            console.log('[DB] Adding missing column: relationship');
+            await db.query('ALTER TABLE users ADD COLUMN relationship VARCHAR(50)');
+        }
+
+        if (!columnNames.includes('zodiac')) {
+            console.log('[DB] Adding missing column: zodiac');
+            await db.query('ALTER TABLE users ADD COLUMN zodiac VARCHAR(50)');
+        }
+
         if (!columnNames.includes('job')) {
             console.log('[DB] Adding missing column: job');
             await db.query('ALTER TABLE users ADD COLUMN job VARCHAR(100)');
@@ -290,7 +300,7 @@ app.put('/api/users/:id', async (req, res) => {
 // UPDATE USER PROFILE (LEGACY / ONBOARDING)
 app.put('/api/users/:id/profile', async (req, res) => {
     const { id } = req.params;
-    const { display_name, name, bio, avatar_url, gender, interests, onboarding_completed } = req.body;
+    const { display_name, name, bio, avatar_url, gender, interests, onboarding_completed, relationship, zodiac, age } = req.body;
 
     // Synchronize
     const finalDisplayName = req.body.display_name || req.body.name;
@@ -323,8 +333,10 @@ app.put('/api/users/:id/profile', async (req, res) => {
                 gender = COALESCE($5, gender),
                 interests = COALESCE($6, interests),
                 onboarding_completed = COALESCE($7, onboarding_completed),
-                age = COALESCE($8::INTEGER, age)
-             WHERE id = $9 RETURNING *`,
+                age = COALESCE($8::INTEGER, age),
+                relationship = COALESCE($9, relationship),
+                zodiac = COALESCE($10, zodiac)
+             WHERE id = $11 RETURNING *`,
             [
                 req.body.display_name || null,
                 req.body.name || null,
@@ -334,6 +346,8 @@ app.put('/api/users/:id/profile', async (req, res) => {
                 req.body.interests || null,
                 req.body.onboarding_completed !== undefined ? req.body.onboarding_completed : null,
                 (req.body.age && !isNaN(parseInt(req.body.age))) ? parseInt(req.body.age) : null,
+                req.body.relationship || null,
+                req.body.zodiac || null,
                 id
             ]
         );

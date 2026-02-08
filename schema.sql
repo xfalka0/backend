@@ -42,6 +42,7 @@ CREATE TABLE IF NOT EXISTS messages (
     sender_id UUID REFERENCES users(id),
     content_type VARCHAR(50) DEFAULT 'text', -- text, image, video, gift, call_stub
     content TEXT, -- Text message or URL to media
+    gift_id INT,
     is_read BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );

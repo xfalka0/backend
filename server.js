@@ -104,10 +104,8 @@ const initializeDatabase = async () => {
         }
 
         // Migration logic
-        await db.query(`
-            UPDATE users SET vip_level = 1 
-            WHERE is_vip = true AND (vip_level IS NULL OR vip_level = 0)
-        `);
+        // Messages table enhancements
+        await db.query('ALTER TABLE messages ADD COLUMN IF NOT EXISTS gift_id INT');
 
         console.log('[DB] SCHEMA VERIFICATION COMPLETE');
     } catch (err) {
@@ -1072,6 +1070,7 @@ app.delete('/api/admin/staff/:id', authenticateToken, authorizeRole('admin', 'su
 // GET ALL USERS (Manager/Admin Only)
 app.get('/api/admin/users', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
     try {
+        console.log(`[ADMIN] Fetching users list for admin: ${req.user.id}`);
         const result = await db.query(`
             SELECT id, username, email, role, account_status, balance, 
                    is_vip, created_at, last_login_at, ban_expires_at, avatar_url 
@@ -1079,8 +1078,10 @@ app.get('/api/admin/users', authenticateToken, authorizeRole('admin', 'super_adm
             WHERE role = 'user' 
             ORDER BY created_at DESC
         `);
+        console.log(`[ADMIN] User List Fetch Success: Found ${result.rows.length} users. IDs: ${result.rows.map(u => u.id).join(', ')}`);
         res.json(result.rows);
     } catch (err) {
+        console.error(`[ADMIN] Fetch users error:`, err.message);
         res.status(500).json({ error: err.message });
     }
 });
@@ -1482,6 +1483,12 @@ app.post('/api/auth/login-email', async (req, res) => {
 });
 // --- END TRADITIONAL EMAIL AUTH ---
 
+app.post('/api/login', async (req, res) => {
+    // Proxy to login-email
+    req.url = '/api/auth/login-email';
+    app._router.handle(req, res);
+});
+
 // TEMPORARY ADMIN ENDPOINT - Create user with email "1" and password "1"
 app.post('/api/admin/create-simple-user', async (req, res) => {
     try {
@@ -1615,8 +1622,23 @@ app.get('/api/operators/:id', async (req, res) => {
 });
 
 // HEALTH CHECK
-app.get('/api/health', (req, res) => {
-    res.json({ status: 'ok', timestamp: new Date() });
+app.get('/api/health', async (req, res) => {
+    try {
+        const dbCheck = await db.query('SELECT 1');
+        res.json({
+            status: 'ok',
+            db: 'connected',
+            timestamp: new Date()
+        });
+    } catch (err) {
+        console.error('[HEALTH] DB Connection Failed:', err.message);
+        res.status(500).json({
+            status: 'error',
+            db: 'disconnected',
+            error: err.message,
+            timestamp: new Date()
+        });
+    }
 });
 
 // UNIFIED DISCOVERY (Operators + Users of opposite gender)
@@ -1629,6 +1651,7 @@ app.get('/api/discovery', authenticateToken, async (req, res) => {
         console.log(`[DISCOVERY] User ${userId} (${userGender}) exploring ${targetGender}...`);
 
         const query = `
+            SELECT 
                 u.id, 
                 COALESCE(u.display_name, u.username) as name, 
                 u.avatar_url, 
@@ -2269,10 +2292,9 @@ io.on('connection', (socket) => {
             }
 
             // 4. Save Message
-            // If gift, content might be the gift ID or a description. Let's use content passed from client.
             const res = await db.query(
-                'INSERT INTO messages (chat_id, sender_id, content, content_type) VALUES ($1, $2, $3, $4) RETURNING *',
-                [chatId, senderId, content, type || 'text']
+                'INSERT INTO messages (chat_id, sender_id, content, content_type, gift_id) VALUES ($1, $2, $3, $4, $5) RETURNING *',
+                [chatId, senderId, content, type || 'text', giftId || null]
             );
             savedMsg = res.rows[0];
 

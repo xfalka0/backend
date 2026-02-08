@@ -14,6 +14,17 @@ CREATE TABLE IF NOT EXISTS users (
     vip_xp INT DEFAULT 0,
     avatar_url TEXT,
     gender VARCHAR(10) DEFAULT 'kadin',
+    last_login_at TIMESTAMP,
+    ban_expires_at TIMESTAMP,
+    account_status VARCHAR(50) DEFAULT 'active',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS activities (
+    id SERIAL PRIMARY KEY,
+    user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+    action_type VARCHAR(50),
+    description TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 

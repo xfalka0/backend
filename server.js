@@ -89,19 +89,34 @@ const initializeDatabase = async () => {
             await db.query('ALTER TABLE users ADD COLUMN is_vip BOOLEAN DEFAULT FALSE');
         }
 
-        if (!columnNames.includes('onboarding_completed')) {
-            console.log('[DB] Adding missing column: onboarding_completed');
-            await db.query('ALTER TABLE users ADD COLUMN onboarding_completed BOOLEAN DEFAULT FALSE');
-        }
         if (!columnNames.includes('phone')) {
             console.log('[DB] Adding missing column: phone');
             await db.query('ALTER TABLE users ADD COLUMN phone VARCHAR(20) UNIQUE');
         }
 
-        if (!columnNames.includes('interests')) {
-            console.log('[DB] Adding missing column: interests');
-            await db.query('ALTER TABLE users ADD COLUMN interests TEXT');
+        if (!columnNames.includes('last_login_at')) {
+            console.log('[DB] Adding missing column: last_login_at');
+            await db.query('ALTER TABLE users ADD COLUMN last_login_at TIMESTAMP');
         }
+
+        if (!columnNames.includes('ban_expires_at')) {
+            console.log('[DB] Adding missing column: ban_expires_at');
+            await db.query('ALTER TABLE users ADD COLUMN ban_expires_at TIMESTAMP');
+        }
+
+        if (!columnNames.includes('account_status')) {
+            console.log('[DB] Adding missing column: account_status');
+            await db.query("ALTER TABLE users ADD COLUMN account_status VARCHAR(50) DEFAULT 'active'");
+        }
+
+        // Ensure Activities table exists
+        await db.query(`CREATE TABLE IF NOT EXISTS activities (
+            id SERIAL PRIMARY KEY,
+            user_id UUID REFERENCES users(id),
+            action_type VARCHAR(50),
+            description TEXT,
+            created_at TIMESTAMP DEFAULT NOW()
+        )`);
 
         // Migration logic
         // Messages table enhancements
@@ -347,132 +362,7 @@ app.put('/api/users/:id/profile', async (req, res) => {
     }
 });
 
-// --- RESILIENT DATABASE INITIALIZATION ---
-(async () => {
-    try {
-        console.log("🚀 [DB] Starting Resilient Initialization...");
-
-        // 0. Ensure search path and extensions
-        try {
-            await db.query('SET search_path TO public');
-            await db.query('CREATE EXTENSION IF NOT EXISTS "pgcrypto"');
-            console.log("✅ [DB] Environment ensured (public schema, pgcrypto).");
-        } catch (e) {
-            console.warn("⚠️ [DB] Non-critical error ensuring environment:", e.message);
-        }
-
-        const runQuery = async (name, query) => {
-            try {
-                await db.query(query);
-                console.log(`✅ [DB] ${name} complete.`);
-            } catch (e) {
-                console.error(`❌ [DB] ${name} failed:`, e.message);
-                // We keep going so other tables can be fixed!
-            }
-        };
-
-        // 1. Critical Base Tables
-        await runQuery("Users Table", `CREATE TABLE IF NOT EXISTS users (
-            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-            username VARCHAR(255) UNIQUE NOT NULL,
-            password VARCHAR(255) NOT NULL,
-            is_admin BOOLEAN DEFAULT FALSE,
-            balance INTEGER DEFAULT 0,
-            profile_image TEXT,
-            gender VARCHAR(10) DEFAULT 'kadin',
-            display_name VARCHAR(255),
-            total_spent DECIMAL(10, 2) DEFAULT 0,
-            vip_level INTEGER DEFAULT 0,
-            account_status VARCHAR(50) DEFAULT 'active',
-            created_at TIMESTAMP DEFAULT NOW()
-        )`);
-
-        // 2. Pending Photos (The blocker!) - Force recreation if schema is wrong
-        console.log("🔄 [DB] Syncing pending_photos...");
-        try {
-            // Check if column exists
-            const check = await db.query(`SELECT column_name FROM information_schema.columns WHERE table_name='pending_photos' AND column_name='type'`);
-            if (check.rows.length === 0) {
-                console.log("⚠️ [DB] 'type' column missing in pending_photos. Recreating table...");
-                await db.query(`DROP TABLE IF EXISTS pending_photos CASCADE`);
-                await db.query(`CREATE TABLE pending_photos (
-                    id SERIAL PRIMARY KEY,
-                    user_id UUID REFERENCES users(id),
-                    type VARCHAR(50),
-                    url TEXT,
-                    status VARCHAR(50) DEFAULT 'pending',
-                    created_at TIMESTAMP DEFAULT NOW()
-                )`);
-                console.log("✅ [DB] pending_photos recreated with 'type' column.");
-            } else {
-                console.log("✅ [DB] pending_photos already has 'type' column.");
-            }
-        } catch (e) {
-            console.error("❌ [DB] Failed to sync pending_photos:", e.message);
-            // Emergency fallback: try to create it if it doesn't exist at all
-            await runQuery("Pending Photos (Fallback)", `CREATE TABLE IF NOT EXISTS pending_photos (
-                id SERIAL PRIMARY KEY,
-                user_id UUID REFERENCES users(id),
-                type VARCHAR(50),
-                url TEXT,
-                status VARCHAR(50) DEFAULT 'pending',
-                created_at TIMESTAMP DEFAULT NOW()
-            )`);
-        }
-
-        // 3. Other Tables (Isolated)
-        await runQuery("Operators Table", `CREATE TABLE IF NOT EXISTS operators (
-            id SERIAL PRIMARY KEY,
-            user_id UUID REFERENCES users(id),
-            name VARCHAR(255) NOT NULL,
-            image TEXT,
-            is_online BOOLEAN DEFAULT TRUE,
-            job VARCHAR(100)
-        )`);
-
-        await runQuery("Chats Table", `CREATE TABLE IF NOT EXISTS chats (
-            id SERIAL PRIMARY KEY,
-            user_id UUID REFERENCES users(id),
-            operator_id UUID REFERENCES users(id),
-            last_message TEXT,
-            unread_count INTEGER DEFAULT 0,
-            last_message_at TIMESTAMP DEFAULT NOW(),
-            created_at TIMESTAMP DEFAULT NOW()
-        )`);
-
-        await runQuery("Messages Table", `CREATE TABLE IF NOT EXISTS messages (
-            id SERIAL PRIMARY KEY,
-            chat_id INTEGER REFERENCES chats(id),
-            sender_id UUID REFERENCES users(id),
-            content TEXT,
-            content_type VARCHAR(50) DEFAULT 'text',
-            is_read BOOLEAN DEFAULT FALSE,
-            created_at TIMESTAMP DEFAULT NOW()
-        )`);
-
-        // 4. Migrations (Isolated)
-        await runQuery("Migration: Users Gender", `ALTER TABLE users ADD COLUMN IF NOT EXISTS gender VARCHAR(10) DEFAULT 'kadin'`);
-        await runQuery("Migration: Users Display Name", `ALTER TABLE users ADD COLUMN IF NOT EXISTS display_name VARCHAR(255)`);
-        await runQuery("Migration: Users Bio", `ALTER TABLE users ADD COLUMN IF NOT EXISTS bio TEXT`);
-        await runQuery("Migration: Users Job/Edu", `ALTER TABLE users ADD COLUMN IF NOT EXISTS job VARCHAR(100), ADD COLUMN IF NOT EXISTS edu VARCHAR(100)`);
-        await runQuery("Migration: Users Age", `ALTER TABLE users ADD COLUMN IF NOT EXISTS age INTEGER`);
-        await runQuery("Migration: Users Interests", `ALTER TABLE users ADD COLUMN IF NOT EXISTS interests TEXT`);
-        await runQuery("Migration: Users Onboarding", `ALTER TABLE users ADD COLUMN IF NOT EXISTS onboarding_completed BOOLEAN DEFAULT false`);
-        await runQuery("Migration: Users Account Status", `ALTER TABLE users ADD COLUMN IF NOT EXISTS account_status VARCHAR(20) DEFAULT 'active'`);
-        await runQuery("Migration: User Avatar", `ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_url TEXT`);
-        await runQuery("Migration: User Account Status", `ALTER TABLE users ADD COLUMN IF NOT EXISTS account_status VARCHAR(50) DEFAULT 'active'`);
-        await runQuery("Migration: Operator Job", `ALTER TABLE operators ADD COLUMN IF NOT EXISTS job VARCHAR(100)`);
-        await runQuery("Migration: Chats Last Msg", `ALTER TABLE chats ADD COLUMN IF NOT EXISTS last_message TEXT`);
-        await runQuery("Migration: Chats Unread", `ALTER TABLE chats ADD COLUMN IF NOT EXISTS unread_count INTEGER DEFAULT 0`);
-        await runQuery("Migration: Coin Packages", `CREATE TABLE IF NOT EXISTS coin_packages (id SERIAL PRIMARY KEY, name TEXT NOT NULL, coins INTEGER NOT NULL, price DECIMAL(10,2) NOT NULL, is_popular BOOLEAN DEFAULT false, created_at TIMESTAMP DEFAULT NOW())`);
-        await runQuery("Migration: Gifts Table", `CREATE TABLE IF NOT EXISTS gifts (id SERIAL PRIMARY KEY, name VARCHAR(100) NOT NULL, cost INTEGER NOT NULL, icon_url TEXT NOT NULL, created_at TIMESTAMP DEFAULT NOW())`);
-        await runQuery("Migration: Activities Table", `CREATE TABLE IF NOT EXISTS activities (id SERIAL PRIMARY KEY, user_id UUID REFERENCES users(id), action_type VARCHAR(50), description TEXT, created_at TIMESTAMP DEFAULT NOW())`);
-
-        console.log("🏁 [DB] Initialization flow completed.");
-    } catch (err) {
-        console.error('❌ [DB] UNEXPECTED INITIALIZATION ERROR:', err.message);
-    }
-})();
+// --- END DATABASE INITIALIZATION ---
 
 // Health Check
 app.get('/', (req, res) => {
@@ -563,172 +453,7 @@ app.get('/api/admin/force-fix-schema', async (req, res) => {
     }
 });
 
-// TEMP: One-time Setup Route for Production with Auto-Migration
-app.get('/api/setup-admin', async (req, res) => {
-    // Basic secret check
-    const secret = req.query.secret;
-    if (secret !== 'falka_setup_2024') return res.status(403).send('Forbidden');
-
-    try {
-        console.log("Starting Auto-Migration...");
-
-        // 1. Comprehensive Auto-Migration: Add ALL potentially missing columns
-        const migrations = [
-            "ALTER TABLE users ADD COLUMN IF NOT EXISTS email VARCHAR(255) UNIQUE",
-            "ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash VARCHAR(255)",
-            "ALTER TABLE users ADD COLUMN IF NOT EXISTS role VARCHAR(50) DEFAULT 'user'",
-            "ALTER TABLE users ADD COLUMN IF NOT EXISTS account_status VARCHAR(20) DEFAULT 'active'",
-            "ALTER TABLE users ADD COLUMN IF NOT EXISTS balance INT DEFAULT 0",
-            "ALTER TABLE users ADD COLUMN IF NOT EXISTS is_vip BOOLEAN DEFAULT FALSE",
-            "ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_url TEXT DEFAULT 'https://via.placeholder.com/150'",
-            "ALTER TABLE users ADD COLUMN IF NOT EXISTS display_name VARCHAR(255)",
-            "ALTER TABLE users ADD COLUMN IF NOT EXISTS gender VARCHAR(10) DEFAULT 'kadin'",
-            "ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login_at TIMESTAMP",
-            "ALTER TABLE users ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT NOW()",
-            "ALTER TABLE operators ADD COLUMN IF NOT EXISTS user_id UUID REFERENCES users(id)",
-            "ALTER TABLE operators ADD COLUMN IF NOT EXISTS category VARCHAR(100)",
-            "ALTER TABLE operators ADD COLUMN IF NOT EXISTS bio TEXT",
-            "ALTER TABLE operators ADD COLUMN IF NOT EXISTS photos TEXT[]",
-            "ALTER TABLE operators ADD COLUMN IF NOT EXISTS rating DECIMAL(3, 1) DEFAULT 5.0",
-            "ALTER TABLE operators ALTER COLUMN name DROP NOT NULL",
-            "DO $$ BEGIN IF EXISTS(SELECT * FROM information_schema.columns WHERE table_name='pending_photos' AND column_name='photo_url') THEN ALTER TABLE pending_photos RENAME COLUMN photo_url TO url; END IF; END $$",
-            "ALTER TABLE pending_photos ADD COLUMN IF NOT EXISTS type VARCHAR(50)",
-            "ALTER TABLE pending_photos ALTER COLUMN url DROP NOT NULL",
-            "ALTER TABLE users ADD COLUMN IF NOT EXISTS ban_expires_at TIMESTAMP",
-            "CREATE TABLE IF NOT EXISTS coin_packages (id SERIAL PRIMARY KEY, name TEXT NOT NULL, coins INTEGER NOT NULL, price DECIMAL(10,2) NOT NULL, is_popular BOOLEAN DEFAULT false, created_at TIMESTAMP DEFAULT NOW())",
-            "CREATE TABLE IF NOT EXISTS gifts (id SERIAL PRIMARY KEY, name VARCHAR(100) NOT NULL, cost INTEGER NOT NULL, icon_url TEXT NOT NULL, created_at TIMESTAMP DEFAULT NOW())",
-            "CREATE TABLE IF NOT EXISTS quick_replies (id SERIAL PRIMARY KEY, title VARCHAR(100) NOT NULL, content TEXT NOT NULL, created_at TIMESTAMP DEFAULT NOW())"
-        ];
-
-        // Create Transactions Table
-        await db.query(`CREATE TABLE IF NOT EXISTS transactions (
-            id SERIAL PRIMARY KEY,
-            user_id INTEGER REFERENCES users(id),
-            amount DECIMAL(10, 2) NOT NULL,
-            package_name VARCHAR(255),
-            status VARCHAR(50) DEFAULT 'completed',
-            created_at TIMESTAMP DEFAULT NOW()
-        )`);
-
-        // Create Activities Table (Real-time logs)
-        await db.query(`CREATE TABLE IF NOT EXISTS activities (
-            id SERIAL PRIMARY KEY,
-            user_id UUID REFERENCES users(id),
-            action_type VARCHAR(50),
-            description TEXT,
-            created_at TIMESTAMP DEFAULT NOW()
-        )`);
-
-        // Drop and Recreate Pending Photos Table to ensure schema match (Safe for now as it's just moderation data)
-        console.log("[DB] Recreating pending_photos table to fix schema mismatch...");
-        await db.query(`DROP TABLE IF EXISTS pending_photos CASCADE`);
-        await db.query(`CREATE TABLE pending_photos (
-            id SERIAL PRIMARY KEY,
-            user_id UUID REFERENCES users(id),
-            type VARCHAR(50),
-            url TEXT,
-            status VARCHAR(50) DEFAULT 'pending',
-            created_at TIMESTAMP DEFAULT NOW()
-        )`);
-        console.log("[DB] pending_photos table recreated successfully.");
-
-        for (const query of migrations) {
-            try {
-                await db.query(query);
-            } catch (migErr) {
-                console.warn(`Migration step failed: ${query}`, migErr.message);
-            }
-        }
-
-        // --- SPECIAL MIGRATION: BACKFILL OPERATOR USER_IDs ---
-        console.log("Checking for legacy operators...");
-        const legacyOps = await db.query("SELECT * FROM operators WHERE user_id IS NULL");
-        for (const op of legacyOps.rows) {
-            try {
-                // Try to find matching user by name
-                // (Assuming operator 'name' matches user 'username' or 'display_name')
-                // If name is null, we can't do much, skip or use ID.
-                const opName = op.name || `Operator_${op.id}`;
-                const uniqueEmail = `op_${op.id}_${Date.now()}@falka.com`; // Fallback email
-
-                let userId = null;
-
-                // 1. Check if user exists (rough match)
-                const userCheck = await db.query("SELECT id FROM users WHERE username = $1 OR display_name = $1", [opName]);
-                if (userCheck.rows.length > 0) {
-                    userId = userCheck.rows[0].id;
-                } else {
-                    // 2. Create User for this Operator
-                    const newUser = await db.query(
-                        "INSERT INTO users (username, email, password, password_hash, role, balance, account_status, display_name, avatar_url, gender) VALUES ($1, $2, $3, $3, 'operator', 0, 'active', $4, $5, $6) RETURNING id",
-                        [opName.replace(/\s+/g, '_').toLowerCase() + '_' + op.id, uniqueEmail, await bcrypt.hash('123456', 10), opName, 'https://via.placeholder.com/150', 'kadin']
-                    );
-                    userId = newUser.rows[0].id;
-                }
-
-                // 3. Link them
-                await db.query("UPDATE operators SET user_id = $1 WHERE id = $2", [userId, op.id]);
-                console.log(`Migrated Operator ${op.id} -> User ${userId}`);
-
-            } catch (err) {
-                console.error(`Failed to migrate operator ${op.id}:`, err.message);
-            }
-        }
-
-        // --- SPECIAL MIGRATION: FIX CHATS & MESSAGES ---
-        console.log("Fixing legacy chats...");
-        // 1. Update Chats: operator_id (old op id) -> operator_id (new user id)
-        // We join on operators table where id matches the chat's current operator_id
-        await db.query(`
-            UPDATE chats c
-            SET operator_id = o.user_id
-            FROM operators o
-            WHERE c.operator_id = o.id
-            AND o.user_id IS NOT NULL
-            AND c.operator_id != o.user_id
-        `);
-
-        // 2. Update Messages: sender_id (old op id) -> sender_id (new user id)
-        // We find messages where sender is NOT the user (so it's the operator)
-        // and update sender_id to match the chat's (now updated) operator_id
-        await db.query(`
-            UPDATE messages m
-            SET sender_id = c.operator_id
-            FROM chats c
-            WHERE m.chat_id = c.id
-            AND m.sender_id != c.user_id
-            AND m.sender_id != c.operator_id
-        `);
-        // -----------------------------------------------------
-
-        // Try to drop NOT NULL constraint on legacy 'password' column if it exists and causes issues
-        try {
-            await db.query("ALTER TABLE users ALTER COLUMN password DROP NOT NULL");
-        } catch (migErr) {
-            console.warn("Could not drop NOT NULL on password (maybe okay):", migErr.message);
-        }
-
-        // 2. Create Admin
-        const hashedPassword = await bcrypt.hash('admin123', 10);
-
-        // Check if admin exists
-        const check = await db.query("SELECT * FROM users WHERE username = 'admin' OR email = 'admin@falka.com'");
-        if (check.rows.length === 0) {
-            await db.query(
-                "INSERT INTO users (username, email, password, password_hash, role, balance, account_status) VALUES ($1, $2, $3, $3, 'admin', 0, 'active')",
-                ['admin', 'admin@falka.com', hashedPassword]
-            );
-            res.send('<h1>Success!</h1><p>Database columns repaired.</p><p>Transactions table created.</p><p>Admin user created.</p>');
-        } else {
-            await db.query("UPDATE users SET password_hash = $1, role = 'admin', account_status = 'active', email = 'admin@falka.com' WHERE username = 'admin'", [hashedPassword]);
-            res.send('<h1>Success!</h1><p>Database columns repaired.</p><p>Transactions table checked.</p><p>Admin user verified.</p>');
-        }
-
-    } catch (err) {
-        console.error("Setup Error:", err);
-        res.status(500).send(`<h1>Error</h1><p>${err.message}</p><pre>${JSON.stringify(err, null, 2)}</pre>`);
-    }
-});
+// --- END SETUP ROUTES ---
 
 // TEMP: Manual Seeding Route
 app.get('/api/seed-data', async (req, res) => {

@@ -2339,47 +2339,74 @@ app.get('/api/admin/force-fix-social-schema', async (req, res) => {
     }
 
     try {
-        log("⚠️ [SOCIAL REPAIR] Starting Social Schema Repair...");
+        log("⚠️ [SOCIAL REPAIR] Starting Granular Social Schema Repair...");
 
         // 1. Extensions
-        await db.query('CREATE EXTENSION IF NOT EXISTS pgcrypto');
-        log("✅ pgcrypto extension checked.");
+        try {
+            await db.query('CREATE EXTENSION IF NOT EXISTS pgcrypto');
+            log("✅ [1] pgcrypto extension checked/added.");
+        } catch (e) { log(`❌ [1] pgcrypto failed: ${e.message}`); }
 
-        // 2. Clear corrupted tables if they exist with wrong schema
-        // CAUTION: This will delete existing posts/stories, but they are already broken.
-        log("ℹ️ Dropping potentially corrupted social tables...");
-        await db.query('DROP TABLE IF EXISTS stories CASCADE');
-        await db.query('DROP TABLE IF EXISTS posts CASCADE');
-        log("✅ Tables dropped.");
+        // 2. Clear corrupted tables
+        try {
+            log("ℹ️ [2] Dropping social tables (Stories)...");
+            await db.query('DROP TABLE IF EXISTS stories CASCADE');
+            log("✅ [2] Stories dropped.");
 
-        // 3. Re-create with proper UUID linking
-        log("ℹ️ Re-creating tables with proper UUID references...");
-        await db.query(`CREATE TABLE posts (
-            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-            operator_id UUID REFERENCES users(id) ON DELETE CASCADE,
-            image_url TEXT NOT NULL,
-            content TEXT,
-            created_at TIMESTAMP DEFAULT NOW()
-        )`);
-        log("✅ Posts table created.");
+            log("ℹ️ [2] Dropping social tables (Posts)...");
+            await db.query('DROP TABLE IF EXISTS posts CASCADE');
+            log("✅ [2] Posts dropped.");
+        } catch (e) { log(`❌ [2] Drop failed: ${e.message}`); }
 
-        await db.query(`CREATE TABLE stories (
-            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-            operator_id UUID REFERENCES users(id) ON DELETE CASCADE,
-            image_url TEXT NOT NULL,
-            created_at TIMESTAMP DEFAULT NOW(),
-            expires_at TIMESTAMP DEFAULT NOW() + INTERVAL '24 hours'
-        )`);
-        log("✅ Stories table created.");
+        // 3. DETECT USERS ID TYPE (Again, just to be ABSOLUTELY sure)
+        let userIdType = 'UUID';
+        try {
+            const userTypeCheck = await db.query(`
+                SELECT data_type 
+                FROM information_schema.columns 
+                WHERE table_name = 'users' AND column_name = 'id'
+            `);
+            if (userTypeCheck.rows.length > 0) {
+                userIdType = userTypeCheck.rows[0].data_type.toUpperCase() === 'INTEGER' ? 'INTEGER' : 'UUID';
+                log(`ℹ️ [3] Detected users.id type: ${userIdType}`);
+            }
+        } catch (e) { log(`❌ [3] Type detection failed: ${e.message}`); }
+
+        // 4. Create Posts
+        try {
+            log("ℹ️ [4] Creating Posts table...");
+            await db.query(`CREATE TABLE posts (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                operator_id ${userIdType} REFERENCES users(id) ON DELETE CASCADE,
+                image_url TEXT NOT NULL,
+                content TEXT,
+                created_at TIMESTAMP DEFAULT NOW()
+            )`);
+            log("✅ [4] Posts table created successfully.");
+        } catch (e) { log(`❌ [4] Posts creation failed: ${e.message}`); }
+
+        // 5. Create Stories
+        try {
+            log("ℹ️ [5] Creating Stories table...");
+            await db.query(`CREATE TABLE stories (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                operator_id ${userIdType} REFERENCES users(id) ON DELETE CASCADE,
+                image_url TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT NOW(),
+                expires_at TIMESTAMP DEFAULT (NOW() + INTERVAL '24 hours')
+            )`);
+            log("✅ [5] Stories table created successfully.");
+        } catch (e) { log(`❌ [5] Stories creation failed: ${e.message}`); }
 
         res.json({
-            status: 'success',
-            message: 'Social schema fully repaired.',
-            logs: logs
+            status: 'complete',
+            message: 'Social schema repair attempt finished.',
+            logs: logs,
+            final_id_type_used: userIdType
         });
 
     } catch (err) {
-        log(`❌ [SOCIAL REPAIR] Error: ${err.message}`);
+        log(`❌ [CRITICAL] Social Repair failed: ${err.message}`);
         res.json({ status: 'error', error: err.message, logs: logs });
     }
 });

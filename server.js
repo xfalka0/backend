@@ -135,10 +135,19 @@ const initializeDatabase = async () => {
         // Initial Setup: Extensions & Core Tables
         await db.query('CREATE EXTENSION IF NOT EXISTS pgcrypto');
 
-        // Social Features: Posts and Stories (UUID based)
+        // Detect users.id type for proper foreign keys
+        const idTypeRes = await db.query(`
+            SELECT data_type 
+            FROM information_schema.columns 
+            WHERE table_name = 'users' AND column_name = 'id'
+        `);
+        const userIdType = idTypeRes.rows[0]?.data_type?.toUpperCase() === 'INTEGER' ? 'INTEGER' : 'UUID';
+        console.log(`[DB] Detected users.id type for social tables: ${userIdType}`);
+
+        // Social Features: Posts and Stories (Adaptive based on userIdType)
         await db.query(`CREATE TABLE IF NOT EXISTS posts (
             id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-            operator_id UUID REFERENCES users(id),
+            operator_id ${userIdType} REFERENCES users(id),
             image_url TEXT NOT NULL,
             content TEXT,
             likes_count INTEGER DEFAULT 0,
@@ -147,7 +156,7 @@ const initializeDatabase = async () => {
 
         await db.query(`CREATE TABLE IF NOT EXISTS stories (
             id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-            operator_id UUID REFERENCES users(id),
+            operator_id ${userIdType} REFERENCES users(id),
             image_url TEXT NOT NULL,
             created_at TIMESTAMP DEFAULT NOW(),
             expires_at TIMESTAMP DEFAULT (NOW() + INTERVAL '24 hours')
@@ -224,27 +233,32 @@ app.get('/admin/*', (req, res) => {
 // Helper: Sanitize User (Rewrite URLs)
 const sanitizeUser = (user, req) => {
     if (!user) return null;
-    const protocol = req.protocol || 'http';
-    const host = req.get ? req.get('host') : 'localhost:3000';
+    const protocol = req?.protocol || 'http';
+    const host = (req?.get ? req.get('host') : null) || 'localhost:3000';
 
     const newUser = { ...user };
 
-    // Rewrite Avatar
-    if (newUser.avatar_url && !newUser.avatar_url.startsWith('http')) {
-        newUser.avatar_url = `${protocol}://${host}${newUser.avatar_url.startsWith('/') ? '' : '/'}${newUser.avatar_url}`;
-    }
+    const rewrite = (url) => {
+        if (url && typeof url === 'string' && !url.startsWith('http')) {
+            return `${protocol}://${host}${url.startsWith('/') ? '' : '/'}${url}`;
+        }
+        return url;
+    };
+
+    // Rewrite common image fields
+    if (newUser.avatar_url) newUser.avatar_url = rewrite(newUser.avatar_url);
+    if (newUser.avatar) newUser.avatar = rewrite(newUser.avatar);
+    if (newUser.image_url) newUser.image_url = rewrite(newUser.image_url);
+    if (newUser.image) newUser.image = rewrite(newUser.image);
 
     // Pass through onboarding status
-    newUser.onboarding_completed = !!user.onboarding_completed;
+    if (user.onboarding_completed !== undefined) {
+        newUser.onboarding_completed = !!user.onboarding_completed;
+    }
 
     // Rewrite Photos array if exists (for operators)
     if (newUser.photos && Array.isArray(newUser.photos)) {
-        newUser.photos = newUser.photos.map(p => {
-            if (p && typeof p === 'string' && !p.startsWith('http')) {
-                return `${protocol}://${host}${p.startsWith('/') ? '' : '/'}${p}`;
-            }
-            return p;
-        });
+        newUser.photos = newUser.photos.map(p => rewrite(p));
     }
 
     return newUser;
@@ -437,30 +451,46 @@ app.get('/api/debug/db-check', async (req, res) => {
 app.get('/api/social/explore', async (req, res) => {
     try {
         // Fetch active stories
-        const storiesRes = await db.query(`
-            SELECT s.*, u.display_name as name, u.avatar_url as avatar, u.vip_level as level
-            FROM stories s
-            JOIN users u ON s.operator_id = u.id
-            WHERE s.expires_at > NOW()
-            ORDER BY s.created_at DESC
-        `);
+        let stories = [];
+        try {
+            const storiesRes = await db.query(`
+                SELECT s.*, u.display_name as name, u.avatar_url as avatar, u.vip_level as level
+                FROM stories s
+                JOIN users u ON s.operator_id = u.id
+                WHERE s.expires_at > NOW()
+                ORDER BY s.created_at DESC
+            `);
+            stories = storiesRes.rows.map(s => sanitizeUser(s, req));
+        } catch (sErr) {
+            console.error('[SOCIAL] Stories Fetch Error:', sErr.message);
+            // Non-blocking for now, return empty or continue to posts
+        }
 
         // Fetch latest posts
-        const postsRes = await db.query(`
-            SELECT p.*, u.display_name as userName, u.avatar_url as avatar, u.job as jobTitle, u.vip_level as level
-            FROM posts p
-            JOIN users u ON p.operator_id = u.id
-            ORDER BY p.created_at DESC
-            LIMIT 50
-        `);
+        let posts = [];
+        try {
+            const postsRes = await db.query(`
+                SELECT p.*, u.display_name as "userName", u.avatar_url as avatar, u.job as "jobTitle", u.vip_level as level
+                FROM posts p
+                JOIN users u ON p.operator_id = u.id
+                ORDER BY p.created_at DESC
+                LIMIT 50
+            `);
+            posts = postsRes.rows.map(p => sanitizeUser(p, req));
+        } catch (pErr) {
+            console.error('[SOCIAL] Posts Fetch Error:', pErr.message);
+        }
 
         res.json({
-            stories: storiesRes.rows.map(s => sanitizeUser(s, req)),
-            posts: postsRes.rows.map(p => sanitizeUser(p, req))
+            stories,
+            posts
         });
     } catch (err) {
-        console.error('[SOCIAL] Explore Error:', err.message);
-        res.status(500).json({ error: 'Keşfet verileri alınamadı.' });
+        console.error('[SOCIAL] Critical Explore Error:', err.message);
+        res.status(500).json({
+            error: 'Keşfet verileri alınamadı.',
+            details: process.env.NODE_ENV === 'development' ? err.message : undefined
+        });
     }
 });
 

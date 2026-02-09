@@ -497,32 +497,54 @@ app.get('/api/social/explore', async (req, res) => {
 // ADMIN: Create Post
 app.post('/api/admin/social/post', async (req, res) => {
     const { operator_id, image_url, content } = req.body;
-    if (!operator_id || !image_url) return res.status(400).json({ error: 'Operator ve görsel gerekli.' });
+    console.log('[SOCIAL] Create Post Attempt:', { operator_id, image_url, content_length: content?.length });
+
+    if (!operator_id || !image_url) {
+        console.warn('[SOCIAL] Missing required fields for post');
+        return res.status(400).json({ error: 'Operator ve görsel gerekli.' });
+    }
 
     try {
         const result = await db.query(
             'INSERT INTO posts (operator_id, image_url, content) VALUES ($1, $2, $3) RETURNING *',
             [operator_id, image_url, content]
         );
+        console.log('[SOCIAL] Post Created Success:', result.rows[0].id);
         res.json(result.rows[0]);
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        console.error('[SOCIAL] Create Post DB Error:', err.message);
+        res.status(500).json({
+            error: 'Veritabanı hatası oluştu.',
+            details: err.message,
+            query_hint: 'Verify operator_id type (UUID vs INT)'
+        });
     }
 });
 
 // ADMIN: Create Story
 app.post('/api/admin/social/story', async (req, res) => {
     const { operator_id, image_url } = req.body;
-    if (!operator_id || !image_url) return res.status(400).json({ error: 'Operator ve görsel gerekli.' });
+    console.log('[SOCIAL] Create Story Attempt:', { operator_id, image_url });
+
+    if (!operator_id || !image_url) {
+        console.warn('[SOCIAL] Missing required fields for story');
+        return res.status(400).json({ error: 'Operator ve görsel gerekli.' });
+    }
 
     try {
         const result = await db.query(
             'INSERT INTO stories (operator_id, image_url) VALUES ($1, $2) RETURNING *',
             [operator_id, image_url]
         );
+        console.log('[SOCIAL] Story Created Success:', result.rows[0].id);
         res.json(result.rows[0]);
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        console.error('[SOCIAL] Create Story DB Error:', err.message);
+        res.status(500).json({
+            error: 'Veritabanı hatası oluştu.',
+            details: err.message,
+            query_hint: 'Verify operator_id type (UUID vs INT)'
+        });
     }
 });
 

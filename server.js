@@ -135,32 +135,24 @@ const initializeDatabase = async () => {
         // Initial Setup: Extensions & Core Tables
         await db.query('CREATE EXTENSION IF NOT EXISTS pgcrypto');
 
-        // Detect users.id type for proper foreign keys
-        const idTypeRes = await db.query(`
-            SELECT data_type 
-            FROM information_schema.columns 
-            WHERE table_name = 'users' AND column_name = 'id'
-        `);
-        const userIdType = idTypeRes.rows[0]?.data_type?.toUpperCase() === 'INTEGER' ? 'INTEGER' : 'UUID';
-        console.log(`[DB] Detected users.id type for social tables: ${userIdType}`);
-
-        // Social Features: Posts and Stories (Adaptive based on userIdType)
+        // Social Features: Posts and Stories (UUID based)
         await db.query(`CREATE TABLE IF NOT EXISTS posts (
             id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-            operator_id ${userIdType} REFERENCES users(id),
+            operator_id UUID REFERENCES users(id) ON DELETE CASCADE,
             image_url TEXT NOT NULL,
             content TEXT,
-            likes_count INTEGER DEFAULT 0,
             created_at TIMESTAMP DEFAULT NOW()
         )`);
 
         await db.query(`CREATE TABLE IF NOT EXISTS stories (
             id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-            operator_id ${userIdType} REFERENCES users(id),
+            operator_id UUID REFERENCES users(id) ON DELETE CASCADE,
             image_url TEXT NOT NULL,
             created_at TIMESTAMP DEFAULT NOW(),
             expires_at TIMESTAMP DEFAULT (NOW() + INTERVAL '24 hours')
         )`);
+
+        console.log('[DB] Social tables verified/created.');
 
         console.log('[DB] SCHEMA VERIFICATION COMPLETE');
     } catch (err) {
@@ -2333,6 +2325,61 @@ app.get('/api/admin/force-fix-schema-v2', async (req, res) => {
 
     } catch (err) {
         log(`❌ [MANUAL V2] Critical Error: ${err.message}`);
+        res.json({ status: 'error', error: err.message, logs: logs });
+    }
+});
+
+// SOCIAL SCHEMA REPAIR: Fix for 500 Errors
+app.get('/api/admin/force-fix-social-schema', async (req, res) => {
+    const logs = [];
+    const log = (msg) => { console.log(msg); logs.push(msg); };
+
+    if (req.query.secret !== 'falka_fix_now') {
+        return res.json({ status: 'error', message: 'Access Denied', logs });
+    }
+
+    try {
+        log("⚠️ [SOCIAL REPAIR] Starting Social Schema Repair...");
+
+        // 1. Extensions
+        await db.query('CREATE EXTENSION IF NOT EXISTS pgcrypto');
+        log("✅ pgcrypto extension checked.");
+
+        // 2. Clear corrupted tables if they exist with wrong schema
+        // CAUTION: This will delete existing posts/stories, but they are already broken.
+        log("ℹ️ Dropping potentially corrupted social tables...");
+        await db.query('DROP TABLE IF EXISTS stories CASCADE');
+        await db.query('DROP TABLE IF EXISTS posts CASCADE');
+        log("✅ Tables dropped.");
+
+        // 3. Re-create with proper UUID linking
+        log("ℹ️ Re-creating tables with proper UUID references...");
+        await db.query(`CREATE TABLE posts (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            operator_id UUID REFERENCES users(id) ON DELETE CASCADE,
+            image_url TEXT NOT NULL,
+            content TEXT,
+            created_at TIMESTAMP DEFAULT NOW()
+        )`);
+        log("✅ Posts table created.");
+
+        await db.query(`CREATE TABLE stories (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            operator_id UUID REFERENCES users(id) ON DELETE CASCADE,
+            image_url TEXT NOT NULL,
+            created_at TIMESTAMP DEFAULT NOW(),
+            expires_at TIMESTAMP DEFAULT NOW() + INTERVAL '24 hours'
+        )`);
+        log("✅ Stories table created.");
+
+        res.json({
+            status: 'success',
+            message: 'Social schema fully repaired.',
+            logs: logs
+        });
+
+    } catch (err) {
+        log(`❌ [SOCIAL REPAIR] Error: ${err.message}`);
         res.json({ status: 'error', error: err.message, logs: logs });
     }
 });

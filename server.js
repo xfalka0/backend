@@ -19,10 +19,11 @@ const sharp = require('sharp');
 const cloudinary = require('cloudinary').v2;
 
 // Cloudinary Configuration
+// Cloudinary Configuration
 cloudinary.config({
-    cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-    api_key: process.env.CLOUDINARY_API_KEY,
-    api_secret: process.env.CLOUDINARY_API_SECRET
+    cloud_name: 'dqnnw4mru',
+    api_key: '176385614858834',
+    api_secret: 'VsHSmd7WVpg9Cum2RY4baMHaU30'
 });
 
 // --- DATABASE AUTO-MIGRATION ---
@@ -217,6 +218,33 @@ app.use(cors());
 app.use(express.json());
 app.use('/uploads', express.static(uploadsDir));
 app.use('/admin', express.static(path.join(__dirname, 'public/admin')));
+
+// CLOUDINARY UPLOAD ENDPOINT
+app.post('/api/upload', upload.single('file'), async (req, res) => {
+    try {
+        if (!req.file) return res.status(400).json({ error: 'Dosya yüklenemedi.' });
+
+        console.log('[UPLOAD] Uploading to Cloudinary:', req.file.path);
+
+        const result = await cloudinary.uploader.upload(req.file.path, {
+            folder: 'dating_app_uploads',
+            use_filename: true,
+            unique_filename: false,
+        });
+
+        console.log('[UPLOAD] Cloudinary Success:', result.secure_url);
+
+        // Delete local file
+        if (fs.existsSync(req.file.path)) {
+            fs.unlinkSync(req.file.path);
+        }
+
+        res.json({ url: result.secure_url });
+    } catch (err) {
+        console.error('[UPLOAD] Error:', err);
+        res.status(500).json({ error: 'Yükleme hatası: ' + err.message });
+    }
+});
 
 // Serve Admin Panel index.html for unknown /admin routes (SPA support)
 app.get('/admin/*', (req, res) => {

@@ -1827,7 +1827,7 @@ app.post('/api/messages', async (req, res) => {
 // --- MODERATION API ---
 
 // File Upload Endpoint with Optimization
-app.post('/api/upload', authenticateToken, upload.any(), async (req, res) => {
+app.post('/api/upload', upload.any(), async (req, res) => {
     try {
         console.log('[UPLOAD] Request handler started');
 

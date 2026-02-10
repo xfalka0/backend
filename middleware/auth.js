@@ -18,19 +18,21 @@ const authenticateToken = async (req, res, next) => {
         const result = await db.query('SELECT id, username, email, role, account_status, display_name, avatar_url, gender FROM users WHERE id = $1', [decoded.id]);
 
         if (result.rows.length === 0) {
+            console.warn(`[AUTH] 403: User not found for ID: ${decoded.id}`);
             return res.status(403).json({ error: 'Kullanıcı bulunamadı.' });
         }
 
         const user = result.rows[0];
 
         if (user.account_status !== 'active') {
+            console.warn(`[AUTH] 403: User account not active for ID: ${user.id}, status: ${user.account_status}`);
             return res.status(403).json({ error: 'Hesap aktif değil.' });
         }
 
         req.user = user;
         next();
     } catch (err) {
-        console.error("Auth Error:", err.message);
+        console.error("[AUTH] 403: Invalid token error:", err.message);
         return res.status(403).json({ error: 'Geçersiz token.' });
     }
 };

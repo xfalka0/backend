@@ -1801,9 +1801,9 @@ app.get('/api/users/:userId/chats', async (req, res) => {
             SELECT 
                 c.id,
                 c.operator_id, 
-                c.last_message,
                 c.last_message_at,
-                c.unread_count,
+                (SELECT content FROM messages WHERE chat_id = c.id ORDER BY created_at DESC LIMIT 1) as last_message,
+                (SELECT COUNT(*)::int FROM messages WHERE chat_id = c.id AND sender_id != $1 AND is_read = false) as unread_count,
                 COALESCE(u.display_name, u.username, 'Bilinmeyen Operatör') as name, 
                 COALESCE(u.avatar_url, 'https://via.placeholder.com/150') as avatar_url,
                 true as is_online 

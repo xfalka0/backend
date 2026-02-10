@@ -495,6 +495,17 @@ app.get('/api/debug/db-check', async (req, res) => {
 
 // ... (existing routes) ...
 
+
+// DEBUG: Dump Users
+app.get('/api/debug/users-list', async (req, res) => {
+    try {
+        const result = await db.query('SELECT id, username, display_name, role FROM users ORDER BY created_at DESC LIMIT 50');
+        res.json(result.rows);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // --- SOCIAL / EXPLORE ROUTES ---
 
 // GET EXPLORE DATA (Stories & Posts)
@@ -1861,6 +1872,10 @@ app.get('/api/chats/admin', async (req, res) => {
                 c.*, 
                 COALESCE(u.display_name, u.username, 'Bilinmeyen Kullanıcı') as user_name, 
                 u.avatar_url as user_avatar,
+                u.vip_level,
+                u.age,
+                u.gender,
+                u.job,
                 COALESCE(op.display_name, op.username, 'Bilinmeyen Operatör') as operator_name, 
                 op.avatar_url as operator_avatar,
                 (SELECT content FROM messages WHERE chat_id = c.id ORDER BY created_at DESC LIMIT 1) as last_message

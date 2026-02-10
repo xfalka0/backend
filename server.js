@@ -464,9 +464,17 @@ app.get('/api/social/explore', async (req, res) => {
         let posts = [];
         try {
             const postsRes = await db.query(`
-                SELECT p.*, u.display_name as "userName", u.avatar_url as avatar, u.job as "jobTitle", u.vip_level as level
+                SELECT 
+                    p.*, 
+                    u.display_name as "userName", 
+                    u.avatar_url as avatar, 
+                    COALESCE(op.category, u.job) as "jobTitle", 
+                    u.vip_level as level, 
+                    u.age, 
+                    u.gender
                 FROM posts p
                 JOIN users u ON p.operator_id = u.id
+                LEFT JOIN operators op ON u.id = op.user_id
                 ORDER BY p.created_at DESC
                 LIMIT 50
             `);
@@ -1819,7 +1827,7 @@ app.post('/api/messages', async (req, res) => {
 // --- MODERATION API ---
 
 // File Upload Endpoint with Optimization
-app.post('/api/upload', upload.any(), async (req, res) => {
+app.post('/api/upload', authenticateToken, upload.any(), async (req, res) => {
     try {
         console.log('[UPLOAD] Request handler started');
 

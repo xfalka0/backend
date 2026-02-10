@@ -1,4 +1,5 @@
 const express = require('express');
+const axios = require('axios');
 const http = require('http');
 const { Server } = require('socket.io');
 const cors = require('cors');
@@ -448,7 +449,8 @@ app.get('/api/social/explore', async (req, res) => {
         let stories = [];
         try {
             const storiesRes = await db.query(`
-                SELECT s.*, u.display_name as name, u.avatar_url as avatar, u.vip_level as level
+                SELECT s.*, u.display_name as name, u.avatar_url as avatar, u.vip_level as level,
+                EXISTS(SELECT 1 FROM stories s2 WHERE s2.operator_id = u.id AND s2.expires_at > NOW()) as "hasStory"
                 FROM stories s
                 JOIN users u ON s.operator_id = u.id
                 WHERE s.expires_at > NOW()
@@ -471,7 +473,8 @@ app.get('/api/social/explore', async (req, res) => {
                     COALESCE(op.category, u.job) as "jobTitle", 
                     u.vip_level as level, 
                     u.age, 
-                    u.gender
+                    u.gender,
+                    EXISTS(SELECT 1 FROM stories s WHERE s.operator_id = u.id AND s.expires_at > NOW()) as "hasStory"
                 FROM posts p
                 JOIN users u ON p.operator_id = u.id
                 LEFT JOIN operators op ON u.id = op.user_id
@@ -1461,7 +1464,8 @@ app.get('/api/operators', async (req, res) => {
         console.log(`[DEBUG] Fetching operators list. Filter Gender: ${gender || 'none'}`);
 
         let query = `
-            SELECT u.id, COALESCE(u.display_name, u.username) as name, u.avatar_url, u.gender, u.age, u.vip_level, o.category, o.rating, o.is_online, COALESCE(o.bio, u.bio) as bio, o.photos, u.role
+            SELECT u.id, COALESCE(u.display_name, u.username) as name, u.avatar_url, u.gender, u.age, u.vip_level, o.category, o.rating, o.is_online, COALESCE(o.bio, u.bio) as bio, o.photos, u.role,
+            EXISTS(SELECT 1 FROM stories s WHERE s.operator_id = u.id AND s.expires_at > NOW()) as has_active_story
             FROM users u
             JOIN operators o ON u.id = o.user_id
         `;
@@ -1582,7 +1586,8 @@ app.get('/api/discovery', authenticateToken, async (req, res) => {
                 o.is_online, 
                 COALESCE(o.bio, u.bio) as bio, 
                 o.photos,
-                CASE WHEN o.user_id IS NOT NULL THEN TRUE ELSE FALSE END as is_operator
+                CASE WHEN o.user_id IS NOT NULL THEN TRUE ELSE FALSE END as is_operator,
+                EXISTS(SELECT 1 FROM stories s WHERE s.operator_id = u.id AND s.expires_at > NOW()) as has_active_story
             FROM users u
             LEFT JOIN operators o ON u.id = o.user_id
             WHERE u.gender = $1 
@@ -1827,7 +1832,7 @@ app.post('/api/messages', async (req, res) => {
 // --- MODERATION API ---
 
 // File Upload Endpoint with Optimization
-app.post('/api/upload', upload.any(), async (req, res) => {
+app.post('/api/upload', authenticateToken, upload.any(), async (req, res) => {
     try {
         console.log('[UPLOAD] Request handler started');
 
@@ -2476,8 +2481,32 @@ app.use((err, req, res, next) => {
     res.status(500).json({ error: err.message || 'Internal Server Error' });
 });
 
+// KEEP ALIVE ENDPOINT
+app.get('/api/keep-alive', (req, res) => {
+    res.json({ status: 'alive', timestamp: new Date().toISOString() });
+});
+
+// SELF PINGER TO PREVENT RENDER SLEEP (Every 14 minutes)
+const startPinger = () => {
+    const PING_INTERVAL = 14 * 60 * 1000; // 14 mins
+    const URL = 'https://backend-kj17.onrender.com/api/keep-alive';
+
+    // Initial delay to let server settle
+    setTimeout(() => {
+        setInterval(async () => {
+            try {
+                await axios.get(URL);
+                console.log('[KEEP-ALIVE] Self-ping successful');
+            } catch (err) {
+                console.error('[KEEP-ALIVE] Self-ping failed:', err.message);
+            }
+        }, PING_INTERVAL);
+    }, 60000);
+};
+
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, '0.0.0.0', () => {
     console.log(`🚀 [BACKEND] Server listening on http://0.0.0.0:${PORT}`);
     console.log(`📡 [BACKEND] Accessible on http://localhost:${PORT}`);
+    startPinger();
 });

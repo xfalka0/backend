@@ -362,8 +362,9 @@ app.put('/api/users/:id/profile', async (req, res) => {
                 onboarding_completed = COALESCE($7, onboarding_completed),
                 age = COALESCE($8::INTEGER, age),
                 relationship = COALESCE($9, relationship),
-                zodiac = COALESCE($10, zodiac)
-             WHERE id = $11 RETURNING *`,
+                zodiac = COALESCE($10, zodiac),
+                job = COALESCE($11, job)
+             WHERE id = $12 RETURNING *`,
             [
                 req.body.display_name || null,
                 req.body.name || null,
@@ -375,6 +376,7 @@ app.put('/api/users/:id/profile', async (req, res) => {
                 (req.body.age && !isNaN(parseInt(req.body.age))) ? parseInt(req.body.age) : null,
                 req.body.relationship || null,
                 req.body.zodiac || null,
+                req.body.job || null,
                 id
             ]
         );
@@ -516,27 +518,53 @@ app.post('/api/admin/social/post', async (req, res) => {
 // ADMIN: Create Story
 app.post('/api/admin/social/story', async (req, res) => {
     const { operator_id, image_url } = req.body;
-    console.log('[SOCIAL] Create Story Attempt:', { operator_id, image_url });
-
-    if (!operator_id || !image_url) {
-        console.warn('[SOCIAL] Missing required fields for story');
-        return res.status(400).json({ error: 'Operator ve görsel gerekli.' });
-    }
-
+    if (!operator_id || !image_url) return res.status(400).json({ error: 'Operator ve görsel gerekli.' });
     try {
         const result = await db.query(
             'INSERT INTO stories (operator_id, image_url) VALUES ($1, $2) RETURNING *',
             [operator_id, image_url]
         );
-        console.log('[SOCIAL] Story Created Success:', result.rows[0].id);
         res.json(result.rows[0]);
     } catch (err) {
-        console.error('[SOCIAL] Create Story DB Error:', err.message);
-        res.status(500).json({
-            error: 'Veritabanı hatası oluştu.',
-            details: err.message,
-            query_hint: 'Verify operator_id type (UUID vs INT)'
-        });
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// USER: Create Post
+app.post('/api/social/post', authenticateToken, async (req, res) => {
+    const { image_url, content } = req.body;
+    const userId = req.user.id;
+
+    if (!image_url) return res.status(400).json({ error: 'Görsel gerekli.' });
+
+    try {
+        const result = await db.query(
+            'INSERT INTO posts (operator_id, image_url, content) VALUES ($1, $2, $3) RETURNING *',
+            [userId, image_url, content]
+        );
+        res.json(result.rows[0]);
+    } catch (err) {
+        console.error('[SOCIAL] User Create Post Error:', err.message);
+        res.status(500).json({ error: 'Paylaşım yapılamadı.' });
+    }
+});
+
+// USER: Create Story (24h default in DB)
+app.post('/api/social/story', authenticateToken, async (req, res) => {
+    const { image_url } = req.body;
+    const userId = req.user.id;
+
+    if (!image_url) return res.status(400).json({ error: 'Görsel gerekli.' });
+
+    try {
+        const result = await db.query(
+            'INSERT INTO stories (operator_id, image_url) VALUES ($1, $2) RETURNING *',
+            [userId, image_url]
+        );
+        res.json(result.rows[0]);
+    } catch (err) {
+        console.error('[SOCIAL] User Create Story Error:', err.message);
+        res.status(500).json({ error: 'Hikaye paylaşılamadı.' });
     }
 });
 
@@ -1761,6 +1789,29 @@ app.get('/api/messages/:chatId', async (req, res) => {
         const result = await db.query(query, [chatId]);
         res.json(result.rows);
     } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// SEND MESSAGE VIA HTTP (for automated messages)
+app.post('/api/messages', async (req, res) => {
+    const { chatId, senderId, content, type } = req.body;
+    try {
+        const result = await db.query(
+            'INSERT INTO messages (chat_id, sender_id, content, content_type) VALUES ($1, $2, $3, $4) RETURNING *',
+            [chatId, senderId, content, type || 'text']
+        );
+        const savedMsg = result.rows[0];
+
+        // Update last message in chat
+        await db.query('UPDATE chats SET last_message_at = NOW(), last_message = $2 WHERE id = $1', [chatId, content]);
+
+        // Broadcast via socket if room is active
+        io.to(chatId).emit('receive_message', savedMsg);
+
+        res.json(savedMsg);
+    } catch (err) {
+        console.error('HTTP Send Message Error:', err.message);
         res.status(500).json({ error: err.message });
     }
 });

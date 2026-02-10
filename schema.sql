@@ -17,6 +17,7 @@ CREATE TABLE IF NOT EXISTS users (
     last_login_at TIMESTAMP,
     ban_expires_at TIMESTAMP,
     account_status VARCHAR(50) DEFAULT 'active',
+    job VARCHAR(100),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 

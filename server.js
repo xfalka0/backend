@@ -217,11 +217,27 @@ app.use('/uploads', express.static(uploadsDir));
 app.use('/admin', express.static(path.join(__dirname, 'public/admin')));
 
 // CLOUDINARY UPLOAD ENDPOINT
-app.post('/api/upload', upload.single('file'), async (req, res) => {
+app.post('/api/upload', (req, res, next) => {
+    upload.single('file')(req, res, (err) => {
+        if (err instanceof multer.MulterError) {
+            console.error('[MULTER ERROR]:', err);
+            return res.status(500).json({ error: 'Multer Error: ' + err.message, details: err });
+        } else if (err) {
+            console.error('[UPLOAD UNKNOWN ERROR]:', err);
+            return res.status(500).json({ error: 'Upload Error: ' + err.message, details: err });
+        }
+        next();
+    });
+}, async (req, res) => {
     try {
-        if (!req.file) return res.status(400).json({ error: 'Dosya yüklenemedi.' });
+        console.log('[UPLOAD] Request received. File:', req.file);
 
-        console.log('[UPLOAD] Uploading to Cloudinary:', req.file.path);
+        if (!req.file) {
+            console.error('[UPLOAD ERROR] No file received via Multer.');
+            return res.status(400).json({ error: 'Dosya yüklenemedi (req.file is empty).' });
+        }
+
+        console.log('[UPLOAD] Uploading to Cloudinary path:', req.file.path);
 
         const result = await cloudinary.uploader.upload(req.file.path, {
             folder: 'dating_app_uploads',
@@ -232,14 +248,22 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
         console.log('[UPLOAD] Cloudinary Success:', result.secure_url);
 
         // Delete local file
-        if (fs.existsSync(req.file.path)) {
-            fs.unlinkSync(req.file.path);
+        try {
+            if (fs.existsSync(req.file.path)) {
+                fs.unlinkSync(req.file.path);
+            }
+        } catch (unlinkErr) {
+            console.warn('[UPLOAD WARNING] Could not delete temp file:', unlinkErr.message);
         }
 
         res.json({ url: result.secure_url });
     } catch (err) {
-        console.error('[UPLOAD] Error:', err);
-        res.status(500).json({ error: 'Yükleme hatası: ' + err.message });
+        console.error('[UPLOAD CRITICAL ERROR]:', err);
+        res.status(500).json({
+            error: 'Sunucu Hatası: ' + err.message,
+            stack: err.stack,
+            details: JSON.stringify(err, Object.getOwnPropertyNames(err))
+        });
     }
 });
 

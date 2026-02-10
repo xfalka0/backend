@@ -1825,6 +1825,33 @@ app.get('/api/users/:userId/chats', async (req, res) => {
     }
 });
 
+
+// CREATE OR GET CHAT
+app.post('/api/chats', async (req, res) => {
+    const { userId, operatorId } = req.body;
+    try {
+        // 1. Check if chat exists
+        const existingChat = await db.query(
+            'SELECT * FROM chats WHERE user_id = $1 AND operator_id = $2',
+            [userId, operatorId]
+        );
+
+        if (existingChat.rows.length > 0) {
+            return res.json(existingChat.rows[0]);
+        }
+
+        // 2. Create new chat
+        const newChat = await db.query(
+            'INSERT INTO chats (user_id, operator_id, last_message_at) VALUES ($1, $2, NOW()) RETURNING *',
+            [userId, operatorId]
+        );
+        res.json(newChat.rows[0]);
+    } catch (err) {
+        console.error('Create Chat Error:', err.message);
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // GET CHATS FOR ADMIN
 app.get('/api/chats/admin', async (req, res) => {
     try {
@@ -1860,6 +1887,23 @@ app.get('/api/chats/admin', async (req, res) => {
         res.json(sanitizedRows);
     } catch (err) {
         console.error('GET /api/chats/admin - ERROR:', err.message);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// MARK MESSAGES AS READ
+app.put('/api/chats/:chatId/read', async (req, res) => {
+    const { chatId } = req.params;
+    const { userId } = req.body;
+
+    try {
+        await db.query(
+            'UPDATE messages SET is_read = true WHERE chat_id = $1 AND sender_id != $2 AND is_read = false',
+            [chatId, userId]
+        );
+        res.json({ success: true });
+    } catch (err) {
+        console.error('Mark Read Error:', err.message);
         res.status(500).json({ error: err.message });
     }
 });

@@ -21,9 +21,9 @@ const cloudinary = require('cloudinary').v2;
 // Cloudinary Configuration
 // Cloudinary Configuration
 cloudinary.config({
-    cloud_name: 'dqnnw4mru',
-    api_key: '176385614858834',
-    api_secret: 'VsHSmd7WVpg9Cum2RY4baMHaU30'
+    cloud_name: 'dqnmw4mru',
+    api_key: '281612529551927',
+    api_secret: 'aaDyBAHKc4maMhtKmM0lwwV82V4'
 });
 
 // --- DATABASE AUTO-MIGRATION ---

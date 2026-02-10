@@ -226,7 +226,13 @@ app.get('/admin/*', (req, res) => {
 // Helper: Sanitize User (Rewrite URLs)
 const sanitizeUser = (user, req) => {
     if (!user) return null;
-    const protocol = req?.protocol || 'http';
+    // Force HTTPS on Render or if x-forwarded-proto is https
+    let protocol = 'http';
+    if (req.get('host').includes('onrender.com') || req.headers['x-forwarded-proto'] === 'https') {
+        protocol = 'https';
+    } else {
+        protocol = req?.protocol || 'http';
+    }
     const host = (req?.get ? req.get('host') : null) || 'localhost:3000';
 
     const newUser = { ...user };
@@ -742,6 +748,27 @@ app.get('/api/admin/stats', authenticateToken, authorizeRole('admin', 'super_adm
                 registrations: registrationChart.rows
             }
         });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// GET ADMIN ACTIVITIES
+app.get('/api/admin/activities', authenticateToken, authorizeRole('admin', 'super_admin', 'moderator'), async (req, res) => {
+    try {
+        const result = await db.query(`
+            SELECT a.*, u.username as user_name, u.avatar_url as user_avatar 
+            FROM activities a
+            LEFT JOIN users u ON a.user_id = u.id
+            ORDER BY a.created_at DESC 
+            LIMIT 50
+        `);
+        // Sanitize users in the activity list
+        const activities = result.rows.map(act => {
+            const sanitizedUser = sanitizeUser({ avatar_url: act.user_avatar }, req);
+            return { ...act, user_avatar: sanitizedUser ? sanitizedUser.avatar_url : null };
+        });
+        res.json(activities);
     } catch (err) {
         res.status(500).json({ error: err.message });
     }

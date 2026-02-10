@@ -185,23 +185,20 @@ if (!fs.existsSync(uploadsDir)) {
     fs.mkdirSync(uploadsDir, { recursive: true });
 }
 
-// Multer Config
+// Multer Config (Updated for Render/Cloudinary)
 const storage = multer.diskStorage({
     destination: (req, file, cb) => {
-        console.log('[MULTER] Resolving destination for:', file.originalname);
-        console.log('[MULTER] destination folder:', uploadsDir);
-        if (!fs.existsSync(uploadsDir)) {
-            console.log('[MULTER] Directory missing, creating...');
-            fs.mkdirSync(uploadsDir, { recursive: true });
-        }
-        cb(null, uploadsDir);
+        // Use system temp directory to avoid permission issues on Render
+        cb(null, os.tmpdir());
     },
     filename: (req, file, cb) => {
+        // Keep extension for Cloudinary to detect type
         const fname = Date.now() + '-' + Math.round(Math.random() * 1E9) + path.extname(file.originalname);
-        console.log('[MULTER] Generating filename:', fname);
+        console.log('[MULTER] Generated temp filename:', fname);
         cb(null, fname);
     }
 });
+
 const upload = multer({
     storage,
     limits: { fileSize: 10 * 1024 * 1024 } // 10MB limit

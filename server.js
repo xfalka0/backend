@@ -101,6 +101,11 @@ const initializeDatabase = async () => {
             await db.query('ALTER TABLE users ADD COLUMN is_vip BOOLEAN DEFAULT FALSE');
         }
 
+        if (!columnNames.includes('is_verified')) {
+            console.log('[DB] Adding missing column: is_verified');
+            await db.query('ALTER TABLE users ADD COLUMN is_verified BOOLEAN DEFAULT FALSE');
+        }
+
         if (!columnNames.includes('phone')) {
             console.log('[DB] Adding missing column: phone');
             await db.query('ALTER TABLE users ADD COLUMN phone VARCHAR(20) UNIQUE');
@@ -1817,6 +1822,8 @@ app.get('/api/users/:userId/chats', async (req, res) => {
                 (SELECT COUNT(*)::int FROM messages WHERE chat_id = c.id AND sender_id != $1 AND is_read = false) as unread_count,
                 COALESCE(u.display_name, u.username, 'Bilinmeyen Operatör') as name, 
                 COALESCE(u.avatar_url, 'https://via.placeholder.com/150') as avatar_url,
+                u.vip_level,
+                u.is_verified,
                 true as is_online 
             FROM chats c
             LEFT JOIN users u ON c.operator_id = u.id

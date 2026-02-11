@@ -2,7 +2,9 @@ import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 import { Plus, Search, Filter, Camera, Trash2, Edit3, CheckCircle, XCircle, Briefcase, GraduationCap, Heart, Hash, Loader2, Crown } from 'lucide-react';
 
-const API_URL = window.location.hostname === 'localhost' ? 'http://localhost:3000/api' : '/api';
+const API_URL = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+    ? 'https://backend-kj17.onrender.com/api'
+    : '/api';
 
 export default function ProfilesPage() {
     const [profiles, setProfiles] = useState([]);

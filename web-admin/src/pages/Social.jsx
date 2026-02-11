@@ -80,8 +80,15 @@ export default function SocialPage() {
 
     const handleSubmit = async (e) => {
         e.preventDefault();
-        if (!formData.operator_id || !formData.image_url) {
-            alert('Lütfen tüm zorunlu alanları doldurun.');
+
+        // DEBUG: Clear logs on new attempt
+        setDebugLogs([]);
+        addLog(`Starting submission...`, 'info');
+        addLog(`Target API: ${API_URL}`, 'info');
+
+        if (!formData.image_url) {
+            addLog('Error: Image URL is missing', 'error');
+            alert('Lütfen bir görsel yükleyin veya URL girin.');
             return;
         }
 
@@ -89,17 +96,33 @@ export default function SocialPage() {
             setUploading(true);
             const token = localStorage.getItem('token');
             const endpoint = activeTab === 'stories' ? '/admin/social/story' : '/admin/social/post';
+            const fullUrl = `${API_URL}${endpoint}`;
 
-            await axios.post(`${API_URL}${endpoint}`, formData, {
+            addLog(`Request URL: ${fullUrl}`, 'info');
+            addLog(`Payload: ${JSON.stringify(formData)}`, 'info');
+
+            const res = await axios.post(fullUrl, formData, {
                 headers: { Authorization: `Bearer ${token}` }
             });
+
+            addLog(`Success! Status: ${res.status}`, 'success');
+            addLog(`Response: ${JSON.stringify(res.data)}`, 'success');
 
             alert(`${activeTab === 'stories' ? 'Hikaye' : 'Post'} başarıyla paylaşıldı!`);
             setFormData(prev => ({ ...prev, image_url: '', content: '' }));
             fetchData();
         } catch (err) {
-            console.error("Submit Error:", err);
-            alert('Paylaşım yapılırken hata oluştu.');
+            console.error(err);
+            addLog(`Error Message: ${err.message}`, 'error');
+            if (err.response) {
+                addLog(`Server Status: ${err.response.status}`, 'error');
+                addLog(`Server Data: ${JSON.stringify(err.response.data)}`, 'error');
+            } else if (err.request) {
+                addLog('No response received from server (Network Error?)', 'error');
+            } else {
+                addLog(`Request Setup Error: ${err.message}`, 'error');
+            }
+            alert('Hata oluştu: ' + (err.response?.data?.error || err.message));
         } finally {
             setUploading(false);
         }

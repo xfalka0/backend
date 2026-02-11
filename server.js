@@ -558,6 +558,15 @@ app.get('/api/social/explore', async (req, res) => {
             posts = postsRes.rows.map(p => sanitizeUser(p, req));
         } catch (pErr) {
             console.error('[SOCIAL] Posts Fetch Error:', pErr.message);
+            // DEBUG: Return error as a post so it's visible in Admin Panel
+            posts = [{
+                id: 'debug-error-' + Date.now(),
+                image_url: 'https://via.placeholder.com/150/FF0000/FFFFFF?text=ERROR',
+                content: `DEBUG ERROR: ${pErr.message}`,
+                userName: 'SYSTEM ERROR',
+                avatar: '',
+                created_at: new Date()
+            }];
         }
 
         res.json({

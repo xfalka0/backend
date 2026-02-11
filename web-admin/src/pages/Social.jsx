@@ -39,6 +39,7 @@ export default function SocialPage() {
     const fetchData = async () => {
         try {
             setLoading(true);
+            addLog('Fetching data...', 'info');
             const token = localStorage.getItem('token');
             const headers = { Authorization: `Bearer ${token}` };
 
@@ -46,6 +47,9 @@ export default function SocialPage() {
                 axios.get(`${API_URL}/operators`, { headers }),
                 axios.get(`${API_URL}/social/explore`)
             ]);
+
+            addLog(`Fetched ${opsRes.data.length} operators`, 'success');
+            addLog(`Fetched ${socialRes.data.posts.length} posts, ${socialRes.data.stories.length} stories`, 'success');
 
             setOperators(opsRes.data);
             setSocialContent(socialRes.data);
@@ -55,6 +59,8 @@ export default function SocialPage() {
             }
         } catch (err) {
             console.error("Fetch Data Error:", err);
+            addLog(`Fetch Error: ${err.message}`, 'error');
+            if (err.response) addLog(`Fetch Status: ${err.response.status}`, 'error');
         } finally {
             setLoading(false);
         }

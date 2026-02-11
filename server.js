@@ -1,9 +1,5 @@
 const express = require('express');
-const axios = require('axios');
-const http = require('http');
-const { Server } = require('socket.io');
-const cors = require('cors');
-const db = require('./db');
+// Deploy Trigger: 2026-02-11 03:54
 require('dotenv').config();
 const bcrypt = require('bcrypt');
 const { authenticateToken, authorizeRole, SECRET_KEY } = require('./middleware/auth');

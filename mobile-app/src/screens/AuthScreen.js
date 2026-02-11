@@ -26,6 +26,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
 import axios from 'axios';
+import { GoogleSignin, statusCodes } from '@react-native-google-signin/google-signin';
 
 import { API_URL } from '../config';
 import { COLORS } from '../theme';
@@ -54,6 +55,11 @@ export default function AuthScreen({ navigation, route }) {
 
     useEffect(() => {
         sheetY.value = withSpring(height * 0.35, { damping: 15 });
+
+        GoogleSignin.configure({
+            webClientId: '412160281837-aru1hd03qt91r9s42hnn2scvnfgc9sf0.apps.googleusercontent.com',
+            offlineAccess: true,
+        });
 
         // Handle direct navigation from WelcomeScreen
         const m = route.params?.mode;
@@ -155,13 +161,41 @@ export default function AuthScreen({ navigation, route }) {
         }
     };
 
-    const handleGoogleLogin = () => {
-        setAlert({
-            visible: true,
-            title: 'Google Login',
-            message: 'Google SDK entegrasyonu yakında eklenecek. Şimdilik Email veya Telefon kullanın.',
-            type: 'info'
-        });
+    const handleGoogleLogin = async () => {
+        setLoading(true);
+        try {
+            await GoogleSignin.hasPlayServices();
+            const userInfo = await GoogleSignin.signIn();
+            const idToken = userInfo.idToken;
+
+            // Verify with backend
+            const res = await axios.post(`${API_URL}/auth/google`, { idToken });
+
+            if (res.data.user) {
+                const { user, token } = res.data;
+                await AsyncStorage.setItem('token', token);
+                await AsyncStorage.setItem('user', JSON.stringify(user));
+
+                if (user.onboarding_completed) {
+                    navigation.replace('Main', { user: { ...user, token } });
+                } else {
+                    navigation.replace('Onboarding', { userId: user.id, token });
+                }
+            }
+        } catch (error) {
+            if (error.code === statusCodes.SIGN_IN_CANCELLED) {
+                // ignore
+            } else if (error.code === statusCodes.IN_PROGRESS) {
+                // ignore
+            } else if (error.code === statusCodes.PLAY_SERVICES_NOT_AVAILABLE) {
+                setAlert({ visible: true, title: 'Hata', message: 'Google Play Servisleri güncel değil.', type: 'error' });
+            } else {
+                setAlert({ visible: true, title: 'Giriş Hatası', message: 'Google ile giriş yapılamadı.', type: 'error' });
+                console.error(error);
+            }
+        } finally {
+            setLoading(false);
+        }
     };
 
     const resetAuth = () => {

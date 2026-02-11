@@ -533,8 +533,9 @@ app.get('/api/social/explore', async (req, res) => {
             // Non-blocking for now, return empty or continue to posts
         }
 
-        // Fetch latest posts
+        // Fetch latest posts with like counts and user like status
         let posts = [];
+        const currentUserId = req.query.user_id; // Pass from mobile
         try {
             const postsRes = await db.query(`
                 SELECT 
@@ -545,13 +546,15 @@ app.get('/api/social/explore', async (req, res) => {
                     u.vip_level as level, 
                     u.age, 
                     u.gender,
+                    (SELECT COUNT(*) FROM post_likes WHERE post_id = p.id) as "likes_count",
+                    CASE WHEN $1::UUID IS NOT NULL AND EXISTS(SELECT 1 FROM post_likes WHERE post_id = p.id AND user_id = $1::UUID) THEN true ELSE false END as "liked",
                     EXISTS(SELECT 1 FROM stories s WHERE s.operator_id = u.id AND s.expires_at > NOW()) as "hasStory"
                 FROM posts p
                 JOIN users u ON p.operator_id = u.id
                 LEFT JOIN operators op ON u.id = op.user_id
                 ORDER BY p.created_at DESC
                 LIMIT 50
-            `);
+            `, [currentUserId]);
             posts = postsRes.rows.map(p => sanitizeUser(p, req));
         } catch (pErr) {
             console.error('[SOCIAL] Posts Fetch Error:', pErr.message);
@@ -567,6 +570,29 @@ app.get('/api/social/explore', async (req, res) => {
             error: 'Keşfet verileri alınamadı.',
             details: process.env.NODE_ENV === 'development' ? err.message : undefined
         });
+    }
+});
+
+// TOGGLE POST LIKE
+app.post('/api/social/post/:id/like', async (req, res) => {
+    const postId = req.params.id;
+    const { user_id } = req.body;
+
+    if (!user_id) return res.status(401).json({ error: 'User ID gerekli' });
+
+    try {
+        const check = await db.query('SELECT 1 FROM post_likes WHERE post_id = $1 AND user_id = $2', [postId, user_id]);
+
+        if (check.rows.length > 0) {
+            await db.query('DELETE FROM post_likes WHERE post_id = $1 AND user_id = $2', [postId, user_id]);
+            res.json({ liked: false });
+        } else {
+            await db.query('INSERT INTO post_likes (post_id, user_id) VALUES ($1, $2)', [postId, user_id]);
+            res.json({ liked: true });
+        }
+    } catch (err) {
+        console.error('[SOCIAL] Like toggle error:', err.message);
+        res.status(500).json({ error: 'Beğeni işlemi başarısız.' });
     }
 });
 
@@ -1426,6 +1452,66 @@ app.post('/api/auth/verify-otp', async (req, res) => {
 });
 
 // --- END AUTH REFACTOR ---
+
+const { OAuth2Client } = require('google-auth-library');
+const GOOGLE_CLIENT_ID = '412160281837-aru1hd03qt91r9s42hnn2scvnfgc9sf0.apps.googleusercontent.com';
+const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID || GOOGLE_CLIENT_ID);
+
+app.post('/api/auth/google', async (req, res) => {
+    const { idToken } = req.body;
+    if (!idToken) return res.status(400).json({ error: 'Token gerekli.' });
+
+    try {
+        const ticket = await googleClient.verifyIdToken({
+            idToken,
+            audience: process.env.GOOGLE_CLIENT_ID || GOOGLE_CLIENT_ID,
+        });
+        const payload = ticket.getPayload();
+        const { email, name, picture, sub: googleId } = payload;
+
+        // Check if user exists
+        let userResult = await db.query('SELECT * FROM users WHERE email = $1', [email]);
+        let user;
+
+        if (userResult.rows.length === 0) {
+            // Create relative username
+            const username = email.split('@')[0] + '_' + Math.floor(Math.random() * 10000);
+
+            // Create passwordless user
+            const result = await db.query(
+                `INSERT INTO users (username, email, display_name, avatar_url, role, balance) 
+                 VALUES ($1, $2, $3, $4, 'user', 100) 
+                 RETURNING *`,
+                [username, email, name, picture || 'https://via.placeholder.com/150']
+            );
+            user = result.rows[0];
+            logActivity(user.id, 'register', 'Kullanıcı Google ile kayıt oldu.');
+            io.emit('new_user', sanitizeUser(user, req));
+        } else {
+            user = userResult.rows[0];
+
+            // Check Account Status
+            if (user.account_status !== 'active') {
+                return res.status(403).json({ error: 'Hesabınız askıya alınmış.' });
+            }
+
+            logActivity(user.id, 'login', 'Kullanıcı Google ile giriş yaptı.');
+        }
+
+        // Generate JWT
+        const token = jwt.sign(
+            { id: user.id, username: user.username, role: user.role, display_name: user.display_name, avatar_url: user.avatar_url },
+            SECRET_KEY,
+            { expiresIn: '30d' }
+        );
+
+        res.json({ user: sanitizeUser(user, req), token });
+
+    } catch (error) {
+        console.error('[GOOGLE_AUTH_ERROR]:', error.message);
+        res.status(401).json({ error: 'Google doğrulaması başarısız.' });
+    }
+});
 
 // --- TRADITIONAL EMAIL AUTH (EPHEMERAL/TRANSITION) ---
 app.post('/api/auth/register-email', async (req, res) => {

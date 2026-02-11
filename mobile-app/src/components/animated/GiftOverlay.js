@@ -7,101 +7,98 @@ import Animated, {
     withTiming,
     withSequence,
     withDelay,
-    Easing,
+    withRepeat,
+    interpolate,
     runOnJS
 } from 'react-native-reanimated';
 import LottieView from 'lottie-react-native';
-import { BlurView } from 'expo-blur';
 
 const { width, height } = Dimensions.get('window');
 
-const ROSE_LOTTIE = require('../../assets/lottie/vip_confetti.json');
-const CAR_LOTTIE = require('../../assets/lottie/fire_breath.json');
+const CONFETTI_LOTTIE = require('../../assets/lottie/vip_confetti.json');
 
 export default function GiftOverlay({ gift, receiver, onFinish }) {
     const scale = useSharedValue(0);
     const opacity = useSharedValue(0);
-    const textOpacity = useSharedValue(0);
-    const shakeTranslation = useSharedValue(0);
+    const contentOpacity = useSharedValue(0);
+    const logoPulse = useSharedValue(1);
+    const textY = useSharedValue(50);
 
     useEffect(() => {
         if (gift) {
-            // Entry Animation
-            opacity.value = withTiming(1, { duration: 500 });
-            scale.value = withSpring(1.2, { damping: 10, stiffness: 100 });
+            // Screen Entry
+            opacity.value = withTiming(1, { duration: 400 });
 
-            // Text Entry
-            textOpacity.value = withDelay(500, withTiming(1, { duration: 500 }));
+            // Content Entry
+            contentOpacity.value = withDelay(200, withTiming(1, { duration: 500 }));
+            scale.value = withDelay(200, withSpring(1, { damping: 12, stiffness: 100 }));
+            textY.value = withDelay(400, withSpring(0, { damping: 15 }));
 
-            // Haptics & Shake
-            if (gift.price >= 2000) {
-                Vibration.vibrate([0, 100, 50, 200]); // Strong haptic pattern
-                shakeTranslation.value = withDelay(800, withSequence(
-                    withTiming(-10, { duration: 50 }),
-                    withTiming(10, { duration: 50 }),
-                    withTiming(-10, { duration: 50 }),
-                    withTiming(10, { duration: 50 }),
-                    withTiming(0, { duration: 50 })
-                ));
-            }
+            // Subtle Logo Pulse
+            logoPulse.value = withDelay(800, withRepeat(withTiming(1.08, { duration: 1200 }), -1, true));
 
-            // Auto Finish
+            // Haptic Feedback
+            Vibration.vibrate(100);
+
+            // Auto Close
             const timer = setTimeout(() => {
                 opacity.value = withTiming(0, { duration: 500 }, () => {
                     runOnJS(onFinish)();
                 });
-            }, 3000);
+            }, 3500);
 
             return () => clearTimeout(timer);
         }
     }, [gift]);
 
-    const animatedStyle = useAnimatedStyle(() => ({
-        transform: [
-            { scale: scale.value },
-            { translateX: shakeTranslation.value }
-        ],
+    const backdropStyle = useAnimatedStyle(() => ({
         opacity: opacity.value
     }));
 
+    const logoStyle = useAnimatedStyle(() => ({
+        opacity: contentOpacity.value,
+        transform: [
+            { scale: scale.value * logoPulse.value }
+        ]
+    }));
+
     const textStyle = useAnimatedStyle(() => ({
-        opacity: textOpacity.value,
-        transform: [{ translateY: withSpring(textOpacity.value === 1 ? 0 : 20) }]
+        opacity: contentOpacity.value,
+        transform: [{ translateY: textY.value }]
     }));
 
     if (!gift) return null;
 
-    // Local assets fallback or remote
-    const lottieFile = gift.price >= 2000 ? CAR_LOTTIE : ROSE_LOTTIE;
-
     return (
-        <Animated.View style={[styles.container, { opacity: opacity.value }]}>
-            <BlurView intensity={60} tint="dark" style={StyleSheet.absoluteFill} />
+        <Animated.View style={[styles.container, backdropStyle]}>
+            {/* High-Impact Solid Backdrop */}
+            <View style={styles.backdrop} />
 
             <View style={styles.content}>
-                {/* Lottie Animation (Higher Layer) */}
+                {/* Celebration Layer - Base Confetti */}
                 <LottieView
-                    source={lottieFile}
+                    source={CONFETTI_LOTTIE}
                     autoPlay
-                    loop={gift.price >= 2000}
-                    style={gift.price >= 2000 ? styles.fullLottie : styles.centerLottie}
+                    loop
+                    style={styles.fullLottie}
+                    resizeMode="cover"
                 />
 
-                {/* Receiver Avatar */}
-                <Animated.View style={[styles.avatarContainer, animatedStyle]}>
+                <Animated.View style={[styles.logoContainer, logoStyle]}>
+                    <View style={styles.glow} />
                     <Image
-                        source={{ uri: receiver.avatar_url || 'https://via.placeholder.com/150' }}
-                        style={styles.avatar}
+                        source={gift.image || require('../../assets/gift_icon.webp')}
+                        style={styles.mainLogo}
+                        resizeMode="contain"
                     />
-                    <View style={styles.giftAura}>
-                        <Text style={styles.giftEmoji}>{gift.icon}</Text>
+
+                    <View style={styles.receiverBadge}>
+                        <Text style={styles.receiverText}>{(receiver.display_name || receiver.username).toUpperCase()}</Text>
                     </View>
                 </Animated.View>
 
-                {/* Text Info */}
-                <Animated.View style={[styles.textContainer, textStyle]}>
-                    <Text style={styles.receiverName}>{receiver.display_name || receiver.username}</Text>
-                    <Text style={styles.subText}>Hediye Gönderildi!</Text>
+                <Animated.View style={[styles.textWrapper, textStyle]}>
+                    <Text style={styles.headerText}>HEDİYE GÖNDERİLDİ!</Text>
                     <View style={styles.giftBadge}>
                         <Text style={styles.giftName}>{gift.name.toUpperCase()}</Text>
                     </View>
@@ -114,13 +111,17 @@ export default function GiftOverlay({ gift, receiver, onFinish }) {
 const styles = StyleSheet.create({
     container: {
         ...StyleSheet.absoluteFillObject,
-        zIndex: 9999,
+        zIndex: 99999,
         justifyContent: 'center',
         alignItems: 'center',
     },
+    backdrop: {
+        ...StyleSheet.absoluteFillObject,
+        backgroundColor: 'rgba(11, 15, 25, 0.96)', // Solid deep dark
+    },
     content: {
+        flex: 1,
         width: '100%',
-        height: '100%',
         justifyContent: 'center',
         alignItems: 'center',
     },
@@ -128,71 +129,84 @@ const styles = StyleSheet.create({
         ...StyleSheet.absoluteFillObject,
         width: width,
         height: height,
+        zIndex: 1,
     },
-    centerLottie: {
-        width: 300,
-        height: 300,
-        position: 'absolute',
-        zIndex: 10,
-    },
-    avatarContainer: {
+    logoContainer: {
         alignItems: 'center',
         justifyContent: 'center',
+        zIndex: 10,
     },
-    avatar: {
-        width: 120,
-        height: 120,
-        borderRadius: 60,
-        borderWidth: 4,
-        borderColor: '#fbbf24',
-    },
-    giftAura: {
+    glow: {
         position: 'absolute',
-        bottom: -10,
-        backgroundColor: '#1e293b',
-        padding: 8,
-        borderRadius: 20,
-        borderWidth: 2,
-        borderColor: '#fbbf24',
-        elevation: 10,
+        width: 180,
+        height: 180,
+        borderRadius: 90,
+        backgroundColor: 'rgba(251, 191, 36, 0.25)',
         shadowColor: '#fbbf24',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.5,
-        shadowRadius: 10,
+        shadowOffset: { width: 0, height: 0 },
+        shadowOpacity: 1,
+        shadowRadius: 50,
+        elevation: 10,
     },
-    giftEmoji: {
-        fontSize: 24,
+    glowEpic: {
+        width: 240,
+        height: 240,
+        borderRadius: 120,
+        backgroundColor: 'rgba(251, 191, 36, 0.4)',
+        shadowRadius: 80,
     },
-    textContainer: {
-        marginTop: 40,
+    mainLogo: {
+        width: 180,
+        height: 180,
+    },
+    receiverBadge: {
+        flexDirection: 'row',
         alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: '#1e293b',
+        paddingHorizontal: 20,
+        paddingVertical: 8,
+        borderRadius: 25,
+        borderWidth: 1.5,
+        borderColor: '#fbbf24',
+        marginTop: -30,
+        elevation: 5,
+        minWidth: 120,
     },
-    receiverName: {
+    receiverText: {
+        color: '#fbbf24',
+        fontWeight: '950',
+        fontSize: 15,
+        letterSpacing: 1,
+        textAlign: 'center',
+    },
+    textWrapper: {
+        marginTop: 50,
+        alignItems: 'center',
+        zIndex: 10,
+    },
+    headerText: {
         color: 'white',
-        fontSize: 24,
-        fontWeight: '900',
-        textTransform: 'uppercase',
-        letterSpacing: 2,
-        textShadowColor: 'rgba(0,0,0,0.75)',
-        textShadowOffset: { width: -1, height: 1 },
-        textShadowRadius: 10,
-    },
-    subText: {
-        color: '#94a3b8',
-        fontSize: 14,
-        fontWeight: 'bold',
-        marginTop: 4,
+        fontSize: 32,
+        fontWeight: '950',
+        letterSpacing: 1,
+        textShadowColor: 'rgba(251, 191, 36, 0.5)',
+        textShadowOffset: { width: 0, height: 0 },
+        textShadowRadius: 15,
     },
     giftBadge: {
-        backgroundColor: '#fbbf24',
-        paddingHorizontal: 16,
-        paddingVertical: 6,
-        borderRadius: 20,
         marginTop: 15,
+        paddingHorizontal: 20,
+        paddingVertical: 8,
+        borderRadius: 15,
+        backgroundColor: 'rgba(251, 191, 36, 0.1)',
+        borderWidth: 1,
+        borderColor: '#fbbf24',
     },
     giftName: {
-        color: '#1e2b3c',
-        fontSize: 12,
+        color: '#fbbf24',
+        fontSize: 16,
         fontWeight: '900',
+        letterSpacing: 2,
     }
 });

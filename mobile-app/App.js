@@ -36,6 +36,7 @@ import SettingsScreen from './src/screens/SettingsScreen';
 import OnboardingScreen from './src/screens/OnboardingScreen';
 import WelcomeScreen from './src/screens/WelcomeScreen';
 import AuthScreen from './src/screens/AuthScreen';
+import VoiceCallScreen from './src/screens/VoiceCallScreen';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import AnimatedTabBar from './src/components/animated/AnimatedTabBar';
@@ -117,6 +118,7 @@ function AppContent() {
                     }}
                 />
                 <Stack.Screen name="VideoCall" component={VideoCallScreen} />
+                <Stack.Screen name="VoiceCall" component={VoiceCallScreen} />
                 <Stack.Screen name="OperatorProfile" component={OperatorProfileScreen} />
                 <Stack.Screen name="Story" component={StoryScreen} options={{ animation: 'fade' }} />
                 <Stack.Screen name="CreatePost" component={CreatePostScreen} />

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, TextInput, FlatList, StyleSheet, KeyboardAvoidingView, Platform, TouchableOpacity, Image, Alert } from 'react-native';
+import { View, Text, TextInput, FlatList, StyleSheet, KeyboardAvoidingView, Platform, TouchableOpacity, Image } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import io from 'socket.io-client';
 import { Ionicons } from '@expo/vector-icons';
@@ -170,16 +170,15 @@ export default function ChatScreen({ route, navigation }) {
 
                         {vip_level > 0 && (
                             <LinearGradient
-                                colors={['#fbbf24', '#d97706']}
+                                colors={vip_level >= 5 ? ['#e879f9', '#d946ef'] : (vip_level >= 3 ? ['#fbbf24', '#d97706'] : ['#8b5cf6', '#6366f1'])}
                                 start={{ x: 0, y: 0 }}
                                 end={{ x: 1, y: 0 }}
                                 style={{
                                     flexDirection: 'row',
                                     alignItems: 'center',
-                                    backgroundColor: '#f59e0b',
                                     paddingHorizontal: 6,
                                     paddingVertical: 2,
-                                    borderRadius: 4,
+                                    borderRadius: 6,
                                     marginRight: 6
                                 }}
                             >
@@ -188,7 +187,7 @@ export default function ChatScreen({ route, navigation }) {
                             </LinearGradient>
                         )}
 
-                        <Ionicons name="checkmark-circle" size={18} color="#3b82f6" />
+                        <Ionicons name="checkmark-circle" size={16} color="#3b82f6" />
                     </View>
                     <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                         <View style={{
@@ -326,7 +325,7 @@ export default function ChatScreen({ route, navigation }) {
         const msgData = {
             chatId: chatId,
             senderId: user.id,
-            content: `🎁 ${gift.name}`,
+            content: gift.name,
             type: 'gift',
             giftId: gift.id
         };
@@ -478,13 +477,18 @@ export default function ChatScreen({ route, navigation }) {
         const isUser = item.sender_id === user.id;
 
         if (item.type === 'gift' || item.content_type === 'gift') {
-            const gift = GIFTS.find(g => g.id === item.giftId) || { name: 'Hediye', icon: '🎁', price: '?' };
+            const giftId = parseInt(item.gift_id || item.giftId);
+            const gift = GIFTS.find(g => g.id === giftId) || { name: 'Hediye', price: '?' };
 
             return (
                 <View style={[styles.giftBubbleContainer, isUser ? { alignSelf: 'flex-end' } : { alignSelf: 'flex-start' }]}>
-                    <MessageBubble isMine={isUser} index={index}>
+                    <MessageBubble isMine={isUser} index={index} isRead={item.is_read}>
                         <View style={styles.giftMessageContent}>
-                            <Text style={styles.giftIconLarge}>{gift.icon}</Text>
+                            <Image
+                                source={gift.image || require('../assets/gift_icon.webp')}
+                                style={{ width: 80, height: 80, marginBottom: 8 }}
+                                resizeMode="contain"
+                            />
                             <View style={styles.giftInfo}>
                                 <Text style={styles.giftNameText}>{gift.name}</Text>
                                 <View style={styles.giftPriceBadge}>
@@ -517,7 +521,7 @@ export default function ChatScreen({ route, navigation }) {
         }
 
         return (
-            <MessageBubble isMine={isUser} index={index}>
+            <MessageBubble isMine={isUser} index={index} isRead={item.is_read}>
                 {content}
             </MessageBubble>
         );
@@ -561,20 +565,20 @@ export default function ChatScreen({ route, navigation }) {
 
                 {/* Bottom Action Bar */}
                 <View style={styles.actionBar}>
-                    <TouchableOpacity style={styles.actionIcon} onPress={() => showAlert({ title: 'Yakında', message: 'Görüntülü arama özelliği çok yakında!', type: 'info' })}>
+                    <TouchableOpacity style={styles.actionIcon} onPress={() => navigation.navigate('VideoCall', { name, avatar_url })}>
                         <Ionicons name="videocam-outline" size={26} color="#94a3b8" />
                     </TouchableOpacity>
 
-                    <TouchableOpacity style={styles.actionIcon} onPress={() => showAlert({ title: 'Yakında', message: 'Sesli arama yakında gelecektir', type: 'info' })}>
+                    <TouchableOpacity style={styles.actionIcon} onPress={() => navigation.navigate('VoiceCall', { name, avatar_url })}>
                         <Ionicons name="call-outline" size={24} color="#94a3b8" />
                     </TouchableOpacity>
 
                     <TouchableOpacity style={styles.giftIconContainer} onPress={() => setShowGiftModal(true)}>
-                        <View style={styles.giftEmojiBg}>
-                            <View style={styles.giftEmojiCircle}>
-                                <Text style={styles.giftEmoji}>🎁</Text>
-                            </View>
-                        </View>
+                        <Image
+                            source={require('../assets/gift_icon.webp')}
+                            style={styles.giftLogoLarge}
+                            resizeMode="contain"
+                        />
                     </TouchableOpacity>
 
                     <TouchableOpacity style={styles.actionIcon} onPress={recording ? stopRecording : startRecording}>
@@ -739,25 +743,11 @@ const styles = StyleSheet.create({
     giftIconContainer: {
         alignItems: 'center',
         justifyContent: 'center',
-        marginTop: -30, // Popped out effect
+        marginTop: -32, // Adjusted for slightly smaller logo
     },
-    giftEmojiBg: {
-        width: 60,
-        height: 60,
-        borderRadius: 30,
-        backgroundColor: COLORS.background, // Match bg to hide overlap
-        alignItems: 'center',
-        justifyContent: 'center',
-        borderWidth: 4,
-        borderColor: COLORS.card, // Blend with action bar
-    },
-    giftEmojiCircle: {
-        width: 48,
-        height: 48,
-        borderRadius: 24,
-        backgroundColor: '#10b981',
-        alignItems: 'center',
-        justifyContent: 'center',
+    giftLogoLarge: {
+        width: 54, // Reduced from 70
+        height: 54,
         ...SHADOWS.glow,
     },
     giftEmoji: {

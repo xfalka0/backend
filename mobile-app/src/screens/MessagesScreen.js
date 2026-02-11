@@ -7,6 +7,7 @@ import axios from 'axios';
 import { useTheme } from '../contexts/ThemeContext';
 import { API_URL } from '../config';
 import PromoBanner from '../components/ui/PromoBanner';
+import VipFrame from '../components/ui/VipFrame';
 
 export default function MessagesScreen({ navigation, route }) {
     const { theme, themeMode } = useTheme();
@@ -56,7 +57,12 @@ export default function MessagesScreen({ navigation, route }) {
                     { marginRight: 15 },
                     hasUnread && styles.avatarGlow // Apply glow if unread
                 ]}>
-                    <Image source={{ uri: item.avatar_url }} style={styles.avatar} />
+                    <VipFrame
+                        level={item.vip_level || 0}
+                        avatar={item.avatar_url}
+                        size={60}
+                        isStatic={true}
+                    />
                     {item.is_online && <View style={[styles.onlineBadge, { borderColor: themeMode === 'dark' ? '#030712' : theme.colors.background }]} />}
                 </View>
 
@@ -67,15 +73,22 @@ export default function MessagesScreen({ navigation, route }) {
                                 <Text style={[styles.name, { color: theme.colors.text }]} numberOfLines={1}>{item.name}</Text>
 
                                 {item.vip_level > 0 && (
-                                    <View style={styles.vipBadge}>
+                                    <LinearGradient
+                                        colors={
+                                            item.vip_level >= 6 ? ['#1a1a1b', '#000000'] :
+                                                item.vip_level >= 5 ? ['#e879f9', '#d946ef'] :
+                                                    (item.vip_level >= 3 ? ['#fbbf24', '#d97706'] : ['#8b5cf6', '#6366f1'])
+                                        }
+                                        start={{ x: 0, y: 0 }}
+                                        end={{ x: 1, y: 0 }}
+                                        style={styles.vipBadge}
+                                    >
                                         <Ionicons name="star" size={8} color="white" />
                                         <Text style={styles.vipText}>VIP {item.vip_level}</Text>
-                                    </View>
+                                    </LinearGradient>
                                 )}
 
-                                {item.is_verified && (
-                                    <Ionicons name="checkmark-circle" size={14} color="#3b82f6" style={styles.verifiedBadgeIcon} />
-                                )}
+                                <Ionicons name="checkmark-circle" size={14} color="#3b82f6" style={styles.verifiedBadgeIcon} />
                             </View>
                             <Text style={[styles.lastMsg, { color: hasUnread ? theme.colors.text : theme.colors.textSecondary, fontWeight: hasUnread ? '700' : '400' }]} numberOfLines={1}>
                                 {item.last_message || 'Sohbet Başladı 💬'}
@@ -179,13 +192,15 @@ const styles = StyleSheet.create({
     },
     onlineBadge: {
         position: 'absolute',
-        right: 0,
-        bottom: 0,
-        width: 14,
-        height: 14,
-        borderRadius: 7,
+        right: -2,
+        bottom: -2,
+        width: 16,
+        height: 16,
+        borderRadius: 8,
         backgroundColor: '#10b981',
         borderWidth: 2,
+        zIndex: 999,
+        elevation: 999,
     },
     unreadBadge: {
         backgroundColor: '#ef4444', // More standard notification red/pink
@@ -231,15 +246,14 @@ const styles = StyleSheet.create({
     vipBadge: {
         flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: '#f59e0b',
-        paddingHorizontal: 5,
-        paddingVertical: 1,
-        borderRadius: 4,
-        marginRight: 4,
+        paddingHorizontal: 6,
+        paddingVertical: 2,
+        borderRadius: 6,
+        marginRight: 6,
     },
     vipText: {
         color: 'white',
-        fontSize: 8,
+        fontSize: 10,
         fontWeight: '900',
         marginLeft: 2,
     },

@@ -133,7 +133,8 @@ export default function HomeScreen({ navigation, route }) {
                                                     item.vip_level === 3 ? ['#a855f7', '#ec4899'] :
                                                         item.vip_level === 4 ? ['#fbbf24', '#7c3aed'] :
                                                             item.vip_level === 5 ? ['#fbbf24', '#ff00ff'] :
-                                                                ['#000000', '#1a1a1a']
+                                                                item.vip_level >= 6 ? ['#1a1a1b', '#000000'] :
+                                                                    ['#000000', '#1a1a1a']
                                         }
                                         start={{ x: 0, y: 0 }}
                                         end={{ x: 1, y: 0 }}

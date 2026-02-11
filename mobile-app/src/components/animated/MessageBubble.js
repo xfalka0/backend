@@ -1,5 +1,6 @@
 import React, { useEffect } from 'react';
-import { StyleSheet } from 'react-native';
+import { StyleSheet, View, Text } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import Animated, {
     useSharedValue,
     useAnimatedStyle,
@@ -8,7 +9,7 @@ import Animated, {
     withSpring,
 } from 'react-native-reanimated';
 
-const MessageBubble = ({ children, isMine, index }) => {
+const MessageBubble = ({ children, isMine, index, isRead }) => {
     const translateX = useSharedValue(isMine ? 50 : -50);
     const opacity = useSharedValue(0);
 
@@ -34,6 +35,15 @@ const MessageBubble = ({ children, isMine, index }) => {
             ]}
         >
             {children}
+            {isMine && (
+                <View style={styles.statusContainer}>
+                    <Ionicons
+                        name={isRead ? "checkmark-done" : "checkmark"}
+                        size={12}
+                        color={isRead ? "#3b82f6" : "rgba(255, 255, 255, 0.5)"}
+                    />
+                </View>
+            )}
         </Animated.View>
     );
 };
@@ -57,6 +67,13 @@ const styles = StyleSheet.create({
         borderBottomLeftRadius: 4,
         borderWidth: 1,
         borderColor: 'rgba(255, 255, 255, 0.1)',
+    },
+    statusContainer: {
+        flexDirection: 'row',
+        justifyContent: 'flex-end',
+        marginTop: 2,
+        marginRight: -4,
+        marginBottom: -4,
     },
 });
 

@@ -53,7 +53,7 @@ export default function ExploreScreen({ route, navigation }) {
     const fetchExploreData = async () => {
         try {
             setLoading(true);
-            const res = await axios.get(`${API_URL}/social/explore`);
+            const res = await axios.get(`${API_URL}/social/explore`, { params: { user_id: user?.id } });
             setPosts(res.data.posts);
             setStories(res.data.stories);
         } catch (err) {
@@ -64,7 +64,10 @@ export default function ExploreScreen({ route, navigation }) {
     };
 
 
-    const likePost = (postId) => {
+    const likePost = async (postId) => {
+        if (!user?.id) return;
+
+        // Optimistic UI Update
         setPosts(prev => prev.map(post => {
             if (post.id === postId) {
                 const isLiked = !!post.liked;
@@ -76,6 +79,21 @@ export default function ExploreScreen({ route, navigation }) {
             }
             return post;
         }));
+
+        try {
+            const res = await axios.post(`${API_URL}/social/post/${postId}/like`, { user_id: user.id });
+            // Sync with actual result from server just in case
+            setPosts(prev => prev.map(post => {
+                if (post.id === postId) {
+                    return { ...post, liked: res.data.liked };
+                }
+                return post;
+            }));
+        } catch (err) {
+            console.error('Like toggle error:', err);
+            // Revert on error
+            fetchExploreData();
+        }
     };
 
     const checkVipAccess = (actionType) => {
@@ -189,6 +207,41 @@ export default function ExploreScreen({ route, navigation }) {
                     contentContainerStyle={styles.storiesList}
                 />
             </View>
+
+            {/* Featured Section */}
+            <View style={styles.featuredContainer}>
+                <View style={styles.sectionHeader}>
+                    <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Günün Favorileri 🔥</Text>
+                    <TouchableOpacity>
+                        <Text style={[styles.seeAll, { color: theme.colors.primary }]}>Hepsini Gör</Text>
+                    </TouchableOpacity>
+                </View>
+                <FlatList
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    data={[
+                        { id: 'fav_1_zeynep', name: 'Zeynep', level: 2, avatar: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=400', category: 'Kültür' },
+                        { id: 'fav_2_asli', name: 'Aslı', level: 4, avatar: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=400', category: 'Seyahat' },
+                        { id: 'fav_3_merve', name: 'Merve', level: 3, avatar: 'https://images.unsplash.com/photo-1531746020798-e6953c6e8e04?w=400', category: 'Fitness' }
+                    ]}
+                    renderItem={({ item }) => (
+                        <TouchableOpacity
+                            style={[styles.featuredCard, { backgroundColor: theme.colors.backgroundSecondary, borderColor: theme.colors.glassBorder }]}
+                            onPress={() => navigation.navigate('OperatorProfile', { operator: item, user })}
+                        >
+                            <LinearGradient
+                                colors={['rgba(139, 92, 246, 0.3)', 'transparent']}
+                                style={StyleSheet.absoluteFill}
+                            />
+                            <VipFrame level={item.level} avatar={item.avatar} size={80} isStatic={true} />
+                            <Text style={[styles.featuredName, { color: theme.colors.text }]}>{item.name}</Text>
+                            <Text style={[styles.featuredCategory, { color: theme.colors.textSecondary }]}>{item.category}</Text>
+                        </TouchableOpacity>
+                    )}
+                    keyExtractor={item => item.id}
+                    contentContainerStyle={styles.featuredList}
+                />
+            </View>
         </View>
     );
 
@@ -220,7 +273,11 @@ export default function ExploreScreen({ route, navigation }) {
 
                         {item.level > 0 && (
                             <LinearGradient
-                                colors={item.level >= 5 ? ['#e879f9', '#d946ef'] : (item.level >= 3 ? ['#fbbf24', '#d97706'] : ['#8b5cf6', '#6366f1'])}
+                                colors={
+                                    item.level >= 6 ? ['#1a1a1b', '#000000'] :
+                                        item.level >= 5 ? ['#e879f9', '#d946ef'] :
+                                            (item.level >= 3 ? ['#fbbf24', '#d97706'] : ['#8b5cf6', '#6366f1'])
+                                }
                                 start={{ x: 0, y: 0 }}
                                 end={{ x: 1, y: 0 }}
                                 style={styles.vipBadgeContainer}
@@ -289,9 +346,12 @@ export default function ExploreScreen({ route, navigation }) {
 
             <View style={styles.postInfo}>
                 <Text style={[styles.likesText, { color: theme.colors.text }]}>{item.likes_count || 0} beğeni</Text>
-                <Text style={[styles.caption, { color: theme.colors.textSecondary }]}><Text style={[styles.captionUser, { color: theme.colors.text }]}>{item.userName}</Text> {item.content || item.caption}</Text>
+                <View style={styles.captionRow}>
+                    <Text style={[styles.captionUser, { color: theme.colors.text }]}>{item.userName}</Text>
+                    <Text style={[styles.captionText, { color: theme.colors.textSecondary }]}>{item.content || item.caption}</Text>
+                </View>
                 <TouchableOpacity onPress={() => setCommentsVisible(true)}>
-                    <Text style={[styles.viewComments, { color: theme.colors.textSecondary, opacity: 0.7 }]}>Yorumları gör...</Text>
+                    <Text style={[styles.viewComments, { color: theme.colors.textSecondary }]}>Yorumları gör...</Text>
                 </TouchableOpacity>
             </View>
         </AnimatedPostCard>
@@ -530,11 +590,13 @@ const styles = StyleSheet.create({
         width: '100%',
         height: '100%',
         resizeMode: 'cover',
+        borderRadius: 36, // Match card radius
     },
     postActions: {
         flexDirection: 'row',
         justifyContent: 'space-between',
-        padding: 15,
+        paddingHorizontal: 20, // Match postInfo padding
+        paddingVertical: 15,
         paddingBottom: 5,
     },
     leftActions: {
@@ -542,27 +604,34 @@ const styles = StyleSheet.create({
         gap: 20,
     },
     postInfo: {
-        paddingHorizontal: 15,
+        paddingHorizontal: 20, // Increased padding for better alignment with header
         paddingBottom: 20,
     },
     likesText: {
         color: 'white',
         fontWeight: '900',
         fontSize: 14,
-        marginBottom: 4,
+        marginBottom: 6,
     },
-    caption: {
-        color: '#cbd5e1',
-        lineHeight: 20,
-        fontSize: 14,
+    captionRow: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        alignItems: 'baseline',
     },
     captionUser: {
         fontWeight: '800',
+        fontSize: 14,
+        marginRight: 6,
+    },
+    captionText: {
+        lineHeight: 20,
+        fontSize: 14,
     },
     viewComments: {
         color: '#94a3b8',
         fontSize: 13,
         marginTop: 8,
+        opacity: 0.7,
     },
     modalOverlay: {
         flex: 1,
@@ -660,5 +729,48 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         borderWidth: 1,
         borderColor: 'rgba(255,255,255,0.2)',
+    },
+    featuredContainer: {
+        marginVertical: 15,
+    },
+    sectionHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        paddingHorizontal: 20,
+        marginBottom: 15,
+    },
+    sectionTitle: {
+        fontSize: 18,
+        fontWeight: '900',
+        letterSpacing: 0.5,
+    },
+    seeAll: {
+        fontSize: 12,
+        fontWeight: '700',
+        opacity: 0.8,
+    },
+    featuredList: {
+        paddingHorizontal: 15,
+    },
+    featuredCard: {
+        width: 140,
+        borderRadius: 24,
+        padding: 15,
+        paddingBottom: 20, // Extra bottom padding
+        alignItems: 'center',
+        marginHorizontal: 8,
+        borderWidth: 1,
+        overflow: 'hidden',
+    },
+    featuredName: {
+        marginTop: 14, // More space from avatar
+        fontSize: 15,
+        fontWeight: '800',
+    },
+    featuredCategory: {
+        fontSize: 11,
+        fontWeight: '600',
+        marginTop: 2,
     },
 });

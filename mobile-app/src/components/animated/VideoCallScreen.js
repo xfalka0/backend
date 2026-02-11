@@ -49,16 +49,23 @@ const VideoCallScreen = ({ callerName, callerImage, onAccept, onDecline }) => {
                         <View style={styles.ring} />
                     </View>
                     <Text style={styles.callerName}>{callerName}</Text>
-                    <Text style={styles.status}>Bağlanıyor...</Text>
+                    <Text style={styles.status}>Yakında Gelecek 🚀</Text>
+                    <Text style={{
+                        color: 'rgba(255,255,255,0.6)',
+                        textAlign: 'center',
+                        paddingHorizontal: 40,
+                        marginTop: 20,
+                        fontSize: 14,
+                        lineHeight: 20
+                    }}>
+                        Görüntülü arama özelliği üzerinde çalışıyoruz. Çok yakında sizlerle!
+                    </Text>
                 </View>
 
                 <View style={styles.controls}>
-                    <TouchableOpacity onPress={onDecline} style={[styles.button, styles.decline]}>
-                        <Ionicons name="close" size={32} color="white" />
-                    </TouchableOpacity>
-
-                    <TouchableOpacity onPress={onAccept} style={[styles.button, styles.accept]}>
-                        <Ionicons name="videocam" size={32} color="white" />
+                    <TouchableOpacity onPress={onDecline} style={[styles.button, styles.decline, { width: 140, borderRadius: 20, flexDirection: 'row', gap: 10 }]}>
+                        <Ionicons name="close-circle-outline" size={24} color="white" />
+                        <Text style={{ color: 'white', fontWeight: 'bold' }}>Vazgeç</Text>
                     </TouchableOpacity>
                 </View>
             </Animated.View>

@@ -12,15 +12,19 @@ export default function GiftPickerModal({ visible, onClose, onSelectGift, userBa
         <TouchableOpacity
             style={styles.giftItem}
             onPress={() => onSelectGift(item)}
-            disabled={userBalance < item.price}
+            disabled={userBalance < (item.price || 0)}
         >
             <View style={[styles.iconContainer, userBalance < item.price && styles.disabledGift]}>
-                <Text style={styles.giftIcon}>{item.icon}</Text>
+                <Image
+                    source={item.image || require('../assets/gift_icon.webp')}
+                    style={{ width: 40, height: 40 }}
+                    resizeMode="contain"
+                />
             </View>
             <Text style={styles.giftName}>{item.name}</Text>
             <View style={styles.priceTag}>
                 <Ionicons name="card" size={12} color="#fbbf24" />
-                <Text style={styles.priceText}>{item.price}</Text>
+                <Text style={styles.priceText}>{item.price || 0}</Text>
             </View>
         </TouchableOpacity>
     );

@@ -9,6 +9,7 @@ import { COLORS } from '../theme';
 import GradientButton from '../components/ui/GradientButton';
 import GlassCard from '../components/ui/GlassCard';
 import { Motion } from '../components/motion/MotionSystem';
+import { GoogleSignin, GoogleSigninButton, statusCodes } from '@react-native-google-signin/google-signin';
 
 const { width } = Dimensions.get('window');
 
@@ -17,8 +18,62 @@ export default function LoginScreen({ navigation }) {
     const [email, setEmail] = useState('user@test.com');
     const [password, setPassword] = useState('pass123');
     const [loading, setLoading] = useState(false);
-
     const [wakingUp, setWakingUp] = useState(false);
+
+    useEffect(() => {
+        GoogleSignin.configure({
+            webClientId: 'YOUR_WEB_CLIENT_ID.apps.googleusercontent.com', // Get this from Google Cloud Console
+            offlineAccess: true,
+        });
+    }, []);
+
+    const handleGoogleLogin = async () => {
+        setLoading(true);
+        try {
+            // Attempt Real Login first
+            await GoogleSignin.hasPlayServices();
+            const userInfo = await GoogleSignin.signIn();
+            const idToken = userInfo.idToken;
+            await processLogin(idToken);
+        } catch (error) {
+            if (error.code === statusCodes.SIGN_IN_CANCELLED) {
+                // User cancelled
+            } else if (error.code === statusCodes.IN_PROGRESS) {
+                // Operation in progress
+            } else if (error.code === statusCodes.PLAY_SERVICES_NOT_AVAILABLE) {
+                showAlert({ title: 'Hata', message: 'Google Play Servisleri güncel değil.', type: 'error' });
+            } else {
+                showAlert({ title: 'Giriş Hatası', message: 'Google ile giriş yapılamadı.', type: 'error' });
+                console.error(error);
+            }
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const processLogin = async (idToken) => {
+        try {
+            const res = await axios.post(`${API_URL}/auth/google`, { idToken });
+
+            if (res.data.user) {
+                const userData = res.data.user;
+                const token = res.data.token;
+
+                await AsyncStorage.setItem('token', token);
+                await AsyncStorage.setItem('user', JSON.stringify(userData));
+
+                setLoading(false);
+                if (userData.onboarding_completed) {
+                    navigation.replace('Main', { user: { ...userData, token } });
+                } else {
+                    navigation.replace('Onboarding', { userId: userData.id, token: token });
+                }
+            }
+        } catch (err) {
+            setLoading(false);
+            showAlert({ title: 'Sunucu Hatası', message: 'Giriş yapılamadı.', type: 'error' });
+        }
+    };
 
     const handleLogin = async () => {
         setLoading(true);
@@ -138,6 +193,20 @@ export default function LoginScreen({ navigation }) {
                                 <Text style={styles.registerLink}>Kayıt Ol</Text>
                             </TouchableOpacity>
                         </View>
+
+                        <View style={styles.divider}>
+                            <View style={styles.dividerLine} />
+                            <Text style={styles.dividerText}>VEYA</Text>
+                            <View style={styles.dividerLine} />
+                        </View>
+
+                        <GoogleSigninButton
+                            style={styles.googleButton}
+                            size={GoogleSigninButton.Size.Wide}
+                            color={GoogleSigninButton.Color.Dark}
+                            onPress={handleGoogleLogin}
+                            disabled={loading}
+                        />
                     </GlassCard>
                 </Motion.SlideUp>
             </KeyboardAvoidingView>
@@ -228,5 +297,25 @@ const styles = StyleSheet.create({
         fontSize: 12,
         marginTop: 10,
         fontStyle: 'italic',
+    },
+    divider: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginVertical: 20,
+    },
+    dividerLine: {
+        flex: 1,
+        height: 1,
+        backgroundColor: 'rgba(255,255,255,0.1)',
+    },
+    dividerText: {
+        color: COLORS.textSecondary,
+        marginHorizontal: 10,
+        fontSize: 12,
+        fontWeight: 'bold',
+    },
+    googleButton: {
+        width: '100%',
+        height: 50,
     }
 });

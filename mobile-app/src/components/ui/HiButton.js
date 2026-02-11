@@ -255,7 +255,7 @@ const styles = StyleSheet.create({
         minWidth: 80,
     },
     chatModeInner: {
-        backgroundColor: 'white',
+        backgroundColor: 'rgba(255, 255, 255, 0.85)', // Semi-transparent white
         paddingHorizontal: 26.5, // 28 - 1.5
         paddingVertical: 7.5, // 9 - 1.5
         borderRadius: 18.5,
@@ -282,7 +282,7 @@ const styles = StyleSheet.create({
     },
     chatText: {
         color: '#ff5e95',
-        fontWeight: '900',
+        fontWeight: '950', // Match Hi text weight
         fontSize: 14,
     }
 });

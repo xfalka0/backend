@@ -91,3 +91,10 @@ CREATE TABLE IF NOT EXISTS pending_photos (
     status VARCHAR(20) DEFAULT 'pending', -- 'pending', 'approved', 'rejected'
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE TABLE IF NOT EXISTS post_likes (
+    post_id UUID REFERENCES posts(id) ON DELETE CASCADE,
+    user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (post_id, user_id)
+);

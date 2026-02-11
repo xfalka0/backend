@@ -2707,6 +2707,18 @@ app.get('/api/admin/force-fix-social-schema', async (req, res) => {
             log("✅ [5] Stories table created successfully.");
         } catch (e) { log(`❌ [5] Stories creation failed: ${e.message}`); }
 
+        // 6. Create post_likes
+        try {
+            log("ℹ️ [6] Creating post_likes table...");
+            await db.query(`CREATE TABLE post_likes (
+                post_id UUID REFERENCES posts(id) ON DELETE CASCADE,
+                user_id ${userIdType} REFERENCES users(id) ON DELETE CASCADE,
+                created_at TIMESTAMP DEFAULT NOW(),
+                PRIMARY KEY (post_id, user_id)
+            )`);
+            log("✅ [6] post_likes table created successfully.");
+        } catch (e) { log(`❌ [6] post_likes creation failed: ${e.message}`); }
+
         res.json({
             status: 'complete',
             message: 'Social schema repair attempt finished.',

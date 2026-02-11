@@ -32,6 +32,16 @@ async function fix() {
         )`);
         console.log('✅ stories table ready.');
 
+        // Create post_likes table
+        console.log('4. Creating post_likes table...');
+        await db.query(`CREATE TABLE IF NOT EXISTS post_likes (
+            post_id UUID REFERENCES posts(id) ON DELETE CASCADE,
+            user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+            created_at TIMESTAMP DEFAULT NOW(),
+            PRIMARY KEY (post_id, user_id)
+        )`);
+        console.log('✅ post_likes table ready.');
+
         console.log('--- 🎉 DATABASE TABLE FIX COMPLETE ---');
         process.exit(0);
     } catch (err) {

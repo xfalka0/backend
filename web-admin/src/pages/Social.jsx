@@ -5,7 +5,9 @@ import {
     Send, User, Loader2, Calendar, Clock, Eye
 } from 'lucide-react';
 
-const API_URL = window.location.hostname === 'localhost' ? 'http://localhost:3000/api' : '/api';
+const API_URL = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+    ? 'http://localhost:3000/api'
+    : '/api';
 
 export default function SocialPage() {
     const [operators, setOperators] = useState([]);

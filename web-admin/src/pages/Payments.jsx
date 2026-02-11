@@ -2,7 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { CreditCard, TrendingUp, DollarSign, Calendar, Search, Download, CheckCircle2, Clock, Loader2 } from 'lucide-react';
 import axios from 'axios';
 
-const API_URL = window.location.hostname === 'localhost' ? 'http://localhost:3000' : '';
+const API_URL = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+    ? 'https://backend-kj17.onrender.com'
+    : '';
 
 export default function PaymentsPage() {
     const [payments, setPayments] = useState([]);

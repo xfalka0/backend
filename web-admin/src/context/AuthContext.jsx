@@ -8,7 +8,9 @@ export const AuthProvider = ({ children }) => {
     const [loading, setLoading] = useState(true);
 
     // URL Configuration for Production vs Localhost
-    const API_URL = window.location.origin;
+    const API_URL = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+        ? 'https://backend-kj17.onrender.com'
+        : window.location.origin;
 
     useEffect(() => {
         const verifyToken = async () => {

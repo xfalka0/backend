@@ -3,7 +3,9 @@ import { Database, Trash2, HardDrive, MessageSquare, Activity, AlertTriangle, Re
 import { useAuth } from '../context/AuthContext';
 import axios from 'axios';
 
-const API_URL = window.location.hostname === 'localhost' ? 'http://localhost:3000' : '';
+const API_URL = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+    ? 'https://backend-kj17.onrender.com'
+    : '';
 
 export default function MaintenancePage() {
     const { token } = useAuth();

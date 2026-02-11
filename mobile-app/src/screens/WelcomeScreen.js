@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
     View,
     Text,
@@ -7,6 +7,8 @@ import {
     Dimensions,
     TouchableOpacity,
     Platform,
+    ActivityIndicator,
+    Alert,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import Animated, {
@@ -21,10 +23,14 @@ import Animated, {
 } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import axios from 'axios';
+import { GoogleSignin, statusCodes } from '@react-native-google-signin/google-signin';
 
 import FloatingProfiles from '../components/animated/FloatingProfiles';
 import WelcomeButton from '../components/ui/WelcomeButton';
 import { COLORS } from '../theme';
+import { API_URL } from '../config';
 
 const { width, height } = Dimensions.get('window');
 
@@ -32,6 +38,7 @@ const AnimatedBlurView = Animated.createAnimatedComponent(BlurView);
 
 export default function WelcomeScreen({ navigation }) {
     const bubbleY = useSharedValue(0);
+    const [loading, setLoading] = useState(false);
 
     useEffect(() => {
         bubbleY.value = withRepeat(
@@ -42,11 +49,54 @@ export default function WelcomeScreen({ navigation }) {
             -1,
             true
         );
+
+        GoogleSignin.configure({
+            webClientId: '412160281837-aru1hd03qt91r9s42hnn2scvnfgc9sf0.apps.googleusercontent.com',
+            offlineAccess: true,
+        });
     }, []);
 
     const bubbleStyle = useAnimatedStyle(() => ({
         transform: [{ translateY: bubbleY.value }],
     }));
+
+    const handleGoogleLogin = async () => {
+        if (loading) return;
+        setLoading(true);
+        try {
+            await GoogleSignin.hasPlayServices();
+            const userInfo = await GoogleSignin.signIn();
+            const idToken = userInfo.idToken;
+
+            // Verify with backend
+            const res = await axios.post(`${API_URL}/auth/google`, { idToken });
+
+            if (res.data.user) {
+                const { user, token } = res.data;
+                await AsyncStorage.setItem('token', token);
+                await AsyncStorage.setItem('user', JSON.stringify(user));
+
+                if (user.onboarding_completed) {
+                    navigation.replace('Main', { user: { ...user, token } });
+                } else {
+                    navigation.replace('Onboarding', { userId: user.id, token });
+                }
+            }
+        } catch (error) {
+            if (error.code === statusCodes.SIGN_IN_CANCELLED) {
+                // ignore
+            } else if (error.code === statusCodes.IN_PROGRESS) {
+                // ignore
+            } else if (error.code === statusCodes.PLAY_SERVICES_NOT_AVAILABLE) {
+                Alert.alert('Hata', 'Google Play Servisleri güncel değil.');
+            } else {
+                Alert.alert('Giriş Hatası', 'Google ile giriş yapılamadı. Lütfen tekrar deneyin.');
+                console.error(error);
+            }
+        } finally {
+            setLoading(false);
+        }
+    };
 
     return (
         <View style={styles.container}>
@@ -99,14 +149,17 @@ export default function WelcomeScreen({ navigation }) {
                                     title="Telefon ile devam et"
                                     icon="call-outline"
                                     onPress={() => navigation.navigate('Auth', { mode: 'phone' })}
+                                    disabled={loading}
                                 />
                             </Animated.View>
 
                             <Animated.View entering={FadeInUp.delay(850).springify()}>
                                 <WelcomeButton
-                                    title="Google ile devam et"
+                                    title={loading ? "Giriş yapılıyor..." : "Google ile devam et"}
                                     icon="logo-google"
-                                    onPress={() => navigation.navigate('Auth', { mode: 'google' })}
+                                    onPress={handleGoogleLogin}
+                                    loading={loading}
+                                    disabled={loading}
                                 />
                             </Animated.View>
 
@@ -116,6 +169,7 @@ export default function WelcomeScreen({ navigation }) {
                                     icon="mail-outline"
                                     variant="gradient"
                                     onPress={() => navigation.navigate('Auth', { mode: 'email' })}
+                                    disabled={loading}
                                 />
                             </Animated.View>
                         </View>
@@ -131,6 +185,12 @@ export default function WelcomeScreen({ navigation }) {
                     </View>
                 </View>
             </SafeAreaView>
+
+            {loading && (
+                <View style={styles.loadingOverlay}>
+                    <ActivityIndicator size="large" color="#ec4899" />
+                </View>
+            )}
         </View>
     );
 }
@@ -230,4 +290,11 @@ const styles = StyleSheet.create({
         fontSize: 13,
         fontWeight: '600',
     },
+    loadingOverlay: {
+        ...StyleSheet.absoluteFillObject,
+        backgroundColor: 'rgba(0,0,0,0.5)',
+        alignItems: 'center',
+        justifyContent: 'center',
+        zIndex: 1000,
+    }
 });

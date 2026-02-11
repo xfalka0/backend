@@ -599,10 +599,19 @@ app.post('/api/social/post/:id/like', async (req, res) => {
 // ADMIN: Create Post
 app.post('/api/admin/social/post', async (req, res) => {
     const { operator_id, image_url, content } = req.body;
-    console.log('[SOCIAL] Create Post Attempt:', { operator_id, image_url, content_length: content?.length });
+    const logFile = path.join(__dirname, 'debug_social.log');
+
+    const log = (msg) => {
+        const timestamp = new Date().toISOString();
+        const logMsg = `[${timestamp}] ${msg}\n`;
+        console.log(logMsg.trim());
+        try { fs.appendFileSync(logFile, logMsg); } catch (e) { /* ignore */ }
+    };
+
+    log(`[REQUEST] /api/admin/social/post - Body: ${JSON.stringify(req.body)}`);
 
     if (!operator_id || !image_url) {
-        console.warn('[SOCIAL] Missing required fields for post');
+        log('[ERROR] Missing fields operator_id or image_url');
         return res.status(400).json({ error: 'Operator ve görsel gerekli.' });
     }
 
@@ -611,14 +620,13 @@ app.post('/api/admin/social/post', async (req, res) => {
             'INSERT INTO posts (operator_id, image_url, content) VALUES ($1, $2, $3) RETURNING *',
             [operator_id, image_url, content]
         );
-        console.log('[SOCIAL] Post Created Success:', result.rows[0].id);
+        log(`[SUCCESS] Post Inserted ID: ${result.rows[0].id}`);
         res.json(result.rows[0]);
     } catch (err) {
-        console.error('[SOCIAL] Create Post DB Error:', err.message);
+        log(`[DB ERROR] ${err.message}`);
         res.status(500).json({
             error: 'Veritabanı hatası oluştu.',
-            details: err.message,
-            query_hint: 'Verify operator_id type (UUID vs INT)'
+            details: err.message
         });
     }
 });

@@ -25,6 +25,13 @@ export default function SocialPage() {
 
     const fileInputRef = useRef(null);
 
+    // DEBUG STATE
+    const [debugLogs, setDebugLogs] = useState([]);
+    const addLog = (msg, type = 'info') => {
+        const timestamp = new Date().toLocaleTimeString();
+        setDebugLogs(prev => [`[${timestamp}] [${type}] ${msg}`, ...prev]);
+    };
+
     useEffect(() => {
         fetchData();
     }, []);
@@ -304,6 +311,17 @@ export default function SocialPage() {
                         </div>
                     )}
                 </div>
+            </div>
+
+            {/* DEBUG CONSOLE */}
+            <div className="mt-8 p-4 bg-black text-green-400 font-mono text-xs rounded-xl border border-gray-700 h-64 overflow-y-auto shadow-2xl">
+                <h3 className="font-bold border-b border-gray-700 mb-2 pb-1 text-white">DEBUG CONSOLE (For Troubleshooting)</h3>
+                {debugLogs.length === 0 && <p className="opacity-50">Waiting for action...</p>}
+                {debugLogs.map((log, i) => (
+                    <div key={i} className={`mb-1 border-b border-white/5 pb-1 ${log.includes('[error]') ? 'text-red-400 font-bold' : log.includes('[success]') ? 'text-green-300' : 'text-gray-300'}`}>
+                        {log}
+                    </div>
+                ))}
             </div>
         </div>
     );

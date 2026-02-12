@@ -2208,20 +2208,23 @@ io.on('connection', (socket) => {
     // Send Message
     socket.on('send_message', async (data) => {
         const { chatId, senderId, content, type, giftId } = data;
-        let savedMsg = { ...data, id: Date.now() };
+        let client;
 
         try {
-            // Check if sender is an operator (bypass coin cost for operators)
-            const operatorCheck = await db.query('SELECT user_id FROM operators WHERE user_id = $1', [senderId]);
+            client = await db.pool.connect();
+            await client.query('BEGIN'); // Start Transaction
+
+            // Check if sender is an operator
+            const operatorCheck = await client.query('SELECT user_id FROM operators WHERE user_id = $1', [senderId]);
             const isOperator = operatorCheck.rows.length > 0;
 
             let cost = 0;
             let userBalance = 0;
+            let currentBalance = 0;
 
-            // Only charge coins if sender is NOT an operator
+            // --- 1. COIN DEDUCTION LOGIC ---
             if (!isOperator) {
-                // Calculate Cost
-                cost = 10; // Default text message cost
+                cost = 10; // Default text
                 if (type === 'gift' && giftId) {
                     cost = GIFT_PRICES[giftId] || 10;
                 } else if (type === 'image') {
@@ -2230,54 +2233,78 @@ io.on('connection', (socket) => {
                     cost = 30;
                 }
 
-                // 1. Check Balance
-                const userResult = await db.query('SELECT balance FROM users WHERE id = $1', [senderId]);
-                if (userResult.rows.length === 0) return;
+                // Lock the user row for update to prevent race conditions
+                const userResult = await client.query('SELECT balance FROM users WHERE id = $1 FOR UPDATE', [senderId]);
 
-                userBalance = userResult.rows[0].balance;
+                if (userResult.rows.length === 0) {
+                    throw new Error('User not found');
+                }
 
-                if (userBalance < cost) {
-                    // Insufficient funds
+                currentBalance = userResult.rows[0].balance;
+
+                if (currentBalance < cost) {
+                    await client.query('ROLLBACK');
                     io.to(socket.id).emit('message_error', {
+                        code: 'INSUFFICIENT_FUNDS',
                         message: `Yetersiz bakiye. Bu işlem için ${cost} coin gerekli.`,
                         required: cost
                     });
-                    return;
+                    return; // Exit transaction
                 }
 
-                // 2. Deduct Coin
-                await db.query('UPDATE users SET balance = balance - $2 WHERE id = $1', [senderId, cost]);
-
-                // 3. Emit new balance (include userId for client sync)
-                io.to(socket.id).emit('balance_update', {
-                    id: senderId,
-                    userId: senderId,
-                    newBalance: userBalance - cost
-                });
+                // Deduct Coins
+                await client.query('UPDATE users SET balance = balance - $2 WHERE id = $1', [senderId, cost]);
+                userBalance = currentBalance - cost;
             }
 
-            // 4. Save Message
-            const res = await db.query(
+            // --- 2. SAVE MESSAGE ---
+            const res = await client.query(
                 'INSERT INTO messages (chat_id, sender_id, content, content_type, gift_id) VALUES ($1, $2, $3, $4, $5) RETURNING *',
                 [chatId, senderId, content, type || 'text', giftId || null]
             );
-            savedMsg = res.rows[0];
+            const savedMsg = res.rows[0];
 
             let lastMsgPreview = content;
             if (type === 'gift') lastMsgPreview = '🎁 Hediye Gönderildi';
             if (type === 'image') lastMsgPreview = '📷 Resim';
             if (type === 'audio') lastMsgPreview = '🎤 Ses Kaydı';
+            if (type === 'video') lastMsgPreview = '🎥 Video'; // Future proofing
 
-            await db.query('UPDATE chats SET last_message_at = NOW(), last_message = $2 WHERE id = $1', [chatId, lastMsgPreview]);
+            await client.query('UPDATE chats SET last_message_at = NOW(), last_message = $2 WHERE id = $1', [chatId, lastMsgPreview]);
 
-            // 5. Broadcast Message
+            await client.query('COMMIT'); // Commit Transaction
+
+            // --- 3. EMIT EVENTS (After Commit) ---
+
+            // Emit Balance Update if coins were deducted
+            if (!isOperator) {
+                // To the sender specifically
+                io.to(socket.id).emit('balance_update', {
+                    userId: senderId,
+                    newBalance: userBalance
+                });
+            }
+
+            // Broadcast Message to Chat Room
             io.to(chatId).emit('receive_message', savedMsg);
 
-            // 6. Notify Admins Global (for chat list updates)
+            // Notify Admins
+            console.log(`[SOCKET] Emitting admin_notification for chat ${chatId}`);
             io.emit('admin_notification', savedMsg);
 
         } catch (err) {
-            console.error('DB Error:', err.message);
+            if (client) {
+                await client.query('ROLLBACK');
+            }
+            console.error('[SOCKET] Send Message Error:', err.message);
+            io.to(socket.id).emit('message_error', {
+                code: 'SEND_FAILED',
+                message: 'Mesaj gönderilemedi. Lütfen tekrar deneyin.'
+            });
+        } finally {
+            if (client) {
+                client.release();
+            }
         }
     });
 

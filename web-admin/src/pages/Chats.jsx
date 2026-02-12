@@ -20,7 +20,19 @@ const Chats = () => {
         fetchChats();
 
         // Connect Socket ONCE
-        socketRef.current = io(API_URL);
+        console.log('[SOCKET] Connecting to:', API_URL);
+        socketRef.current = io(API_URL, {
+            transports: ['websocket', 'polling'], // Ensure compatibility
+            reconnection: true,
+        });
+
+        socketRef.current.on('connect', () => {
+            console.log('[SOCKET] Connected with ID:', socketRef.current.id);
+        });
+
+        socketRef.current.on('connect_error', (err) => {
+            console.error('[SOCKET] Connection Error:', err);
+        });
 
         socketRef.current.on('receive_message', (msg) => {
             // Only update messages if it belongs to the active chat

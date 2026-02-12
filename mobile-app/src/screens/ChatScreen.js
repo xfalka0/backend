@@ -266,8 +266,13 @@ export default function ChatScreen({ route, navigation }) {
             });
 
             socketRef.current.on('message_error', (data) => {
-                // Show Coin Modal on insufficient balance error
-                setShowCoinModal(true);
+                console.log('[SOCKET] Message Error:', data);
+                if (data.code === 'INSUFFICIENT_FUNDS') {
+                    // Show Coin Modal on insufficient balance error
+                    setShowCoinModal(true);
+                } else {
+                    showAlert({ title: 'Hata', message: data.message || 'Mesaj gönderilemedi.', type: 'error' });
+                }
             });
 
             socketRef.current.on('balance_update', (data) => {

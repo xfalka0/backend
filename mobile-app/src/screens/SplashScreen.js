@@ -9,6 +9,8 @@ import Animated, {
     withSpring,
     Easing
 } from 'react-native-reanimated';
+import axios from 'axios';
+import { API_URL } from '../config';
 import { COLORS } from '../theme';
 
 const { width, height } = Dimensions.get('window');
@@ -29,10 +31,28 @@ export default function SplashScreen({ navigation }) {
                 const userData = userJson ? JSON.parse(userJson) : null;
 
                 if (token && userData) {
-                    if (userData.onboarding_completed) {
-                        navigation.replace('Main', { user: { ...userData, token } });
-                    } else {
-                        navigation.replace('Onboarding', { userId: userData.id, token });
+                    try {
+                        // Verify token validity with backend
+                        const res = await axios.get(`${API_URL}/auth/me`, {
+                            headers: { Authorization: `Bearer ${token}` }
+                        });
+
+                        // Token valid, proceed to app
+                        const freshUser = res.data;
+                        await AsyncStorage.setItem('user', JSON.stringify(freshUser));
+
+                        if (freshUser.onboarding_completed) {
+                            navigation.replace('Main', { user: { ...freshUser, token } });
+                        } else {
+                            navigation.replace('Onboarding', { userId: freshUser.id, token });
+                        }
+                    } catch (verifyErr) {
+                        console.warn("[Session] Token verification failed:", verifyErr.message);
+                        // If 401 or 403, clear session and go to welcome
+                        if (verifyErr.response?.status === 401 || verifyErr.response?.status === 403) {
+                            await AsyncStorage.multiRemove(['token', 'user']);
+                        }
+                        navigation.replace('Welcome');
                     }
                 } else {
                     navigation.replace('Welcome');

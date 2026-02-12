@@ -2,12 +2,18 @@ import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, Image, TouchableOpacity, Dimensions, TextInput, KeyboardAvoidingView, Platform } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
+import axios from 'axios';
+import { API_URL } from '../config';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const { width, height } = Dimensions.get('window');
 
 export default function StoryScreen({ route, navigation }) {
-    const { story } = route.params;
+    const { story, user } = route.params;
     const [progress, setProgress] = useState(0);
+    const [liked, setLiked] = useState(story.liked || false);
+    const [message, setMessage] = useState('');
+    const [sending, setSending] = useState(false);
 
     useEffect(() => {
         const interval = setInterval(() => {
@@ -25,6 +31,73 @@ export default function StoryScreen({ route, navigation }) {
             navigation.goBack();
         }
     }, [progress]);
+
+    const toggleLike = async () => {
+        try {
+            const token = user?.token || await AsyncStorage.getItem('token');
+            const currentUserId = user?.id || (await AsyncStorage.getItem('user') ? JSON.parse(await AsyncStorage.getItem('user')).id : null);
+
+            if (!currentUserId) return;
+
+            setLiked(!liked);
+            await axios.post(`${API_URL}/social/story/like/${story.id}`, {
+                user_id: currentUserId
+            }, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+        } catch (error) {
+            console.error('[Story] Like error:', error);
+            setLiked(liked); // Revert
+        }
+    };
+
+    const handleSendMessage = async () => {
+        if (!message.trim() || sending) return;
+        setSending(true);
+
+        try {
+            const token = user?.token || await AsyncStorage.getItem('token');
+            const currentUserId = user?.id || (await AsyncStorage.getItem('user') ? JSON.parse(await AsyncStorage.getItem('user')).id : null);
+
+            if (!currentUserId) return;
+
+            // 1. Create or get chat
+            const chatRes = await axios.post(`${API_URL}/chats`, {
+                userId: currentUserId,
+                operatorId: story.operator_id
+            }, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+
+            const chatId = chatRes.data?.id;
+
+            if (chatId) {
+                // 2. Send the message (story reply)
+                // We'll send it via the API for simplicity here, or just via the standard message endpoint
+                await axios.post(`${API_URL}/messages`, {
+                    chatId: chatId,
+                    senderId: currentUserId,
+                    content: `Hikayene mesaj gönderdi: ${message}`,
+                    type: 'text'
+                }, {
+                    headers: { Authorization: `Bearer ${token}` }
+                });
+
+                setMessage('');
+                // Navigate to the chat
+                navigation.replace('Chat', {
+                    operatorId: story.operator_id,
+                    name: story.name,
+                    avatar_url: story.avatar,
+                    user: user
+                });
+            }
+        } catch (error) {
+            console.error('[Story] Message error:', error);
+        } finally {
+            setSending(false);
+        }
+    };
 
     return (
         <View style={styles.container}>
@@ -65,12 +138,13 @@ export default function StoryScreen({ route, navigation }) {
                         placeholder="Mesaj gönder..."
                         placeholderTextColor="rgba(255,255,255,0.7)"
                         style={styles.input}
+                        value={message}
+                        onChangeText={setMessage}
+                        returnKeyType="send"
+                        onSubmitEditing={handleSendMessage}
                     />
-                    <TouchableOpacity style={styles.actionIcon}>
-                        <Ionicons name="heart-outline" size={28} color="white" />
-                    </TouchableOpacity>
-                    <TouchableOpacity style={styles.actionIcon}>
-                        <Ionicons name="paper-plane-outline" size={26} color="white" />
+                    <TouchableOpacity style={styles.actionIcon} onPress={toggleLike}>
+                        <Ionicons name={liked ? "heart" : "heart-outline"} size={28} color={liked ? "#ff4d6d" : "white"} />
                     </TouchableOpacity>
                 </View>
             </KeyboardAvoidingView>

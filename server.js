@@ -187,14 +187,23 @@ const initializeDatabase = async () => {
             }
         }
 
-        // Fix post_likes table types
-        const likeColsCheck = await db.query("SELECT column_name, data_type FROM information_schema.columns WHERE table_name = 'post_likes'");
-        const likeColNames = likeColsCheck.rows.map(c => c.column_name);
-        if (likeColNames.length > 0) {
-            const userIdCol = likeColsCheck.rows.find(c => c.column_name === 'user_id');
+        // Fix story_likes table types
+        const storyLikeColsCheck = await db.query("SELECT column_name, data_type FROM information_schema.columns WHERE table_name = 'story_likes'");
+        if (storyLikeColsCheck.rows.length > 0) {
+            const userIdCol = storyLikeColsCheck.rows.find(c => c.column_name === 'user_id');
             if (userIdCol && userIdCol.data_type.toUpperCase() !== userIdType) {
-                console.log(`[DB] Syncing post_likes.user_id type to ${userIdType}...`);
-                await db.query(`ALTER TABLE post_likes ALTER COLUMN user_id TYPE ${userIdType} USING user_id::TEXT::${userIdType}`);
+                console.log(`[DB] Syncing story_likes.user_id type to ${userIdType}...`);
+                await db.query(`ALTER TABLE story_likes ALTER COLUMN user_id TYPE ${userIdType} USING user_id::TEXT::${userIdType}`);
+            }
+        }
+
+        // Fix post_comments table types
+        const commentColsCheck = await db.query("SELECT column_name, data_type FROM information_schema.columns WHERE table_name = 'post_comments'");
+        if (commentColsCheck.rows.length > 0) {
+            const userIdCol = commentColsCheck.rows.find(c => c.column_name === 'user_id');
+            if (userIdCol && userIdCol.data_type.toUpperCase() !== userIdType) {
+                console.log(`[DB] Syncing post_comments.user_id type to ${userIdType}...`);
+                await db.query(`ALTER TABLE post_comments ALTER COLUMN user_id TYPE ${userIdType} USING user_id::TEXT::${userIdType}`);
             }
         }
 
@@ -235,6 +244,21 @@ const initializeDatabase = async () => {
             user_id ${userIdType} REFERENCES users(id) ON DELETE CASCADE,
             created_at TIMESTAMP DEFAULT NOW(),
             PRIMARY KEY (post_id, user_id)
+        )`);
+
+        await runMigration('StoryLikesTable', `CREATE TABLE IF NOT EXISTS story_likes (
+            story_id UUID REFERENCES stories(id) ON DELETE CASCADE,
+            user_id ${userIdType} REFERENCES users(id) ON DELETE CASCADE,
+            created_at TIMESTAMP DEFAULT NOW(),
+            PRIMARY KEY (story_id, user_id)
+        )`);
+
+        await runMigration('PostCommentsTable', `CREATE TABLE IF NOT EXISTS post_comments (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            post_id UUID REFERENCES posts(id) ON DELETE CASCADE,
+            user_id ${userIdType} REFERENCES users(id) ON DELETE CASCADE,
+            content TEXT NOT NULL,
+            created_at TIMESTAMP DEFAULT NOW()
         )`);
 
         console.log('[DB] SCHEMA VERIFICATION COMPLETE');

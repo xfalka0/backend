@@ -199,7 +199,11 @@ export default function AuthScreen({ navigation, route }) {
     };
 
     const resetAuth = () => {
-        navigation.goBack();
+        if (navigation.canGoBack()) {
+            navigation.goBack();
+        } else {
+            navigation.replace('Welcome');
+        }
     };
 
     const renderStep0 = () => (

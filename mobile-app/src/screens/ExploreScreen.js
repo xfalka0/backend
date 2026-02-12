@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { View, Text, StyleSheet, Image, TouchableOpacity, Dimensions, Modal, TextInput, FlatList, Alert } from 'react-native';
+import { View, Text, StyleSheet, Image, TouchableOpacity, Dimensions, Modal, TextInput, FlatList, Alert, ActivityIndicator } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Animated, {
     useSharedValue,
@@ -29,6 +29,10 @@ export default function ExploreScreen({ route, navigation }) {
     const [stories, setStories] = useState([]);
     const [loading, setLoading] = useState(true);
     const [isCommentsVisible, setCommentsVisible] = useState(false);
+    const [activePostId, setActivePostId] = useState(null);
+    const [comments, setComments] = useState([]);
+    const [newComment, setNewComment] = useState('');
+    const [isPostingComment, setIsPostingComment] = useState(false);
     const scrollY = useSharedValue(0);
 
     useFocusEffect(
@@ -71,9 +75,10 @@ export default function ExploreScreen({ route, navigation }) {
         setPosts(prev => prev.map(post => {
             if (post.id === postId) {
                 const isLiked = !!post.liked;
+                const currentCount = parseInt(post.likes_count) || 0;
                 return {
                     ...post,
-                    likes_count: (post.likes_count || 0) + (isLiked ? -1 : 1),
+                    likes_count: isLiked ? Math.max(0, currentCount - 1) : currentCount + 1,
                     liked: !isLiked
                 };
             }
@@ -93,6 +98,47 @@ export default function ExploreScreen({ route, navigation }) {
             console.error('Like toggle error:', err);
             // Revert on error
             fetchExploreData();
+        }
+    };
+
+    const fetchComments = async (postId) => {
+        try {
+            setActivePostId(postId);
+            setCommentsVisible(true);
+            const res = await axios.get(`${API_URL}/social/post/${postId}/comments`);
+            setComments(res.data);
+        } catch (err) {
+            console.error('Fetch Comments Error:', err);
+        }
+    };
+
+    const handleCommentSubmit = async () => {
+        if (!newComment.trim() || !activePostId || isPostingComment) return;
+        setIsPostingComment(true);
+
+        try {
+            const token = await AsyncStorage.getItem('token');
+            const res = await axios.post(`${API_URL}/social/post/${activePostId}/comments`, {
+                user_id: user.id,
+                content: newComment
+            }, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+
+            setComments(prev => [...prev, res.data]);
+            setNewComment('');
+
+            // Update comments_count in posts list
+            setPosts(prev => prev.map(p => {
+                if (p.id === activePostId) {
+                    return { ...p, comments_count: (parseInt(p.comments_count) || 0) + 1 };
+                }
+                return p;
+            }));
+        } catch (err) {
+            console.error('Post Comment Error:', err);
+        } finally {
+            setIsPostingComment(false);
         }
     };
 
@@ -338,7 +384,7 @@ export default function ExploreScreen({ route, navigation }) {
                             color={item.liked ? "#f472b6" : (themeMode === 'dark' ? "white" : theme.colors.text)}
                         />
                     </TouchableOpacity>
-                    <TouchableOpacity onPress={() => setCommentsVisible(true)}>
+                    <TouchableOpacity onPress={() => fetchComments(item.id)}>
                         <Ionicons name="chatbubble-outline" size={26} color={themeMode === 'dark' ? "white" : theme.colors.text} />
                     </TouchableOpacity>
                 </View>
@@ -350,8 +396,10 @@ export default function ExploreScreen({ route, navigation }) {
                     <Text style={[styles.captionUser, { color: theme.colors.text }]}>{item.userName}</Text>
                     <Text style={[styles.captionText, { color: theme.colors.textSecondary }]}>{item.content || item.caption}</Text>
                 </View>
-                <TouchableOpacity onPress={() => setCommentsVisible(true)}>
-                    <Text style={[styles.viewComments, { color: theme.colors.textSecondary }]}>Yorumları gör...</Text>
+                <TouchableOpacity onPress={() => fetchComments(item.id)}>
+                    <Text style={[styles.viewComments, { color: theme.colors.textSecondary }]}>
+                        {item.comments_count > 0 ? `${item.comments_count} yorumun tümünü gör...` : 'Yorum yaz...'}
+                    </Text>
                 </TouchableOpacity>
             </View>
         </AnimatedPostCard>
@@ -404,32 +452,40 @@ export default function ExploreScreen({ route, navigation }) {
                             <Text style={[styles.modalTitle, { color: theme.colors.text }]}>Yorumlar</Text>
                         </View>
                         <Animated.FlatList
-                            data={[
-                                { id: '1', user: 'Ayşe', text: 'Çok tatlısın 😍' },
-                                { id: '2', user: 'Emre', text: '🔥🔥🔥' },
-                                { id: '3', user: 'Zeynep', text: 'Merhaba! 👋' }
-                            ]}
+                            data={comments}
                             keyExtractor={item => item.id}
                             renderItem={({ item }) => (
                                 <View style={styles.commentItem}>
-                                    <Image source={{ uri: `https://i.pravatar.cc/150?u=${item.user}` }} style={styles.commentAvatar} />
-                                    <View>
-                                        <Text style={[styles.commentUser, { color: theme.colors.text }]}>{item.user}</Text>
-                                        <Text style={[styles.commentText, { color: theme.colors.textSecondary }]}>{item.text}</Text>
+                                    <Image source={{ uri: item.avatar }} style={styles.commentAvatar} />
+                                    <View style={{ flex: 1 }}>
+                                        <Text style={[styles.commentUser, { color: theme.colors.text }]}>{item.userName}</Text>
+                                        <Text style={[styles.commentText, { color: theme.colors.textSecondary }]}>{item.content}</Text>
                                     </View>
                                 </View>
                             )}
                             contentContainerStyle={{ padding: 20 }}
+                            ListEmptyComponent={() => (
+                                <View style={{ alignItems: 'center', marginTop: 50 }}>
+                                    <Text style={{ color: theme.colors.textSecondary }}>Henüz yorum yok. İlk yorumu sen yaz!</Text>
+                                </View>
+                            )}
                         />
                         <View style={[styles.commentInputContainer, { borderTopColor: theme.colors.glassBorder }]}>
                             <TextInput
                                 placeholder="Yorum yaz..."
                                 placeholderTextColor={theme.colors.textSecondary}
                                 style={[styles.commentInput, { backgroundColor: theme.colors.glass, color: theme.colors.text }]}
+                                value={newComment}
+                                onChangeText={setNewComment}
+                                onSubmitEditing={handleCommentSubmit}
                             />
-                            <TouchableOpacity>
-                                <LinearGradient colors={['#8b5cf6', '#d946ef']} style={styles.commentSend}>
-                                    <Ionicons name="send" size={18} color="white" />
+                            <TouchableOpacity onPress={handleCommentSubmit} disabled={isPostingComment}>
+                                <LinearGradient colors={['#8b5cf6', '#d946ef']} style={[styles.commentSend, isPostingComment && { opacity: 0.5 }]}>
+                                    {isPostingComment ? (
+                                        <ActivityIndicator size="small" color="white" />
+                                    ) : (
+                                        <Ionicons name="send" size={18} color="white" />
+                                    )}
                                 </LinearGradient>
                             </TouchableOpacity>
                         </View>

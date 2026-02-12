@@ -63,6 +63,15 @@ export default function HomeScreen({ navigation, route }) {
             setOperators(res.data);
         } catch (error) {
             console.error("Fetch Discovery Error:", error);
+
+            // If 403 Forbidden, token is invalid, clear and redirect
+            if (error.response?.status === 401 || error.response?.status === 403) {
+                console.warn("[Home] Token invalid detected, clearing session.");
+                await AsyncStorage.multiRemove(['token', 'user']);
+                navigation.replace('Auth');
+                return;
+            }
+
             try {
                 const res = await axios.get(`${API_URL}/operators`);
                 setOperators(res.data);

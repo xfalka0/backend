@@ -136,50 +136,75 @@ const initializeDatabase = async () => {
             await db.query("ALTER TABLE users ADD COLUMN account_status VARCHAR(50) DEFAULT 'active'");
         }
 
-        // Ensure Activities table exists
-        await db.query(`CREATE TABLE IF NOT EXISTS activities (
-            id SERIAL PRIMARY KEY,
-            user_id UUID REFERENCES users(id),
-            action_type VARCHAR(50),
-            description TEXT,
-            created_at TIMESTAMP DEFAULT NOW()
-        )`);
+        // Detect users.id type to ensure FK compatibility
+        let userIdType = 'UUID';
+        const userTypeCheck = await db.query("SELECT data_type FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'id'");
+        if (userTypeCheck.rows.length > 0) {
+            userIdType = userTypeCheck.rows[0].data_type.toUpperCase() === 'INTEGER' ? 'INTEGER' : 'UUID';
+            console.log(`[DB] Detected users.id type: ${userIdType}`);
+        }
+
+        // Fix activities table user_id type if mismatched
+        const actCols = await db.query("SELECT column_name, data_type FROM information_schema.columns WHERE table_name = 'activities'");
+        const actColNames = actCols.rows.map(c => c.column_name);
+
+        if (actColNames.length > 0) {
+            const userIdCol = actCols.rows.find(c => c.column_name === 'user_id');
+            if (userIdCol && userIdCol.data_type.toUpperCase() !== userIdType) {
+                console.log(`[DB] Syncing activities.user_id type to ${userIdType}...`);
+                await db.query(`ALTER TABLE activities ALTER COLUMN user_id TYPE ${userIdType} USING user_id::${userIdType}`);
+            }
+        } else {
+            await db.query(`CREATE TABLE IF NOT EXISTS activities (
+                id SERIAL PRIMARY KEY,
+                user_id ${userIdType} REFERENCES users(id) ON DELETE CASCADE,
+                action_type VARCHAR(50),
+                description TEXT,
+                created_at TIMESTAMP DEFAULT NOW()
+            )`);
+        }
 
         // Migration logic
         // Messages table enhancements
         await db.query('ALTER TABLE messages ADD COLUMN IF NOT EXISTS gift_id INT');
 
-        // Initial Setup: Extensions & Core Tables
-        await db.query('CREATE EXTENSION IF NOT EXISTS pgcrypto');
+        // Create tables one by one to avoid one failure blocking all migrations
+        const runMigration = async (name, sql) => {
+            try {
+                await db.query(sql);
+            } catch (err) {
+                console.error(`[DB] Migration Error (${name}):`, err.message);
+                app.set('db_status', (app.get('db_status') || 'ready') + ` | Error ${name}: ${err.message}`);
+            }
+        };
 
-        // Social Features: Posts and Stories (UUID based)
-        await db.query(`CREATE TABLE IF NOT EXISTS posts (
+        await runMigration('Extensions', 'CREATE EXTENSION IF NOT EXISTS pgcrypto');
+
+        await runMigration('PostsTable', `CREATE TABLE IF NOT EXISTS posts (
             id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-            operator_id UUID REFERENCES users(id) ON DELETE CASCADE,
+            operator_id ${userIdType} REFERENCES users(id) ON DELETE CASCADE,
             image_url TEXT NOT NULL,
             content TEXT,
             created_at TIMESTAMP DEFAULT NOW()
         )`);
 
-        await db.query(`CREATE TABLE IF NOT EXISTS stories (
+        await runMigration('StoriesTable', `CREATE TABLE IF NOT EXISTS stories (
             id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-            operator_id UUID REFERENCES users(id) ON DELETE CASCADE,
+            operator_id ${userIdType} REFERENCES users(id) ON DELETE CASCADE,
             image_url TEXT NOT NULL,
             created_at TIMESTAMP DEFAULT NOW(),
             expires_at TIMESTAMP DEFAULT (NOW() + INTERVAL '24 hours')
         )`);
 
-        await db.query(`CREATE TABLE IF NOT EXISTS post_likes (
+        await runMigration('PostLikesTable', `CREATE TABLE IF NOT EXISTS post_likes (
             post_id UUID REFERENCES posts(id) ON DELETE CASCADE,
-            user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+            user_id ${userIdType} REFERENCES users(id) ON DELETE CASCADE,
             created_at TIMESTAMP DEFAULT NOW(),
             PRIMARY KEY (post_id, user_id)
         )`);
 
-        console.log('[DB] Social tables verified/created.');
-
         console.log('[DB] SCHEMA VERIFICATION COMPLETE');
-        app.set('db_status', 'ready');
+        if (!app.get('db_status')) app.set('db_status', 'ready');
     } catch (err) {
         console.error('[DB] CRITICAL SCHEMA ERROR:', err.message);
         app.set('db_status', 'error: ' + err.message);
@@ -193,12 +218,20 @@ app.get('/api/health-check', async (req, res) => {
         const dbCheck = await db.query('SELECT NOW()');
         const tables = await db.query("SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'");
 
+        // Detailed column info for users and posts
+        const userCols = await db.query("SELECT column_name, data_type FROM information_schema.columns WHERE table_name = 'users'");
+        const postCols = await db.query("SELECT column_name, data_type FROM information_schema.columns WHERE table_name = 'posts'");
+
         res.json({
             status: 'online',
             db: 'connected',
             db_time: dbCheck.rows[0].now,
             db_status: app.get('db_status'),
             tables: tables.rows.map(t => t.table_name),
+            schema_info: {
+                users: userCols.rows,
+                posts: postCols.rows
+            },
             env: {
                 has_cloudinary: !!process.env.CLOUDINARY_CLOUD_NAME,
                 has_jwt_secret: !!process.env.JWT_SECRET,

@@ -179,11 +179,36 @@ const initializeDatabase = async () => {
         console.log('[DB] Social tables verified/created.');
 
         console.log('[DB] SCHEMA VERIFICATION COMPLETE');
+        app.set('db_status', 'ready');
     } catch (err) {
         console.error('[DB] CRITICAL SCHEMA ERROR:', err.message);
+        app.set('db_status', 'error: ' + err.message);
     }
 };
 initializeDatabase();
+
+// --- DIAGNOSTIC ENDPOINT ---
+app.get('/api/health-check', async (req, res) => {
+    try {
+        const dbCheck = await db.query('SELECT NOW()');
+        const tables = await db.query("SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'");
+
+        res.json({
+            status: 'online',
+            db: 'connected',
+            db_time: dbCheck.rows[0].now,
+            db_status: app.get('db_status'),
+            tables: tables.rows.map(t => t.table_name),
+            env: {
+                has_cloudinary: !!process.env.CLOUDINARY_CLOUD_NAME,
+                has_jwt_secret: !!process.env.JWT_SECRET,
+                node_env: process.env.NODE_ENV
+            }
+        });
+    } catch (err) {
+        res.status(500).json({ status: 'error', database: err.message });
+    }
+});
 
 const server = http.createServer(app);
 

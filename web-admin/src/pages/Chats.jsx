@@ -25,16 +25,13 @@ const Chats = () => {
             // Only update messages if it belongs to the active chat
             if (selectedChatIdRef.current === msg.chat_id) {
                 setMessages((prev) => {
-                    // 1. Check if exact ID already exists (deduplication)
                     if (prev.some(m => m.id === msg.id)) return prev;
 
-                    // 2. Check if we have a matching optimistic message (same content, sender, and recent)
-                    // If we find one, REPLACE it with the real message
                     const optimisticMatchIndex = prev.findIndex(m =>
                         m.is_optimistic &&
                         m.content === msg.content &&
                         m.sender_id === msg.sender_id &&
-                        Date.now() - new Date(m.created_at).getTime() < 10000 // generated within last 10s
+                        Date.now() - new Date(m.created_at).getTime() < 10000
                     );
 
                     if (optimisticMatchIndex !== -1) {
@@ -42,12 +39,48 @@ const Chats = () => {
                         newMessages[optimisticMatchIndex] = msg;
                         return newMessages;
                     }
-
-                    // 3. Otherwise add new message
                     return [...prev, msg];
                 });
             }
-            fetchChats();
+        });
+
+        // GLOBAL LISTENER for Admin Chat List Updates
+        socketRef.current.on('admin_notification', (msg) => {
+            // If the message is from the ADMIN (operator), ignore it for unread counts
+            // But we still want to update last_message text.
+            // checking if sender is the chat.operator_id or if we can derive it.
+            // Ideally, we compare senderId vs operatorId.
+            // For now, let's just update based on logic:
+
+            setChats(prevChats => {
+                const chatIndex = prevChats.findIndex(c => c.id === msg.chat_id);
+                if (chatIndex === -1) {
+                    // New chat we don't know about? Fetch all.
+                    fetchChats();
+                    return prevChats;
+                }
+
+                const updatedChats = [...prevChats];
+                const chat = { ...updatedChats[chatIndex] };
+
+                // Update last message info
+                chat.last_message = (msg.content_type === 'text') ? msg.content : (msg.content_type === 'image' ? '📷 Resim' : 'Yeni Mesaj');
+                chat.last_message_at = msg.created_at;
+
+                // Increment unread count ONLY if:
+                // 1. It is NOT the currently selected chat
+                // 2. The sender is THE USER (not the operator/admin)
+                // We know 'chat.user_id' is the user.
+                if (msg.chat_id !== selectedChatIdRef.current && msg.sender_id === chat.user_id) {
+                    chat.unread_count = (chat.unread_count || 0) + 1;
+                }
+
+                // Remove from current position and add to top
+                updatedChats.splice(chatIndex, 1);
+                updatedChats.unshift(chat);
+
+                return updatedChats;
+            });
         });
 
         return () => {
@@ -138,7 +171,7 @@ const Chats = () => {
                             onClick={() => fetchMessages(chat)}
                             className={`w-full p-5 flex items-center gap-4 hover:bg-white/5 transition-all text-left border-b border-white/5 relative group 
                                 ${selectedChat?.id === chat.id ? 'bg-fuchsia-600/10 border-r-4 border-r-fuchsia-600' : ''}
-                                ${chat.unread_count > 0 ? 'bg-fuchsia-500/10 shadow-[inset_0_0_20px_rgba(217,70,239,0.1)]' : ''}`}
+                                ${chat.unread_count > 0 ? 'bg-fuchsia-500/20 shadow-[inset_0_0_30px_rgba(217,70,239,0.4)] border-l-4 border-l-fuchsia-500' : ''}`}
                         >
                             <div className="relative">
                                 <div className={`w-14 h-14 rounded-2xl overflow-hidden border-2 shadow-2xl transition-all

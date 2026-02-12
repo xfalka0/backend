@@ -2258,6 +2258,9 @@ io.on('connection', (socket) => {
             // 5. Broadcast Message
             io.to(chatId).emit('receive_message', savedMsg);
 
+            // 6. Notify Admins Global (for chat list updates)
+            io.emit('admin_notification', savedMsg);
+
         } catch (err) {
             console.error('DB Error:', err.message);
         }

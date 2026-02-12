@@ -83,6 +83,14 @@ const Chats = () => {
         try {
             const res = await axios.get(`${API_URL}/api/messages/${chat.id}`);
             setMessages(res.data);
+
+            // Mark as read for the admin (sender_id = user_id should be read)
+            await axios.put(`${API_URL}/api/chats/${chat.id}/read`, {
+                userId: chat.operator_id
+            });
+
+            // Local update to clear badge
+            setChats(prev => prev.map(c => c.id === chat.id ? { ...c, unread_count: 0 } : c));
         } catch (err) {
             console.error('Error fetching messages:', err);
         }
@@ -127,10 +135,13 @@ const Chats = () => {
                         <button
                             key={chat.id}
                             onClick={() => fetchMessages(chat)}
-                            className={`w-full p-5 flex items-center gap-4 hover:bg-white/5 transition-all text-left border-b border-white/5 relative group ${selectedChat?.id === chat.id ? 'bg-fuchsia-600/10 border-r-4 border-r-fuchsia-600' : ''}`}
+                            className={`w-full p-5 flex items-center gap-4 hover:bg-white/5 transition-all text-left border-b border-white/5 relative group 
+                                ${selectedChat?.id === chat.id ? 'bg-fuchsia-600/10 border-r-4 border-r-fuchsia-600' : ''}
+                                ${chat.unread_count > 0 ? 'bg-fuchsia-500/5 animate-pulse-slow' : ''}`}
                         >
                             <div className="relative">
-                                <div className="w-14 h-14 rounded-2xl overflow-hidden border-2 border-white/5 shadow-2xl">
+                                <div className={`w-14 h-14 rounded-2xl overflow-hidden border-2 shadow-2xl transition-all
+                                    ${chat.unread_count > 0 ? 'border-fuchsia-500 shadow-fuchsia-500/20' : 'border-white/5'}`}>
                                     {chat.user_avatar ? (
                                         <img
                                             src={chat.user_avatar}
@@ -157,17 +168,25 @@ const Chats = () => {
                             <div className="flex-1 overflow-hidden">
                                 <div className="flex justify-between items-start">
                                     <div className="flex flex-col flex-1 min-w-0">
-                                        <h3 className="font-black text-white text-base truncate group-hover:text-fuchsia-400 transition-colors uppercase tracking-tight">
+                                        <h3 className={`font-black text-base truncate transition-colors uppercase tracking-tight
+                                            ${chat.unread_count > 0 ? 'text-fuchsia-400' : 'text-white group-hover:text-fuchsia-400'}`}>
                                             {chat.user_name}
                                         </h3>
-                                        <p className="text-xs text-slate-400 truncate font-medium opacity-60 mt-1">
+                                        <p className={`text-xs truncate font-medium mt-1 ${chat.unread_count > 0 ? 'text-white opacity-90' : 'text-slate-400 opacity-60'}`}>
                                             {chat.last_message || 'Sohbeti başlattı ✨'}
                                         </p>
                                     </div>
 
-                                    <span className="text-[10px] text-slate-500 font-black shrink-0 ml-2">
-                                        {chat.last_message_at ? new Date(chat.last_message_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
-                                    </span>
+                                    <div className="flex flex-col items-end gap-2 ml-2">
+                                        <span className="text-[10px] text-slate-500 font-black shrink-0">
+                                            {chat.last_message_at ? new Date(chat.last_message_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
+                                        </span>
+                                        {chat.unread_count > 0 && (
+                                            <span className="bg-fuchsia-600 text-white text-[10px] font-black w-5 h-5 flex items-center justify-center rounded-full shadow-lg shadow-fuchsia-600/40 animate-bounce">
+                                                {chat.unread_count}
+                                            </span>
+                                        )}
+                                    </div>
                                 </div>
                             </div>
                         </button>

@@ -1731,7 +1731,8 @@ app.get('/api/chats/admin', async (req, res) => {
                 u.job,
                 COALESCE(op.display_name, op.username, 'Bilinmeyen Operatör') as operator_name, 
                 op.avatar_url as operator_avatar,
-                (SELECT content FROM messages WHERE chat_id = c.id ORDER BY created_at DESC LIMIT 1) as last_message
+                (SELECT content FROM messages WHERE chat_id = c.id ORDER BY created_at DESC LIMIT 1) as last_message,
+                (SELECT COUNT(*)::int FROM messages WHERE chat_id = c.id AND sender_id = c.user_id AND is_read = false) as unread_count
             FROM chats c
             LEFT JOIN users u ON c.user_id = u.id
             LEFT JOIN users op ON c.operator_id = op.id
@@ -1755,6 +1756,17 @@ app.get('/api/chats/admin', async (req, res) => {
         res.json(sanitizedRows);
     } catch (err) {
         console.error('GET /api/chats/admin - ERROR:', err.message);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// GET PUBLIC COIN PACKAGES
+app.get('/api/public/packages', async (req, res) => {
+    try {
+        const result = await db.query('SELECT * FROM product_packages WHERE is_active = true ORDER BY price ASC');
+        res.json(result.rows);
+    } catch (err) {
+        console.error('Fetch Packages Error:', err.message);
         res.status(500).json({ error: err.message });
     }
 });

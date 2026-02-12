@@ -388,21 +388,22 @@ export default function ExploreScreen({ route, navigation }) {
 
             <View style={styles.postActions}>
                 <View style={styles.leftActions}>
-                    <TouchableOpacity onPress={() => likePost(item.id)}>
+                    <TouchableOpacity onPress={() => likePost(item.id)} style={styles.actionItem}>
                         <Ionicons
                             name={item.liked ? "heart" : "heart-outline"}
                             size={28}
                             color={item.liked ? "#f472b6" : (themeMode === 'dark' ? "white" : theme.colors.text)}
                         />
+                        <Text style={[styles.actionCount, { color: theme.colors.text }]}>{item.likes_count || 0}</Text>
                     </TouchableOpacity>
-                    <TouchableOpacity onPress={() => fetchComments(item.id)}>
+                    <TouchableOpacity onPress={() => fetchComments(item.id)} style={styles.actionItem}>
                         <Ionicons name="chatbubble-outline" size={26} color={themeMode === 'dark' ? "white" : theme.colors.text} />
+                        <Text style={[styles.actionCount, { color: theme.colors.text }]}>{item.comments_count || 0}</Text>
                     </TouchableOpacity>
                 </View>
             </View>
 
             <View style={styles.postInfo}>
-                <Text style={[styles.likesText, { color: theme.colors.text }]}>{item.likes_count || 0} beğeni</Text>
                 <View style={styles.captionRow}>
                     <Text style={[styles.captionUser, { color: theme.colors.text }]}>{item.userName}</Text>
                     <Text style={[styles.captionText, { color: theme.colors.textSecondary }]}>{item.content || item.caption}</Text>
@@ -668,7 +669,16 @@ const styles = StyleSheet.create({
     },
     leftActions: {
         flexDirection: 'row',
-        gap: 20,
+        gap: 25,
+    },
+    actionItem: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
+    },
+    actionCount: {
+        fontSize: 16,
+        fontWeight: '700',
     },
     postInfo: {
         paddingHorizontal: 20, // Increased padding for better alignment with header

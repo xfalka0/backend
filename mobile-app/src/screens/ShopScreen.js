@@ -22,9 +22,35 @@ export default function ShopScreen({ navigation, route }) {
     useEffect(() => {
         const fetchOfferings = async () => {
             setLoading(true);
-            const availablePackages = await PurchaseService.getOfferings();
-            setOfferings(availablePackages);
-            setLoading(false);
+            try {
+                // 1. Try RevenueCat
+                const availablePackages = await PurchaseService.getOfferings();
+
+                if (availablePackages && availablePackages.length > 0) {
+                    setOfferings(availablePackages);
+                } else {
+                    // 2. Fallback to our Backend
+                    console.log('[Shop] No RevenueCat offerings found, falling back to backend API.');
+                    const res = await axios.get(`${API_URL}/api/public/packages`);
+                    // Transform DB packages to a compatible format for render
+                    const transformed = res.data.map(pkg => ({
+                        isLocal: true,
+                        product: {
+                            identifier: pkg.id.toString(),
+                            title: `${pkg.coins} Coin`,
+                            description: pkg.name || 'Altın Paketi',
+                            priceString: `${pkg.price} ₺`,
+                            price: pkg.price,
+                            coins: pkg.coins
+                        }
+                    }));
+                    setOfferings(transformed);
+                }
+            } catch (err) {
+                console.error('[Shop] Error loading offerings:', err);
+            } finally {
+                setLoading(false);
+            }
         };
         fetchOfferings();
     }, []);
@@ -69,11 +95,20 @@ export default function ShopScreen({ navigation, route }) {
         // Map common icons based on price or identifier as a fallback
         const isBestValue = product.identifier.includes('popular') || index === 1;
 
+        const handlePress = () => {
+            if (pack.isLocal) {
+                // Handle local purchase logic (simulated for now)
+                alert(`${product.title} satın alma işlemi başlatıldı (Simülasyon).`);
+            } else {
+                handlePurchase(pack);
+            }
+        };
+
         return (
             <TouchableOpacity
                 key={product.identifier}
                 style={[styles.cardContainer, isBestValue && styles.bestValueContainer]}
-                onPress={() => handlePurchase(pack)}
+                onPress={handlePress}
                 activeOpacity={0.8}
             >
                 <LinearGradient
@@ -90,10 +125,10 @@ export default function ShopScreen({ navigation, route }) {
                     )}
 
                     <LinearGradient
-                        colors={['#8b5cf6', '#7c3aed']}
+                        colors={index % 3 === 0 ? ['#8b5cf6', '#7c3aed'] : index % 3 === 1 ? ['#fbbf24', '#f59e0b'] : ['#e879f9', '#d946ef']}
                         style={styles.iconCircle}
                     >
-                        <Ionicons name="cube-outline" size={26} color="white" />
+                        <Ionicons name={index % 2 === 0 ? "cube-outline" : "diamond-outline"} size={26} color="white" />
                     </LinearGradient>
 
                     <View style={styles.cardInfo}>

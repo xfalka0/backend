@@ -143,14 +143,16 @@ export default function StoryScreen({ route, navigation }) {
                         returnKeyType="send"
                         onSubmitEditing={handleSendMessage}
                     />
-                    <TouchableOpacity style={styles.actionIcon} onPress={toggleLike}>
-                        <Ionicons name={liked ? "heart" : "heart-outline"} size={28} color={liked ? "#ff4d6d" : "white"} />
-                    </TouchableOpacity>
-                    {message.length > 0 && (
-                        <TouchableOpacity style={styles.actionIcon} onPress={handleSendMessage}>
-                            <Ionicons name="send" size={24} color="#3b82f6" />
+                    <View style={styles.iconActions}>
+                        <TouchableOpacity style={styles.actionIcon} onPress={toggleLike}>
+                            <Ionicons name={liked ? "heart" : "heart-outline"} size={28} color={liked ? "#ff4d6d" : "white"} />
                         </TouchableOpacity>
-                    )}
+                        {message.trim().length > 0 && (
+                            <TouchableOpacity style={styles.actionIcon} onPress={handleSendMessage}>
+                                <Ionicons name="send" size={24} color="#3b82f6" />
+                            </TouchableOpacity>
+                        )}
+                    </View>
                 </View>
             </KeyboardAvoidingView>
         </View>
@@ -233,6 +235,12 @@ const styles = StyleSheet.create({
         borderColor: 'rgba(255,255,255,0.4)',
         paddingHorizontal: 20,
         color: 'white',
+        marginRight: 10,
+    },
+    iconActions: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
     },
     actionIcon: {
         padding: 5,

@@ -146,6 +146,11 @@ export default function StoryScreen({ route, navigation }) {
                     <TouchableOpacity style={styles.actionIcon} onPress={toggleLike}>
                         <Ionicons name={liked ? "heart" : "heart-outline"} size={28} color={liked ? "#ff4d6d" : "white"} />
                     </TouchableOpacity>
+                    {message.length > 0 && (
+                        <TouchableOpacity style={styles.actionIcon} onPress={handleSendMessage}>
+                            <Ionicons name="send" size={24} color="#3b82f6" />
+                        </TouchableOpacity>
+                    )}
                 </View>
             </KeyboardAvoidingView>
         </View>

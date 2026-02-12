@@ -11,7 +11,7 @@ import Animated, {
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { Ionicons } from '@expo/vector-icons';
 
-const LikeAnimation = ({ onLike }) => {
+const LikeAnimation = React.forwardRef(({ onLike, showIcon = false }, ref) => {
     const scale = useSharedValue(0);
     const opacity = useSharedValue(0);
     const heartScale = useSharedValue(1);
@@ -39,6 +39,10 @@ const LikeAnimation = ({ onLike }) => {
         }
     };
 
+    React.useImperativeHandle(ref, () => ({
+        trigger: triggerAnimation
+    }));
+
     const doubleTap = Gesture.Tap()
         .numberOfTaps(2)
         .onEnd(() => {
@@ -61,14 +65,15 @@ const LikeAnimation = ({ onLike }) => {
                     <Ionicons name="heart" size={120} color="#EC4899" />
                 </Animated.View>
 
-                {/* Particle effects would go here with Lottie */}
-                <Animated.View style={animatedIconStyle}>
-                    <Ionicons name="heart-outline" size={28} color="#EC4899" />
-                </Animated.View>
+                {showIcon && (
+                    <Animated.View style={animatedIconStyle}>
+                        <Ionicons name="heart-outline" size={28} color="#EC4899" />
+                    </Animated.View>
+                )}
             </View>
         </GestureDetector>
     );
-};
+});
 
 const styles = StyleSheet.create({
     container: {

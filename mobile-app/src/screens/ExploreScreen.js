@@ -101,6 +101,13 @@ export default function ExploreScreen({ route, navigation }) {
         }
     };
 
+    const handleDoubleTapLike = (postId) => {
+        const post = posts.find(p => p.id === postId);
+        if (post && !post.liked) {
+            likePost(postId);
+        }
+    };
+
     const fetchComments = async (postId) => {
         try {
             setActivePostId(postId);
@@ -373,6 +380,10 @@ export default function ExploreScreen({ route, navigation }) {
 
             <View style={styles.postImageContainer}>
                 <Image source={{ uri: item.image_url || item.image }} style={styles.postImage} />
+                <LikeAnimation
+                    onLike={() => handleDoubleTapLike(item.id)}
+                    showIcon={false}
+                />
             </View>
 
             <View style={styles.postActions}>

@@ -47,14 +47,10 @@ const Chats = () => {
 
         // GLOBAL LISTENER for Admin Chat List Updates
         socketRef.current.on('admin_notification', (msg) => {
-            // If the message is from the ADMIN (operator), ignore it for unread counts
-            // But we still want to update last_message text.
-            // checking if sender is the chat.operator_id or if we can derive it.
-            // Ideally, we compare senderId vs operatorId.
-            // For now, let's just update based on logic:
+            console.log('[SOCKET] Admin Notification Received:', msg);
 
             setChats(prevChats => {
-                const chatIndex = prevChats.findIndex(c => c.id === msg.chat_id);
+                const chatIndex = prevChats.findIndex(c => c.id == msg.chat_id); // Relaxed check
                 if (chatIndex === -1) {
                     // New chat we don't know about? Fetch all.
                     fetchChats();
@@ -71,9 +67,10 @@ const Chats = () => {
                 // Increment unread count ONLY if:
                 // 1. It is NOT the currently selected chat
                 // 2. The sender is THE USER (not the operator/admin)
-                // We know 'chat.user_id' is the user.
-                if (msg.chat_id !== selectedChatIdRef.current && msg.sender_id === chat.user_id) {
+                // Relaxed equality check for sender_id vs user_id
+                if (msg.chat_id != selectedChatIdRef.current && msg.sender_id == chat.user_id) {
                     chat.unread_count = (chat.unread_count || 0) + 1;
+                    console.log(`[SOCKET] Incrementing unread count for ${ chat.user_name } to ${ chat.unread_count } `);
                 }
 
                 // Remove from current position and add to top
@@ -159,7 +156,7 @@ const sendMessage = (e) => {
 };
 
 return (
-    <div className="flex h-[calc(100vh-160px)] bg-slate-950/50 rounded-3xl overflow-hidden border border-white/5 m-8">
+    <div className="flex h-[calc(10vh-160px)] bg-slate-950/50 rounded-3xl overflow-hidden border border-white/5 m-8">
         {/* Chat List */}
         <div className="w-80 border-r border-white/5 flex flex-col bg-slate-900/50">
             <div className="p-6 border-b border-white/5">
@@ -170,13 +167,13 @@ return (
                     <button
                         key={chat.id}
                         onClick={() => fetchMessages(chat)}
-                        className={`w-full p-5 flex items-center gap-4 hover:bg-white/5 transition-all text-left border-b border-white/5 relative group 
+                        className={`w - full p - 5 flex items - center gap - 4 hover: bg - white / 5 transition - all text - left border - b border - white / 5 relative group 
                                 ${selectedChat?.id === chat.id ? 'bg-fuchsia-600/10 border-r-4 border-r-fuchsia-600' : ''}
-                                ${chat.unread_count > 0 ? 'bg-fuchsia-500/20 shadow-[inset_0_0_30px_rgba(217,70,239,0.4)] border-l-4 border-l-fuchsia-500' : ''}`}
+                                ${chat.unread_count > 0 ? 'bg-fuchsia-500/20 shadow-[inset_0_0_30px_rgba(217,70,239,0.4)] border-l-4 border-l-fuchsia-500' : ''} `}
                     >
                         <div className="relative">
-                            <div className={`w-14 h-14 rounded-2xl overflow-hidden border-2 shadow-2xl transition-all
-                                    ${chat.unread_count > 0 ? 'border-fuchsia-500 shadow-fuchsia-500/20' : 'border-white/5'}`}>
+                            <div className={`w - 14 h - 14 rounded - 2xl overflow - hidden border - 2 shadow - 2xl transition - all
+                                    ${chat.unread_count > 0 ? 'border-fuchsia-500 shadow-fuchsia-500/20' : 'border-white/5'} `}>
                                 {chat.user_avatar ? (
                                     <img
                                         src={chat.user_avatar}
@@ -203,11 +200,11 @@ return (
                         <div className="flex-1 overflow-hidden">
                             <div className="flex justify-between items-start">
                                 <div className="flex flex-col flex-1 min-w-0">
-                                    <h3 className={`font-black text-base truncate transition-colors uppercase tracking-tight
-                                            ${chat.unread_count > 0 ? 'text-fuchsia-400' : 'text-white group-hover:text-fuchsia-400'}`}>
+                                    <h3 className={`font - black text - base truncate transition - colors uppercase tracking - tight
+                                            ${chat.unread_count > 0 ? 'text-fuchsia-400' : 'text-white group-hover:text-fuchsia-400'} `}>
                                         {chat.user_name}
                                     </h3>
-                                    <p className={`text-xs truncate font-medium mt-1 ${chat.unread_count > 0 ? 'text-white opacity-90' : 'text-slate-400 opacity-60'}`}>
+                                    <p className={`text - xs truncate font - medium mt - 1 ${chat.unread_count > 0 ? 'text-white opacity-90' : 'text-slate-400 opacity-60'} `}>
                                         {chat.last_message || 'Sohbeti başlattı ✨'}
                                     </p>
                                 </div>
@@ -269,13 +266,13 @@ return (
                         {messages.map((msg, idx) => (
                             <div
                                 key={idx}
-                                className={`flex ${msg.sender_id === selectedChat.operator_id ? 'justify-end' : 'justify-start'}`}
+                                className={`flex ${msg.sender_id === selectedChat.operator_id ? 'justify-end' : 'justify-start'} `}
                             >
                                 <div
-                                    className={`max-w-[70%] p-4 rounded-2xl ${msg.sender_id === selectedChat.operator_id
+                                    className={`max - w - [70 %] p - 4 rounded - 2xl ${msg.sender_id === selectedChat.operator_id
                                         ? 'bg-fuchsia-600 text-white rounded-tr-none'
                                         : 'bg-slate-800 text-slate-200 rounded-tl-none'
-                                        }`}
+                                        } `}
                                 >
                                     <p className="text-sm leading-relaxed">{msg.content}</p>
                                     <span className="text-[9px] opacity-50 mt-2 block font-bold">

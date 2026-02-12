@@ -9,6 +9,9 @@ const bcrypt = require('bcrypt');
 const { authenticateToken, authorizeRole, SECRET_KEY } = require('./middleware/auth');
 const { getVipLevel, getVipProgress } = require('./utils/vipUtils');
 const jwt = require('jsonwebtoken');
+const socialRoutes = require('./routes/socialRoutes');
+const authRoutes = require('./routes/authRoutes');
+const { sanitizeUser, logActivity } = require('./utils/helpers');
 
 const app = express();
 const multer = require('multer');
@@ -18,12 +21,19 @@ const fs = require('fs');
 const sharp = require('sharp');
 const cloudinary = require('cloudinary').v2;
 
-// Cloudinary Configuration
+// Trust proxy for Render/HTTPS
+app.enable('trust proxy');
+
+// Cloudinary Configuration Check
+if (!process.env.CLOUDINARY_CLOUD_NAME) {
+    console.warn('⚠️ [WARNING] CLOUDINARY_CLOUD_NAME is not set in environment variables.');
+}
+
 // Cloudinary Configuration
 cloudinary.config({
-    cloud_name: 'dqnmw4mru',
-    api_key: '761886164599834',
-    api_secret: 'VsHSmd7WVpg9Cum2RY4baMHaU30'
+    cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+    api_key: process.env.CLOUDINARY_API_KEY,
+    api_secret: process.env.CLOUDINARY_API_SECRET
 });
 
 // --- DATABASE AUTO-MIGRATION ---
@@ -159,6 +169,13 @@ const initializeDatabase = async () => {
             expires_at TIMESTAMP DEFAULT (NOW() + INTERVAL '24 hours')
         )`);
 
+        await db.query(`CREATE TABLE IF NOT EXISTS post_likes (
+            post_id UUID REFERENCES posts(id) ON DELETE CASCADE,
+            user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+            created_at TIMESTAMP DEFAULT NOW(),
+            PRIMARY KEY (post_id, user_id)
+        )`);
+
         console.log('[DB] Social tables verified/created.');
 
         console.log('[DB] SCHEMA VERIFICATION COMPLETE');
@@ -215,11 +232,15 @@ const io = new Server(server, {
         methods: ["GET", "POST"]
     }
 });
+app.set('io', io);
 
 app.use(cors());
 app.use(express.json());
 app.use('/uploads', express.static(uploadsDir));
 app.use('/admin', express.static(path.join(__dirname, 'public/admin')));
+app.use('/api', socialRoutes);
+app.use('/api/auth', authRoutes);
+app.use('/api', authRoutes); // Proxy for /api/me /api/login etc
 
 // CLOUDINARY UPLOAD ENDPOINT
 app.post('/api/upload', (req, res, next) => {
@@ -278,70 +299,7 @@ app.get('/admin/*', (req, res) => {
 });
 
 // Helper: Sanitize User (Rewrite URLs)
-const sanitizeUser = (user, req) => {
-    if (!user) return null;
-    // Force HTTPS on Render or if x-forwarded-proto is https
-    let protocol = 'http';
-    if (req.get('host').includes('onrender.com') || req.headers['x-forwarded-proto'] === 'https') {
-        protocol = 'https';
-    } else {
-        protocol = req?.protocol || 'http';
-    }
-    const host = (req?.get ? req.get('host') : null) || 'localhost:3000';
-
-    const newUser = { ...user };
-
-    const rewrite = (url) => {
-        if (url && typeof url === 'string' && !url.startsWith('http')) {
-            return `${protocol}://${host}${url.startsWith('/') ? '' : '/'}${url}`;
-        }
-        return url;
-    };
-
-    // Rewrite common image fields
-    if (newUser.avatar_url) newUser.avatar_url = rewrite(newUser.avatar_url);
-    if (newUser.avatar) newUser.avatar = rewrite(newUser.avatar);
-    if (newUser.image_url) newUser.image_url = rewrite(newUser.image_url);
-    if (newUser.image) newUser.image = rewrite(newUser.image);
-
-    // Pass through onboarding status
-    if (user.onboarding_completed !== undefined) {
-        newUser.onboarding_completed = !!user.onboarding_completed;
-    }
-
-    // Rewrite Photos array if exists (for operators)
-    if (newUser.photos && Array.isArray(newUser.photos)) {
-        newUser.photos = newUser.photos.map(p => rewrite(p));
-    }
-
-    return newUser;
-};
-
 // Helper: Log Activity & Emit Socket Event
-const logActivity = async (userId, actionType, description) => {
-    try {
-        // 1. Insert into DB
-        const result = await db.query(
-            'INSERT INTO activities (user_id, action_type, description) VALUES ($1, $2, $3) RETURNING *',
-            [userId, actionType, description]
-        );
-
-        // 2. Fetch User Details for UI
-        const act = result.rows[0];
-        const userRes = await db.query('SELECT username, avatar_url FROM users WHERE id = $1', [userId]);
-        const user = userRes.rows[0] || { username: 'Unknown', avatar_url: '' };
-
-        const fullActivity = { ...act, user_name: user.username, user_avatar: user.avatar_url };
-
-        // 3. Emit Real-time Event
-        io.emit('new_activity', fullActivity);
-
-        return fullActivity;
-    } catch (err) {
-        console.error("Log Activity Error:", err.message);
-    }
-};
-
 // --- REST API ROUTES ---
 
 // GET USER PROFILE
@@ -506,201 +464,6 @@ app.get('/api/debug/users-list', async (req, res) => {
     try {
         const result = await db.query('SELECT id, username, display_name, role FROM users ORDER BY created_at DESC LIMIT 50');
         res.json(result.rows);
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
-});
-
-// --- SOCIAL / EXPLORE ROUTES ---
-
-// GET EXPLORE DATA (Stories & Posts)
-app.get('/api/social/explore', async (req, res) => {
-    try {
-        // Fetch active stories
-        let stories = [];
-        try {
-            const storiesRes = await db.query(`
-                SELECT s.*, u.display_name as name, u.avatar_url as avatar, u.vip_level as level,
-                EXISTS(SELECT 1 FROM stories s2 WHERE s2.operator_id = u.id AND s2.expires_at > NOW()) as "hasStory"
-                FROM stories s
-                JOIN users u ON s.operator_id = u.id
-                WHERE s.expires_at > NOW()
-                ORDER BY s.created_at DESC
-            `);
-            stories = storiesRes.rows.map(s => sanitizeUser(s, req));
-        } catch (sErr) {
-            console.error('[SOCIAL] Stories Fetch Error:', sErr.message);
-            // Non-blocking for now, return empty or continue to posts
-        }
-
-        // Fetch latest posts with like counts and user like status
-        let posts = [];
-        const currentUserId = req.query.user_id; // Pass from mobile
-        try {
-            const postsRes = await db.query(`
-                SELECT 
-                    p.*, 
-                    u.display_name as "userName", 
-                    u.avatar_url as avatar, 
-                    COALESCE(op.category, u.job) as "jobTitle", 
-                    u.vip_level as level, 
-                    u.age, 
-                    u.gender,
-                    (SELECT COUNT(*) FROM post_likes WHERE post_id = p.id) as "likes_count",
-                    CASE WHEN $1::UUID IS NOT NULL AND EXISTS(SELECT 1 FROM post_likes WHERE post_id = p.id AND user_id = $1::UUID) THEN true ELSE false END as "liked",
-                    EXISTS(SELECT 1 FROM stories s WHERE s.operator_id = u.id AND s.expires_at > NOW()) as "hasStory"
-                FROM posts p
-                JOIN users u ON p.operator_id = u.id
-                LEFT JOIN operators op ON u.id = op.user_id
-                ORDER BY p.created_at DESC
-                LIMIT 50
-            `, [currentUserId]);
-            posts = postsRes.rows.map(p => sanitizeUser(p, req));
-        } catch (pErr) {
-            console.error('[SOCIAL] Posts Fetch Error:', pErr.message);
-            // DEBUG: Return error as a post so it's visible in Admin Panel
-            posts = [{
-                id: 'debug-error-' + Date.now(),
-                image_url: 'https://via.placeholder.com/150/FF0000/FFFFFF?text=ERROR',
-                content: `DEBUG ERROR: ${pErr.message}`,
-                userName: 'SYSTEM ERROR',
-                avatar: '',
-                created_at: new Date()
-            }];
-        }
-
-        res.json({
-            stories,
-            posts
-        });
-    } catch (err) {
-        console.error('[SOCIAL] Critical Explore Error:', err.message);
-        res.status(500).json({
-            error: 'Keşfet verileri alınamadı.',
-            details: process.env.NODE_ENV === 'development' ? err.message : undefined
-        });
-    }
-});
-
-// TOGGLE POST LIKE
-app.post('/api/social/post/:id/like', async (req, res) => {
-    const postId = req.params.id;
-    const { user_id } = req.body;
-
-    if (!user_id) return res.status(401).json({ error: 'User ID gerekli' });
-
-    try {
-        const check = await db.query('SELECT 1 FROM post_likes WHERE post_id = $1 AND user_id = $2', [postId, user_id]);
-
-        if (check.rows.length > 0) {
-            await db.query('DELETE FROM post_likes WHERE post_id = $1 AND user_id = $2', [postId, user_id]);
-            res.json({ liked: false });
-        } else {
-            await db.query('INSERT INTO post_likes (post_id, user_id) VALUES ($1, $2)', [postId, user_id]);
-            res.json({ liked: true });
-        }
-    } catch (err) {
-        console.error('[SOCIAL] Like toggle error:', err.message);
-        res.status(500).json({ error: 'Beğeni işlemi başarısız.' });
-    }
-});
-
-// ADMIN: Create Post
-app.post('/api/admin/social/post', async (req, res) => {
-    const { operator_id, image_url, content } = req.body;
-    const logFile = path.join(__dirname, 'debug_social.log');
-
-    const log = (msg) => {
-        const timestamp = new Date().toISOString();
-        const logMsg = `[${timestamp}] ${msg}\n`;
-        console.log(logMsg.trim());
-        try { fs.appendFileSync(logFile, logMsg); } catch (e) { /* ignore */ }
-    };
-
-    log(`[REQUEST] /api/admin/social/post - Body: ${JSON.stringify(req.body)}`);
-
-    if (!operator_id || !image_url) {
-        log('[ERROR] Missing fields operator_id or image_url');
-        return res.status(400).json({ error: 'Operator ve görsel gerekli.' });
-    }
-
-    try {
-        const result = await db.query(
-            'INSERT INTO posts (operator_id, image_url, content) VALUES ($1, $2, $3) RETURNING *',
-            [operator_id, image_url, content]
-        );
-        log(`[SUCCESS] Post Inserted ID: ${result.rows[0].id}`);
-        res.json(result.rows[0]);
-    } catch (err) {
-        log(`[DB ERROR] ${err.message}`);
-        res.status(500).json({
-            error: 'Veritabanı hatası oluştu.',
-            details: err.message
-        });
-    }
-});
-
-// ADMIN: Create Story
-app.post('/api/admin/social/story', async (req, res) => {
-    const { operator_id, image_url } = req.body;
-    if (!operator_id || !image_url) return res.status(400).json({ error: 'Operator ve görsel gerekli.' });
-    try {
-        const result = await db.query(
-            'INSERT INTO stories (operator_id, image_url) VALUES ($1, $2) RETURNING *',
-            [operator_id, image_url]
-        );
-        res.json(result.rows[0]);
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
-});
-
-// USER: Create Post
-app.post('/api/social/post', authenticateToken, async (req, res) => {
-    const { image_url, content } = req.body;
-    const userId = req.user.id;
-
-    if (!image_url) return res.status(400).json({ error: 'Görsel gerekli.' });
-
-    try {
-        const result = await db.query(
-            'INSERT INTO posts (operator_id, image_url, content) VALUES ($1, $2, $3) RETURNING *',
-            [userId, image_url, content]
-        );
-        res.json(result.rows[0]);
-    } catch (err) {
-        console.error('[SOCIAL] User Create Post Error:', err.message);
-        res.status(500).json({ error: 'Paylaşım yapılamadı.' });
-    }
-});
-
-// USER: Create Story (24h default in DB)
-app.post('/api/social/story', authenticateToken, async (req, res) => {
-    const { image_url } = req.body;
-    const userId = req.user.id;
-
-    if (!image_url) return res.status(400).json({ error: 'Görsel gerekli.' });
-
-    try {
-        const result = await db.query(
-            'INSERT INTO stories (operator_id, image_url) VALUES ($1, $2) RETURNING *',
-            [userId, image_url]
-        );
-        res.json(result.rows[0]);
-    } catch (err) {
-        console.error('[SOCIAL] User Create Story Error:', err.message);
-        res.status(500).json({ error: 'Hikaye paylaşılamadı.' });
-    }
-});
-
-// DELETE Social Content
-app.delete('/api/admin/social/:type/:id', async (req, res) => {
-    const { type, id } = req.params;
-    const table = type === 'story' ? 'stories' : 'posts';
-
-    try {
-        await db.query(`DELETE FROM ${table} WHERE id = $1`, [id]);
-        res.json({ success: true });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
@@ -1434,18 +1197,19 @@ app.post('/api/auth/verify-otp', async (req, res) => {
         let user;
         if (result.rows.length === 0) {
             // Register New User (Signup)
+            const email = identifier;
             const username = email ? email.split('@')[0] : `user_${Math.floor(1000 + Math.random() * 9000)}`;
             const insertResult = await db.query(
-                "INSERT INTO users (username, email, phone, role, balance, avatar_url, display_name) VALUES ($1, $2, $3, 'user', 100, 'https://via.placeholder.com/150', $4) RETURNING *",
-                [username, email || null, phone || null, username]
+                "INSERT INTO users (username, email, role, balance, avatar_url, display_name) VALUES ($1, $2, 'user', 100, 'https://via.placeholder.com/150', $3) RETURNING *",
+                [username, email || null, username]
             );
             user = insertResult.rows[0];
-            logActivity(user.id, 'register', 'Yeni kullanıcı OTP ile kayıt oldu.');
-            io.emit('new_user', sanitizeUser(user, req));
+            await logActivity(io, user.id, 'register', 'Yeni kullanıcı OTP ile kayıt oldu.');
+            if (io) io.emit('new_user', sanitizeUser(user, req));
         } else {
             // Login Existing User
             user = result.rows[0];
-            logActivity(user.id, 'login', 'Kullanıcı OTP ile giriş yaptı.');
+            await logActivity(io, user.id, 'login', 'Kullanıcı OTP ile giriş yaptı.');
         }
 
         // Check Account Status
@@ -1466,143 +1230,6 @@ app.post('/api/auth/verify-otp', async (req, res) => {
         console.error("OTP Verify Error:", err.message);
         res.status(500).json({ error: 'Giriş işlemi sırasında bir hata oluştu.' });
     }
-});
-
-// --- END AUTH REFACTOR ---
-
-const { OAuth2Client } = require('google-auth-library');
-const GOOGLE_CLIENT_ID = '412160281837-aru1hd03qt91r9s42hnn2scvnfgc9sf0.apps.googleusercontent.com';
-const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID || GOOGLE_CLIENT_ID);
-
-app.post('/api/auth/google', async (req, res) => {
-    const { idToken } = req.body;
-    if (!idToken) return res.status(400).json({ error: 'Token gerekli.' });
-
-    try {
-        const ticket = await googleClient.verifyIdToken({
-            idToken,
-            audience: process.env.GOOGLE_CLIENT_ID || GOOGLE_CLIENT_ID,
-        });
-        const payload = ticket.getPayload();
-        const { email, name, picture, sub: googleId } = payload;
-
-        // Check if user exists
-        let userResult = await db.query('SELECT * FROM users WHERE email = $1', [email]);
-        let user;
-
-        if (userResult.rows.length === 0) {
-            // Create relative username
-            const username = email.split('@')[0] + '_' + Math.floor(Math.random() * 10000);
-
-            // Create passwordless user
-            const result = await db.query(
-                `INSERT INTO users (username, email, display_name, avatar_url, role, balance) 
-                 VALUES ($1, $2, $3, $4, 'user', 100) 
-                 RETURNING *`,
-                [username, email, name, picture || 'https://via.placeholder.com/150']
-            );
-            user = result.rows[0];
-            logActivity(user.id, 'register', 'Kullanıcı Google ile kayıt oldu.');
-            io.emit('new_user', sanitizeUser(user, req));
-        } else {
-            user = userResult.rows[0];
-
-            // Check Account Status
-            if (user.account_status !== 'active') {
-                return res.status(403).json({ error: 'Hesabınız askıya alınmış.' });
-            }
-
-            logActivity(user.id, 'login', 'Kullanıcı Google ile giriş yaptı.');
-        }
-
-        // Generate JWT
-        const token = jwt.sign(
-            { id: user.id, username: user.username, role: user.role, display_name: user.display_name, avatar_url: user.avatar_url },
-            SECRET_KEY,
-            { expiresIn: '30d' }
-        );
-
-        res.json({ user: sanitizeUser(user, req), token });
-
-    } catch (error) {
-        console.error('[GOOGLE_AUTH_ERROR]:', error.message);
-        res.status(401).json({ error: 'Google doğrulaması başarısız.' });
-    }
-});
-
-// --- TRADITIONAL EMAIL AUTH (EPHEMERAL/TRANSITION) ---
-app.post('/api/auth/register-email', async (req, res) => {
-    const { email, password, username, display_name } = req.body;
-    if (!email || !password) return res.status(400).json({ error: 'Email ve şifre zorunludur.' });
-
-    try {
-        const hashedPassword = await bcrypt.hash(password, 10);
-        const finalUsername = username || email.split('@')[0] + '_' + Math.floor(Math.random() * 1000);
-
-        const result = await db.query(
-            "INSERT INTO users (username, email, password, password_hash, role, balance, display_name, avatar_url) VALUES ($1, $2, $3, $3, 'user', 100, $4, 'https://via.placeholder.com/150') RETURNING *",
-            [finalUsername, email, hashedPassword, display_name || finalUsername]
-        );
-
-        const user = result.rows[0];
-        const token = jwt.sign(
-            { id: user.id, username: user.username, role: user.role, display_name: user.display_name, avatar_url: user.avatar_url },
-            SECRET_KEY,
-            { expiresIn: '30d' }
-        );
-
-        logActivity(user.id, 'register', 'Yeni kullanıcı e-posta ile kayıt oldu.');
-        io.emit('new_user', sanitizeUser(user, req));
-        res.status(201).json({ user: sanitizeUser(user, req), token });
-    } catch (err) {
-        if (err.code === '23505') return res.status(400).json({ error: 'Bu e-posta adresi zaten kullanımda.' });
-        res.status(500).json({ error: err.message });
-    }
-});
-
-app.post('/api/auth/login-email', async (req, res) => {
-    const { email, password } = req.body;
-    console.log('[LOGIN] Attempt for email:', email);
-
-    try {
-        const result = await db.query('SELECT * FROM users WHERE email = $1', [email]);
-
-        if (result.rows.length === 0) {
-            console.log('[LOGIN] User not found:', email);
-            return res.status(401).json({ error: 'E-posta veya şifre hatalı.' });
-        }
-
-        const user = result.rows[0];
-        console.log('[LOGIN] User found, checking password...');
-
-        const valid = await bcrypt.compare(password, user.password_hash || user.password);
-
-        if (!valid) {
-            console.log('[LOGIN] Invalid password for:', email);
-            return res.status(401).json({ error: 'E-posta veya şifre hatalı.' });
-        }
-
-        console.log('[LOGIN] Success for:', email);
-
-        const token = jwt.sign(
-            { id: user.id, username: user.username, role: user.role, display_name: user.display_name, avatar_url: user.avatar_url },
-            SECRET_KEY,
-            { expiresIn: '30d' }
-        );
-
-        logActivity(user.id, 'login', 'Kullanıcı e-posta ile giriş yaptı.');
-        res.json({ user: sanitizeUser(user, req), token });
-    } catch (err) {
-        console.error('[LOGIN] Error:', err.message);
-        res.status(500).json({ error: err.message });
-    }
-});
-// --- END TRADITIONAL EMAIL AUTH ---
-
-app.post('/api/login', async (req, res) => {
-    // Proxy to login-email
-    req.url = '/api/auth/login-email';
-    app._router.handle(req, res);
 });
 
 // TEMPORARY ADMIN ENDPOINT - Create user with email "1" and password "1"

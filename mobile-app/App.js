@@ -40,6 +40,9 @@ import VoiceCallScreen from './src/screens/VoiceCallScreen';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import AnimatedTabBar from './src/components/animated/AnimatedTabBar';
+import { PurchaseService } from './src/services/purchaseService';
+import { useEffect } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -148,6 +151,16 @@ import { AlertProvider } from './src/contexts/AlertContext';
 // ... existing code ...
 
 export default function App() {
+    useEffect(() => {
+        const setupPurchases = async () => {
+            const userData = await AsyncStorage.getItem('user');
+            const user = userData ? JSON.parse(userData) : null;
+            // Initialize with UID if logged in, otherwise anonymous
+            await PurchaseService.init(user?.id || null);
+        };
+        setupPurchases();
+    }, []);
+
     return (
         <GestureHandlerRootView style={{ flex: 1 }}>
             <ThemeProvider>

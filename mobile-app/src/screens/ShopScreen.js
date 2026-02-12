@@ -5,6 +5,8 @@ import { Ionicons } from '@expo/vector-icons';
 import axios from 'axios';
 import { API_URL } from '../config';
 import { useTheme } from '../contexts/ThemeContext';
+import { PurchaseService } from '../services/purchaseService';
+import { useEffect, useState } from 'react';
 
 const { width } = Dimensions.get('window');
 
@@ -13,26 +15,42 @@ export default function ShopScreen({ navigation, route }) {
     const { user, initialTab } = route.params || {};
     const TEST_USER_ID = 'c917f7d6-cc44-4b04-8917-1dbbed0b1e9b';
     const currentUserId = user?.id || TEST_USER_ID;
-    const [balance, setBalance] = React.useState(user?.balance || 0);
+    const [balance, setBalance] = useState(user?.balance || 0);
+    const [offerings, setOfferings] = useState([]);
+    const [loading, setLoading] = useState(true);
 
-    const handlePurchase = async (item) => {
-        const priceStr = item.price.replace(' ₺', '').replace('.', '').replace(',', '.');
-        const price = parseFloat(priceStr);
+    useEffect(() => {
+        const fetchOfferings = async () => {
+            setLoading(true);
+            const availablePackages = await PurchaseService.getOfferings();
+            setOfferings(availablePackages);
+            setLoading(false);
+        };
+        fetchOfferings();
+    }, []);
 
+    const handlePurchase = async (pack) => {
         try {
-            const res = await axios.post(`${API_URL}/purchase`, {
-                userId: currentUserId,
-                amount: price,
-                coins: item.coins
-            });
+            const result = await PurchaseService.purchasePackage(pack);
 
-            if (res.data.success) {
-                setBalance(res.data.balance);
-                alert(`Satın Alındı! \nYeni Bakiye: ${res.data.balance}`);
+            if (result.success) {
+                // Sync with backend
+                const res = await axios.post(`${API_URL}/purchase`, {
+                    userId: currentUserId,
+                    productId: pack.product.identifier,
+                    transactionId: result.customerInfo.allPurchaseDates[pack.product.identifier]
+                });
+
+                if (res.data.success) {
+                    setBalance(res.data.balance);
+                    alert(`Tebrikler! Satın alım başarılı. \nYeni Bakiye: ${res.data.balance}`);
+                }
+            } else if (!result.cancelled) {
+                alert('Satın alma işlemi başarısız: ' + result.error);
             }
         } catch (error) {
             console.error(error);
-            alert('Satın alma hatası');
+            alert('Beklenmedik bir hata oluştu.');
         }
     };
 
@@ -46,45 +64,51 @@ export default function ShopScreen({ navigation, route }) {
         { coins: 5000, price: '1749,99 ₺', icon: 'trophy', color: ['#fcd34d', '#b45309'] },
     ];
 
-    const renderCoinCard = (item, index) => (
-        <TouchableOpacity
-            key={index}
-            style={[styles.cardContainer, item.bestValue && styles.bestValueContainer]}
-            onPress={() => handlePurchase(item)}
-            activeOpacity={0.8}
-        >
-            <LinearGradient
-                colors={item.bestValue ? (themeMode === 'dark' ? ['#1e293b', '#0f172a'] : [theme.colors.card, theme.colors.backgroundSecondary]) : (themeMode === 'dark' ? ['rgba(255,255,255,0.05)', 'rgba(255,255,255,0.02)'] : [theme.colors.card, theme.colors.card])}
-                style={[styles.card, item.bestValue && styles.bestValueCard, { borderColor: item.bestValue ? '#fbbf24' : theme.colors.glassBorder }]}
+    const renderCoinCard = (pack, index) => {
+        const product = pack.product;
+        // Map common icons based on price or identifier as a fallback
+        const isBestValue = product.identifier.includes('popular') || index === 1;
+
+        return (
+            <TouchableOpacity
+                key={product.identifier}
+                style={[styles.cardContainer, isBestValue && styles.bestValueContainer]}
+                onPress={() => handlePurchase(pack)}
+                activeOpacity={0.8}
             >
-                {item.bestValue && (
-                    <LinearGradient
-                        colors={['#fbbf24', '#f59e0b']}
-                        style={styles.popularBadge}
-                    >
-                        <Text style={styles.popularBadgeText}>EN POPÜLER</Text>
-                    </LinearGradient>
-                )}
-
                 <LinearGradient
-                    colors={item.color}
-                    style={styles.iconCircle}
+                    colors={isBestValue ? (themeMode === 'dark' ? ['#1e293b', '#0f172a'] : [theme.colors.card, theme.colors.backgroundSecondary]) : (themeMode === 'dark' ? ['rgba(255,255,255,0.05)', 'rgba(255,255,255,0.02)'] : [theme.colors.card, theme.colors.card])}
+                    style={[styles.card, isBestValue && styles.bestValueCard, { borderColor: isBestValue ? '#fbbf24' : theme.colors.glassBorder }]}
                 >
-                    <Ionicons name={item.icon} size={26} color="white" />
+                    {isBestValue && (
+                        <LinearGradient
+                            colors={['#fbbf24', '#f59e0b']}
+                            style={styles.popularBadge}
+                        >
+                            <Text style={styles.popularBadgeText}>EN POPÜLER</Text>
+                        </LinearGradient>
+                    )}
+
+                    <LinearGradient
+                        colors={['#8b5cf6', '#7c3aed']}
+                        style={styles.iconCircle}
+                    >
+                        <Ionicons name="cube-outline" size={26} color="white" />
+                    </LinearGradient>
+
+                    <View style={styles.cardInfo}>
+                        <Text style={[styles.coinCount, { color: theme.colors.text }]}>{product.title}</Text>
+                        <Text style={[styles.coinLabel, { color: theme.colors.textSecondary }]}>{product.description || 'Altın Paketi'}</Text>
+                    </View>
+
+                    <View style={[styles.priceContainer, { backgroundColor: theme.colors.glass }]}>
+                        <Text style={[styles.priceValue, { color: theme.colors.text }]}>{product.priceString}</Text>
+                        <Ionicons name="chevron-forward" size={16} color={theme.colors.textSecondary} />
+                    </View>
                 </LinearGradient>
-
-                <View style={styles.cardInfo}>
-                    <Text style={[styles.coinCount, { color: theme.colors.text }]}>{item.coins} Coin</Text>
-                    <Text style={[styles.coinLabel, { color: theme.colors.textSecondary }]}>Altın Paketi</Text>
-                </View>
-
-                <View style={[styles.priceContainer, { backgroundColor: theme.colors.glass }]}>
-                    <Text style={[styles.priceValue, { color: theme.colors.text }]}>{item.price}</Text>
-                    <Ionicons name="chevron-forward" size={16} color={theme.colors.textSecondary} />
-                </View>
-            </LinearGradient>
-        </TouchableOpacity>
-    );
+            </TouchableOpacity>
+        );
+    };
 
     return (
         <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
@@ -126,7 +150,17 @@ export default function ShopScreen({ navigation, route }) {
                     <Text style={[styles.sectionSub, { color: theme.colors.textSecondary }]}>Daha fazla etkileşim için hesabına coin yükle.</Text>
 
                     <View style={styles.packagesGrid}>
-                        {coinPackages.map(renderCoinCard)}
+                        {loading ? (
+                            <View style={{ py: 40, alignItems: 'center' }}>
+                                <Text style={{ color: theme.colors.textSecondary }}>Paketler yükleniyor...</Text>
+                            </View>
+                        ) : offerings.length > 0 ? (
+                            offerings.map(renderCoinCard)
+                        ) : (
+                            <View style={{ py: 40, alignItems: 'center' }}>
+                                <Text style={{ color: theme.colors.textSecondary }}>Henüz aktif paket bulunamadı.</Text>
+                            </View>
+                        )}
                     </View>
                 </ScrollView>
             </SafeAreaView>

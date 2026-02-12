@@ -4,11 +4,11 @@ const socialController = require('../controllers/socialController');
 const { authenticateToken } = require('../middleware/auth');
 
 // Public/Shared Social Routes
-router.get('/explore', socialController.getExplore);
-router.post('/like/:id', socialController.toggleLike);
-router.post('/story/like/:id', socialController.toggleStoryLike);
-router.get('/post/:id/comments', socialController.getPostComments);
-router.post('/post/:id/comments', socialController.addPostComment);
+router.get('/social/explore', socialController.getExplore);
+router.post('/social/post/:id/like', socialController.toggleLike);
+router.post('/social/story/like/:id', socialController.toggleStoryLike);
+router.get('/social/post/:id/comments', socialController.getPostComments);
+router.post('/social/post/:id/comments', socialController.addPostComment);
 
 // User Protected Routes
 router.post('/social/post', authenticateToken, socialController.userCreatePost);

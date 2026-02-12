@@ -25,6 +25,8 @@ exports.getExplore = async (req, res) => {
         // Fetch latest posts with like counts and user like status
         let posts = [];
         const currentUserId = req.query.user_id;
+        const userIdType = req.app.get('user_id_type') || 'UUID';
+
         try {
             const postsRes = await db.query(`
                 SELECT 
@@ -36,7 +38,7 @@ exports.getExplore = async (req, res) => {
                     u.age, 
                     u.gender,
                     (SELECT COUNT(*) FROM post_likes WHERE post_id = p.id) as "likes_count",
-                    CASE WHEN $1::UUID IS NOT NULL AND EXISTS(SELECT 1 FROM post_likes WHERE post_id = p.id AND user_id = $1::UUID) THEN true ELSE false END as "liked",
+                    CASE WHEN $1::TEXT IS NOT NULL AND $1::TEXT <> '' AND EXISTS(SELECT 1 FROM post_likes WHERE post_id = p.id AND user_id = $1::${userIdType}) THEN true ELSE false END as "liked",
                     EXISTS(SELECT 1 FROM stories s WHERE s.operator_id = u.id AND s.expires_at > NOW()) as "hasStory"
                 FROM posts p
                 JOIN users u ON p.operator_id = u.id

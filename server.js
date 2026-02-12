@@ -143,6 +143,7 @@ const initializeDatabase = async () => {
             userIdType = userTypeCheck.rows[0].data_type.toUpperCase() === 'INTEGER' ? 'INTEGER' : 'UUID';
             console.log(`[DB] Detected users.id type: ${userIdType}`);
         }
+        app.set('user_id_type', userIdType);
 
         // Fix activities table user_id type if mismatched
         const actCols = await db.query("SELECT column_name, data_type FROM information_schema.columns WHERE table_name = 'activities'");
@@ -162,6 +163,39 @@ const initializeDatabase = async () => {
                 description TEXT,
                 created_at TIMESTAMP DEFAULT NOW()
             )`);
+        }
+
+        // Fix posts table operator_id type if mismatched
+        const postColsCheck = await db.query("SELECT column_name, data_type FROM information_schema.columns WHERE table_name = 'posts'");
+        const postColNames = postColsCheck.rows.map(c => c.column_name);
+        if (postColNames.length > 0) {
+            const opIdCol = postColsCheck.rows.find(c => c.column_name === 'operator_id');
+            if (opIdCol && opIdCol.data_type.toUpperCase() !== userIdType) {
+                console.log(`[DB] Syncing posts.operator_id type to ${userIdType}...`);
+                await db.query(`ALTER TABLE posts ALTER COLUMN operator_id TYPE ${userIdType} USING operator_id::TEXT::${userIdType}`);
+            }
+        }
+
+        // Fix stories table operator_id type if mismatched
+        const storyColsCheck = await db.query("SELECT column_name, data_type FROM information_schema.columns WHERE table_name = 'stories'");
+        const storyColNames = storyColsCheck.rows.map(c => c.column_name);
+        if (storyColNames.length > 0) {
+            const opIdCol = storyColsCheck.rows.find(c => c.column_name === 'operator_id');
+            if (opIdCol && opIdCol.data_type.toUpperCase() !== userIdType) {
+                console.log(`[DB] Syncing stories.operator_id type to ${userIdType}...`);
+                await db.query(`ALTER TABLE stories ALTER COLUMN operator_id TYPE ${userIdType} USING operator_id::TEXT::${userIdType}`);
+            }
+        }
+
+        // Fix post_likes table types
+        const likeColsCheck = await db.query("SELECT column_name, data_type FROM information_schema.columns WHERE table_name = 'post_likes'");
+        const likeColNames = likeColsCheck.rows.map(c => c.column_name);
+        if (likeColNames.length > 0) {
+            const userIdCol = likeColsCheck.rows.find(c => c.column_name === 'user_id');
+            if (userIdCol && userIdCol.data_type.toUpperCase() !== userIdType) {
+                console.log(`[DB] Syncing post_likes.user_id type to ${userIdType}...`);
+                await db.query(`ALTER TABLE post_likes ALTER COLUMN user_id TYPE ${userIdType} USING user_id::TEXT::${userIdType}`);
+            }
         }
 
         // Migration logic

@@ -15,7 +15,7 @@ const authenticateToken = async (req, res, next) => {
         const decoded = jwt.verify(token, SECRET_KEY);
 
         // Verify user still exists and is active
-        const result = await db.query('SELECT id, username, email, role, account_status, display_name, avatar_url, gender FROM users WHERE id = $1', [decoded.id]);
+        const result = await db.query('SELECT id, username, email, role, account_status, display_name, avatar_url, gender, onboarding_completed FROM users WHERE id = $1', [decoded.id]);
 
         if (result.rows.length === 0) {
             console.warn(`[AUTH] 403: User not found for ID: ${decoded.id}`);

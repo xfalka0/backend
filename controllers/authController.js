@@ -130,6 +130,7 @@ exports.getMe = (req, res) => {
         email: req.user.email,
         role: req.user.role,
         avatar_url: req.user.avatar_url,
-        display_name: req.user.display_name
+        display_name: req.user.display_name,
+        onboarding_completed: req.user.onboarding_completed
     });
 };

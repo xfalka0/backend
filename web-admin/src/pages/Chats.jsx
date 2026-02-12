@@ -66,6 +66,7 @@ const Chats = () => {
     const fetchChats = async () => {
         try {
             const res = await axios.get(`${API_URL}/api/chats/admin`);
+            console.log('[DEBUG] Admin Chats Data:', res.data);
             setChats(res.data);
         } catch (err) {
             console.error('Error fetching chats:', err);
@@ -137,7 +138,7 @@ const Chats = () => {
                             onClick={() => fetchMessages(chat)}
                             className={`w-full p-5 flex items-center gap-4 hover:bg-white/5 transition-all text-left border-b border-white/5 relative group 
                                 ${selectedChat?.id === chat.id ? 'bg-fuchsia-600/10 border-r-4 border-r-fuchsia-600' : ''}
-                                ${chat.unread_count > 0 ? 'bg-fuchsia-500/5 animate-pulse-slow' : ''}`}
+                                ${chat.unread_count > 0 ? 'bg-fuchsia-500/10 shadow-[inset_0_0_20px_rgba(217,70,239,0.1)]' : ''}`}
                         >
                             <div className="relative">
                                 <div className={`w-14 h-14 rounded-2xl overflow-hidden border-2 shadow-2xl transition-all
@@ -182,9 +183,9 @@ const Chats = () => {
                                             {chat.last_message_at ? new Date(chat.last_message_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
                                         </span>
                                         {chat.unread_count > 0 && (
-                                            <span className="bg-fuchsia-600 text-white text-[10px] font-black w-5 h-5 flex items-center justify-center rounded-full shadow-lg shadow-fuchsia-600/40 animate-bounce">
+                                            <div className="bg-fuchsia-600 text-white text-[10px] font-black min-w-[20px] h-5 px-1.5 flex items-center justify-center rounded-full shadow-lg shadow-fuchsia-600/40">
                                                 {chat.unread_count}
-                                            </span>
+                                            </div>
                                         )}
                                     </div>
                                 </div>

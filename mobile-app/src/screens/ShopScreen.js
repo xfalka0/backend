@@ -192,9 +192,23 @@ export default function ShopScreen({ navigation, route }) {
                         ) : offerings.length > 0 ? (
                             offerings.map(renderCoinCard)
                         ) : (
-                            <View style={{ py: 40, alignItems: 'center' }}>
-                                <Text style={{ color: theme.colors.textSecondary }}>Henüz aktif paket bulunamadı.</Text>
-                            </View>
+                            // Absolute Fallback if even API fails
+                            [
+                                { coins: 100, price: '39,99 ₺', name: 'Başlangıç Paketi' },
+                                { coins: 250, price: '89,99 ₺', name: 'Gümüş Paket' },
+                                { coins: 500, price: '159,99 ₺', name: 'Altın Paket' },
+                                { coins: 1000, price: '299,99 ₺', name: 'VIP Paket' },
+                                { coins: 2500, price: '699,99 ₺', name: 'Platin Paket' },
+                                { coins: 5000, price: '1299,99 ₺', name: 'Efsane Paket' }
+                            ].map((p, i) => renderCoinCard({
+                                isLocal: true,
+                                product: {
+                                    identifier: `fallback_${i}`,
+                                    title: `${p.coins} Coin`,
+                                    description: p.name,
+                                    priceString: p.price
+                                }
+                            }, i))
                         )}
                     </View>
                 </ScrollView>

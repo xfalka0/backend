@@ -1763,7 +1763,7 @@ app.get('/api/chats/admin', async (req, res) => {
 // GET PUBLIC COIN PACKAGES
 app.get('/api/public/packages', async (req, res) => {
     try {
-        const result = await db.query('SELECT * FROM product_packages WHERE is_active = true ORDER BY price ASC');
+        const result = await db.query('SELECT * FROM coin_packages ORDER BY price ASC');
         res.json(result.rows);
     } catch (err) {
         console.error('Fetch Packages Error:', err.message);

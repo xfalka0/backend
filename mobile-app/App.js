@@ -153,10 +153,15 @@ import { AlertProvider } from './src/contexts/AlertContext';
 export default function App() {
     useEffect(() => {
         const setupPurchases = async () => {
-            const userData = await AsyncStorage.getItem('user');
-            const user = userData ? JSON.parse(userData) : null;
-            // Initialize with UID if logged in, otherwise anonymous
-            await PurchaseService.init(user?.id || null);
+            try {
+                const userData = await AsyncStorage.getItem('user');
+                const user = userData ? JSON.parse(userData) : null;
+                // Initialize with UID if logged in (must be string), otherwise null
+                const appUserID = user?.id ? String(user.id) : null;
+                await PurchaseService.init(appUserID);
+            } catch (err) {
+                console.warn('[App] Purchase setup failed:', err);
+            }
         };
         setupPurchases();
     }, []);

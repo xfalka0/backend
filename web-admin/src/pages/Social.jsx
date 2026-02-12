@@ -85,7 +85,10 @@ export default function SocialPage() {
             setFormData(prev => ({ ...prev, image_url: res.data.url }));
         } catch (err) {
             console.error("Upload Error:", err);
-            alert('Görsel yüklenirken bir hata oluştu.');
+            const errMsg = err.response?.data?.error || err.message;
+            const details = err.response?.data?.details || '';
+            addLog(`Upload Failed: ${errMsg} ${details}`, 'error');
+            alert(`Görsel yüklenirken bir hata oluştu: ${errMsg}`);
         } finally {
             setUploading(false);
         }

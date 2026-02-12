@@ -478,7 +478,7 @@ export default function ChatScreen({ route, navigation }) {
 
         if (item.type === 'gift' || item.content_type === 'gift') {
             const giftId = parseInt(item.gift_id || item.giftId);
-            const gift = GIFTS.find(g => g.id === giftId) || { name: 'Hediye', price: '?' };
+            const gift = GIFTS.find(g => g.id === giftId) || { name: item.content || 'Hediye', price: '?' };
 
             return (
                 <View style={[styles.giftBubbleContainer, isUser ? { alignSelf: 'flex-end' } : { alignSelf: 'flex-start' }]}>

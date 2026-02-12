@@ -2105,8 +2105,12 @@ io.on('connection', (socket) => {
                 // 2. Deduct Coin
                 await db.query('UPDATE users SET balance = balance - $2 WHERE id = $1', [senderId, cost]);
 
-                // 3. Emit new balance
-                io.to(socket.id).emit('balance_update', { newBalance: userBalance - cost });
+                // 3. Emit new balance (include userId for client sync)
+                io.to(socket.id).emit('balance_update', {
+                    id: senderId,
+                    userId: senderId,
+                    newBalance: userBalance - cost
+                });
             }
 
             // 4. Save Message

@@ -10,5 +10,5 @@ import { Platform } from 'react-native';
 // export const SOCKET_URL = 'https://backend-kj17.onrender.com';
 
 // Local Development (Android Emulator)
-export const API_URL = 'http://10.0.2.2:3000/api';
-export const SOCKET_URL = 'http://10.0.2.2:3000';
+export const API_URL = 'https://backend-kj17.onrender.com/api';
+export const SOCKET_URL = 'https://backend-kj17.onrender.com';

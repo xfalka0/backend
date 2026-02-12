@@ -85,6 +85,21 @@ const initializeDatabase = async () => {
             await db.query('ALTER TABLE users ADD COLUMN edu VARCHAR(100)');
         }
 
+        if (!columnNames.includes('bio')) {
+            console.log('[DB] Adding missing column: bio');
+            await db.query('ALTER TABLE users ADD COLUMN bio TEXT');
+        }
+
+        if (!columnNames.includes('avatar_url')) {
+            console.log('[DB] Adding missing column: avatar_url');
+            await db.query('ALTER TABLE users ADD COLUMN avatar_url TEXT');
+        }
+
+        if (!columnNames.includes('gender')) {
+            console.log('[DB] Adding missing column: gender');
+            await db.query('ALTER TABLE users ADD COLUMN gender VARCHAR(50)');
+        }
+
         if (!columnNames.includes('onboarding_completed')) {
             console.log('[DB] Adding missing column: onboarding_completed');
             await db.query('ALTER TABLE users ADD COLUMN onboarding_completed BOOLEAN DEFAULT false');

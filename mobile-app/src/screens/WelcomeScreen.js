@@ -122,6 +122,8 @@ export default function WelcomeScreen({ navigation }) {
         }
     };
 
+
+
     return (
         <View style={styles.container}>
             {/* Background Gradient */}
@@ -195,6 +197,17 @@ export default function WelcomeScreen({ navigation }) {
                                     onPress={() => navigation.navigate('Auth', { mode: 'email' })}
                                     disabled={loading}
                                 />
+                            </Animated.View>
+
+                            <Animated.View entering={FadeInUp.delay(1150).springify()} style={{ marginTop: 20 }}>
+                                <TouchableOpacity onPress={handleTestLogin} style={{ backgroundColor: '#ef4444', padding: 15, borderRadius: 12, alignItems: 'center' }}>
+                                    <Text style={{ color: 'white', fontWeight: 'bold', fontSize: 16 }}>
+                                        GELİŞTİRİCİ: TEST GİRİŞİ YAP
+                                    </Text>
+                                    <Text style={{ color: 'rgba(255,255,255,0.8)', fontSize: 10 }}>
+                                        (Google sorunu varsa buna tıkla)
+                                    </Text>
+                                </TouchableOpacity>
                             </Animated.View>
                         </View>
 

@@ -198,6 +198,29 @@ export default function AuthScreen({ navigation, route }) {
         }
     };
 
+    const handleTestLogin = async () => {
+        setLoading(true);
+        try {
+            // 1. Ensure Test User Exists
+            await axios.post(`${API_URL}/admin/create-simple-user`);
+
+            // 2. Login
+            const res = await axios.post(`${API_URL}/auth/login-email`, { email: '1', password: '1' });
+
+            if (res.data.user) {
+                const { user, token } = res.data;
+                await AsyncStorage.setItem('token', token);
+                await AsyncStorage.setItem('user', JSON.stringify(user));
+                navigation.replace('Main', { user: { ...user, token } });
+            }
+        } catch (error) {
+            console.error(error);
+            setAlert({ visible: true, title: 'Test Giriş Hatası', message: error.message, type: 'error' });
+        } finally {
+            setLoading(false);
+        }
+    };
+
     const resetAuth = () => {
         if (navigation.canGoBack()) {
             navigation.goBack();
@@ -227,6 +250,15 @@ export default function AuthScreen({ navigation, route }) {
                 variant="gradient"
                 onPress={() => { setAuthMethod('email'); setStep(1); }}
             />
+
+            <TouchableOpacity onPress={handleTestLogin} style={{ marginTop: 20, backgroundColor: '#ef4444', padding: 15, borderRadius: 12, alignItems: 'center' }}>
+                <Text style={{ color: 'white', fontWeight: 'bold', fontSize: 16 }}>
+                    GELİŞTİRİCİ: TEST GİRİŞİ YAP
+                </Text>
+                <Text style={{ color: 'rgba(255,255,255,0.8)', fontSize: 10 }}>
+                    (Google sorunu varsa buna tıkla)
+                </Text>
+            </TouchableOpacity>
         </Animated.View>
     );
 

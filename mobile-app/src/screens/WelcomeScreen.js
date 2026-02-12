@@ -98,6 +98,30 @@ export default function WelcomeScreen({ navigation }) {
         }
     };
 
+    const handleTestLogin = async () => {
+        if (loading) return;
+        setLoading(true);
+        try {
+            // 1. Ensure Test User Exists
+            await axios.post(`${API_URL}/admin/create-simple-user`);
+
+            // 2. Login
+            const res = await axios.post(`${API_URL}/auth/login-email`, { email: '1', password: '1' });
+
+            if (res.data.user) {
+                const { user, token } = res.data;
+                await AsyncStorage.setItem('token', token);
+                await AsyncStorage.setItem('user', JSON.stringify(user));
+                navigation.replace('Main', { user: { ...user, token } });
+            }
+        } catch (error) {
+            console.error(error);
+            Alert.alert('Test Giriş Hatası', error.message);
+        } finally {
+            setLoading(false);
+        }
+    };
+
     return (
         <View style={styles.container}>
             {/* Background Gradient */}

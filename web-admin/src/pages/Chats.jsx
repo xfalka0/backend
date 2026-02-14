@@ -44,6 +44,8 @@ const Chats = () => {
         });
 
         socketRef.current.on('receive_message', (msg) => {
+            console.log('[DEBUG] Mesaj Geldi:', msg);
+            console.log('[DEBUG] Şu anki Chat ID:', selectedChatIdRef.current);
             if (selectedChatIdRef.current === msg.chat_id) {
                 setMessages((prev) => {
                     if (prev.some(m => m.id === msg.id)) return prev;

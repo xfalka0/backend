@@ -2387,8 +2387,12 @@ io.on('connection', (socket) => {
 
     // Join a specific chat room
     socket.on('join_room', (chatId) => {
+        if (!chatId) {
+            console.error(`[SOCKET] User ${socket.user?.username || socket.id} tried to join an empty room!`);
+            return;
+        }
         socket.join(chatId);
-        console.log(`User ${socket.id} joined room ${chatId}`);
+        console.log(`[SOCKET] User ${socket.user?.username || socket.id} (${socket.id}) joined room: ${chatId}`);
     });
 
     // --- TYPING INDICATOR (YAZIYOR...) ---

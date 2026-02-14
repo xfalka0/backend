@@ -70,6 +70,14 @@ const Chats = () => {
 
         socketRef.current.on('connect', () => {
             console.log('[SOCKET] Connected with ID:', socketRef.current.id);
+            if (selectedChatIdRef.current) {
+                console.log('[SOCKET] Re-joining room after reconnect:', selectedChatIdRef.current);
+                socketRef.current.emit('join_room', selectedChatIdRef.current);
+            }
+        });
+
+        socketRef.current.on('disconnect', (reason) => {
+            console.warn('[SOCKET] Disconnected! Reason:', reason);
         });
 
         socketRef.current.on('connect_error', (err) => {

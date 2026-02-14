@@ -240,6 +240,9 @@ export default function ChatScreen({ route, navigation }) {
                 });
                 realChatId = chatRes.data.id;
                 setChatId(realChatId);
+                console.log('[ChatScreen] Created/Fetched chatId:', realChatId);
+            } else {
+                console.log('[ChatScreen] Using existing chatId:', realChatId);
             }
 
             // 2. Fetch Latest User Balance & History
@@ -265,7 +268,15 @@ export default function ChatScreen({ route, navigation }) {
             socketRef.current = io(SOCKET_URL, {
                 auth: { token }
             });
-            socketRef.current?.emit('join_room', realChatId);
+
+            socketRef.current.on('connect', () => {
+                console.log('[SOCKET] Connected to Backend. Room ID:', realChatId);
+                socketRef.current.emit('join_room', realChatId);
+            });
+
+            socketRef.current.on('disconnect', (reason) => {
+                console.warn('[SOCKET] Disconnected from server:', reason);
+            });
 
             // Listeners
             socketRef.current.on('receive_message', (msg) => {

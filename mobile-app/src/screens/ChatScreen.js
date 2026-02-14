@@ -686,6 +686,17 @@ export default function ChatScreen({ route, navigation }) {
             const res = await axios.get(`${API_URL}/messages/${chatId}?limit=${limit}&offset=${offset}`);
 
             if (res.data.length > 0) {
+                // For inverted list, new (older) messages are added to the END of array (which is top visual)
+                // But since we reverse the array in render, we actually need to append them to state as usual
+                setMessages(prev => [...prev, ...res.data]);
+                // Wait, if messages = [Oldest, ..., Newest]
+                // Reversed = [Newest, ..., Oldest]
+                // FlatList Inverted: Bottom is Index 0 (Newest). Top is Last Index (Oldest).
+                // When we load more (older), we want them to appear at the Top.
+                // So they should be at the END of the Reversed array, which means they should be at the START of the original array?
+                // Original: [Msg1, Msg2] (Msg1 is older). Visual Top: Msg1.
+                // Load More: [Msg0, Msg1, Msg2]. Visual Top: Msg0.
+                // So we should PREPEND to state.
                 setMessages(prev => [...res.data, ...prev]);
             }
         } catch (error) {
@@ -706,25 +717,12 @@ export default function ChatScreen({ route, navigation }) {
 
             <FlatList
                 ref={flatListRef}
-                data={messages}
+                data={[...messages].reverse()} // Reverse messages for inverted list
+                inverted={true} // Start from bottom
                 keyExtractor={item => item.id.toString()}
                 renderItem={renderMessage}
-                onContentSizeChange={() => {
-                    // Only scroll to end on initial load or new message, not on pagination
-                    if (!refreshing && messages.length <= 50) {
-                        flatListRef.current?.scrollToEnd({ animated: true });
-                    }
-                }}
                 contentContainerStyle={styles.messagesList}
-                refreshControl={
-                    <RefreshControl
-                        refreshing={refreshing}
-                        onRefresh={loadPreviousMessages}
-                        tintColor={theme.colors.primary}
-                        title="Geçmiş yükleniyor..."
-                        titleColor={theme.colors.textSecondary}
-                    />
-                }
+                scrollIndicatorInsets={{ right: 1 }} // Fix scrollbar on iOS
                 ListFooterComponent={isTyping ? <TypingIndicator /> : null}
             />
 

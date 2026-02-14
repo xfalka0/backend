@@ -17,6 +17,8 @@ const Chats = () => {
     const socketRef = useRef(null);
     const messagesEndRef = useRef(null);
     const typingTimeoutRef = useRef(null);
+    const fileInputRef = useRef(null);
+    const selectedChatIdRef = useRef(null);
 
     const handleTyping = (e) => {
         const text = e.target.value;

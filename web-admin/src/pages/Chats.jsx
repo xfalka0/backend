@@ -62,30 +62,14 @@ const Chats = () => {
 
         socketRef.current.on('admin_notification', (msg) => {
             console.log('[SOCKET] Admin Notification Received:', msg);
+            // Force refresh from server to ensure 100% data consistency
+            // This avoids client-side state merging issues and sorting bugs
+            fetchChats();
 
-            setChats(prevChats => {
-                const chatIndex = prevChats.findIndex(c => c.id == msg.chat_id);
-                if (chatIndex === -1) {
-                    fetchChats();
-                    return prevChats;
-                }
-
-                const updatedChats = [...prevChats];
-                const chat = { ...updatedChats[chatIndex] };
-
-                chat.last_message = (msg.content_type === 'text') ? msg.content : (msg.content_type === 'image' ? '📷 Resim' : 'Yeni Mesaj');
-                chat.last_message_at = msg.created_at;
-
-                if (msg.chat_id != selectedChatIdRef.current && msg.sender_id == chat.user_id) {
-                    chat.unread_count = (chat.unread_count || 0) + 1;
-                    console.log(`[SOCKET] Incrementing unread count for ${chat.user_name} to ${chat.unread_count}`);
-                }
-
-                updatedChats.splice(chatIndex, 1);
-                updatedChats.unshift(chat);
-
-                return updatedChats;
-            });
+            // Optional: Update unread count if it's not the selected chat
+            if (msg.chat_id != selectedChatIdRef.current) {
+                // You could add a toast/notification sound here
+            }
         });
 
         return () => {
@@ -110,25 +94,37 @@ const Chats = () => {
         }
     };
 
-    const fetchMessages = async (chat) => {
-        setSelectedChat(chat);
-        selectedChatIdRef.current = chat.id;
-
-        if (socketRef.current) {
-            socketRef.current.emit('join_room', chat.id);
+    const fetchMessages = async (chat, isLoadMore = false) => {
+        if (!isLoadMore) {
+            setSelectedChat(chat);
+            selectedChatIdRef.current = chat.id;
+            setMessages([]); // Clear previous messages
+            if (socketRef.current) socketRef.current.emit('join_room', chat.id);
         }
 
         try {
-            const res = await axios.get(`${API_URL}/api/messages/${chat.id}`);
-            setMessages(res.data);
+            const limit = 50;
+            const offset = isLoadMore ? messages.length : 0;
 
-            await axios.put(`${API_URL}/api/chats/${chat.id}/read`, {
-                userId: chat.operator_id
-            });
+            const res = await axios.get(`${API_URL}/api/messages/${chat.id}?limit=${limit}&offset=${offset}`);
 
-            setChats(prev => prev.map(c => c.id === chat.id ? { ...c, unread_count: 0 } : c));
+            if (isLoadMore) {
+                setMessages(prev => [...res.data, ...prev]);
+            } else {
+                setMessages(res.data);
+                await axios.put(`${API_URL}/api/chats/${chat.id}/read`, {
+                    userId: chat.operator_id
+                });
+                setChats(prev => prev.map(c => c.id === chat.id ? { ...c, unread_count: 0 } : c));
+            }
         } catch (err) {
             console.error('Error fetching messages:', err);
+        }
+    };
+
+    const handleLoadMore = () => {
+        if (selectedChat) {
+            fetchMessages(selectedChat, true);
         }
     };
 
@@ -304,53 +300,78 @@ const Chats = () => {
                             </div>
                         </div>
 
-                        <div className="flex-1 overflow-y-auto p-6 space-y-4">
+                        <div className="flex-1 overflow-y-auto p-4 space-y-4 relative scrollbar-thin scrollbar-thumb-slate-700 scrollbar-track-transparent">
+                            {/* Load More Button */}
+                            <div className="flex justify-center mb-4">
+                                <button
+                                    onClick={handleLoadMore}
+                                    className="text-xs font-bold text-slate-500 hover:text-white bg-slate-800/50 hover:bg-slate-700 px-4 py-2 rounded-full transition-colors"
+                                >
+                                    Daha Eski Mesajları Yükle
+                                </button>
+                            </div>
+
                             {messages.map((msg, idx) => (
                                 <div
                                     key={idx}
                                     className={`flex ${msg.sender_id === selectedChat.operator_id ? 'justify-end' : 'justify-start'}`}
                                 >
-                                    <div
-                                        className={`max-w-[70%] p-4 rounded-2xl ${msg.sender_id === selectedChat.operator_id
-                                            ? 'bg-fuchsia-600 text-white rounded-tr-none'
-                                            : 'bg-slate-800 text-slate-200 rounded-tl-none'
-                                            }`}
-                                    >
-                                        {msg.content_type === 'gift' || msg.type === 'gift' ? (
-                                            <div className="bg-gradient-to-r from-amber-200 via-yellow-300 to-amber-200 text-amber-900 p-4 rounded-xl border border-yellow-400/50 shadow-[0_0_20px_rgba(251,191,36,0.4)] flex items-center gap-4 relative overflow-hidden group/gift">
-                                                <div className="absolute top-0 right-0 w-20 h-20 bg-white/20 blur-2xl transform rotate-45 translate-x-10 -translate-y-10 group-hover/gift:translate-x-0 transition-transform duration-700"></div>
-                                                <div className="text-4xl drop-shadow-sm filter contrast-125 hover:scale-110 transition-transform">
-                                                    {msg.gift_icon && msg.gift_icon.startsWith('http') ? <img src={msg.gift_icon} className="w-10 h-10 object-contain" alt="Gift" /> : '🎁'}
-                                                </div>
-                                                <div className="relative z-10">
-                                                    <p className="font-black text-sm uppercase tracking-tight text-amber-950/90">{msg.gift_name || 'Özel Hediye'}</p>
-                                                    <div className="flex items-center gap-1 mt-0.5">
-                                                        <span className="text-xs font-bold text-amber-800 bg-amber-100/50 px-2 py-0.5 rounded-md border border-amber-900/10">
-                                                            {msg.gift_cost ? `${msg.gift_cost} Coin` : 'Değerli'}
-                                                        </span>
+                                    <div className={`max-w-[70%] space-y-1`}>
+                                        {/* Gift Message Styling */}
+                                        {(msg.content_type === 'gift' || msg.type === 'gift') ? (
+                                            <div className="bg-gradient-to-r from-amber-200 via-yellow-300 to-amber-200 text-amber-900 p-0.5 rounded-2xl shadow-lg shadow-amber-500/20 transform hover:scale-[1.02] transition-transform duration-300">
+                                                <div className="bg-gradient-to-br from-amber-50 to-white px-4 py-3 rounded-[14px] flex items-center gap-4 relative overflow-hidden">
+                                                    {/* Shiny Effect */}
+                                                    <div className="absolute top-0 right-0 -mr-4 -mt-4 w-20 h-20 bg-yellow-400/20 blur-2xl rounded-full"></div>
+
+                                                    <div className="text-4xl filter drop-shadow-md">
+                                                        {msg.gift_icon ? <img src={msg.gift_icon} className="w-12 h-12 object-contain" alt="Gift" /> : '🎁'}
+                                                    </div>
+                                                    <div>
+                                                        <p className="min-w-[100px] font-black text-amber-900 text-sm uppercase tracking-wider">{msg.gift_name || msg.content}</p>
+                                                        <div className="flex items-center gap-1 mt-1">
+                                                            <span className="bg-amber-100/80 text-amber-800 text-[10px] font-bold px-2 py-0.5 rounded-full border border-amber-200/50 shadow-sm">
+                                                                {msg.gift_cost ? `${msg.gift_cost} COINS` : 'HEDİYE'}
+                                                            </span>
+                                                        </div>
                                                     </div>
                                                 </div>
-                                            </div>
-                                        ) : msg.content_type === 'image' || msg.type === 'image' ? (
-                                            <div className="relative group/img">
-                                                <img
-                                                    src={msg.content}
-                                                    className="max-w-full rounded-lg shadow-2xl border border-white/10 cursor-zoom-in"
-                                                    alt="Resim"
-                                                    onClick={() => window.open(msg.content, '_blank')}
-                                                />
-                                                <div className="absolute inset-0 bg-black/0 group-hover/img:bg-black/20 transition-all rounded-lg flex items-center justify-center">
-                                                    <svg className="w-8 h-8 text-white opacity-0 group-hover/img:opacity-100 transition-all" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v3m0 0v3m0-3h3m-3 0H7" />
-                                                    </svg>
+                                                <div className="absolute -bottom-1 -right-1">
+                                                    <span className="flex h-3 w-3">
+                                                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-yellow-400 opacity-75"></span>
+                                                        <span className="relative inline-flex rounded-full h-3 w-3 bg-yellow-500"></span>
+                                                    </span>
                                                 </div>
                                             </div>
                                         ) : (
-                                            <p className="text-sm leading-relaxed">{msg.content}</p>
+                                            <div
+                                                className={`p-4 rounded-2xl text-sm font-medium shadow-sm ${msg.sender_id === selectedChat.operator_id
+                                                    ? 'bg-purple-600 text-white rounded-br-none'
+                                                    : 'bg-slate-800 text-slate-200 rounded-bl-none border border-slate-700'
+                                                    }`}
+                                            >
+                                                {msg.content_type === 'image' || msg.type === 'image' ? (
+                                                    <div className="relative group/img">
+                                                        <img
+                                                            src={msg.content}
+                                                            className="max-w-full rounded-lg shadow-2xl border border-white/10 cursor-zoom-in"
+                                                            alt="Resim"
+                                                            onClick={() => window.open(msg.content, '_blank')}
+                                                        />
+                                                        <div className="absolute inset-0 bg-black/0 group-hover/img:bg-black/20 transition-all rounded-lg flex items-center justify-center pointer-events-none group-hover/img:pointer-events-auto">
+                                                            <svg className="w-8 h-8 text-white opacity-0 group-hover/img:opacity-100 transition-all" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v3m0 0v3m0-3h3m-3 0H7" />
+                                                            </svg>
+                                                        </div>
+                                                    </div>
+                                                ) : (
+                                                    msg.content
+                                                )}
+                                            </div>
                                         )}
-                                        <span className="text-[9px] opacity-50 mt-2 block font-bold">
+                                        <p className={`text-[10px] opacity-50 ${msg.sender_id === selectedChat.operator_id ? 'text-right' : 'text-left'}`}>
                                             {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                        </span>
+                                        </p>
                                     </div>
                                 </div>
                             ))}
@@ -402,8 +423,8 @@ const Chats = () => {
                         <p className="font-black uppercase tracking-widest text-xs">Sohbet seçilmedi</p>
                     </div>
                 )}
-            </div>
-        </div>
+            </div >
+        </div >
     );
 };
 

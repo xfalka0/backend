@@ -1896,20 +1896,28 @@ app.put('/api/chats/:chatId/read', async (req, res) => {
 // GET MESSAGES FOR A CHAT
 app.get('/api/messages/:chatId', async (req, res) => {
     const { chatId } = req.params;
+    const limit = parseInt(req.query.limit) || 50;
+    const offset = parseInt(req.query.offset) || 0;
+
     try {
+        // Fetch latest messages using DESC limit/offset, then flip back to ASC for display
         const query = `
-            SELECT m.*, 
-                   COALESCE(u.display_name, u.username, 'Bilinmeyen Kullanıcı') as sender_name,
-                   g.name as gift_name, 
-                   g.cost as gift_cost, 
-                   g.icon_url as gift_icon
-            FROM messages m
-            LEFT JOIN users u ON m.sender_id = u.id
-            LEFT JOIN gifts g ON m.gift_id = g.id
-            WHERE m.chat_id = $1
-            ORDER BY m.created_at ASC
+            SELECT * FROM (
+                SELECT m.*, 
+                       COALESCE(u.display_name, u.username, 'Bilinmeyen Kullanıcı') as sender_name,
+                       g.name as gift_name, 
+                       g.cost as gift_cost, 
+                       g.icon_url as gift_icon
+                FROM messages m
+                LEFT JOIN users u ON m.sender_id = u.id
+                LEFT JOIN gifts g ON m.gift_id = g.id
+                WHERE m.chat_id = $1
+                ORDER BY m.created_at DESC
+                LIMIT $2 OFFSET $3
+            ) sub
+            ORDER BY created_at ASC
         `;
-        const result = await db.query(query, [chatId]);
+        const result = await db.query(query, [chatId, limit, offset]);
         res.json(result.rows);
     } catch (err) {
         res.status(500).json({ error: err.message });

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, TextInput, FlatList, StyleSheet, KeyboardAvoidingView, Platform, TouchableOpacity, Image } from 'react-native';
+import { View, Text, TextInput, FlatList, StyleSheet, KeyboardAvoidingView, Platform, TouchableOpacity, Image, RefreshControl } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import io from 'socket.io-client';
@@ -268,7 +268,37 @@ export default function ChatScreen({ route, navigation }) {
 
             // Listeners
             socketRef.current.on('receive_message', (msg) => {
-                setMessages((prev) => [...prev, msg]);
+                setMessages(prev => {
+                    // Check if we have an optimistic message with the same tempId (if provided)
+                    // or if the message ID already exists
+                    const exists = prev.some(m => m.id === msg.id);
+                    if (exists) return prev;
+
+                    if (msg.tempId) {
+                        // Find and replace the optimistic message
+                        const optimisticIndex = prev.findIndex(m => m.id === msg.tempId);
+                        if (optimisticIndex !== -1) {
+                            const newMessages = [...prev];
+                            newMessages[optimisticIndex] = msg;
+                            return newMessages;
+                        }
+                    } else {
+                        // Fallback: try to match by content/time if tempId missing (less reliable but helpful)
+                        const optimisticIndex = prev.findIndex(m =>
+                            m.is_optimistic &&
+                            m.content === msg.content &&
+                            m.type === msg.type &&
+                            Math.abs(new Date(m.created_at) - new Date(msg.created_at)) < 5000
+                        );
+                        if (optimisticIndex !== -1) {
+                            const newMessages = [...prev];
+                            newMessages[optimisticIndex] = msg;
+                            return newMessages;
+                        }
+                    }
+
+                    return [...prev, msg];
+                });
             });
 
             socketRef.current.on('message_error', (data) => {
@@ -300,23 +330,34 @@ export default function ChatScreen({ route, navigation }) {
         };
     }, []);
 
-    const sendMessage = () => {
-        if (input.trim() === '' || !chatId) return;
+    if (input.trim() === '' || !chatId) return;
 
-        // Optimistic Balance Update
-        setCurrentBalance(prev => Math.max(0, prev - 10));
+    // Optimistic Balance Update
+    setCurrentBalance(prev => Math.max(0, prev - 10));
 
-        const msgData = {
-            chatId: chatId,
-            senderId: user.id,
-            content: input,
-            type: 'text'
-        };
-
-        socketRef.current?.emit('send_message', msgData);
-        // Wait for server confirmation
-        setInput('');
+    const tempId = Date.now().toString();
+    const optimisticMsg = {
+        id: tempId,
+        chat_id: chatId,
+        sender_id: user.id,
+        content: input,
+        type: 'text',
+        created_at: new Date().toISOString(),
+        is_optimistic: true // Flag to identify and replace later
     };
+
+    setMessages(prev => [...prev, optimisticMsg]);
+    setInput('');
+
+    const msgData = {
+        chatId: chatId,
+        senderId: user.id,
+        content: input,
+        type: 'text',
+        tempId: tempId // Send tempId to track confirmation
+    };
+
+    socketRef.current?.emit('send_message', msgData);
 
 
 
@@ -333,11 +374,25 @@ export default function ChatScreen({ route, navigation }) {
         setActiveGift(gift);
         setShowGiftModal(false);
 
+        const tempId = Date.now().toString();
+        const optimisticMsg = {
+            id: tempId,
+            chat_id: chatId,
+            sender_id: user.id,
+            content: gift.name,
+            type: 'gift',
+            gift_id: gift.id,
+            created_at: new Date().toISOString(),
+            is_optimistic: true
+        };
+        setMessages(prev => [...prev, optimisticMsg]);
+
         const msgData = {
             chatId: chatId,
             senderId: user.id,
             content: gift.name,
             type: 'gift',
+            tempId: tempId,
             giftId: gift.id
         };
 
@@ -383,11 +438,25 @@ export default function ChatScreen({ route, navigation }) {
 
             const imageUrl = res.data.url || `${API_URL}${res.data.relativePath}`; // Handle both formats if flexible
 
+            const tempId = Date.now().toString();
+            const optimisticMsg = {
+                id: tempId,
+                chat_id: chatId,
+                sender_id: user.id,
+                content: imageUrl,
+                type: 'image',
+                content_type: 'image',
+                created_at: new Date().toISOString(),
+                is_optimistic: true
+            };
+            setMessages(prev => [...prev, optimisticMsg]);
+
             const msgData = {
                 chatId: chatId,
                 senderId: user.id,
                 content: imageUrl,
-                type: 'image'
+                type: 'image',
+                tempId: tempId
             };
             socketRef.current?.emit('send_message', msgData);
 
@@ -446,11 +515,25 @@ export default function ChatScreen({ route, navigation }) {
 
             const audioUrl = res.data.url || `${API_URL}${res.data.relativePath}`;
 
+            const tempId = Date.now().toString();
+            const optimisticMsg = {
+                id: tempId,
+                chat_id: chatId,
+                sender_id: user.id,
+                content: audioUrl,
+                type: 'audio',
+                content_type: 'audio',
+                created_at: new Date().toISOString(),
+                is_optimistic: true
+            };
+            setMessages(prev => [...prev, optimisticMsg]);
+
             const msgData = {
                 chatId: chatId,
                 senderId: user.id,
                 content: audioUrl,
-                type: 'audio'
+                type: 'audio',
+                tempId: tempId
             };
             socketRef.current?.emit('send_message', msgData);
 
@@ -540,6 +623,27 @@ export default function ChatScreen({ route, navigation }) {
         );
     };
 
+    // Pagination State
+    const [refreshing, setRefreshing] = useState(false);
+
+    const loadPreviousMessages = async () => {
+        if (!chatId || refreshing) return;
+        setRefreshing(true);
+        try {
+            const limit = 50;
+            const offset = messages.length;
+            const res = await axios.get(`${API_URL}/messages/${chatId}?limit=${limit}&offset=${offset}`);
+
+            if (res.data.length > 0) {
+                setMessages(prev => [...res.data, ...prev]);
+            }
+        } catch (error) {
+            console.error('Load Previous Messages Error:', error);
+        } finally {
+            setRefreshing(false);
+        }
+    };
+
     return (
         <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
             {themeMode === 'dark' && (
@@ -554,8 +658,22 @@ export default function ChatScreen({ route, navigation }) {
                 data={messages}
                 keyExtractor={item => item.id.toString()}
                 renderItem={renderMessage}
-                onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
+                onContentSizeChange={() => {
+                    // Only scroll to end on initial load or new message, not on pagination
+                    if (!refreshing && messages.length <= 50) {
+                        flatListRef.current?.scrollToEnd({ animated: true });
+                    }
+                }}
                 contentContainerStyle={styles.messagesList}
+                refreshControl={
+                    <RefreshControl
+                        refreshing={refreshing}
+                        onRefresh={loadPreviousMessages}
+                        tintColor={theme.colors.primary}
+                        title="Geçmiş yükleniyor..."
+                        titleColor={theme.colors.textSecondary}
+                    />
+                }
                 ListFooterComponent={isTyping ? <TypingIndicator /> : null}
             />
 

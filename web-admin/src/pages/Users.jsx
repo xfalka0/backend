@@ -31,7 +31,11 @@ export default function UsersPage() {
         init();
 
         // Real-time listener
-        const socket = io(API_URL, { transports: ['websocket'] });
+        const token = localStorage.getItem('token');
+        const socket = io(API_URL, {
+            transports: ['websocket'],
+            auth: { token }
+        });
         socket.on('new_user', (newUser) => {
             setUsers(prev => [newUser, ...prev]);
         });

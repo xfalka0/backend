@@ -514,13 +514,15 @@ export default function ChatScreen({ route, navigation }) {
 
         let content = <Text style={styles.messageText}>{item.content}</Text>;
 
-        if (item.content_type === 'image') {
+        if (item.content_type === 'image' || item.type === 'image') {
             content = (
-                <Image
-                    source={{ uri: item.content }}
-                    style={{ width: 200, height: 200, borderRadius: 12 }}
-                    resizeMode="cover"
-                />
+                <TouchableOpacity activeOpacity={0.9} onPress={() => { /* View full screen logic optional */ }}>
+                    <Image
+                        source={{ uri: item.content }}
+                        style={{ width: 220, height: 220, borderRadius: 16, backgroundColor: '#cbd5e1' }}
+                        resizeMode="cover"
+                    />
+                </TouchableOpacity>
             );
         } else if (item.content_type === 'audio') {
             content = (

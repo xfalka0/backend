@@ -21,9 +21,13 @@ const Chats = () => {
         fetchChats();
 
         console.log('[SOCKET] Connecting to:', API_URL);
+        const token = localStorage.getItem('token');
         socketRef.current = io(API_URL, {
             transports: ['websocket', 'polling'],
             reconnection: true,
+            auth: {
+                token: token
+            }
         });
 
         socketRef.current.on('connect', () => {

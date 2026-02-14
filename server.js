@@ -354,7 +354,15 @@ const storage = multer.diskStorage({
 
 const upload = multer({
     storage,
-    limits: { fileSize: 10 * 1024 * 1024 } // 10MB limit
+    limits: { fileSize: 10 * 1024 * 1024 }, // 10MB limit
+    fileFilter: (req, file, cb) => {
+        const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'video/mp4', 'video/webm', 'video/quicktime'];
+        if (allowedTypes.includes(file.mimetype)) {
+            cb(null, true);
+        } else {
+            cb(new Error('Desteklenmeyen dosya türü. Sadece resim ve video yüklenebilir.'));
+        }
+    }
 });
 
 const io = new Server(server, {
@@ -602,15 +610,19 @@ app.get('/api/debug/users-list', async (req, res) => {
 
 // --- ADMIN USER MANAGEMENT ---
 
+const helmet = require('helmet');
+
+// Security Middleware
+app.use(helmet());
+
+// ... (existing middleware)
+
+// --- ADMIN USER MANAGEMENT ---
+
 // MANUAL EMERGENCY FIX: Smart Schema Repair
-app.get('/api/admin/force-fix-schema', async (req, res) => {
+app.get('/api/admin/force-fix-schema', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
     const logs = [];
     const log = (msg) => { console.log(msg); logs.push(msg); };
-
-    // 1. Basic security check
-    if (req.query.secret !== 'falka_fix_now') {
-        return res.json({ status: 'error', message: 'Access Denied', logs });
-    }
 
     try {
         log("⚠️ [MANUAL] Starting Smart Schema Repair...");
@@ -1886,9 +1898,14 @@ app.get('/api/messages/:chatId', async (req, res) => {
     const { chatId } = req.params;
     try {
         const query = `
-            SELECT m.*, COALESCE(u.display_name, u.username, 'Bilinmeyen Kullanıcı') as sender_name 
+            SELECT m.*, 
+                   COALESCE(u.display_name, u.username, 'Bilinmeyen Kullanıcı') as sender_name,
+                   g.name as gift_name, 
+                   g.cost as gift_cost, 
+                   g.icon_url as gift_icon
             FROM messages m
             LEFT JOIN users u ON m.sender_id = u.id
+            LEFT JOIN gifts g ON m.gift_id = g.id
             WHERE m.chat_id = $1
             ORDER BY m.created_at ASC
         `;
@@ -2389,14 +2406,16 @@ io.on('connection', (socket) => {
             let cost = 0;
             let userBalance = 0;
             let currentBalance = 0;
+            let giftDetails = null;
 
             // --- 1. COIN DEDUCTION LOGIC ---
             if (!isOperator) {
                 cost = 10; // Default text
                 if (type === 'gift' && giftId) {
-                    const giftRes = await client.query('SELECT cost FROM gifts WHERE id = $1', [giftId]);
+                    const giftRes = await client.query('SELECT * FROM gifts WHERE id = $1', [giftId]);
                     if (giftRes.rows.length > 0) {
-                        cost = giftRes.rows[0].cost;
+                        giftDetails = giftRes.rows[0];
+                        cost = giftDetails.cost;
                     } else {
                         throw new Error('Invalid Gift ID');
                     }
@@ -2458,6 +2477,13 @@ io.on('connection', (socket) => {
                 });
             }
 
+            // Attach gift details if available
+            if (giftDetails) {
+                savedMsg.gift_name = giftDetails.name;
+                savedMsg.gift_cost = giftDetails.cost;
+                savedMsg.gift_icon = giftDetails.icon_url;
+            }
+
             // Broadcast Message to Chat Room
             io.to(chatId).emit('receive_message', savedMsg);
 
@@ -2486,68 +2512,15 @@ io.on('connection', (socket) => {
     });
 });
 
-// MANUAL ADMIN CREATION: Chameleon Fix
-app.get('/api/admin/force-create-admin', async (req, res) => {
-    const logs = [];
-    const log = (msg) => { console.log(msg); logs.push(msg); };
-
-    if (req.query.secret !== 'falka_fix_now') {
-        return res.json({ status: 'error', message: 'Access Denied' });
-    }
-
-    try {
-        log("⚠️ [MANUAL ADMIN] Starting Admin Creation/Reset...");
-
-        // 1. Hash Password
-        const hashedPassword = await bcrypt.hash('admin123', 10);
-        log("✅ Password hashed.");
-
-        // 2. Insert or Update Admin
-        // We need to handle UUID vs INT for the ID return, but mostly we just care about inserting.
-        // We will try to INSERT with ON CONFLICT DO UPDATE
-
-        // Check if admin exists by email
-        const check = await db.query("SELECT * FROM users WHERE email = 'admin@falka.com'");
-
-        if (check.rows.length > 0) {
-            log("ℹ️ Admin exists. Updating password...");
-            await db.query("UPDATE users SET password_hash = $1, role = 'admin', account_status = 'active' WHERE email = 'admin@falka.com'", [hashedPassword]);
-            log("✅ Admin updated.");
-        } else {
-            log("ℹ️ Creating new admin...");
-            // We need to know if ID is SERIAL or UUID to know if we can rely on auto-gen
-            // Actually, if we just INSERT without ID, the DB handles it.
-            // But we need to match the columns.
-
-            await db.query(`
-                INSERT INTO users (username, email, password, password_hash, role, balance, account_status, display_name) 
-                VALUES ($1, $2, $3, $3, 'admin', 0, 'active', 'Admin')
-            `, ['admin', 'admin@falka.com', hashedPassword]);
-            log("✅ Admin created.");
-        }
-
-        res.json({
-            status: 'success',
-            message: 'Admin user ready.',
-            credentials: { email: 'admin@falka.com', password: 'admin123' },
-            logs: logs
-        });
-
-    } catch (err) {
-        log(`❌ [MANUAL ADMIN] Error: ${err.message}`);
-        res.json({ status: 'error', error: err.message, logs: logs });
-    }
-});
+// MANUAL ADMIN CREATION: Chameleon Fix - DISABLED
+// app.get('/api/admin/force-create-admin', async (req, res) => {
+//    // ... code ...
+// });
 
 // MANUAL EMERGENCY FIX V2: Chameleon Fix (UUID/INT Adaptive)
-app.get('/api/admin/force-fix-schema-v2', async (req, res) => {
+app.get('/api/admin/force-fix-schema-v2', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
     const logs = [];
     const log = (msg) => { console.log(msg); logs.push(msg); };
-
-    // 1. Basic security check
-    if (req.query.secret !== 'falka_fix_now') {
-        return res.json({ status: 'error', message: 'Access Denied', logs });
-    }
 
     try {
         log("⚠️ [MANUAL V2] Starting Smart Schema Repair (Type Adaptive)...");
@@ -2616,13 +2589,9 @@ app.get('/api/admin/force-fix-schema-v2', async (req, res) => {
 });
 
 // SOCIAL SCHEMA REPAIR: Fix for 500 Errors
-app.get('/api/admin/force-fix-social-schema', async (req, res) => {
+app.get('/api/admin/force-fix-social-schema', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
     const logs = [];
     const log = (msg) => { console.log(msg); logs.push(msg); };
-
-    if (req.query.secret !== 'falka_fix_now') {
-        return res.json({ status: 'error', message: 'Access Denied', logs });
-    }
 
     try {
         log("⚠️ [SOCIAL REPAIR] Starting Granular Social Schema Repair...");

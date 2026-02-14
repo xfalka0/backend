@@ -312,7 +312,22 @@ const Chats = () => {
                                             : 'bg-slate-800 text-slate-200 rounded-tl-none'
                                             }`}
                                     >
-                                        {msg.content_type === 'image' || msg.type === 'image' ? (
+                                        {msg.content_type === 'gift' || msg.type === 'gift' ? (
+                                            <div className="bg-gradient-to-r from-amber-200 via-yellow-300 to-amber-200 text-amber-900 p-4 rounded-xl border border-yellow-400/50 shadow-[0_0_20px_rgba(251,191,36,0.4)] flex items-center gap-4 relative overflow-hidden group/gift">
+                                                <div className="absolute top-0 right-0 w-20 h-20 bg-white/20 blur-2xl transform rotate-45 translate-x-10 -translate-y-10 group-hover/gift:translate-x-0 transition-transform duration-700"></div>
+                                                <div className="text-4xl drop-shadow-sm filter contrast-125 hover:scale-110 transition-transform">
+                                                    {msg.gift_icon && msg.gift_icon.startsWith('http') ? <img src={msg.gift_icon} className="w-10 h-10 object-contain" alt="Gift" /> : '🎁'}
+                                                </div>
+                                                <div className="relative z-10">
+                                                    <p className="font-black text-sm uppercase tracking-tight text-amber-950/90">{msg.gift_name || 'Özel Hediye'}</p>
+                                                    <div className="flex items-center gap-1 mt-0.5">
+                                                        <span className="text-xs font-bold text-amber-800 bg-amber-100/50 px-2 py-0.5 rounded-md border border-amber-900/10">
+                                                            {msg.gift_cost ? `${msg.gift_cost} Coin` : 'Değerli'}
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        ) : msg.content_type === 'image' || msg.type === 'image' ? (
                                             <div className="relative group/img">
                                                 <img
                                                     src={msg.content}

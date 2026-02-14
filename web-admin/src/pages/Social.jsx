@@ -225,7 +225,7 @@ export default function SocialPage() {
                                             <span className="text-[10px] font-black uppercase text-slate-500 group-hover/upload:text-purple-300">Medya Yükle</span>
                                         </>
                                     )}
-                                    <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleFileUpload} />
+                                    <input type="file" ref={fileInputRef} className="hidden" accept="image/*,video/*" onChange={handleFileUpload} />
                                 </div>
                             </div>
 

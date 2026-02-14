@@ -279,7 +279,7 @@ export default function ChatScreen({ route, navigation }) {
                         const optimisticIndex = prev.findIndex(m => m.id === msg.tempId);
                         if (optimisticIndex !== -1) {
                             const newMessages = [...prev];
-                            newMessages[optimisticIndex] = msg;
+                            newMessages[optimisticIndex] = msg; // Replace optimistic with confirmed
                             return newMessages;
                         }
                     } else {
@@ -303,6 +303,13 @@ export default function ChatScreen({ route, navigation }) {
 
             socketRef.current.on('message_error', (data) => {
                 console.log('[SOCKET] Message Error:', data);
+
+                // Rollback optimistic update if tempId is present
+                if (data.tempId) {
+                    setMessages(prev => prev.filter(m => m.id !== data.tempId));
+                    // Refund optimistic balance deduction if needed (optional complexity)
+                }
+
                 if (data.code === 'INSUFFICIENT_FUNDS') {
                     // Show Coin Modal on insufficient balance error
                     setShowCoinModal(true);
@@ -330,34 +337,42 @@ export default function ChatScreen({ route, navigation }) {
         };
     }, []);
 
-    if (input.trim() === '' || !chatId) return;
+    const sendMessage = () => {
+        if (input.trim() === '' || !chatId) return;
 
-    // Optimistic Balance Update
-    setCurrentBalance(prev => Math.max(0, prev - 10));
+        // Check Balance
+        if (currentBalance < 10 && vip_level < 1) { // Assuming 10 is cost and VIPs might bypass or checking balance logic
+            setShowCoinModal(true);
+            return;
+        }
 
-    const tempId = Date.now().toString();
-    const optimisticMsg = {
-        id: tempId,
-        chat_id: chatId,
-        sender_id: user.id,
-        content: input,
-        type: 'text',
-        created_at: new Date().toISOString(),
-        is_optimistic: true // Flag to identify and replace later
+        // Optimistic Balance Update
+        setCurrentBalance(prev => Math.max(0, prev - 10));
+
+        const tempId = Date.now().toString();
+        const optimisticMsg = {
+            id: tempId,
+            chat_id: chatId,
+            sender_id: user.id,
+            content: input,
+            type: 'text',
+            created_at: new Date().toISOString(),
+            is_optimistic: true // Flag to identify and replace later
+        };
+
+        setMessages(prev => [...prev, optimisticMsg]);
+        setInput('');
+
+        const msgData = {
+            chatId: chatId,
+            senderId: user.id,
+            content: input,
+            type: 'text',
+            tempId: tempId // Send tempId to track confirmation
+        };
+
+        socketRef.current?.emit('send_message', msgData);
     };
-
-    setMessages(prev => [...prev, optimisticMsg]);
-    setInput('');
-
-    const msgData = {
-        chatId: chatId,
-        senderId: user.id,
-        content: input,
-        type: 'text',
-        tempId: tempId // Send tempId to track confirmation
-    };
-
-    socketRef.current?.emit('send_message', msgData);
 
 
 

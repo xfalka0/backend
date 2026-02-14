@@ -17,6 +17,11 @@ const Chats = () => {
     const fileInputRef = useRef(null);
     const selectedChatIdRef = useRef(null);
 
+    // Keep ref in sync with state for socket listeners
+    useEffect(() => {
+        selectedChatIdRef.current = selectedChat?.id;
+    }, [selectedChat]);
+
     useEffect(() => {
         fetchChats();
 
@@ -43,6 +48,17 @@ const Chats = () => {
                 setMessages((prev) => {
                     if (prev.some(m => m.id === msg.id)) return prev;
 
+                    // Deduplicate using tempId
+                    if (msg.tempId) {
+                        const optimisticIndex = prev.findIndex(m => m.id === msg.tempId);
+                        if (optimisticIndex !== -1) {
+                            const newMessages = [...prev];
+                            newMessages[optimisticIndex] = msg;
+                            return newMessages;
+                        }
+                    }
+
+                    // Fallback Deduplication (Content + Time)
                     const optimisticMatchIndex = prev.findIndex(m =>
                         m.is_optimistic &&
                         m.content === msg.content &&
@@ -318,7 +334,7 @@ const Chats = () => {
                                 >
                                     <div className={`max-w-[70%] space-y-1`}>
                                         {/* Gift Message Styling */}
-                                        {(msg.content_type === 'gift' || msg.type === 'gift') ? (
+                                        {(msg.content_type === 'gift' || msg.type === 'gift' || msg.gift_id) ? (
                                             <div className="bg-gradient-to-r from-amber-200 via-yellow-300 to-amber-200 text-amber-900 p-0.5 rounded-2xl shadow-lg shadow-amber-500/20 transform hover:scale-[1.02] transition-transform duration-300">
                                                 <div className="bg-gradient-to-br from-amber-50 to-white px-4 py-3 rounded-[14px] flex items-center gap-4 relative overflow-hidden">
                                                     {/* Shiny Effect */}

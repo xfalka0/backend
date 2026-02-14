@@ -2393,7 +2393,8 @@ io.on('connection', (socket) => {
 
     // Send Message
     socket.on('send_message', async (data) => {
-        const { chatId, content, type, giftId } = data;
+        console.log('[SOCKET] send_message received:', JSON.stringify(data, null, 2));
+        const { chatId, content, type, giftId, tempId } = data; // Catch tempId
         // SECURITY: Use authenticated user ID
         const senderId = socket.user.id;
 
@@ -2447,7 +2448,8 @@ io.on('connection', (socket) => {
                     io.to(socket.id).emit('message_error', {
                         code: 'INSUFFICIENT_FUNDS',
                         message: `Yetersiz bakiye. Bu işlem için ${cost} coin gerekli.`,
-                        required: cost
+                        required: cost,
+                        tempId: tempId // Return tempId so client can undo
                     });
                     return; // Exit transaction
                 }
@@ -2493,11 +2495,14 @@ io.on('connection', (socket) => {
             }
 
             // Broadcast Message to Chat Room
-            io.to(chatId).emit('receive_message', savedMsg);
+            // Combine savedMsg with tempId for the sender to verify
+            const msgToEmit = { ...savedMsg, tempId };
+
+            io.to(chatId).emit('receive_message', msgToEmit);
 
             // Notify Admins
             console.log(`[SOCKET] Emitting admin_notification for chat ${chatId}`);
-            io.emit('admin_notification', savedMsg);
+            io.emit('admin_notification', msgToEmit);
 
         } catch (err) {
             if (client) {

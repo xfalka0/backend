@@ -2,9 +2,12 @@ import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 import io from 'socket.io-client';
 
+import { useAuth } from '../context/AuthContext';
+
 const API_URL = 'https://backend-kj17.onrender.com';
 
 const Chats = () => {
+    const { token } = useAuth(); // Get token from Context (Source of Truth)
     const [chats, setChats] = useState([]);
     const [selectedChat, setSelectedChat] = useState(null);
     const [messages, setMessages] = useState([]);
@@ -21,17 +24,25 @@ const Chats = () => {
     }, [selectedChat]);
 
     useEffect(() => {
+        if (!token) return; // Wait for token
+
         fetchChats();
 
         console.log('[SOCKET] Connecting to:', API_URL);
-        const token = localStorage.getItem('token');
-        console.log('[DEBUG] Token Durumu:', token);
+        console.log('[DEBUG] Token Durumu (Context):', token); // Use Context Token
 
         socketRef.current = io(API_URL, {
             transports: ['websocket', 'polling'],
             reconnection: true,
             auth: {
                 token: token
+            },
+            // Fallbacks for different socket.io versions/proxies
+            query: {
+                token: token
+            },
+            extraHeaders: {
+                Authorization: `Bearer ${token}`
             }
         });
 

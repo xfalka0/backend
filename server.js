@@ -2397,7 +2397,9 @@ io.on('connection', (socket) => {
 
     // --- TYPING INDICATOR (YAZIYOR...) ---
     socket.on('typing_start', (data) => {
-        const { chatId } = data;
+        const chatId = data.chatId ? data.chatId.toString() : null;
+        if (!chatId) return;
+
         console.log(`[SOCKET] typing_start received from ${socket.user?.username || socket.id} for chatId: ${chatId}`);
         // Broadcast to everyone in the room (including sender, sender should handle filtering)
         console.log(`[SOCKET] Broadcasting display_typing to room ${chatId} for user ${socket.user?.id || 'unknown'}`);
@@ -2408,7 +2410,9 @@ io.on('connection', (socket) => {
     });
 
     socket.on('typing_end', (data) => {
-        const { chatId } = data;
+        const chatId = data.chatId ? data.chatId.toString() : null;
+        if (!chatId) return;
+
         console.log(`[SOCKET] typing_end received from ${socket.user?.username || socket.id} for chatId: ${chatId}`);
         io.to(chatId).emit('hide_typing', {
             userId: socket.user ? socket.user.id : null,

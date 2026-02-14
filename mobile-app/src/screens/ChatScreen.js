@@ -263,7 +263,7 @@ export default function ChatScreen({ route, navigation }) {
             if (socketRef.current) socketRef.current.disconnect();
 
             const token = await AsyncStorage.getItem('token');
-            console.log('[ChatScreen] Connecting to socket with token:', token ? 'Exists' : 'Missing');
+            console.log('[ChatScreen] Connecting to socket with token:', token ? 'Exists' : 'Missing', 'Local user.id:', user.id);
 
             socketRef.current = io(SOCKET_URL, {
                 transports: ['websocket', 'polling'],
@@ -750,8 +750,9 @@ export default function ChatScreen({ route, navigation }) {
                 renderItem={renderMessage}
                 contentContainerStyle={styles.messagesList}
                 scrollIndicatorInsets={{ right: 1 }} // Fix scrollbar on iOS
-                ListHeaderComponent={isTyping ? <TypingIndicator /> : null}
             />
+
+            {isTyping && <TypingIndicator />}
 
             <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} keyboardVerticalOffset={90}>
                 <View style={[styles.inputContainer, { backgroundColor: theme.colors.background, borderTopColor: theme.colors.glassBorder }]}>

@@ -413,7 +413,16 @@ const Chats = () => {
                             <div ref={messagesEndRef} />
                         </div>
 
-                        <form onSubmit={sendMessage} className="p-6 bg-slate-900/40 border-t border-white/5 flex gap-4">
+                        <form onSubmit={sendMessage} className="p-6 bg-slate-900/40 border-t border-white/5 flex gap-4 relative">
+                            {isTyping && (
+                                <div className="absolute -top-6 left-6 text-xs font-bold text-fuchsia-400 animate-pulse flex items-center gap-2">
+                                    <span className="relative flex h-2 w-2">
+                                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-fuchsia-400 opacity-75"></span>
+                                        <span className="relative inline-flex rounded-full h-2 w-2 bg-fuchsia-500"></span>
+                                    </span>
+                                    Kullanıcı yazıyor...
+                                </div>
+                            )}
                             <input
                                 type="file"
                                 ref={fileInputRef}

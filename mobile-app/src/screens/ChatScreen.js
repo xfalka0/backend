@@ -392,6 +392,10 @@ export default function ChatScreen({ route, navigation }) {
         };
 
         socketRef.current?.emit('send_message', msgData);
+
+        // Stop typing immediately
+        socketRef.current?.emit('typing_end', { chatId });
+        if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
     };
 
 

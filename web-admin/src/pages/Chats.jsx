@@ -2,9 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 import io from 'socket.io-client';
 
-const API_URL = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
-    ? 'http://localhost:3000'
-    : 'https://backend-kj17.onrender.com';
+const API_URL = 'https://backend-kj17.onrender.com';
 
 const Chats = () => {
     const [chats, setChats] = useState([]);

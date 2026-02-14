@@ -2352,7 +2352,7 @@ initializeGifts();
 // --- SOCKET AUTHENTICATION MIDDLEWARE ---
 io.use(async (socket, next) => {
     try {
-        const token = socket.handshake.auth.token;
+        const token = socket.handshake.auth.token || socket.handshake.query.token;
         if (!token) {
             console.log(`[SOCKET] Authentication error: Token missing for socket ${socket.id}`);
             return next(new Error('Authentication error: Token required'));

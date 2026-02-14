@@ -133,13 +133,12 @@ const Chats = () => {
 
         socketRef.current.on('display_typing', (data) => {
             console.log('[SOCKET] display_typing received in Admin:', data, 'Current Selected:', selectedChatIdRef.current);
-            // In Admin panel, we don't have a user.id easily in this scope to filter out our own typing, 
-            // but usually Admin typing is emitted by the same socket, so it's filtered by socket.to.
-            // Since we switched to io.to for debugging, we check if the sender is DIFFERENT if we can,
-            // or just rely on the fact that Admin usually doesn't see their own bubble if they are typing.
-            // Actually, we can check if it's the operatorId vs userId in data if we included it.
             if (selectedChatIdRef.current == data.chatId) {
                 setIsTyping(true);
+
+                // Safety timeout to clear typing if hide_typing is missed
+                if (window.adminTypingTimeout) clearTimeout(window.adminTypingTimeout);
+                window.adminTypingTimeout = setTimeout(() => setIsTyping(false), 5000);
             }
         });
 
@@ -147,6 +146,7 @@ const Chats = () => {
             console.log('[SOCKET] hide_typing received in Admin:', data, 'Current Selected:', selectedChatIdRef.current);
             if (selectedChatIdRef.current == data.chatId) {
                 setIsTyping(false);
+                if (window.adminTypingTimeout) clearTimeout(window.adminTypingTimeout);
             }
         });
 
@@ -157,7 +157,7 @@ const Chats = () => {
 
     useEffect(() => {
         scrollToBottom();
-    }, [messages]);
+    }, [messages, isTyping]);
 
     const scrollToBottom = () => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -498,7 +498,7 @@ const Chats = () => {
                             <input
                                 type="text"
                                 value={input}
-                                onChange={(e) => setInput(e.target.value)}
+                                onChange={handleTyping}
                                 placeholder={uploading ? "Resim yükleniyor..." : "Mesajınızı yazın..."}
                                 disabled={uploading}
                                 className="flex-1 bg-slate-800/50 border border-white/10 rounded-xl px-4 text-sm text-white focus:outline-none focus:border-fuchsia-500 transition-all font-medium disabled:opacity-50"

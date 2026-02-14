@@ -7,7 +7,7 @@ import { useAuth } from '../context/AuthContext';
 const API_URL = 'https://backend-kj17.onrender.com';
 
 const Chats = () => {
-    const { token } = useAuth(); // Get token from Context (Source of Truth)
+    const { token, user } = useAuth(); // Get token and user from Context
     const [chats, setChats] = useState([]);
     const [selectedChat, setSelectedChat] = useState(null);
     const [messages, setMessages] = useState([]);

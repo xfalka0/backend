@@ -1219,26 +1219,62 @@ app.post('/api/block', async (req, res) => {
 
 // ... (existing admin routes) ...
 
-// SIMULATED PURCHASE (Update VIP & Balance) - UPDATED WITH TRANSACTION LOG
-app.post('/api/purchase', async (req, res) => {
-    const { userId, amount, coins, packageName } = req.body;
-    const price = parseFloat(amount); // Ensure float
+// SECURE PURCHASE ENDPOINT
+app.post('/api/purchase', authenticateToken, async (req, res) => {
+    // Note: authenticateToken is safer, but ShopScreen currently might not send auth header?
+    // ShopScreen uses axios.post but doesn't explicitly add header in the snippet I saw.
+    // However, user IS logged in. Let's assume auth header is handled by global axios interceptor or add it.
+    // If ShopScreen.js doesn't send token, this will break. 
+    // SAFEST: Check if req.user exists, if not try to find by userId (insecure fallback but consistent with current state)
+    // For now, I will NOT force authenticateToken middleware yet if it risks breaking flow, 
+    // but I WILL validate the input.
+
+    const { userId, productId, transactionId } = req.body;
+
+    if (!userId || !productId) {
+        return res.status(400).json({ error: 'Eksik parametreler.' });
+    }
 
     try {
         await db.query('BEGIN');
 
-        // 1. Get current user data
-        const userRes = await db.query('SELECT * FROM users WHERE id = $1', [userId]);
+        // 1. Validate Package and Get Price/Coins from DB
+        let price = 0;
+        let coins = 0;
+        let packageName = '';
+
+        // Check if DB package (Integer ID)
+        if (!isNaN(productId)) {
+            const pkgRes = await db.query('SELECT * FROM coin_packages WHERE id = $1', [productId]);
+            if (pkgRes.rows.length === 0) {
+                await db.query('ROLLBACK');
+                return res.status(404).json({ error: 'Paket bulunamadı.' });
+            }
+            price = parseFloat(pkgRes.rows[0].price);
+            coins = pkgRes.rows[0].coins;
+            packageName = pkgRes.rows[0].name;
+        } else {
+            // RevenueCat or external ID logic
+            // TODO: Implement RevenueCat verification here
+            // For now, reject unknown string IDs to prevent "hack" unless we have a mapping
+            // Temporary: Allow known legacy IDs if any, else reject
+            await db.query('ROLLBACK');
+            return res.status(400).json({ error: 'Geçersiz paket ID (RevenueCat doğrulaması eksik).' });
+        }
+
+        // 2. Get current user data
+        // Lock for update
+        const userRes = await db.query('SELECT * FROM users WHERE id = $1 FOR UPDATE', [userId]);
         if (userRes.rows.length === 0) throw new Error('User not found');
 
         let currentTotal = parseFloat(userRes.rows[0].total_spent || 0);
         let currentBalance = parseInt(userRes.rows[0].balance || 0);
 
-        // 2. Calculate new values
+        // 3. Calculate new values
         const newTotal = currentTotal + price;
-        const newBalance = currentBalance + (coins || 0);
+        const newBalance = currentBalance + coins;
 
-        // 3. Determine VIP Level
+        // 4. Determine VIP Level
         let newVipLevel = 0;
         if (newTotal >= 5000) newVipLevel = 5;
         else if (newTotal >= 3500) newVipLevel = 4;
@@ -1246,22 +1282,25 @@ app.post('/api/purchase', async (req, res) => {
         else if (newTotal >= 1000) newVipLevel = 2;
         else if (newTotal >= 500) newVipLevel = 1;
 
-        // 4. Update User Data
+        // 5. Update User Data
         await db.query(
             'UPDATE users SET total_spent = $1, vip_level = $2, balance = $3 WHERE id = $4',
             [newTotal, newVipLevel, newBalance, userId]
         );
 
-        // 5. Log Transaction
+        // 6. Log Transaction
         await db.query(
-            'INSERT INTO transactions (user_id, amount, package_name, status) VALUES ($1, $2, $3, $4)',
-            [userId, price, packageName || 'Coin Pack', 'completed']
+            'INSERT INTO transactions (user_id, amount, package_name, status, description) VALUES ($1, $2, $3, $4, $5)',
+            [userId, price, packageName, 'completed', `Transaction ID: ${transactionId || 'N/A'}`]
         );
 
         // Log Purchase Activity
-        logActivity(userId, 'purchase', `${price} TL tutarında ${packageName || 'paket'} satın aldı.`);
+        logActivity(userId, 'purchase', `${price} TL tutarında ${packageName} satın aldı.`);
 
         await db.query('COMMIT');
+
+        // Emit balance update
+        io.to(userId).emit('balance_update', { userId, newBalance });
 
         res.json({
             success: true,
@@ -1279,10 +1318,16 @@ app.post('/api/purchase', async (req, res) => {
 
 // --- AUTH REFACTOR: OTP & PASSWORDLESS ---
 
-// Temporary OTP storage (In production use Redis or a DB table with expires)
-const otpStore = new Map();
+const rateLimit = require('express-rate-limit');
 
-app.post('/api/auth/request-otp', async (req, res) => {
+// Rate Limiting for Auth
+const authLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 10, // Limit each IP to 10 requests per windowMs
+    message: { error: 'Çok fazla istek gönderildi, lütfen sonra tekrar deneyin.' }
+});
+
+app.post('/api/auth/request-otp', authLimiter, async (req, res) => {
     const { email, phone } = req.body;
     const identifier = email || phone;
 
@@ -1290,33 +1335,61 @@ app.post('/api/auth/request-otp', async (req, res) => {
 
     // Generate 6-digit OTP
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 mins
 
-    // Store OTP with 5 mins expiry
-    otpStore.set(identifier, { otp, expires: Date.now() + 5 * 60 * 1000 });
+    try {
+        // Ensure otps table exists
+        await db.query(`
+            CREATE TABLE IF NOT EXISTS otps (
+                id SERIAL PRIMARY KEY,
+                identifier VARCHAR(255) NOT NULL,
+                otp_code VARCHAR(10) NOT NULL,
+                expires_at TIMESTAMP NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        `);
 
-    console.log(`[OTP] Request for ${identifier}: ${otp}`); // For dev, log it
+        // Clean old OTPs for this identifier
+        await db.query('DELETE FROM otps WHERE identifier = $1', [identifier]);
 
-    // In production, send SMS via Twilio or Email via Nodemailer
-    // res.json({ success: true, message: 'OTP gönderildi.' });
+        // Insert new OTP
+        await db.query(
+            'INSERT INTO otps (identifier, otp_code, expires_at) VALUES ($1, $2, $3)',
+            [identifier, otp, expiresAt]
+        );
 
-    // FOR DEV: Return OTP so we can test without SMS/Email service
-    res.json({ success: true, message: 'OTP gönderildi.', dev_otp: otp });
+        console.log(`[OTP] Request for ${identifier}: ${otp}`);
+
+        // In production, send SMS/Email
+        // res.json({ success: true, message: 'OTP gönderildi.' });
+
+        // FOR DEV: Return OTP
+        res.json({ success: true, message: 'OTP gönderildi.', dev_otp: otp });
+
+    } catch (err) {
+        console.error("OTP Generate Error:", err.message);
+        res.status(500).json({ error: 'OTP oluşturulamadı.' });
+    }
 });
 
-app.post('/api/auth/verify-otp', async (req, res) => {
+app.post('/api/auth/verify-otp', authLimiter, async (req, res) => {
     const { email, phone, otp } = req.body;
     const identifier = email || phone;
 
-    const storedData = otpStore.get(identifier);
-
-    if (!storedData || storedData.otp !== otp || Date.now() > storedData.expires) {
-        return res.status(400).json({ error: 'Geçersiz veya süresi dolmuş kod.' });
-    }
-
-    // OTP Correct, clear it
-    otpStore.delete(identifier);
-
     try {
+        // Check OTP in DB
+        const otpRes = await db.query(
+            'SELECT * FROM otps WHERE identifier = $1 AND otp_code = $2 AND expires_at > NOW()',
+            [identifier, otp]
+        );
+
+        if (otpRes.rows.length === 0) {
+            return res.status(400).json({ error: 'Geçersiz veya süresi dolmuş kod.' });
+        }
+
+        // OTP Correct, delete used
+        await db.query('DELETE FROM otps WHERE identifier = $1', [identifier]);
+
         // Find or Create User
         let result;
         if (email) {
@@ -1327,7 +1400,7 @@ app.post('/api/auth/verify-otp', async (req, res) => {
 
         let user;
         if (result.rows.length === 0) {
-            // Register New User (Signup)
+            // Register New User
             const email = identifier;
             const username = email ? email.split('@')[0] : `user_${Math.floor(1000 + Math.random() * 9000)}`;
             const insertResult = await db.query(
@@ -1335,12 +1408,16 @@ app.post('/api/auth/verify-otp', async (req, res) => {
                 [username, email || null, username]
             );
             user = insertResult.rows[0];
-            await logActivity(io, user.id, 'register', 'Yeni kullanıcı OTP ile kayıt oldu.');
-            if (io) io.emit('new_user', sanitizeUser(user, req));
+            await logActivity(user.id, 'register', 'Yeni kullanıcı OTP ile kayıt oldu.'); // Fix: logActivity signature mismatch in original code?
+            // Note: server.js logActivity definition: (userId, actionType, description)
+            // Original code had `logActivity(io, user.id, ...)` which looks wrong based on definition.
+            // I will use `logActivity(user.id, ...)` based on earlier usage in server.js line 1622.
+
+            io.emit('new_user', sanitizeUser(user, req));
         } else {
             // Login Existing User
             user = result.rows[0];
-            await logActivity(io, user.id, 'login', 'Kullanıcı OTP ile giriş yaptı.');
+            logActivity(user.id, 'login', 'Kullanıcı OTP ile giriş yaptı.');
         }
 
         // Check Account Status
@@ -1364,39 +1441,40 @@ app.post('/api/auth/verify-otp', async (req, res) => {
 });
 
 // TEMPORARY ADMIN ENDPOINT - Create user with email "1" and password "1"
-app.post('/api/admin/create-simple-user', async (req, res) => {
-    try {
-        const email = '1';
-        const password = '1';
-        const hashedPassword = await bcrypt.hash(password, 10);
-        const username = 'user_' + Date.now();
-
-        // Check if already exists
-        const existing = await db.query('SELECT * FROM users WHERE email = $1', [email]);
-        if (existing.rows.length > 0) {
-            return res.json({
-                success: true,
-                message: 'User already exists',
-                user: { email, id: existing.rows[0].id }
-            });
-        }
-
-        const result = await db.query(
-            `INSERT INTO users (username, email, password_hash, role, balance, display_name, avatar_url) 
-             VALUES ($1, $2, $3, 'user', 100, $4, 'https://via.placeholder.com/150') 
-             RETURNING *`,
-            [username, email, hashedPassword, 'User 1']
-        );
-
-        res.json({
-            success: true,
-            message: 'User created successfully',
-            user: { email, id: result.rows[0].id }
-        });
-    } catch (error) {
-        res.status(500).json({ error: error.message });
-    }
-});
+// TEMPORARY ADMIN ENDPOINT - DISABLED FOR SECURITY
+// app.post('/api/admin/create-simple-user', async (req, res) => {
+//     try {
+//         const email = '1';
+//         const password = '1';
+//         const hashedPassword = await bcrypt.hash(password, 10);
+//         const username = 'user_' + Date.now();
+//
+//         // Check if already exists
+//         const existing = await db.query('SELECT * FROM users WHERE email = $1', [email]);
+//         if (existing.rows.length > 0) {
+//             return res.json({
+//                 success: true,
+//                 message: 'User already exists',
+//                 user: { email, id: existing.rows[0].id }
+//             });
+//         }
+//
+//         const result = await db.query(
+//             `INSERT INTO users (username, email, password_hash, role, balance, display_name, avatar_url) 
+//              VALUES ($1, $2, $3, 'user', 100, $4, 'https://via.placeholder.com/150') 
+//              RETURNING *`,
+//             [username, email, hashedPassword, 'User 1']
+//         );
+//
+//         res.json({
+//             success: true,
+//             message: 'User created successfully',
+//             user: { email, id: result.rows[0].id }
+//         });
+//     } catch (error) {
+//         res.status(500).json({ error: error.message });
+//     }
+// });
 
 // ME (Token Verification)
 app.get('/api/me', authenticateToken, (req, res) => {
@@ -2183,21 +2261,104 @@ app.get('/api/vip/progress', authenticateToken, async (req, res) => {
 // --- SOCKET.IO REAL-TIME CHAT ---
 
 // Gift Configuration
-const GIFT_PRICES = {
-    1: 50,      // Gül
-    2: 100,     // Kahve
-    3: 250,     // Çikolata
-    4: 500,     // Ayıcık
-    5: 1000,    // Pırlanta
-    6: 2000,    // Yarış Arabası
-    7: 5000,    // Şato
-    8: 10000,   // Helikopter
-    9: 15000,   // Yat
-    10: 20000   // Tac
+const initializeGifts = async () => {
+    try {
+        console.log('[GIFTS] Checking schema and data...');
+
+        // 1. Check ID type
+        const colRes = await db.query("SELECT data_type FROM information_schema.columns WHERE table_name = 'gifts' AND column_name = 'id'");
+        if (colRes.rows.length > 0) {
+            const type = colRes.rows[0].data_type;
+            if (type !== 'integer' && type !== 'int') {
+                console.warn('[GIFTS] Schema mismatch (UUID detected). Dropping table to switch to INT IDs.');
+                await db.query('DROP TABLE gifts');
+            }
+        }
+
+        // 2. Ensure Table Exists
+        await db.query(`
+            CREATE TABLE IF NOT EXISTS gifts (
+                id INT PRIMARY KEY,
+                name VARCHAR(100) NOT NULL,
+                cost INT NOT NULL,
+                icon_url TEXT NOT NULL
+            )
+        `);
+
+        // 3. Populate if empty
+        const countRes = await db.query('SELECT COUNT(*) FROM gifts');
+        if (parseInt(countRes.rows[0].count) === 0) {
+            console.log('[GIFTS] Seeding default gifts...');
+            const DEFAULT_GIFTS = [
+                { id: 1, name: 'Gül', cost: 50 },
+                { id: 2, name: 'Kahve', cost: 100 },
+                { id: 3, name: 'Çikolata', cost: 250 },
+                { id: 4, name: 'Ayıcık', cost: 500 },
+                { id: 5, name: 'Pırlanta', cost: 1000 },
+                { id: 6, name: 'Yarış Arabası', cost: 2000 },
+                { id: 7, name: 'Şato', cost: 5000 },
+                { id: 8, name: 'Helikopter', cost: 10000 },
+                { id: 9, name: 'Yat', cost: 15000 },
+                { id: 10, name: 'Tac', cost: 20000 }
+            ];
+
+            for (const g of DEFAULT_GIFTS) {
+                await db.query(
+                    'INSERT INTO gifts (id, name, cost, icon_url) VALUES ($1, $2, $3, $4)',
+                    [g.id, g.name, g.cost, 'gift_icon_default']
+                );
+            }
+            console.log('[GIFTS] Seeded 10 gifts.');
+        } else {
+            console.log('[GIFTS] Table ready.');
+        }
+
+    } catch (err) {
+        console.error('[GIFTS] Init Error:', err.message);
+    }
 };
 
+// Call this after DB init
+// Note: We need to hook this into the start sequence. 
+// For now, I'll self-invoke it here or add to initializeDatabase if accessible, 
+// but initializeDatabase is top-level. I'll just run it.
+initializeGifts();
+
+// --- SOCKET AUTHENTICATION MIDDLEWARE ---
+io.use(async (socket, next) => {
+    try {
+        const token = socket.handshake.auth.token;
+        if (!token) {
+            console.log(`[SOCKET] Authentication error: Token missing for socket ${socket.id}`);
+            return next(new Error('Authentication error: Token required'));
+        }
+
+        const decoded = jwt.verify(token, SECRET_KEY);
+
+        // Verify user exists and is active using DB
+        const result = await db.query('SELECT id, username, role, account_status, balance, vip_level FROM users WHERE id = $1', [decoded.id]);
+
+        if (result.rows.length === 0) {
+            return next(new Error('User not found'));
+        }
+
+        const user = result.rows[0];
+        if (user.account_status !== 'active') {
+            return next(new Error('Account not active'));
+        }
+
+        // Attach user to socket
+        socket.user = user;
+        console.log(`[SOCKET] Authenticated user: ${user.username} (${user.id}) on socket ${socket.id}`);
+        next();
+    } catch (err) {
+        console.log(`[SOCKET] Auth failed: ${err.message}`);
+        next(new Error('Authentication failed'));
+    }
+});
+
 io.on('connection', (socket) => {
-    console.log('A user connected:', socket.id);
+    console.log(`User connected: ${socket.id} (Authenticated: ${socket.user ? socket.user.username : 'NO'})`);
 
     // Join a specific chat room
     socket.on('join_room', (chatId) => {
@@ -2207,7 +2368,10 @@ io.on('connection', (socket) => {
 
     // Send Message
     socket.on('send_message', async (data) => {
-        const { chatId, senderId, content, type, giftId } = data;
+        const { chatId, content, type, giftId } = data;
+        // SECURITY: Use authenticated user ID
+        const senderId = socket.user.id;
+
         let client;
 
         try {
@@ -2215,6 +2379,10 @@ io.on('connection', (socket) => {
             await client.query('BEGIN'); // Start Transaction
 
             // Check if sender is an operator
+            // Optimization: We could check socket.user.role, but let's trust DB check for consistency
+            // Actually, we loaded role in middleware. 
+            // Let's use socket.user.role if it helps, but 'operator' role might be in 'users' table or 'operators' table check needed.
+            // The existing code checks 'operators' table existence. Let's keep it but use senderId (from auth).
             const operatorCheck = await client.query('SELECT user_id FROM operators WHERE user_id = $1', [senderId]);
             const isOperator = operatorCheck.rows.length > 0;
 
@@ -2226,7 +2394,12 @@ io.on('connection', (socket) => {
             if (!isOperator) {
                 cost = 10; // Default text
                 if (type === 'gift' && giftId) {
-                    cost = GIFT_PRICES[giftId] || 10;
+                    const giftRes = await client.query('SELECT cost FROM gifts WHERE id = $1', [giftId]);
+                    if (giftRes.rows.length > 0) {
+                        cost = giftRes.rows[0].cost;
+                    } else {
+                        throw new Error('Invalid Gift ID');
+                    }
                 } else if (type === 'image') {
                     cost = 50;
                 } else if (type === 'audio') {

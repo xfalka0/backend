@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, TextInput, FlatList, StyleSheet, KeyboardAvoidingView, Platform, TouchableOpacity, Image } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import io from 'socket.io-client';
 import { Ionicons } from '@expo/vector-icons';
 import axios from 'axios';
@@ -257,7 +258,12 @@ export default function ChatScreen({ route, navigation }) {
             // 3. Connect Socket
             if (socketRef.current) socketRef.current.disconnect();
 
-            socketRef.current = io(SOCKET_URL);
+            const token = await AsyncStorage.getItem('token');
+            console.log('[ChatScreen] Connecting to socket with token:', token ? 'Exists' : 'Missing');
+
+            socketRef.current = io(SOCKET_URL, {
+                auth: { token }
+            });
             socketRef.current?.emit('join_room', realChatId);
 
             // Listeners

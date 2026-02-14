@@ -189,9 +189,11 @@ export default function HomeScreen({ navigation, route }) {
                                         console.log('[HiButton] Chat ID received:', chatId);
 
                                         if (chatId) {
+                                            const token = await AsyncStorage.getItem('token');
                                             const socket = io(SOCKET_URL, {
                                                 transports: ['websocket'],
-                                                reconnectionAttempts: 5
+                                                reconnectionAttempts: 5,
+                                                auth: { token }
                                             });
 
                                             socket.on('connect', () => {

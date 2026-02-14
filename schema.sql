@@ -60,10 +60,19 @@ CREATE TABLE IF NOT EXISTS messages (
 );
 
 CREATE TABLE IF NOT EXISTS gifts (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id INT PRIMARY KEY,
     name VARCHAR(100) NOT NULL,
     cost INT NOT NULL,
     icon_url TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS coin_packages (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    price DECIMAL(10, 2) NOT NULL,
+    coins INT NOT NULL,
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE IF NOT EXISTS fake_videos (
@@ -97,4 +106,12 @@ CREATE TABLE IF NOT EXISTS post_likes (
     user_id UUID REFERENCES users(id) ON DELETE CASCADE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (post_id, user_id)
+);
+
+CREATE TABLE IF NOT EXISTS otps (
+    id SERIAL PRIMARY KEY,
+    identifier VARCHAR(255) NOT NULL,
+    otp_code VARCHAR(10) NOT NULL,
+    expires_at TIMESTAMP NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );

@@ -327,12 +327,15 @@ export default function ChatScreen({ route, navigation }) {
             });
 
             socketRef.current.on('display_typing', (data) => {
-                if (data.chatId === realChatId) {
+                console.log('[SOCKET] display_typing received on Mobile:', data);
+                // Don't show indicator if it's our own typing event
+                if (data.chatId === realChatId && data.userId !== user.id) {
                     setIsTyping(true);
                 }
             });
 
             socketRef.current.on('hide_typing', (data) => {
+                console.log('[SOCKET] hide_typing received on Mobile:', data);
                 if (data.chatId === realChatId) {
                     setIsTyping(false);
                 }
@@ -353,17 +356,23 @@ export default function ChatScreen({ route, navigation }) {
     const handleTyping = (text) => {
         setInput(text);
 
-        if (!socketRef.current) return;
+        if (!socketRef.current) {
+            console.log('[ChatScreen] socketRef.current is null, cannot emit typing');
+            return;
+        }
 
         if (text.length > 0) {
+            console.log(`[ChatScreen] Emitting typing_start for chatId: ${chatId}`);
             socketRef.current.emit('typing_start', { chatId });
 
             if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
 
             typingTimeoutRef.current = setTimeout(() => {
+                console.log(`[ChatScreen] Emitting typing_end (timeout) for chatId: ${chatId}`);
                 socketRef.current.emit('typing_end', { chatId });
             }, 2000);
         } else {
+            console.log(`[ChatScreen] Emitting typing_end (empty) for chatId: ${chatId}`);
             socketRef.current.emit('typing_end', { chatId });
             if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
         }
@@ -723,7 +732,7 @@ export default function ChatScreen({ route, navigation }) {
                 renderItem={renderMessage}
                 contentContainerStyle={styles.messagesList}
                 scrollIndicatorInsets={{ right: 1 }} // Fix scrollbar on iOS
-                ListFooterComponent={isTyping ? <TypingIndicator /> : null}
+                ListHeaderComponent={isTyping ? <TypingIndicator /> : null}
             />
 
             <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} keyboardVerticalOffset={90}>
@@ -836,8 +845,8 @@ const styles = StyleSheet.create({
     },
     messagesList: {
         paddingHorizontal: 16,
-        paddingTop: 100, // Space for header
-        paddingBottom: 20,
+        paddingTop: 20,    // Visual BOTTOM padding (inverted)
+        paddingBottom: 100, // Visual TOP padding (inverted - space for header)
     },
     messageBubble: {
         maxWidth: '75%',

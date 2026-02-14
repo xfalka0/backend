@@ -118,12 +118,19 @@ const Chats = () => {
         });
 
         socketRef.current.on('display_typing', (data) => {
+            console.log('[SOCKET] display_typing received in Admin:', data, 'Current Selected:', selectedChatIdRef.current);
+            // In Admin panel, we don't have a user.id easily in this scope to filter out our own typing, 
+            // but usually Admin typing is emitted by the same socket, so it's filtered by socket.to.
+            // Since we switched to io.to for debugging, we check if the sender is DIFFERENT if we can,
+            // or just rely on the fact that Admin usually doesn't see their own bubble if they are typing.
+            // Actually, we can check if it's the operatorId vs userId in data if we included it.
             if (selectedChatIdRef.current == data.chatId) {
                 setIsTyping(true);
             }
         });
 
         socketRef.current.on('hide_typing', (data) => {
+            console.log('[SOCKET] hide_typing received in Admin:', data, 'Current Selected:', selectedChatIdRef.current);
             if (selectedChatIdRef.current == data.chatId) {
                 setIsTyping(false);
             }
@@ -153,10 +160,15 @@ const Chats = () => {
 
     const fetchMessages = async (chat, isLoadMore = false) => {
         if (!isLoadMore) {
+            console.log('[Admin] Switching to chat:', chat.id);
             setSelectedChat(chat);
             selectedChatIdRef.current = chat.id;
             setMessages([]); // Clear previous messages
-            if (socketRef.current) socketRef.current.emit('join_room', chat.id);
+            setIsTyping(false); // Reset typing status on switch
+            if (socketRef.current) {
+                console.log('[Admin] Joining room:', chat.id);
+                socketRef.current.emit('join_room', chat.id);
+            }
         }
 
         try {

@@ -27,6 +27,8 @@ const Chats = () => {
 
         console.log('[SOCKET] Connecting to:', API_URL);
         const token = localStorage.getItem('token');
+        console.log('[DEBUG] Token Durumu:', token);
+
         socketRef.current = io(API_URL, {
             transports: ['websocket', 'polling'],
             reconnection: true,

@@ -1,36 +1,36 @@
-import React, { useEffect } from 'react';
-import { StyleSheet, View } from 'react-native';
-import Animated, {
-    useSharedValue,
-    useAnimatedStyle,
-    withRepeat,
-    withTiming,
-    withSequence,
-    withDelay,
-} from 'react-native-reanimated';
+import React, { useEffect, useRef } from 'react';
+import { StyleSheet, View, Animated, Easing } from 'react-native';
 
 const Dot = ({ index }) => {
-    const translateY = useSharedValue(0);
+    const translateY = useRef(new Animated.Value(0)).current;
 
     useEffect(() => {
-        translateY.value = withDelay(
-            index * 200,
-            withRepeat(
-                withSequence(
-                    withTiming(-6, { duration: 400 }),
-                    withTiming(0, { duration: 400 })
-                ),
-                -1,
-                true
-            )
-        );
-    }, []);
+        const startAnimation = () => {
+            Animated.loop(
+                Animated.sequence([
+                    Animated.timing(translateY, {
+                        toValue: -6,
+                        duration: 400,
+                        useNativeDriver: true,
+                        easing: Easing.ease,
+                        delay: index * 200,
+                    }),
+                    Animated.timing(translateY, {
+                        toValue: 0,
+                        duration: 400,
+                        useNativeDriver: true,
+                        easing: Easing.ease,
+                    }),
+                ])
+            ).start();
+        };
 
-    const animatedStyle = useAnimatedStyle(() => ({
-        transform: [{ translateY: translateY.value }],
-    }));
+        startAnimation();
+    }, [index]);
 
-    return <Animated.View style={[styles.dot, animatedStyle]} />;
+    return (
+        <Animated.View style={[styles.dot, { transform: [{ translateY }] }]} />
+    );
 };
 
 const TypingIndicator = () => {
@@ -59,6 +59,7 @@ const styles = StyleSheet.create({
         height: 6,
         borderRadius: 3,
         backgroundColor: 'rgba(255, 255, 255, 0.4)',
+        marginHorizontal: 2,
     },
 });
 

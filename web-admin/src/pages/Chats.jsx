@@ -16,10 +16,30 @@ const Chats = () => {
     const [uploading, setUploading] = useState(false);
     const socketRef = useRef(null);
     const messagesEndRef = useRef(null);
-    const fileInputRef = useRef(null);
-    const selectedChatIdRef = useRef(null);
+    const typingTimeoutRef = useRef(null);
 
-    // Keep ref in sync with state for socket listeners
+    const handleTyping = (e) => {
+        const text = e.target.value;
+        setInput(text);
+
+        if (!socketRef.current || !selectedChatIdRef.current) return;
+
+        if (text.length > 0) {
+            socketRef.current.emit('typing_start', { chatId: selectedChatIdRef.current });
+
+            if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+
+            typingTimeoutRef.current = setTimeout(() => {
+                socketRef.current.emit('typing_end', { chatId: selectedChatIdRef.current });
+            }, 2000);
+        } else {
+            socketRef.current.emit('typing_end', { chatId: selectedChatIdRef.current });
+            if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+        }
+    };
+
+
+
     useEffect(() => {
         selectedChatIdRef.current = selectedChat?.id;
     }, [selectedChat]);
@@ -166,6 +186,10 @@ const Chats = () => {
     const sendMessage = (e) => {
         e.preventDefault();
         if (!input.trim() || !selectedChat) return;
+
+        // Stop typing immediately
+        socketRef.current.emit('typing_end', { chatId: selectedChat.id });
+        if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
 
         const msgData = {
             chatId: selectedChat.id,
@@ -410,19 +434,22 @@ const Chats = () => {
                                     </div>
                                 </div>
                             ))}
+
+                            {/* Typing Indicator Bubble */}
+                            {isTyping && (
+                                <div className="flex justify-start">
+                                    <div className="bg-slate-800 p-4 rounded-2xl rounded-bl-none border border-slate-700 flex items-center gap-1 w-16 h-10">
+                                        <span className="w-2 h-2 bg-slate-400 rounded-full animate-bounce"></span>
+                                        <span className="w-2 h-2 bg-slate-400 rounded-full animate-bounce delay-75"></span>
+                                        <span className="w-2 h-2 bg-slate-400 rounded-full animate-bounce delay-150"></span>
+                                    </div>
+                                </div>
+                            )}
+
                             <div ref={messagesEndRef} />
                         </div>
 
                         <form onSubmit={sendMessage} className="p-6 bg-slate-900/40 border-t border-white/5 flex gap-4 relative">
-                            {isTyping && (
-                                <div className="absolute -top-6 left-6 text-xs font-bold text-fuchsia-400 animate-pulse flex items-center gap-2">
-                                    <span className="relative flex h-2 w-2">
-                                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-fuchsia-400 opacity-75"></span>
-                                        <span className="relative inline-flex rounded-full h-2 w-2 bg-fuchsia-500"></span>
-                                    </span>
-                                    Kullanıcı yazıyor...
-                                </div>
-                            )}
                             <input
                                 type="file"
                                 ref={fileInputRef}

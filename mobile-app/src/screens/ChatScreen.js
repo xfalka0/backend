@@ -326,6 +326,18 @@ export default function ChatScreen({ route, navigation }) {
                 }
             });
 
+            socketRef.current.on('display_typing', (data) => {
+                if (data.chatId === realChatId) {
+                    setIsTyping(true);
+                }
+            });
+
+            socketRef.current.on('hide_typing', (data) => {
+                if (data.chatId === realChatId) {
+                    setIsTyping(false);
+                }
+            });
+
         } catch (error) {
             console.error('Chat Initialization Error:', error);
         }

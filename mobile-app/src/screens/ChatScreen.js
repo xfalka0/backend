@@ -266,12 +266,18 @@ export default function ChatScreen({ route, navigation }) {
             console.log('[ChatScreen] Connecting to socket with token:', token ? 'Exists' : 'Missing');
 
             socketRef.current = io(SOCKET_URL, {
+                transports: ['websocket', 'polling'],
+                reconnection: true,
                 auth: { token }
             });
 
             socketRef.current.on('connect', () => {
-                console.log('[SOCKET] Connected to Backend. Room ID:', realChatId);
+                console.log('[SOCKET] Connected to Backend. ID:', socketRef.current.id, 'Room:', realChatId);
                 socketRef.current.emit('join_room', realChatId);
+            });
+
+            socketRef.current.on('connect_error', (err) => {
+                console.error('[SOCKET] Connection Error:', err.message);
             });
 
             socketRef.current.on('disconnect', (reason) => {

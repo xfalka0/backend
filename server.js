@@ -2391,6 +2391,24 @@ io.on('connection', (socket) => {
         console.log(`User ${socket.id} joined room ${chatId}`);
     });
 
+    // --- TYPING INDICATOR (YAZIYOR...) ---
+    socket.on('typing_start', (data) => {
+        const { chatId } = data;
+        // Broadcast to everyone in the room EXCEPT the sender
+        socket.to(chatId).emit('display_typing', {
+            userId: socket.user ? socket.user.id : null,
+            chatId: chatId
+        });
+    });
+
+    socket.on('typing_end', (data) => {
+        const { chatId } = data;
+        socket.to(chatId).emit('hide_typing', {
+            userId: socket.user ? socket.user.id : null,
+            chatId: chatId
+        });
+    });
+
     // Send Message
     socket.on('send_message', async (data) => {
         console.log('[SOCKET] send_message received:', JSON.stringify(data, null, 2));

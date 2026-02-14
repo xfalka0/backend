@@ -158,6 +158,7 @@ export default function ChatScreen({ route, navigation }) {
 
     const socketRef = useRef(null);
     const flatListRef = useRef(null);
+    const typingTimeoutRef = useRef(null);
 
     // Header Config
     React.useLayoutEffect(() => {
@@ -336,6 +337,25 @@ export default function ChatScreen({ route, navigation }) {
             if (socketRef.current) socketRef.current.disconnect();
         };
     }, []);
+
+    const handleTyping = (text) => {
+        setInput(text);
+
+        if (!socketRef.current) return;
+
+        if (text.length > 0) {
+            socketRef.current.emit('typing_start', { chatId });
+
+            if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+
+            typingTimeoutRef.current = setTimeout(() => {
+                socketRef.current.emit('typing_end', { chatId });
+            }, 2000);
+        } else {
+            socketRef.current.emit('typing_end', { chatId });
+            if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+        }
+    };
 
     const sendMessage = () => {
         if (input.trim() === '' || !chatId) return;
@@ -697,7 +717,7 @@ export default function ChatScreen({ route, navigation }) {
                     <TextInput
                         style={[styles.input, { backgroundColor: theme.colors.glass, borderColor: theme.colors.glassBorder, color: theme.colors.text }]}
                         value={input}
-                        onChangeText={setInput}
+                        onChangeText={handleTyping}
                         placeholder="Mesaj yaz..."
                         placeholderTextColor={theme.colors.textSecondary}
                     />

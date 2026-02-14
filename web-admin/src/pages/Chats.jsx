@@ -11,6 +11,7 @@ const Chats = () => {
     const [chats, setChats] = useState([]);
     const [selectedChat, setSelectedChat] = useState(null);
     const [messages, setMessages] = useState([]);
+    const [isTyping, setIsTyping] = useState(false);
     const [input, setInput] = useState('');
     const [uploading, setUploading] = useState(false);
     const socketRef = useRef(null);
@@ -29,7 +30,6 @@ const Chats = () => {
         fetchChats();
 
         console.log('[SOCKET] Connecting to:', API_URL);
-        console.log('[DEBUG] Token Durumu (Context):', token); // Use Context Token
 
         socketRef.current = io(API_URL, {
             transports: ['websocket', 'polling'],
@@ -55,8 +55,6 @@ const Chats = () => {
         });
 
         socketRef.current.on('receive_message', (msg) => {
-            console.log('[DEBUG] Mesaj Geldi:', msg);
-            console.log('[DEBUG] Şu anki Chat ID:', selectedChatIdRef.current);
             if (selectedChatIdRef.current === msg.chat_id) {
                 setMessages((prev) => {
                     if (prev.some(m => m.id === msg.id)) return prev;
@@ -91,13 +89,21 @@ const Chats = () => {
 
         socketRef.current.on('admin_notification', (msg) => {
             console.log('[SOCKET] Admin Notification Received:', msg);
-            // Force refresh from server to ensure 100% data consistency
-            // This avoids client-side state merging issues and sorting bugs
             fetchChats();
-
-            // Optional: Update unread count if it's not the selected chat
             if (msg.chat_id != selectedChatIdRef.current) {
-                // You could add a toast/notification sound here
+                // notification logic
+            }
+        });
+
+        socketRef.current.on('display_typing', (data) => {
+            if (selectedChatIdRef.current == data.chatId) {
+                setIsTyping(true);
+            }
+        });
+
+        socketRef.current.on('hide_typing', (data) => {
+            if (selectedChatIdRef.current == data.chatId) {
+                setIsTyping(false);
             }
         });
 

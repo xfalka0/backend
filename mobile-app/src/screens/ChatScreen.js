@@ -344,16 +344,17 @@ export default function ChatScreen({ route, navigation }) {
             });
 
             socketRef.current.on('display_typing', (data) => {
-                console.log('[SOCKET] display_typing received on Mobile:', data);
-                // Don't show indicator if it's our own typing event
-                if (data.chatId === realChatId && data.userId !== user.id) {
+                console.log('[SOCKET] display_typing received on Mobile:', data, 'Current realChatId:', realChatId);
+                // Use loose equality (==) for ID comparison to handle String vs Number mismatches
+                if (data.chatId == realChatId && data.userId != user.id) {
+                    console.log('[ChatScreen] Showing Typing Indicator');
                     setIsTyping(true);
                 }
             });
 
             socketRef.current.on('hide_typing', (data) => {
                 console.log('[SOCKET] hide_typing received on Mobile:', data);
-                if (data.chatId === realChatId) {
+                if (data.chatId == realChatId) {
                     setIsTyping(false);
                 }
             });

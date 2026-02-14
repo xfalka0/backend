@@ -24,17 +24,23 @@ const Chats = () => {
         const text = e.target.value;
         setInput(text);
 
-        if (!socketRef.current || !selectedChatIdRef.current) return;
+        if (!socketRef.current || !selectedChatIdRef.current) {
+            console.log('[Admin] Cannot emit typing: Socket or ChatId missing', !!socketRef.current, selectedChatIdRef.current);
+            return;
+        }
 
         if (text.length > 0) {
+            console.log('[Admin] Emitting typing_start for:', selectedChatIdRef.current);
             socketRef.current.emit('typing_start', { chatId: selectedChatIdRef.current });
 
             if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
 
             typingTimeoutRef.current = setTimeout(() => {
+                console.log('[Admin] Emitting typing_end (timeout) for:', selectedChatIdRef.current);
                 socketRef.current.emit('typing_end', { chatId: selectedChatIdRef.current });
             }, 2000);
         } else {
+            console.log('[Admin] Emitting typing_end (empty) for:', selectedChatIdRef.current);
             socketRef.current.emit('typing_end', { chatId: selectedChatIdRef.current });
             if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
         }

@@ -2391,8 +2391,9 @@ io.on('connection', (socket) => {
             console.error(`[SOCKET] User ${socket.user?.username || socket.id} tried to join an empty room!`);
             return;
         }
-        socket.join(chatId);
-        console.log(`[SOCKET] User ${socket.user?.username || socket.id} (${socket.id}) joined room: ${chatId}`);
+        const roomName = chatId.toString();
+        socket.join(roomName);
+        console.log(`[SOCKET] User ${socket.user?.username || socket.id} (${socket.id}) joined room: ${roomName}`);
     });
 
     // --- TYPING INDICATOR (YAZIYOR...) ---

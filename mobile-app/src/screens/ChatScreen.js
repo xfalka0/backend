@@ -272,8 +272,9 @@ export default function ChatScreen({ route, navigation }) {
             });
 
             socketRef.current.on('connect', () => {
-                console.log('[SOCKET] Connected to Backend. ID:', socketRef.current.id, 'Room:', realChatId);
-                socketRef.current.emit('join_room', realChatId);
+                const roomStr = realChatId.toString();
+                console.log('[SOCKET] Connected to Backend. ID:', socketRef.current.id, 'Joining Room:', roomStr);
+                socketRef.current.emit('join_room', roomStr);
             });
 
             socketRef.current.on('connect_error', (err) => {
@@ -345,8 +346,12 @@ export default function ChatScreen({ route, navigation }) {
 
             socketRef.current.on('display_typing', (data) => {
                 console.log('[SOCKET] display_typing received on Mobile:', data, 'Current realChatId:', realChatId);
-                // Use loose equality (==) for ID comparison to handle String vs Number mismatches
-                if (data.chatId == realChatId && data.userId != user.id) {
+                const incomingChatId = data.chatId ? data.chatId.toString() : '';
+                const incomingUserId = data.userId ? data.userId.toString() : '';
+                const myId = user?.id ? user.id.toString() : '';
+                const myChatId = realChatId ? realChatId.toString() : '';
+
+                if (incomingChatId === myChatId && incomingUserId !== myId) {
                     console.log('[ChatScreen] Showing Typing Indicator');
                     setIsTyping(true);
                 }
@@ -354,7 +359,9 @@ export default function ChatScreen({ route, navigation }) {
 
             socketRef.current.on('hide_typing', (data) => {
                 console.log('[SOCKET] hide_typing received on Mobile:', data);
-                if (data.chatId == realChatId) {
+                const incomingChatId = data.chatId ? data.chatId.toString() : '';
+                const myChatId = realChatId ? realChatId.toString() : '';
+                if (incomingChatId === myChatId) {
                     setIsTyping(false);
                 }
             });

@@ -30,18 +30,20 @@ const Chats = () => {
         }
 
         if (text.length > 0) {
-            console.log('[Admin] Emitting typing_start for:', selectedChatIdRef.current);
-            socketRef.current.emit('typing_start', { chatId: selectedChatIdRef.current });
+            const roomStr = selectedChatIdRef.current.toString();
+            console.log('[Admin] Emitting typing_start for:', roomStr);
+            socketRef.current.emit('typing_start', { chatId: roomStr });
 
             if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
 
             typingTimeoutRef.current = setTimeout(() => {
-                console.log('[Admin] Emitting typing_end (timeout) for:', selectedChatIdRef.current);
-                socketRef.current.emit('typing_end', { chatId: selectedChatIdRef.current });
+                console.log('[Admin] Emitting typing_end (timeout) for:', roomStr);
+                socketRef.current.emit('typing_end', { chatId: roomStr });
             }, 2000);
         } else {
-            console.log('[Admin] Emitting typing_end (empty) for:', selectedChatIdRef.current);
-            socketRef.current.emit('typing_end', { chatId: selectedChatIdRef.current });
+            const roomStr = selectedChatIdRef.current.toString();
+            console.log('[Admin] Emitting typing_end (empty) for:', roomStr);
+            socketRef.current.emit('typing_end', { chatId: roomStr });
             if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
         }
     };
@@ -77,8 +79,9 @@ const Chats = () => {
         socketRef.current.on('connect', () => {
             console.log('[SOCKET] Connected with ID:', socketRef.current.id);
             if (selectedChatIdRef.current) {
-                console.log('[SOCKET] Re-joining room after reconnect:', selectedChatIdRef.current);
-                socketRef.current.emit('join_room', selectedChatIdRef.current);
+                const roomStr = selectedChatIdRef.current.toString();
+                console.log('[SOCKET] Re-joining room after reconnect:', roomStr);
+                socketRef.current.emit('join_room', roomStr);
             }
         });
 

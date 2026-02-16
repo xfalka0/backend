@@ -36,6 +36,58 @@ cloudinary.config({
     api_secret: process.env.CLOUDINARY_API_SECRET
 });
 
+// Initialize Default Coin Packages
+const initializePackages = async () => {
+    try {
+        // Ensure table exists
+        await db.query(`
+            CREATE TABLE IF NOT EXISTS coin_packages (
+                id SERIAL PRIMARY KEY,
+                name VARCHAR(100) NOT NULL,
+                description TEXT,
+                price DECIMAL(10, 2) NOT NULL,
+                coins INTEGER NOT NULL,
+                icon_url VARCHAR(255),
+                revenuecat_id VARCHAR(255),
+                is_active BOOLEAN DEFAULT TRUE,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        `);
+
+        // Check for revenuecat_id column (backend migration)
+        const cols = await db.query("SELECT column_name FROM information_schema.columns WHERE table_name = 'coin_packages'");
+        if (!cols.rows.some(c => c.column_name === 'revenuecat_id')) {
+            console.log('[DB] Adding revenuecat_id to coin_packages...');
+            await db.query('ALTER TABLE coin_packages ADD COLUMN revenuecat_id VARCHAR(255)');
+        }
+
+        // Check if packages exist
+        const result = await db.query('SELECT COUNT(*) FROM coin_packages');
+        if (parseInt(result.rows[0].count) === 0) {
+            console.log('Seeding default coin packages...');
+            const packages = [
+                { name: 'Başlangıç Paketi', price: 39.99, coins: 100, rc_id: 'coins_100' },
+                { name: 'Gümüş Paket', price: 69.99, coins: 200, rc_id: 'coins_200' },
+                { name: 'Altın Paket', price: 129.99, coins: 400, rc_id: 'coins_400' },
+                { name: 'VIP Paket', price: 249.99, coins: 700, rc_id: 'coins_700' },
+                { name: 'Platin Paket', price: 449.99, coins: 1200, rc_id: 'coins_1200' },
+                { name: 'Efsane Paket', price: 949.99, coins: 2500, rc_id: 'coins_2500' },
+                { name: 'Ultimate Paket', price: 1749.99, coins: 5000, rc_id: 'coins_5000' }
+            ];
+
+            for (const pkg of packages) {
+                await db.query(
+                    'INSERT INTO coin_packages (name, price, coins, revenuecat_id) VALUES ($1, $2, $3, $4)',
+                    [pkg.name, pkg.price, pkg.coins, pkg.rc_id]
+                );
+            }
+            console.log('Default coin packages seeded.');
+        }
+    } catch (err) {
+        console.error('Error initializing packages:', err.message);
+    }
+};
+
 // --- DATABASE AUTO-MIGRATION ---
 const initializeDatabase = async () => {
     try {
@@ -140,6 +192,9 @@ const initializeDatabase = async () => {
             console.log('[DB] Adding missing column: last_login_at');
             await db.query('ALTER TABLE users ADD COLUMN last_login_at TIMESTAMP');
         }
+
+        // Initialize Packages
+        await initializePackages();
 
         if (!columnNames.includes('ban_expires_at')) {
             console.log('[DB] Adding missing column: ban_expires_at');
@@ -568,6 +623,35 @@ app.put('/api/users/:id/profile', async (req, res) => {
 // Health Check
 app.get('/', (req, res) => {
     res.send('Chat System Backend is Running (FIX_V18)');
+});
+
+// Account Deletion Page (Google Play Requirement)
+app.get('/account-deletion', (req, res) => {
+    res.send(`
+        <!DOCTYPE html>
+        <html lang="en">
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Account Deletion Request - Fiva</title>
+            <style>
+                body { font-family: sans-serif; padding: 20px; max-width: 600px; margin: 0 auto; line-height: 1.6; }
+                h1 { color: #333; }
+                .contact { background: #f9f9f9; padding: 15px; border-radius: 5px; border: 1px solid #ddd; }
+            </style>
+        </head>
+        <body>
+            <h1>Data Deletion Request</h1>
+            <p>If you wish to delete your Fiva account and all associated personal data, please follow the steps below:</p>
+            <div class="contact">
+                <p>Send an email to our support team at: <strong>support@fiva.com</strong></p>
+                <p>Subject: <strong>Account Deletion Request - [Your Username]</strong></p>
+                <p>Please send the request from the email address associated with your account.</p>
+            </div>
+            <p>Your request will be processed within 30 days. All personal data will be permanently removed from our systems.</p>
+        </body>
+        </html>
+    `);
 });
 
 // DEBUG: DB Check
@@ -1187,6 +1271,50 @@ app.put('/api/admin/users/:id/role', authenticateToken, authorizeRole('admin', '
     }
 });
 
+// DELETE USER (Self or Admin)
+app.delete('/api/users/:id', authenticateToken, async (req, res) => {
+    const { id } = req.params;
+
+    // Check permissions: users can delete themselves, admins can delete anyone
+    // Note: req.user.id is from token. Ensure type matches (string vs number)
+    // Loose equality check or toString() is safer.
+    const requestorId = req.user.id.toString();
+    const targetId = id.toString();
+
+    if (requestorId !== targetId && req.user.role !== 'admin' && req.user.role !== 'super_admin') {
+        return res.status(403).json({ error: 'Yetkisiz işlem. Başkasının hesabını silemezsiniz.' });
+    }
+
+    try {
+        await db.query('BEGIN');
+
+        console.log(`[DELETE] Starting deletion for user ${id}`);
+
+        // Delete related data (Cascade manually to be safe)
+        await db.query('DELETE FROM messages WHERE sender_id = $1', [id]);
+        await db.query('DELETE FROM chats WHERE user_id = $1 OR operator_id = $1', [id]);
+        await db.query('DELETE FROM operators WHERE user_id = $1', [id]);
+        await db.query('DELETE FROM stories WHERE operator_id = $1', [id]);
+        await db.query('DELETE FROM activities WHERE user_id = $1', [id]);
+
+        // Finally delete user
+        const result = await db.query('DELETE FROM users WHERE id = $1 RETURNING id', [id]);
+
+        if (result.rowCount === 0) {
+            await db.query('ROLLBACK');
+            return res.status(404).json({ error: 'Kullanıcı bulunamadı.' });
+        }
+
+        await db.query('COMMIT');
+        console.log(`[DELETE] User ${id} deleted successfully.`);
+        res.json({ success: true, message: 'Hesap başarıyla silindi.' });
+    } catch (err) {
+        await db.query('ROLLBACK');
+        console.error('Delete User Error:', err.message);
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // DELETE USER (Manager/Admin Only)
 app.delete('/api/admin/users/:id', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
     const { id } = req.params;
@@ -1266,12 +1394,15 @@ app.post('/api/purchase', authenticateToken, async (req, res) => {
             coins = pkgRes.rows[0].coins;
             packageName = pkgRes.rows[0].name;
         } else {
-            // RevenueCat or external ID logic
-            // TODO: Implement RevenueCat verification here
-            // For now, reject unknown string IDs to prevent "hack" unless we have a mapping
-            // Temporary: Allow known legacy IDs if any, else reject
-            await db.query('ROLLBACK');
-            return res.status(400).json({ error: 'Geçersiz paket ID (RevenueCat doğrulaması eksik).' });
+            // RevenueCat ID (String)
+            const pkgRes = await db.query('SELECT * FROM coin_packages WHERE revenuecat_id = $1', [productId]);
+            if (pkgRes.rows.length === 0) {
+                await db.query('ROLLBACK');
+                return res.status(404).json({ error: 'Paket bulunamadı (Store ID eşleşmedi).' });
+            }
+            price = parseFloat(pkgRes.rows[0].price);
+            coins = pkgRes.rows[0].coins;
+            packageName = pkgRes.rows[0].name;
         }
 
         // 2. Get current user data

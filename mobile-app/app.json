@@ -1,7 +1,7 @@
 {
     "expo": {
-        "name": "Faya",
-        "slug": "faya",
+        "name": "Fiva",
+        "slug": "fiva",
         "version": "1.0.0",
         "orientation": "portrait",
         "icon": "./assets/icon.png",
@@ -15,14 +15,15 @@
             "**/*"
         ],
         "ios": {
-            "supportsTablet": true
+            "supportsTablet": true,
+            "bundleIdentifier": "com.fiva.app"
         },
         "android": {
             "adaptiveIcon": {
                 "foregroundImage": "./assets/adaptive-icon.png",
                 "backgroundColor": "#ffffff"
             },
-            "package": "com.faya.app"
+            "package": "com.fiva.app"
         },
         "web": {
             "favicon": "./assets/favicon.png"

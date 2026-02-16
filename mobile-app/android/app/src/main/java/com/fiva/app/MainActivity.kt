@@ -1,4 +1,4 @@
-package com.faya.app
+package com.fiva.app
 
 import android.os.Build
 import android.os.Bundle

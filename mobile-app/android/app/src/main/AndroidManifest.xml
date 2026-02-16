@@ -28,6 +28,8 @@
         <category android:name="android.intent.category.BROWSABLE"/>
         <data android:scheme="com.faya.app"/>
         <data android:scheme="exp+faya"/>
+        <data android:scheme="com.fiva.app"/>
+        <data android:scheme="exp+fiva"/>
       </intent-filter>
     </activity>
     <activity android:name="com.facebook.react.devsupport.DevSettingsActivity" android:exported="false"/>

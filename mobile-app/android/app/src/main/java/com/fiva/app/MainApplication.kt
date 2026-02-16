@@ -1,4 +1,4 @@
-package com.faya.app
+package com.fiva.app
 
 import android.app.Application
 import android.content.res.Configuration

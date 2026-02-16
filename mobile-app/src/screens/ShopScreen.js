@@ -36,7 +36,7 @@ export default function ShopScreen({ navigation, route }) {
                     const transformed = res.data.map(pkg => ({
                         isLocal: true,
                         product: {
-                            identifier: pkg.id.toString(),
+                            identifier: pkg.revenuecat_id || pkg.id.toString(),
                             title: `${pkg.coins} Coin`,
                             description: pkg.name || 'Altın Paketi',
                             priceString: `${pkg.price} ₺`,
@@ -57,26 +57,51 @@ export default function ShopScreen({ navigation, route }) {
 
     const handlePurchase = async (pack) => {
         try {
+            let transactionId = `test_${Date.now()}`;
+            let success = false;
+
+            if (pack.isLocal && !pack.product.identifier.includes('_')) {
+                // Fallback for old integer IDs if revenuecat_id is missing (still Test Mode for legacy)
+                // But ideally we want real purchase. 
+                // If identifier is "coins_100", PurchaseService might work if configured in Store.
+            }
+
+            // Always try real purchase (RevenueCat)
+            // Even if isLocal=true, we now use revenuecat_id as identifier
             const result = await PurchaseService.purchasePackage(pack);
-
             if (result.success) {
-                // Sync with backend
-                const res = await axios.post(`${API_URL}/purchase`, {
-                    userId: currentUserId,
-                    productId: pack.product.identifier,
-                    transactionId: result.customerInfo.allPurchaseDates[pack.product.identifier]
-                });
-
-                if (res.data.success) {
-                    setBalance(res.data.balance);
-                    alert(`Tebrikler! Satın alım başarılı. \nYeni Bakiye: ${res.data.balance}`);
-                }
+                success = true;
+                transactionId = result.customerInfo.allPurchaseDates[pack.product.identifier] || transactionId;
             } else if (!result.cancelled) {
                 alert('Satın alma işlemi başarısız: ' + result.error);
+                return;
+            }
+
+            if (success) {
+                // Sync with backend
+                const res = await axios.post(`${API_URL}/api/purchase`, {
+                    userId: currentUserId,
+                    productId: pack.product.identifier,
+                    transactionId: transactionId
+                });
+
+                if (res.data.success || res.status === 200) {
+                    // Backend returns updated user fields usually, or we refetch
+                    // The backend snippet showed updating balance, but verify logic
+                    if (res.data.balance !== undefined) {
+                        setBalance(res.data.balance);
+                        alert(`Tebrikler! Satın alım başarılı. \nYeni Bakiye: ${res.data.balance}`);
+                    } else {
+                        // Fallback refetch
+                        const userRes = await axios.get(`${API_URL}/users/${currentUserId}`);
+                        setBalance(userRes.data.balance);
+                        alert('Satın alım başarılı! Bakiyeniz güncellendi.');
+                    }
+                }
             }
         } catch (error) {
-            console.error(error);
-            alert('Beklenmedik bir hata oluştu.');
+            console.error('Purchase Error:', error);
+            alert('Beklenmedik bir hata oluştu: ' + (error.response?.data?.error || error.message));
         }
     };
 
@@ -96,12 +121,7 @@ export default function ShopScreen({ navigation, route }) {
         const isBestValue = product.identifier.includes('popular') || index === 1;
 
         const handlePress = () => {
-            if (pack.isLocal) {
-                // Handle local purchase logic (simulated for now)
-                alert(`${product.title} satın alma işlemi başlatıldı (Simülasyon).`);
-            } else {
-                handlePurchase(pack);
-            }
+            handlePurchase(pack);
         };
 
         return (

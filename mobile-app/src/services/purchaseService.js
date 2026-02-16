@@ -3,8 +3,8 @@ import Purchases from 'react-native-purchases';
 
 // REVENUECAT API KEYS (Replace with real keys from RevenueCat Dashboard)
 const RC_API_KEYS = {
-    apple: 'goog_placeholder_ios_key',
-    google: 'goog_placeholder_android_key',
+    apple: 'goog_placeholder_ios_key', // iOS için henüz anahtar gelmedi
+    google: 'goog_EerPgzQtDpetwESLvIcHjFeiDXG', // Android Anahtarı Eklendi
 };
 
 export const PurchaseService = {

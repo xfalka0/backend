@@ -629,11 +629,11 @@ app.get('/', (req, res) => {
 app.get('/account-deletion', (req, res) => {
     res.send(`
         <!DOCTYPE html>
-        <html lang="en">
+        <html lang="tr">
         <head>
             <meta charset="UTF-8">
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>Account Deletion Request - Fiva</title>
+            <title>Hesap Silme Talebi - Fiva</title>
             <style>
                 body { font-family: sans-serif; padding: 20px; max-width: 600px; margin: 0 auto; line-height: 1.6; }
                 h1 { color: #333; }
@@ -641,14 +641,14 @@ app.get('/account-deletion', (req, res) => {
             </style>
         </head>
         <body>
-            <h1>Data Deletion Request</h1>
-            <p>If you wish to delete your Fiva account and all associated personal data, please follow the steps below:</p>
+            <h1>Veri Silme Talebi</h1>
+            <p>Fiva hesabınızı ve ilgili tüm kişisel verilerinizi silmek istiyorsanız, lütfen aşağıdaki adımları izleyin:</p>
             <div class="contact">
-                <p>Send an email to our support team at: <strong>support@fiva.com</strong></p>
-                <p>Subject: <strong>Account Deletion Request - [Your Username]</strong></p>
-                <p>Please send the request from the email address associated with your account.</p>
+                <p>Destek ekibimize şu adresten e-posta gönderin: <strong>falkasoft@gmail.com</strong></p>
+                <p>Konu: <strong>Hesap Silme Talebi - [Kullanıcı Adınız]</strong></p>
+                <p>Lütfen talebi, hesabınızla ilişkili e-posta adresinden gönderin.</p>
             </div>
-            <p>Your request will be processed within 30 days. All personal data will be permanently removed from our systems.</p>
+            <p>Talebiniz 30 gün içinde işleme alınacaktır. Tüm kişisel veriler sistemlerimizden kalıcı olarak silinecektir.</p>
         </body>
         </html>
     `);

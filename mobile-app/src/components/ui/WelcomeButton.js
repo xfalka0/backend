@@ -1,18 +1,28 @@
 import React from 'react';
-import { TouchableOpacity, Text, StyleSheet, Platform } from 'react-native';
+import { TouchableOpacity, Text, StyleSheet, Platform, ActivityIndicator, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { BlurView } from 'expo-blur';
 import Animated, {
     useAnimatedStyle,
     useSharedValue,
     withSpring,
-    interpolate
+    withRepeat,
+    withTiming,
+    FadeIn,
+    FadeOut
 } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
 
 const AnimatedTouchableOpacity = Animated.createAnimatedComponent(TouchableOpacity);
 
-export default function WelcomeButton({ title, icon, onPress, variant = 'glass', gradient }) {
+export default function WelcomeButton({
+    title,
+    icon,
+    onPress,
+    variant = 'glass',
+    gradient,
+    loading = false,
+    disabled = false
+}) {
     const scale = useSharedValue(1);
 
     const animatedStyle = useAnimatedStyle(() => {
@@ -22,7 +32,7 @@ export default function WelcomeButton({ title, icon, onPress, variant = 'glass',
     });
 
     const handlePressIn = () => {
-        scale.value = withSpring(0.96);
+        if (!loading && !disabled) scale.value = withSpring(0.96);
     };
 
     const handlePressOut = () => {
@@ -30,19 +40,38 @@ export default function WelcomeButton({ title, icon, onPress, variant = 'glass',
     };
 
     const renderContent = () => (
-        <>
-            {icon && <Ionicons name={icon} size={24} color="white" style={styles.icon} />}
-            <Text style={styles.text}>{title}</Text>
-        </>
+        <View style={styles.contentContainer}>
+            {loading ? (
+                <Animated.View
+                    entering={FadeIn.duration(200)}
+                    exiting={FadeOut.duration(200)}
+                    style={styles.loadingContainer}
+                >
+                    <ActivityIndicator size="small" color="white" />
+                </Animated.View>
+            ) : (
+                <Animated.View
+                    entering={FadeIn.duration(200)}
+                    exiting={FadeOut.duration(200)}
+                    style={styles.innerContent}
+                >
+                    {icon && <Ionicons name={icon} size={24} color="white" style={styles.icon} />}
+                    <Text style={styles.text} numberOfLines={1} adjustsFontSizeToFit>
+                        {title}
+                    </Text>
+                </Animated.View>
+            )}
+        </View>
     );
 
     if (variant === 'gradient') {
         return (
             <AnimatedTouchableOpacity
-                activeOpacity={1}
+                activeOpacity={0.7}
                 onPressIn={handlePressIn}
                 onPressOut={handlePressOut}
                 onPress={onPress}
+                disabled={loading || disabled}
                 style={[styles.button, animatedStyle]}
             >
                 <LinearGradient
@@ -63,11 +92,12 @@ export default function WelcomeButton({ title, icon, onPress, variant = 'glass',
             onPressIn={handlePressIn}
             onPressOut={handlePressOut}
             onPress={onPress}
+            disabled={loading || disabled}
             style={[styles.button, styles.glassButton, animatedStyle]}
         >
-            <BlurView intensity={20} style={styles.blur}>
+            <View style={styles.glassInner}>
                 {renderContent()}
-            </BlurView>
+            </View>
         </AnimatedTouchableOpacity>
     );
 }
@@ -98,13 +128,22 @@ const styles = StyleSheet.create({
     },
     gradient: {
         flex: 1,
-        flexDirection: 'row',
+    },
+    glassInner: {
+        flex: 1,
+    },
+    contentContainer: {
+        flex: 1,
         alignItems: 'center',
         justifyContent: 'center',
     },
-    blur: {
-        flex: 1,
+    innerContent: {
         flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingHorizontal: 20,
+    },
+    loadingContainer: {
         alignItems: 'center',
         justifyContent: 'center',
     },
@@ -114,7 +153,8 @@ const styles = StyleSheet.create({
     text: {
         color: 'white',
         fontSize: 18,
-        fontWeight: '600',
+        fontWeight: 'normal',
+        fontFamily: 'Outfit_400Regular',
         letterSpacing: 0.5,
     },
 });

@@ -164,6 +164,46 @@ export default function OperatorProfileScreen({ route, navigation }) {
 
                         {/* Hakkımda Bölümü */}
                         <Motion.Fade delay={400}>
+                            {/* Personal Info Section */}
+                            {(operator.relationship || operator.zodiac || operator.interests) && (
+                                <View style={styles.section}>
+                                    <Text style={styles.sectionTitle}>Kişisel Bilgiler</Text>
+                                    <View style={styles.infoTagsContainer}>
+                                        {operator.relationship && (
+                                            <View style={[styles.infoTag, { backgroundColor: 'rgba(236, 72, 153, 0.15)', borderColor: 'rgba(236, 72, 153, 0.3)' }]}>
+                                                <Ionicons name="heart" size={14} color="#ec4899" />
+                                                <Text style={[styles.infoTagText, { color: '#fbcfe8' }]}>{operator.relationship}</Text>
+                                            </View>
+                                        )}
+                                        {operator.zodiac && (
+                                            <View style={[styles.infoTag, { backgroundColor: 'rgba(139, 92, 246, 0.15)', borderColor: 'rgba(139, 92, 246, 0.3)' }]}>
+                                                <Ionicons name="sparkles" size={14} color="#a78bfa" />
+                                                <Text style={[styles.infoTagText, { color: '#ddd6fe' }]}>{operator.zodiac}</Text>
+                                            </View>
+                                        )}
+                                        {operator.job && (
+                                            <View style={[styles.infoTag, { backgroundColor: 'rgba(59, 130, 246, 0.15)', borderColor: 'rgba(59, 130, 246, 0.3)' }]}>
+                                                <Ionicons name="briefcase" size={14} color="#60a5fa" />
+                                                <Text style={[styles.infoTagText, { color: '#dbeafe' }]}>{operator.job}</Text>
+                                            </View>
+                                        )}
+                                    </View>
+
+                                    {operator.interests && (
+                                        <View style={{ marginTop: 12 }}>
+                                            <Text style={[styles.sectionTitle, { fontSize: 14, marginBottom: 8, opacity: 0.8 }]}>İlgi Alanları</Text>
+                                            <View style={styles.interestsContainer}>
+                                                {(Array.isArray(operator.interests) ? operator.interests : JSON.parse(operator.interests || '[]').length > 0 ? JSON.parse(operator.interests) : operator.interests.split(',')).map((interest, idx) => (
+                                                    <View key={idx} style={styles.interestTag}>
+                                                        <Text style={styles.interestText}>{interest.trim()}</Text>
+                                                    </View>
+                                                ))}
+                                            </View>
+                                        </View>
+                                    )}
+                                </View>
+                            )}
+
                             <View style={styles.section}>
                                 <Text style={styles.sectionTitle}>Hakkımda</Text>
                                 <Text style={styles.bioText}>{operator.bio || 'Merhaba! Seninle tanışmak için sabırsızlanıyorum.'}</Text>
@@ -386,5 +426,42 @@ const styles = StyleSheet.create({
         fontWeight: '900',
         textTransform: 'uppercase',
         letterSpacing: 1.5,
+    },
+    infoTagsContainer: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        gap: 8,
+        marginBottom: 10,
+    },
+    infoTag: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 12,
+        paddingVertical: 6,
+        borderRadius: 12,
+        borderWidth: 1,
+        gap: 6,
+    },
+    infoTagText: {
+        fontSize: 13,
+        fontWeight: '700',
+    },
+    interestsContainer: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        gap: 6,
+    },
+    interestTag: {
+        backgroundColor: 'rgba(255, 255, 255, 0.05)',
+        paddingHorizontal: 10,
+        paddingVertical: 5,
+        borderRadius: 8,
+        borderWidth: 1,
+        borderColor: 'rgba(255, 255, 255, 0.1)',
+    },
+    interestText: {
+        color: '#e2e8f0',
+        fontSize: 12,
+        fontWeight: '500',
     },
 });

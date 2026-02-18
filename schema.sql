@@ -18,6 +18,9 @@ CREATE TABLE IF NOT EXISTS users (
     ban_expires_at TIMESTAMP,
     account_status VARCHAR(50) DEFAULT 'active',
     job VARCHAR(100),
+    relationship VARCHAR(50),
+    zodiac VARCHAR(50),
+    interests TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 

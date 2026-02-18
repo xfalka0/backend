@@ -53,7 +53,7 @@ const Column = React.memo(({ images, speed, reverse = false }) => {
             {displayImages.map((img, index) => (
                 <View key={index} style={styles.cardContainer}>
                     <Image source={img} style={styles.card} resizeMode="cover" />
-                    <BlurView intensity={10} style={StyleSheet.absoluteFill} />
+                    <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(255,255,255,0.05)' }]} />
                 </View>
             ))}
         </Animated.View>

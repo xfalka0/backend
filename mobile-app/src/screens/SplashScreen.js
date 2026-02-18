@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { View, Image, StyleSheet, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, Dimensions, StatusBar } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LinearGradient } from 'expo-linear-gradient';
 import Animated, {
@@ -7,22 +7,37 @@ import Animated, {
     useAnimatedStyle,
     withTiming,
     withSpring,
+    withDelay,
+    withRepeat,
     Easing
 } from 'react-native-reanimated';
 import axios from 'axios';
 import { API_URL } from '../config';
-import { COLORS } from '../theme';
 
 const { width, height } = Dimensions.get('window');
 
 export default function SplashScreen({ navigation }) {
-    const scale = useSharedValue(0.3);
-    const opacity = useSharedValue(0);
+    // Animation Values
+    const scale = useSharedValue(0.8);
+    const textOpacity = useSharedValue(0);
+    const textTranslateY = useSharedValue(20);
+
+    // Background Animation Value (0 -> 1 -> 0)
+    const gradientOpacity = useSharedValue(0);
 
     useEffect(() => {
-        // Animation sequence
-        opacity.value = withTiming(1, { duration: 1000, easing: Easing.out(Easing.exp) });
-        scale.value = withSpring(1, { damping: 12, stiffness: 90 });
+        // Continuous Background Animation: Smoothly pulse between two gradients
+        // 0 -> 1 -> 0 (Infinite)
+        gradientOpacity.value = withRepeat(
+            withTiming(1, { duration: 3000, easing: Easing.inOut(Easing.quad) }),
+            -1, // Infinite
+            true // Reverse (ping-pong)
+        );
+
+        // Text Animation
+        scale.value = withTiming(1, { duration: 1500, easing: Easing.out(Easing.quad) });
+        textOpacity.value = withDelay(300, withTiming(1, { duration: 800 }));
+        textTranslateY.value = withDelay(300, withSpring(0, { damping: 12 }));
 
         const checkSession = async () => {
             try {
@@ -32,12 +47,9 @@ export default function SplashScreen({ navigation }) {
 
                 if (token && userData) {
                     try {
-                        // Verify token validity with backend
                         const res = await axios.get(`${API_URL}/auth/me`, {
                             headers: { Authorization: `Bearer ${token}` }
                         });
-
-                        // Token valid, proceed to app
                         const freshUser = res.data;
                         await AsyncStorage.setItem('user', JSON.stringify(freshUser));
 
@@ -48,7 +60,6 @@ export default function SplashScreen({ navigation }) {
                         }
                     } catch (verifyErr) {
                         console.warn("[Session] Token verification failed:", verifyErr.message);
-                        // If 401 or 403, clear session and go to welcome
                         if (verifyErr.response?.status === 401 || verifyErr.response?.status === 403) {
                             await AsyncStorage.multiRemove(['token', 'user']);
                         }
@@ -63,32 +74,47 @@ export default function SplashScreen({ navigation }) {
             }
         };
 
-        const timer = setTimeout(checkSession, 2000);
+        const timer = setTimeout(checkSession, 2500);
         return () => clearTimeout(timer);
     }, []);
 
-    const animatedLogoStyle = useAnimatedStyle(() => ({
-        transform: [{ scale: scale.value }],
-        opacity: opacity.value,
+    const animatedGradientStyle = useAnimatedStyle(() => ({
+        opacity: gradientOpacity.value,
+    }));
+
+    const animatedTextStyle = useAnimatedStyle(() => ({
+        opacity: textOpacity.value,
+        transform: [{ translateY: textTranslateY.value }, { scale: scale.value }],
     }));
 
     return (
         <View style={styles.container}>
-            <Image
-                source={require('../../assets/splash.png')}
-                style={styles.backgroundImage}
-                resizeMode="cover"
-            />
-            <LinearGradient
-                colors={['transparent', 'rgba(15, 23, 42, 0.9)', '#0f172a']}
-                style={styles.gradientOverlay}
-            />
+            <StatusBar barStyle="dark-content" />
 
-            <Animated.View style={[styles.logoContainer, animatedLogoStyle]}>
-                <Image
-                    source={require('../../assets/icon.png')}
-                    style={styles.logo}
+            {/* Layer 1: Base Gradient (Static) - WHITE/PASTEL */}
+            <View style={StyleSheet.absoluteFill}>
+                <LinearGradient
+                    // Bembeyazdan çok açık lila/pembe tonlarına
+                    colors={['#ffffff', '#fdf4ff', '#fae8ff']}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={styles.background}
                 />
+            </View>
+
+            {/* Layer 2: Overlay Gradient (Animated Opacity) - SLIGHTLY DIFFERENT WHITE/PASTEL */}
+            <Animated.View style={[StyleSheet.absoluteFill, animatedGradientStyle]}>
+                <LinearGradient
+                    // Bembeyazdan çok açık mavi/indigo tonlarına
+                    colors={['#ffffff', '#f5f3ff', '#ede9fe']}
+                    start={{ x: 0.2, y: 0 }}
+                    end={{ x: 0.8, y: 1 }}
+                    style={styles.background}
+                />
+            </Animated.View>
+
+            <Animated.View style={[styles.contentContainer, animatedTextStyle]}>
+                <Text style={styles.brandText}>Fiva</Text>
             </Animated.View>
         </View>
     );
@@ -97,30 +123,25 @@ export default function SplashScreen({ navigation }) {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: COLORS.background,
+        backgroundColor: '#ffffff',
         alignItems: 'center',
         justifyContent: 'center',
     },
-    backgroundImage: {
-        ...StyleSheet.absoluteFillObject,
+    background: {
         width,
         height,
     },
-    gradientOverlay: {
-        ...StyleSheet.absoluteFillObject,
-    },
-    logoContainer: {
+    contentContainer: {
         alignItems: 'center',
         justifyContent: 'center',
-        shadowColor: COLORS.primary,
-        shadowOffset: { width: 0, height: 10 },
-        shadowOpacity: 0.5,
-        shadowRadius: 20,
-        elevation: 20,
+        zIndex: 10,
     },
-    logo: {
-        width: 150,
-        height: 150,
-        borderRadius: 35,
+    brandText: {
+        fontSize: 64,
+        fontFamily: 'Outfit_800ExtraBold',
+        letterSpacing: 2,
+        // Arkaplan beyaz olduğu için yazı artık Koyu Mor/Lacivert olmalı
+        color: '#2e1065',
+        // Text Shadow/Glow tamamen kaldırıldı
     }
 });

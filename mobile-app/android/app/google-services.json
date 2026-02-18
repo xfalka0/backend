@@ -1,0 +1,55 @@
+{
+  "project_info": {
+    "project_number": "46669084263",
+    "project_id": "fiva-e08be",
+    "storage_bucket": "fiva-e08be.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:46669084263:android:e0f8efa920817a4fe2c6c2",
+        "android_client_info": {
+          "package_name": "com.fiva.app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "46669084263-61q201o3p2npu0q52i4frnnlgoh4md40.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.fiva.app",
+            "certificate_hash": "976b94aab64157ce938a2b160431aed5332b7e8c"
+          }
+        },
+        {
+          "client_id": "46669084263-nr965kavjol3nervt5n0pfftrvibiol1.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.fiva.app",
+            "certificate_hash": "5e8f16062ea3cd2c4a0d547876baa6f38cabf625"
+          }
+        },
+        {
+          "client_id": "46669084263-drv76chuoahgvfitcdmctvvqm3cbudl7.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCNPhiT6EV2ksdb9y67vqcoJWf0YPYYKvE"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "46669084263-drv76chuoahgvfitcdmctvvqm3cbudl7.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

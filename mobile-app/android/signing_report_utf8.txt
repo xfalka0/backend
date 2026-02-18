@@ -1,4 +1,4 @@
-> Task :gradle-plugin:settings-plugin:checkKotlinGradlePluginConfigurationErrors
+ï»¿> Task :gradle-plugin:settings-plugin:checkKotlinGradlePluginConfigurationErrors
 > Task :gradle-plugin:settings-plugin:compileKotlin UP-TO-DATE
 > Task :gradle-plugin:settings-plugin:compileJava NO-SOURCE
 > Task :gradle-plugin:settings-plugin:pluginDescriptors UP-TO-DATE
@@ -7,16 +7,16 @@
 > Task :gradle-plugin:settings-plugin:jar UP-TO-DATE
 > Task :gradle-plugin:react-native-gradle-plugin:checkKotlinGradlePluginConfigurationErrors
 > Task :expo-dev-launcher-gradle-plugin:checkKotlinGradlePluginConfigurationErrors
-> Task :expo-dev-launcher-gradle-plugin:compileKotlin UP-TO-DATE
 > Task :gradle-plugin:react-native-gradle-plugin:compileKotlin UP-TO-DATE
-> Task :expo-dev-launcher-gradle-plugin:compileJava NO-SOURCE
-> Task :expo-dev-launcher-gradle-plugin:pluginDescriptors UP-TO-DATE
+> Task :expo-dev-launcher-gradle-plugin:compileKotlin UP-TO-DATE
 > Task :gradle-plugin:react-native-gradle-plugin:compileJava NO-SOURCE
+> Task :expo-dev-launcher-gradle-plugin:compileJava NO-SOURCE
 > Task :gradle-plugin:react-native-gradle-plugin:pluginDescriptors UP-TO-DATE
+> Task :expo-dev-launcher-gradle-plugin:pluginDescriptors UP-TO-DATE
 > Task :expo-dev-launcher-gradle-plugin:processResources UP-TO-DATE
-> Task :expo-dev-launcher-gradle-plugin:classes UP-TO-DATE
 > Task :gradle-plugin:react-native-gradle-plugin:processResources UP-TO-DATE
 > Task :gradle-plugin:react-native-gradle-plugin:classes UP-TO-DATE
+> Task :expo-dev-launcher-gradle-plugin:classes UP-TO-DATE
 > Task :expo-dev-launcher-gradle-plugin:jar UP-TO-DATE
 > Task :gradle-plugin:react-native-gradle-plugin:jar UP-TO-DATE
 
@@ -56,16 +56,16 @@ Alias: androiddebugkey
 MD5: 20:F4:61:48:B7:2D:8E:5E:5C:A2:3D:37:A4:F4:14:90
 SHA1: 5E:8F:16:06:2E:A3:CD:2C:4A:0D:54:78:76:BA:A6:F3:8C:AB:F6:25
 SHA-256: FA:C6:17:45:DC:09:03:78:6F:B9:ED:E6:2A:96:2B:39:9F:73:48:F0:BB:6F:89:9B:83:32:66:75:91:03:3B:9C
-Valid until: 1 Mayýs 2052 Çarþamba
+Valid until: 1 MayÂ²s 2052 Ãƒarâ– amba
 ----------
 Variant: release
-Config: debug
-Store: C:\Users\Falka\Desktop\dating\backend\mobile-app\android\app\debug.keystore
-Alias: androiddebugkey
-MD5: 20:F4:61:48:B7:2D:8E:5E:5C:A2:3D:37:A4:F4:14:90
-SHA1: 5E:8F:16:06:2E:A3:CD:2C:4A:0D:54:78:76:BA:A6:F3:8C:AB:F6:25
-SHA-256: FA:C6:17:45:DC:09:03:78:6F:B9:ED:E6:2A:96:2B:39:9F:73:48:F0:BB:6F:89:9B:83:32:66:75:91:03:3B:9C
-Valid until: 1 Mayýs 2052 Çarþamba
+Config: release
+Store: C:\Users\Falka\Desktop\dating\backend\mobile-app\android\app\fiva-release.keystore
+Alias: fiva-key
+MD5: F7:73:FF:30:44:F0:F6:AF:9B:E2:B0:E8:D9:69:3D:29
+SHA1: 97:6B:94:AA:B6:41:57:CE:93:8A:2B:16:04:31:AE:D5:33:2B:7E:8C
+SHA-256: E7:56:3A:27:20:CC:C8:FC:DB:92:87:61:64:A0:D7:BA:ED:1C:8F:20:26:C3:3F:80:9E:E4:80:30:B3:2A:44:A6
+Valid until: 4 Temmuz 2053 Cuma
 ----------
 Variant: debugAndroidTest
 Config: debug
@@ -74,7 +74,7 @@ Alias: androiddebugkey
 MD5: 20:F4:61:48:B7:2D:8E:5E:5C:A2:3D:37:A4:F4:14:90
 SHA1: 5E:8F:16:06:2E:A3:CD:2C:4A:0D:54:78:76:BA:A6:F3:8C:AB:F6:25
 SHA-256: FA:C6:17:45:DC:09:03:78:6F:B9:ED:E6:2A:96:2B:39:9F:73:48:F0:BB:6F:89:9B:83:32:66:75:91:03:3B:9C
-Valid until: 1 Mayýs 2052 Çarþamba
+Valid until: 1 MayÂ²s 2052 Ãƒarâ– amba
 ----------
 
 > Task :expo:signingReport
@@ -85,7 +85,7 @@ Alias: AndroidDebugKey
 MD5: C1:37:1F:6E:86:27:D3:7C:FE:45:E8:85:BD:41:B2:96
 SHA1: 39:25:37:85:F8:9B:4C:F8:8A:A9:F1:77:DC:13:14:09:F2:21:DE:34
 SHA-256: B0:81:19:F9:58:CC:E3:10:4B:D5:A9:F9:22:1D:7F:15:03:32:42:0B:5A:DE:1F:6E:AD:0D:75:42:E6:A9:32:10
-Valid until: 26 Aralýk 2055 Pazar
+Valid until: 26 AralÂ²k 2055 Pazar
 ----------
 
 > Task :expo-asset:signingReport
@@ -96,7 +96,7 @@ Alias: AndroidDebugKey
 MD5: C1:37:1F:6E:86:27:D3:7C:FE:45:E8:85:BD:41:B2:96
 SHA1: 39:25:37:85:F8:9B:4C:F8:8A:A9:F1:77:DC:13:14:09:F2:21:DE:34
 SHA-256: B0:81:19:F9:58:CC:E3:10:4B:D5:A9:F9:22:1D:7F:15:03:32:42:0B:5A:DE:1F:6E:AD:0D:75:42:E6:A9:32:10
-Valid until: 26 Aralýk 2055 Pazar
+Valid until: 26 AralÂ²k 2055 Pazar
 ----------
 
 > Task :expo-av:signingReport
@@ -107,7 +107,7 @@ Alias: AndroidDebugKey
 MD5: C1:37:1F:6E:86:27:D3:7C:FE:45:E8:85:BD:41:B2:96
 SHA1: 39:25:37:85:F8:9B:4C:F8:8A:A9:F1:77:DC:13:14:09:F2:21:DE:34
 SHA-256: B0:81:19:F9:58:CC:E3:10:4B:D5:A9:F9:22:1D:7F:15:03:32:42:0B:5A:DE:1F:6E:AD:0D:75:42:E6:A9:32:10
-Valid until: 26 Aralýk 2055 Pazar
+Valid until: 26 AralÂ²k 2055 Pazar
 ----------
 
 > Task :expo-blur:signingReport
@@ -118,7 +118,7 @@ Alias: AndroidDebugKey
 MD5: C1:37:1F:6E:86:27:D3:7C:FE:45:E8:85:BD:41:B2:96
 SHA1: 39:25:37:85:F8:9B:4C:F8:8A:A9:F1:77:DC:13:14:09:F2:21:DE:34
 SHA-256: B0:81:19:F9:58:CC:E3:10:4B:D5:A9:F9:22:1D:7F:15:03:32:42:0B:5A:DE:1F:6E:AD:0D:75:42:E6:A9:32:10
-Valid until: 26 Aralýk 2055 Pazar
+Valid until: 26 AralÂ²k 2055 Pazar
 ----------
 
 > Task :expo-constants:signingReport
@@ -129,7 +129,7 @@ Alias: AndroidDebugKey
 MD5: C1:37:1F:6E:86:27:D3:7C:FE:45:E8:85:BD:41:B2:96
 SHA1: 39:25:37:85:F8:9B:4C:F8:8A:A9:F1:77:DC:13:14:09:F2:21:DE:34
 SHA-256: B0:81:19:F9:58:CC:E3:10:4B:D5:A9:F9:22:1D:7F:15:03:32:42:0B:5A:DE:1F:6E:AD:0D:75:42:E6:A9:32:10
-Valid until: 26 Aralýk 2055 Pazar
+Valid until: 26 AralÂ²k 2055 Pazar
 ----------
 
 > Task :expo-dev-client:signingReport
@@ -140,7 +140,7 @@ Alias: AndroidDebugKey
 MD5: C1:37:1F:6E:86:27:D3:7C:FE:45:E8:85:BD:41:B2:96
 SHA1: 39:25:37:85:F8:9B:4C:F8:8A:A9:F1:77:DC:13:14:09:F2:21:DE:34
 SHA-256: B0:81:19:F9:58:CC:E3:10:4B:D5:A9:F9:22:1D:7F:15:03:32:42:0B:5A:DE:1F:6E:AD:0D:75:42:E6:A9:32:10
-Valid until: 26 Aralýk 2055 Pazar
+Valid until: 26 AralÂ²k 2055 Pazar
 ----------
 
 > Task :expo-dev-launcher:signingReport
@@ -151,7 +151,7 @@ Alias: AndroidDebugKey
 MD5: C1:37:1F:6E:86:27:D3:7C:FE:45:E8:85:BD:41:B2:96
 SHA1: 39:25:37:85:F8:9B:4C:F8:8A:A9:F1:77:DC:13:14:09:F2:21:DE:34
 SHA-256: B0:81:19:F9:58:CC:E3:10:4B:D5:A9:F9:22:1D:7F:15:03:32:42:0B:5A:DE:1F:6E:AD:0D:75:42:E6:A9:32:10
-Valid until: 26 Aralýk 2055 Pazar
+Valid until: 26 AralÂ²k 2055 Pazar
 ----------
 
 > Task :expo-dev-menu:signingReport
@@ -162,7 +162,7 @@ Alias: AndroidDebugKey
 MD5: C1:37:1F:6E:86:27:D3:7C:FE:45:E8:85:BD:41:B2:96
 SHA1: 39:25:37:85:F8:9B:4C:F8:8A:A9:F1:77:DC:13:14:09:F2:21:DE:34
 SHA-256: B0:81:19:F9:58:CC:E3:10:4B:D5:A9:F9:22:1D:7F:15:03:32:42:0B:5A:DE:1F:6E:AD:0D:75:42:E6:A9:32:10
-Valid until: 26 Aralýk 2055 Pazar
+Valid until: 26 AralÂ²k 2055 Pazar
 ----------
 
 > Task :expo-dev-menu-interface:signingReport
@@ -173,7 +173,7 @@ Alias: AndroidDebugKey
 MD5: C1:37:1F:6E:86:27:D3:7C:FE:45:E8:85:BD:41:B2:96
 SHA1: 39:25:37:85:F8:9B:4C:F8:8A:A9:F1:77:DC:13:14:09:F2:21:DE:34
 SHA-256: B0:81:19:F9:58:CC:E3:10:4B:D5:A9:F9:22:1D:7F:15:03:32:42:0B:5A:DE:1F:6E:AD:0D:75:42:E6:A9:32:10
-Valid until: 26 Aralýk 2055 Pazar
+Valid until: 26 AralÂ²k 2055 Pazar
 ----------
 
 > Task :expo-file-system:signingReport
@@ -184,7 +184,7 @@ Alias: AndroidDebugKey
 MD5: C1:37:1F:6E:86:27:D3:7C:FE:45:E8:85:BD:41:B2:96
 SHA1: 39:25:37:85:F8:9B:4C:F8:8A:A9:F1:77:DC:13:14:09:F2:21:DE:34
 SHA-256: B0:81:19:F9:58:CC:E3:10:4B:D5:A9:F9:22:1D:7F:15:03:32:42:0B:5A:DE:1F:6E:AD:0D:75:42:E6:A9:32:10
-Valid until: 26 Aralýk 2055 Pazar
+Valid until: 26 AralÂ²k 2055 Pazar
 ----------
 
 > Task :expo-font:signingReport
@@ -195,7 +195,7 @@ Alias: AndroidDebugKey
 MD5: C1:37:1F:6E:86:27:D3:7C:FE:45:E8:85:BD:41:B2:96
 SHA1: 39:25:37:85:F8:9B:4C:F8:8A:A9:F1:77:DC:13:14:09:F2:21:DE:34
 SHA-256: B0:81:19:F9:58:CC:E3:10:4B:D5:A9:F9:22:1D:7F:15:03:32:42:0B:5A:DE:1F:6E:AD:0D:75:42:E6:A9:32:10
-Valid until: 26 Aralýk 2055 Pazar
+Valid until: 26 AralÂ²k 2055 Pazar
 ----------
 
 > Task :expo-image-loader:signingReport
@@ -206,7 +206,7 @@ Alias: AndroidDebugKey
 MD5: C1:37:1F:6E:86:27:D3:7C:FE:45:E8:85:BD:41:B2:96
 SHA1: 39:25:37:85:F8:9B:4C:F8:8A:A9:F1:77:DC:13:14:09:F2:21:DE:34
 SHA-256: B0:81:19:F9:58:CC:E3:10:4B:D5:A9:F9:22:1D:7F:15:03:32:42:0B:5A:DE:1F:6E:AD:0D:75:42:E6:A9:32:10
-Valid until: 26 Aralýk 2055 Pazar
+Valid until: 26 AralÂ²k 2055 Pazar
 ----------
 
 > Task :expo-image-picker:signingReport
@@ -217,7 +217,7 @@ Alias: AndroidDebugKey
 MD5: C1:37:1F:6E:86:27:D3:7C:FE:45:E8:85:BD:41:B2:96
 SHA1: 39:25:37:85:F8:9B:4C:F8:8A:A9:F1:77:DC:13:14:09:F2:21:DE:34
 SHA-256: B0:81:19:F9:58:CC:E3:10:4B:D5:A9:F9:22:1D:7F:15:03:32:42:0B:5A:DE:1F:6E:AD:0D:75:42:E6:A9:32:10
-Valid until: 26 Aralýk 2055 Pazar
+Valid until: 26 AralÂ²k 2055 Pazar
 ----------
 
 > Task :expo-json-utils:signingReport
@@ -228,7 +228,7 @@ Alias: AndroidDebugKey
 MD5: C1:37:1F:6E:86:27:D3:7C:FE:45:E8:85:BD:41:B2:96
 SHA1: 39:25:37:85:F8:9B:4C:F8:8A:A9:F1:77:DC:13:14:09:F2:21:DE:34
 SHA-256: B0:81:19:F9:58:CC:E3:10:4B:D5:A9:F9:22:1D:7F:15:03:32:42:0B:5A:DE:1F:6E:AD:0D:75:42:E6:A9:32:10
-Valid until: 26 Aralýk 2055 Pazar
+Valid until: 26 AralÂ²k 2055 Pazar
 ----------
 
 > Task :expo-keep-awake:signingReport
@@ -239,7 +239,7 @@ Alias: AndroidDebugKey
 MD5: C1:37:1F:6E:86:27:D3:7C:FE:45:E8:85:BD:41:B2:96
 SHA1: 39:25:37:85:F8:9B:4C:F8:8A:A9:F1:77:DC:13:14:09:F2:21:DE:34
 SHA-256: B0:81:19:F9:58:CC:E3:10:4B:D5:A9:F9:22:1D:7F:15:03:32:42:0B:5A:DE:1F:6E:AD:0D:75:42:E6:A9:32:10
-Valid until: 26 Aralýk 2055 Pazar
+Valid until: 26 AralÂ²k 2055 Pazar
 ----------
 
 > Task :expo-linear-gradient:signingReport
@@ -250,7 +250,7 @@ Alias: AndroidDebugKey
 MD5: C1:37:1F:6E:86:27:D3:7C:FE:45:E8:85:BD:41:B2:96
 SHA1: 39:25:37:85:F8:9B:4C:F8:8A:A9:F1:77:DC:13:14:09:F2:21:DE:34
 SHA-256: B0:81:19:F9:58:CC:E3:10:4B:D5:A9:F9:22:1D:7F:15:03:32:42:0B:5A:DE:1F:6E:AD:0D:75:42:E6:A9:32:10
-Valid until: 26 Aralýk 2055 Pazar
+Valid until: 26 AralÂ²k 2055 Pazar
 ----------
 
 > Task :expo-manifests:signingReport
@@ -261,7 +261,7 @@ Alias: AndroidDebugKey
 MD5: C1:37:1F:6E:86:27:D3:7C:FE:45:E8:85:BD:41:B2:96
 SHA1: 39:25:37:85:F8:9B:4C:F8:8A:A9:F1:77:DC:13:14:09:F2:21:DE:34
 SHA-256: B0:81:19:F9:58:CC:E3:10:4B:D5:A9:F9:22:1D:7F:15:03:32:42:0B:5A:DE:1F:6E:AD:0D:75:42:E6:A9:32:10
-Valid until: 26 Aralýk 2055 Pazar
+Valid until: 26 AralÂ²k 2055 Pazar
 ----------
 
 > Task :expo-modules-core:signingReport
@@ -272,7 +272,7 @@ Alias: AndroidDebugKey
 MD5: C1:37:1F:6E:86:27:D3:7C:FE:45:E8:85:BD:41:B2:96
 SHA1: 39:25:37:85:F8:9B:4C:F8:8A:A9:F1:77:DC:13:14:09:F2:21:DE:34
 SHA-256: B0:81:19:F9:58:CC:E3:10:4B:D5:A9:F9:22:1D:7F:15:03:32:42:0B:5A:DE:1F:6E:AD:0D:75:42:E6:A9:32:10
-Valid until: 26 Aralýk 2055 Pazar
+Valid until: 26 AralÂ²k 2055 Pazar
 ----------
 
 > Task :expo-updates-interface:signingReport
@@ -283,7 +283,7 @@ Alias: AndroidDebugKey
 MD5: C1:37:1F:6E:86:27:D3:7C:FE:45:E8:85:BD:41:B2:96
 SHA1: 39:25:37:85:F8:9B:4C:F8:8A:A9:F1:77:DC:13:14:09:F2:21:DE:34
 SHA-256: B0:81:19:F9:58:CC:E3:10:4B:D5:A9:F9:22:1D:7F:15:03:32:42:0B:5A:DE:1F:6E:AD:0D:75:42:E6:A9:32:10
-Valid until: 26 Aralýk 2055 Pazar
+Valid until: 26 AralÂ²k 2055 Pazar
 ----------
 
 > Task :lottie-react-native:signingReport
@@ -294,7 +294,7 @@ Alias: AndroidDebugKey
 MD5: C1:37:1F:6E:86:27:D3:7C:FE:45:E8:85:BD:41:B2:96
 SHA1: 39:25:37:85:F8:9B:4C:F8:8A:A9:F1:77:DC:13:14:09:F2:21:DE:34
 SHA-256: B0:81:19:F9:58:CC:E3:10:4B:D5:A9:F9:22:1D:7F:15:03:32:42:0B:5A:DE:1F:6E:AD:0D:75:42:E6:A9:32:10
-Valid until: 26 Aralýk 2055 Pazar
+Valid until: 26 AralÂ²k 2055 Pazar
 ----------
 
 > Task :react-native-async-storage_async-storage:signingReport
@@ -305,7 +305,7 @@ Alias: AndroidDebugKey
 MD5: C1:37:1F:6E:86:27:D3:7C:FE:45:E8:85:BD:41:B2:96
 SHA1: 39:25:37:85:F8:9B:4C:F8:8A:A9:F1:77:DC:13:14:09:F2:21:DE:34
 SHA-256: B0:81:19:F9:58:CC:E3:10:4B:D5:A9:F9:22:1D:7F:15:03:32:42:0B:5A:DE:1F:6E:AD:0D:75:42:E6:A9:32:10
-Valid until: 26 Aralýk 2055 Pazar
+Valid until: 26 AralÂ²k 2055 Pazar
 ----------
 
 > Task :react-native-gesture-handler:signingReport
@@ -316,7 +316,7 @@ Alias: AndroidDebugKey
 MD5: C1:37:1F:6E:86:27:D3:7C:FE:45:E8:85:BD:41:B2:96
 SHA1: 39:25:37:85:F8:9B:4C:F8:8A:A9:F1:77:DC:13:14:09:F2:21:DE:34
 SHA-256: B0:81:19:F9:58:CC:E3:10:4B:D5:A9:F9:22:1D:7F:15:03:32:42:0B:5A:DE:1F:6E:AD:0D:75:42:E6:A9:32:10
-Valid until: 26 Aralýk 2055 Pazar
+Valid until: 26 AralÂ²k 2055 Pazar
 ----------
 
 > Task :react-native-google-signin_google-signin:signingReport
@@ -327,7 +327,18 @@ Alias: AndroidDebugKey
 MD5: C1:37:1F:6E:86:27:D3:7C:FE:45:E8:85:BD:41:B2:96
 SHA1: 39:25:37:85:F8:9B:4C:F8:8A:A9:F1:77:DC:13:14:09:F2:21:DE:34
 SHA-256: B0:81:19:F9:58:CC:E3:10:4B:D5:A9:F9:22:1D:7F:15:03:32:42:0B:5A:DE:1F:6E:AD:0D:75:42:E6:A9:32:10
-Valid until: 26 Aralýk 2055 Pazar
+Valid until: 26 AralÂ²k 2055 Pazar
+----------
+
+> Task :react-native-purchases:signingReport
+Variant: debugAndroidTest
+Config: debug
+Store: C:\Users\Falka\.android\debug.keystore
+Alias: AndroidDebugKey
+MD5: C1:37:1F:6E:86:27:D3:7C:FE:45:E8:85:BD:41:B2:96
+SHA1: 39:25:37:85:F8:9B:4C:F8:8A:A9:F1:77:DC:13:14:09:F2:21:DE:34
+SHA-256: B0:81:19:F9:58:CC:E3:10:4B:D5:A9:F9:22:1D:7F:15:03:32:42:0B:5A:DE:1F:6E:AD:0D:75:42:E6:A9:32:10
+Valid until: 26 AralÂ²k 2055 Pazar
 ----------
 
 > Task :react-native-reanimated:signingReport
@@ -338,7 +349,7 @@ Alias: AndroidDebugKey
 MD5: C1:37:1F:6E:86:27:D3:7C:FE:45:E8:85:BD:41:B2:96
 SHA1: 39:25:37:85:F8:9B:4C:F8:8A:A9:F1:77:DC:13:14:09:F2:21:DE:34
 SHA-256: B0:81:19:F9:58:CC:E3:10:4B:D5:A9:F9:22:1D:7F:15:03:32:42:0B:5A:DE:1F:6E:AD:0D:75:42:E6:A9:32:10
-Valid until: 26 Aralýk 2055 Pazar
+Valid until: 26 AralÂ²k 2055 Pazar
 ----------
 
 > Task :react-native-safe-area-context:signingReport
@@ -349,7 +360,7 @@ Alias: AndroidDebugKey
 MD5: C1:37:1F:6E:86:27:D3:7C:FE:45:E8:85:BD:41:B2:96
 SHA1: 39:25:37:85:F8:9B:4C:F8:8A:A9:F1:77:DC:13:14:09:F2:21:DE:34
 SHA-256: B0:81:19:F9:58:CC:E3:10:4B:D5:A9:F9:22:1D:7F:15:03:32:42:0B:5A:DE:1F:6E:AD:0D:75:42:E6:A9:32:10
-Valid until: 26 Aralýk 2055 Pazar
+Valid until: 26 AralÂ²k 2055 Pazar
 ----------
 
 > Task :react-native-screens:signingReport
@@ -360,8 +371,8 @@ Alias: AndroidDebugKey
 MD5: C1:37:1F:6E:86:27:D3:7C:FE:45:E8:85:BD:41:B2:96
 SHA1: 39:25:37:85:F8:9B:4C:F8:8A:A9:F1:77:DC:13:14:09:F2:21:DE:34
 SHA-256: B0:81:19:F9:58:CC:E3:10:4B:D5:A9:F9:22:1D:7F:15:03:32:42:0B:5A:DE:1F:6E:AD:0D:75:42:E6:A9:32:10
-Valid until: 26 Aralýk 2055 Pazar
+Valid until: 26 AralÂ²k 2055 Pazar
 ----------
 
-BUÝLD SUCCESSFUL in 12s
-42 actionable tasks: 30 executed, 12 up-to-date
+BUÂ¦LD SUCCESSFUL in 13s
+43 actionable tasks: 31 executed, 12 up-to-date

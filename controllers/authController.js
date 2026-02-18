@@ -4,7 +4,7 @@ const jwt = require('jsonwebtoken');
 const { OAuth2Client } = require('google-auth-library');
 const { sanitizeUser, logActivity } = require('../utils/helpers');
 
-const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || '412160281837-aru1hd03qt91r9s42hnn2scvnfgc9sf0.apps.googleusercontent.com';
+const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || '46669084263-drv76chuoahgvfitcdmctvvqm3cbudl7.apps.googleusercontent.com';
 const googleClient = new OAuth2Client(GOOGLE_CLIENT_ID);
 const SECRET_KEY = process.env.JWT_SECRET || 'falka_super_secret_2024_key_change_me';
 

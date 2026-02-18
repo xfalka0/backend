@@ -1,13 +1,22 @@
-import React from 'react';
+import 'react-native-gesture-handler'; // MUST BE AT THE TOP
+import React, { useEffect } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
+import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useFonts, Outfit_800ExtraBold, Outfit_500Medium, Outfit_400Regular } from '@expo-google-fonts/outfit';
 
 // Theme & Context
 import { ThemeProvider, useTheme } from './src/contexts/ThemeContext';
+import { AlertProvider } from './src/contexts/AlertContext';
+import { PurchaseService } from './src/services/purchaseService';
+import AnimatedTabBar from './src/components/animated/AnimatedTabBar';
 
 // Screens
+import LegalScreen from './src/screens/LegalScreen';
 import SplashScreen from './src/screens/SplashScreen';
 import LoginScreen from './src/screens/LoginScreen';
 import SignupScreen from './src/screens/SignupScreen';
@@ -37,13 +46,6 @@ import OnboardingScreen from './src/screens/OnboardingScreen';
 import WelcomeScreen from './src/screens/WelcomeScreen';
 import AuthScreen from './src/screens/AuthScreen';
 import VoiceCallScreen from './src/screens/VoiceCallScreen';
-import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import AnimatedTabBar from './src/components/animated/AnimatedTabBar';
-import { PurchaseService } from './src/services/purchaseService';
-import { useEffect } from 'react';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
 
@@ -100,6 +102,7 @@ function AppContent() {
                     contentStyle: { backgroundColor: theme.colors.background }
                 }}
             >
+                <Stack.Screen name="Legal" component={LegalScreen} />
                 <Stack.Screen name="Splash" component={SplashScreen} />
                 <Stack.Screen name="Welcome" component={WelcomeScreen} />
                 <Stack.Screen name="Auth" component={AuthScreen} />
@@ -146,11 +149,17 @@ function AppContent() {
     );
 }
 
-import { AlertProvider } from './src/contexts/AlertContext';
+// ... imports moved to top
 
 // ... existing code ...
 
 export default function App() {
+    const [fontsLoaded] = useFonts({
+        Outfit_800ExtraBold,
+        Outfit_500Medium,
+        Outfit_400Regular,
+    });
+
     useEffect(() => {
         const setupPurchases = async () => {
             try {
@@ -165,6 +174,10 @@ export default function App() {
         };
         setupPurchases();
     }, []);
+
+    if (!fontsLoaded) {
+        return null;
+    }
 
     return (
         <GestureHandlerRootView style={{ flex: 1 }}>

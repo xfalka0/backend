@@ -26,8 +26,6 @@
         <action android:name="android.intent.action.VIEW"/>
         <category android:name="android.intent.category.DEFAULT"/>
         <category android:name="android.intent.category.BROWSABLE"/>
-        <data android:scheme="com.faya.app"/>
-        <data android:scheme="exp+faya"/>
         <data android:scheme="com.fiva.app"/>
         <data android:scheme="exp+fiva"/>
       </intent-filter>

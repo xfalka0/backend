@@ -2886,7 +2886,14 @@ app.get('*', (req, res) => {
     if (req.path.startsWith('/api')) {
         return res.status(404).json({ error: 'API route not found' });
     }
-    res.sendFile(path.join(__dirname, 'web-admin', 'dist', 'index.html'));
+    const filePath = path.join(__dirname, 'web-admin', 'dist', 'index.html');
+    console.log('[DEBUG] Serving static file:', filePath);
+    if (require('fs').existsSync(filePath)) {
+        res.sendFile(filePath);
+    } else {
+        console.error('[ERROR] File not found:', filePath);
+        res.status(404).send('Admin Panel Not Found (File Missing on Server)');
+    }
 });
 
 const PORT = process.env.PORT || 3000;

@@ -7,7 +7,8 @@
     "start": "node server.js",
     "dev": "nodemon server.js",
     "seed": "node seed.js",
-    "build": "cd web-admin && npm install && npm run build"
+    "build": "cd web-admin && npm install && npm run build",
+    "postinstall": "npm run build"
   },
   "dependencies": {
     "axios": "^1.13.4",

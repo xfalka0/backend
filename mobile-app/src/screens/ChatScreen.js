@@ -287,22 +287,26 @@ export default function ChatScreen({ route, navigation }) {
 
             // Listeners
             socketRef.current.on('receive_message', (msg) => {
+                console.log('[SOCKET] receive_message on Mobile:', msg.id, 'for chatId:', msg.chat_id, 'Current chatId:', realChatId);
+
+                // Add explicit chatId check just in case global emission leaks or room logic fails
+                if (msg.chat_id && realChatId && msg.chat_id.toString() !== realChatId.toString()) {
+                    console.warn('[SOCKET] Received message for different chat! Ignoring.');
+                    return;
+                }
+
                 setMessages(prev => {
-                    // Check if we have an optimistic message with the same tempId (if provided)
-                    // or if the message ID already exists
                     const exists = prev.some(m => m.id === msg.id);
                     if (exists) return prev;
 
                     if (msg.tempId) {
-                        // Find and replace the optimistic message
                         const optimisticIndex = prev.findIndex(m => m.id === msg.tempId);
                         if (optimisticIndex !== -1) {
                             const newMessages = [...prev];
-                            newMessages[optimisticIndex] = msg; // Replace optimistic with confirmed
+                            newMessages[optimisticIndex] = msg;
                             return newMessages;
                         }
                     } else {
-                        // Fallback: try to match by content/time if tempId missing (less reliable but helpful)
                         const optimisticIndex = prev.findIndex(m =>
                             m.is_optimistic &&
                             m.content === msg.content &&

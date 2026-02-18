@@ -94,7 +94,7 @@ const Chats = () => {
         });
 
         socketRef.current.on('receive_message', (msg) => {
-            if (selectedChatIdRef.current === msg.chat_id) {
+            if (selectedChatIdRef.current == msg.chat_id) {
                 setMessages((prev) => {
                     if (prev.some(m => m.id === msg.id)) return prev;
 

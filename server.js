@@ -2131,6 +2131,21 @@ app.get('/api/messages/:chatId', async (req, res) => {
         const result = await db.query(query, [chatId, limit, offset]);
         res.json(result.rows);
     } catch (err) {
+        console.error('Fetch Messages Error:', err.message);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// DEBUG: Temporary endpoint to update gender
+app.post('/api/debug/update-gender', async (req, res) => {
+    const { email, gender } = req.body;
+    try {
+        const result = await db.query(
+            "UPDATE users SET gender = $1 WHERE email = $2 RETURNING *",
+            [gender, email]
+        );
+        res.json({ success: true, user: result.rows[0] });
+    } catch (err) {
         res.status(500).json({ error: err.message });
     }
 });
@@ -2139,6 +2154,7 @@ app.get('/api/messages/:chatId', async (req, res) => {
 app.post('/api/messages', async (req, res) => {
     const { chatId, senderId, content, type } = req.body;
     try {
+        console.log(`[MESSAGE] Sending message to chat ${chatId} from sender ${senderId}`);
         const result = await db.query(
             'INSERT INTO messages (chat_id, sender_id, content, content_type) VALUES ($1, $2, $3, $4) RETURNING *',
             [chatId, senderId, content, type || 'text']
@@ -2735,13 +2751,23 @@ io.on('connection', (socket) => {
             }
 
             // Broadcast Message to Chat Room
-            // Combine savedMsg with tempId for the sender to verify
-            const msgToEmit = { ...savedMsg, tempId };
+            const msgToEmit = {
+                ...savedMsg,
+                chat_id: savedMsg.chat_id.toString(), // Force string for client-side comparison
+                tempId
+            };
+            const roomName = chatId.toString();
+            console.log(`[SOCKET] Emitting receive_message to room: ${roomName}`);
 
-            io.to(chatId).emit('receive_message', msgToEmit);
+            // io.to ensures everyone including the sender (if in room) receives it
+            io.to(roomName).emit('receive_message', msgToEmit);
+
+            // Also emit to individual rooms of participants (as fallback)
+            // This ensures if someone isn't joined to the specific chat room they still get it if they have their own room
+            // But usually chat room is enough.
 
             // Notify Admins
-            console.log(`[SOCKET] Emitting admin_notification for chat ${chatId}`);
+            console.log(`[SOCKET] Emitting admin_notification globally for chat ${roomName}`);
             io.emit('admin_notification', msgToEmit);
 
         } catch (err) {

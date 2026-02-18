@@ -165,8 +165,8 @@ export default function ChatScreen({ route, navigation }) {
         navigation.setOptions({
             headerTitle: () => (
                 <View style={{ alignItems: 'center' }}>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 2 }}>
-                        <Text style={{ color: theme.colors.text, fontSize: 18, fontWeight: '900', marginRight: 6 }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 1 }}>
+                        <Text style={{ color: theme.colors.text, fontSize: 15, fontWeight: '900', marginRight: 4 }}>
                             {name ? name.toUpperCase() : 'SOHBET'}
                         </Text>
 
@@ -178,28 +178,28 @@ export default function ChatScreen({ route, navigation }) {
                                 style={{
                                     flexDirection: 'row',
                                     alignItems: 'center',
-                                    paddingHorizontal: 6,
-                                    paddingVertical: 2,
+                                    paddingHorizontal: 5,
+                                    paddingVertical: 1.5,
                                     borderRadius: 6,
-                                    marginRight: 6
+                                    marginRight: 4
                                 }}
                             >
-                                <Ionicons name="star" size={10} color="white" />
-                                <Text style={{ color: 'white', fontSize: 10, fontWeight: '900', marginLeft: 2 }}>VIP {vip_level}</Text>
+                                <Ionicons name="star" size={9} color="white" />
+                                <Text style={{ color: 'white', fontSize: 9, fontWeight: '900', marginLeft: 2 }}>VIP {vip_level}</Text>
                             </LinearGradient>
                         )}
 
-                        <Ionicons name="checkmark-circle" size={16} color="#3b82f6" />
+                        <Ionicons name="checkmark-circle" size={14} color="#3b82f6" />
                     </View>
                     <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                         <View style={{
-                            width: 7,
-                            height: 7,
-                            borderRadius: 3.5,
+                            width: 6,
+                            height: 6,
+                            borderRadius: 3,
                             backgroundColor: is_online ? '#10b981' : theme.colors.textSecondary,
-                            marginRight: 6
+                            marginRight: 4
                         }} />
-                        <Text style={{ color: is_online ? '#10b981' : theme.colors.textSecondary, fontSize: 12, fontWeight: '700' }}>
+                        <Text style={{ color: is_online ? '#10b981' : theme.colors.textSecondary, fontSize: 11, fontWeight: '700' }}>
                             {is_online ? 'Çevrimiçi' : 'Çevrimdışı'}
                         </Text>
                     </View>
@@ -214,7 +214,7 @@ export default function ChatScreen({ route, navigation }) {
                         <VipFrame
                             level={vip_level}
                             avatar={avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(name || 'User')}&background=random&color=fff`}
-                            size={38}
+                            size={50}
                             isStatic={true}
                         />
                     </TouchableOpacity>

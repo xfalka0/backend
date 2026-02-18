@@ -29,6 +29,7 @@ export default function NameScreen({ navigation, route }) {
                             value={name}
                             onChangeText={setName}
                             autoFocus
+                            maxLength={15}
                         />
                     </View>
 

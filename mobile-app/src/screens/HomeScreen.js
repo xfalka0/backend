@@ -245,7 +245,13 @@ export default function HomeScreen({ navigation, route }) {
                         </View>
                         <View style={styles.infoContainer}>
                             <View style={styles.nameRow}>
-                                <Text style={[styles.name, { color: theme.colors.text }]}>{item.name}</Text>
+                                <Text
+                                    style={[styles.name, { color: theme.colors.text, flexShrink: 1 }]}
+                                    numberOfLines={1}
+                                    ellipsizeMode="tail"
+                                >
+                                    {item.name}
+                                </Text>
                                 {item.vip_level > 0 && (
                                     <LinearGradient
                                         colors={item.vip_level >= 6 ? ['#1a1a1b', '#000000'] : item.vip_level >= 4 ? ['#fbbf24', '#7c3aed'] : ['#a855f7', '#ec4899']}

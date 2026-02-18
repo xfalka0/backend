@@ -118,7 +118,14 @@ export default function OperatorProfileScreen({ route, navigation }) {
                             </View>
                             <View style={{ flex: 1 }}>
                                 <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                                    <Text style={styles.name}>{operator.name}</Text>
+                                    <Text
+                                        style={[styles.name, { flexShrink: 1 }]}
+                                        numberOfLines={1}
+                                        adjustsFontSizeToFit
+                                        minimumFontScale={0.8}
+                                    >
+                                        {operator.name}
+                                    </Text>
                                     {operator.vip_level > 0 && (
                                         <LinearGradient
                                             colors={
@@ -314,13 +321,13 @@ const styles = StyleSheet.create({
         marginBottom: 25,
     },
     name: {
-        fontSize: 32,
+        fontSize: 20, // Reduced from 28
         fontWeight: '900',
         color: 'white',
-        letterSpacing: -0.5,
+        letterSpacing: -0.7,
     },
     category: {
-        fontSize: 16,
+        fontSize: 12, // Reduced from 16
         color: '#94a3b8',
         fontWeight: '600',
         marginTop: 4,
@@ -328,40 +335,52 @@ const styles = StyleSheet.create({
     premiumVipBadge: {
         flexDirection: 'row',
         alignItems: 'center',
-        paddingHorizontal: 10,
-        paddingVertical: 3,
-        borderRadius: 12, // Soft edges
-        marginLeft: 12,
-        gap: 5,
+        paddingHorizontal: 5, // Reduced from 10
+        paddingVertical: 2, // Reduced from 3
+        borderRadius: 10,
+        marginLeft: 10, // Reduced from 12
+        gap: 2,
     },
     premiumVipText: {
         color: 'white',
-        fontSize: 12,
+        fontSize: 10, // Reduced from 12
         fontWeight: '900',
-        letterSpacing: 0.5,
+        letterSpacing: 0.3,
     },
-    ageBadge: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 15, marginLeft: 12 },
-    ageBadgeText: { color: 'white', fontSize: 13, fontWeight: '900', marginLeft: 6 },
+    ageBadge: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 6, // Reduced from 10
+        paddingVertical: 2, // Reduced from 4
+        borderRadius: 12,
+        marginLeft: 8 // Reduced from 12
+    },
+    ageBadgeText: {
+        color: 'white',
+        fontSize: 10, // Reduced from 13
+        fontWeight: '900',
+        marginLeft: 2
+    },
     onlineBadge: {
         flexDirection: 'row',
         alignItems: 'center',
         backgroundColor: 'rgba(16, 185, 129, 0.1)',
-        paddingHorizontal: 12,
-        paddingVertical: 6,
-        borderRadius: 20,
+        paddingHorizontal: 5, // Reduced from 12
+        paddingVertical: 4, // Reduced from 6
+        borderRadius: 16,
         borderWidth: 1,
         borderColor: 'rgba(16, 185, 129, 0.2)',
     },
     onlineDot: {
-        width: 8,
-        height: 8,
-        borderRadius: 4,
+        width: 6, // Reduced from 8
+        height: 6, // Reduced from 8
+        borderRadius: 3,
         backgroundColor: '#10b981',
-        marginRight: 6,
+        marginRight: 4,
     },
     onlineText: {
         color: '#10b981',
-        fontSize: 12,
+        fontSize: 11, // Reduced from 12
         fontWeight: '800',
     },
     section: {

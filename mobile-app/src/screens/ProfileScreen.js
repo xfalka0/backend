@@ -557,6 +557,7 @@ export default function ProfileScreen({ route, navigation }) {
                                             style={[styles.infoInput, { color: theme.colors.text, backgroundColor: theme.colors.glass, borderColor: theme.colors.glassBorder }]}
                                             value={info[item.key]}
                                             onChangeText={(val) => setInfo({ ...info, [item.key]: val })}
+                                            maxLength={item.key === 'name' ? 15 : 100}
                                         />
                                     )
                                 ) : (

@@ -1900,6 +1900,36 @@ app.put('/api/operators/:id', authenticateToken, authorizeRole('admin', 'super_a
     }
 });
 
+// DELETE OPERATOR
+app.delete('/api/operators/:id', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
+    const { id } = req.params;
+    try {
+        await db.query('BEGIN');
+
+        // Check if operator exists (use user_id as it is the PK for operators usually, or FK)
+        // The id passed here is likely the user_id (from profile.id in frontend)
+        const opResult = await db.query('SELECT * FROM users WHERE id = $1', [id]);
+        if (opResult.rows.length === 0) {
+            await db.query('ROLLBACK');
+            return res.status(404).json({ error: 'Kullanıcı bulunamadı.' });
+        }
+
+        // Delete User (Cascade should handle operators, posts, stories, messages if FK set, but we manually delete to be safe/granular if needed)
+        // Assuming ON DELETE CASCADE is set for most things, but let's delete user.
+        await db.query('DELETE FROM users WHERE id = $1', [id]);
+
+        // Log Activity
+        logActivity(req.user.id, 'admin', `Kullanıcı/Operatör silindi: ID ${id}`);
+
+        await db.query('COMMIT');
+        res.json({ success: true });
+    } catch (err) {
+        await db.query('ROLLBACK');
+        console.error("Delete Operator Error:", err.message);
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // START CHAT (Find or Create)
 app.post('/api/chats', async (req, res) => {
     const { userId, operatorId } = req.body;
@@ -2628,7 +2658,7 @@ io.on('connection', (socket) => {
             let giftDetails = null;
 
             // --- 1. COIN DEDUCTION LOGIC ---
-            if (!isOperator) {
+            if (!isOperator && socket.user.role !== 'admin' && socket.user.role !== 'super_admin') {
                 cost = 10; // Default text
                 if (type === 'gift' && giftId) {
                     const giftRes = await client.query('SELECT * FROM gifts WHERE id = $1', [giftId]);

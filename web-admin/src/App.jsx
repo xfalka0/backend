@@ -67,7 +67,7 @@ const Layout = () => (
 function App() {
     return (
         <AuthProvider>
-            <BrowserRouter basename="/admin">
+            <BrowserRouter basename="/">
                 <Routes>
                     <Route path="/login" element={<Login />} />
 

@@ -404,7 +404,7 @@ const Chats = () => {
                             {messages.map((msg, idx) => (
                                 <div
                                     key={idx}
-                                    className={`flex ${msg.sender_id === selectedChat.operator_id ? 'justify-end' : 'justify-start'}`}
+                                    className={`flex ${msg.sender_id === selectedChat.operator_id || msg.sender_id === user?.id ? 'justify-end' : 'justify-start'}`}
                                 >
                                     <div className={`max-w-[70%] space-y-1`}>
                                         {/* Gift Message Styling */}
@@ -435,7 +435,7 @@ const Chats = () => {
                                             </div>
                                         ) : (
                                             <div
-                                                className={`p-4 rounded-2xl text-sm font-medium shadow-sm ${msg.sender_id === selectedChat.operator_id
+                                                className={`p-4 rounded-2xl text-sm font-medium shadow-sm ${msg.sender_id === selectedChat.operator_id || msg.sender_id === user?.id
                                                     ? 'bg-purple-600 text-white rounded-br-none'
                                                     : 'bg-slate-800 text-slate-200 rounded-bl-none border border-slate-700'
                                                     }`}
@@ -459,7 +459,7 @@ const Chats = () => {
                                                 )}
                                             </div>
                                         )}
-                                        <p className={`text-[10px] opacity-50 ${msg.sender_id === selectedChat.operator_id ? 'text-right' : 'text-left'}`}>
+                                        <p className={`text-[10px] opacity-50 ${msg.sender_id === selectedChat.operator_id || msg.sender_id === user?.id ? 'text-right' : 'text-left'}`}>
                                             {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                                         </p>
                                     </div>

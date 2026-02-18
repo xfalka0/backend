@@ -1637,7 +1637,7 @@ app.get('/api/operators', async (req, res) => {
         console.log(`[DEBUG] Fetching operators list. Filter Gender: ${gender || 'none'}`);
 
         let query = `
-            SELECT u.id, COALESCE(u.display_name, u.username) as name, u.avatar_url, u.gender, u.age, u.vip_level, o.category, o.rating, o.is_online, COALESCE(o.bio, u.bio) as bio, o.photos, u.role,
+            SELECT u.id, COALESCE(u.display_name, u.username) as name, u.avatar_url, u.gender, u.age, u.vip_level, u.job, u.relationship, u.zodiac, u.interests, o.category, o.rating, o.is_online, COALESCE(o.bio, u.bio) as bio, o.photos, u.role,
             EXISTS(SELECT 1 FROM stories s WHERE s.operator_id = u.id AND s.expires_at > NOW()) as has_active_story
             FROM users u
             JOIN operators o ON u.id = o.user_id
@@ -1753,6 +1753,10 @@ app.get('/api/discovery', authenticateToken, async (req, res) => {
                 u.gender, 
                 u.age, 
                 u.vip_level, 
+                u.job,
+                u.relationship,
+                u.zodiac,
+                u.interests,
                 u.role,
                 o.category, 
                 o.rating, 

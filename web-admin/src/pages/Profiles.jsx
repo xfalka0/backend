@@ -549,33 +549,30 @@ export default function ProfilesPage() {
                                             <Edit3 size={18} />
                                         </button>
                                     </div>
-                                    <Edit3 size={18} />
-                                </button>
-                            </div>
-                            <button
-                                onClick={() => handleDelete(profile.id)}
-                                className="p-2.5 bg-white/5 hover:bg-rose-500 text-slate-400 hover:text-white rounded-xl border border-white/5 transition-all shadow-lg active:scale-95"
-                            >
-                                <Trash2 size={18} />
-                            </button>
-                        </div>
+                                    <button
+                                        onClick={() => handleDelete(profile.id)}
+                                        className="p-2.5 bg-white/5 hover:bg-rose-500 text-slate-400 hover:text-white rounded-xl border border-white/5 transition-all shadow-lg active:scale-95"
+                                    >
+                                        <Trash2 size={18} />
+                                    </button>
+                                </div>
                             </div>
                         </div>
-    ))
-}
+                    ))
+                    }
 
-<button
-    onClick={() => setShowAddForm(true)}
-    className="group relative h-full min-h-[400px]"
->
-    <div className="absolute inset-0 border-4 border-dashed border-white/5 group-hover:border-purple-500/30 rounded-[30px] transition-all flex flex-col items-center justify-center p-8 text-center bg-white/[0.02] group-hover:bg-purple-500/5">
-        <div className="w-16 h-16 rounded-full bg-slate-800 flex items-center justify-center text-slate-500 group-hover:bg-purple-600 group-hover:text-white transition-all shadow-2xl mb-4 group-hover:scale-110">
-            <Plus size={32} />
-        </div>
-        <p className="font-black text-slate-500 group-hover:text-white transition-colors uppercase tracking-widest">Profil Ekle</p>
-        <p className="text-sm text-slate-600 mt-2 font-medium">Yeni bir operatör veya vitrin profili oluşturun.</p>
-    </div>
-</button>
+                    <button
+                        onClick={() => setShowAddForm(true)}
+                        className="group relative h-full min-h-[400px]"
+                    >
+                        <div className="absolute inset-0 border-4 border-dashed border-white/5 group-hover:border-purple-500/30 rounded-[30px] transition-all flex flex-col items-center justify-center p-8 text-center bg-white/[0.02] group-hover:bg-purple-500/5">
+                            <div className="w-16 h-16 rounded-full bg-slate-800 flex items-center justify-center text-slate-500 group-hover:bg-purple-600 group-hover:text-white transition-all shadow-2xl mb-4 group-hover:scale-110">
+                                <Plus size={32} />
+                            </div>
+                            <p className="font-black text-slate-500 group-hover:text-white transition-colors uppercase tracking-widest">Profil Ekle</p>
+                            <p className="text-sm text-slate-600 mt-2 font-medium">Yeni bir operatör veya vitrin profili oluşturun.</p>
+                        </div>
+                    </button>
                 </div >
             )}
         </div >

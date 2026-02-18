@@ -184,7 +184,7 @@ const Chats = () => {
             setIsTyping(false); // Reset typing status on switch
             if (socketRef.current) {
                 console.log('[Admin] Joining room:', chat.id);
-                socketRef.current.emit('join_room', chat.id);
+                socketRef.current.emit('join_room', chat.id.toString());
             }
         }
 
@@ -222,22 +222,26 @@ const Chats = () => {
         socketRef.current.emit('typing_end', { chatId: selectedChat.id });
         if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
 
+        const tempId = Date.now().toString();
+
         const msgData = {
             chatId: selectedChat.id,
             senderId: selectedChat.operator_id,
             content: input,
-            type: 'text'
+            type: 'text',
+            tempId: tempId
         };
 
         socketRef.current.emit('send_message', msgData);
 
         const optimisticMsg = {
-            id: Date.now(),
+            id: tempId,
             sender_id: selectedChat.operator_id,
             content: input,
             chat_id: selectedChat.id,
             created_at: new Date().toISOString(),
-            is_optimistic: true
+            is_optimistic: true,
+            tempId: tempId
         };
 
         setMessages((prev) => [...prev, optimisticMsg]);
@@ -259,24 +263,28 @@ const Chats = () => {
 
             const imageUrl = res.data.url;
 
+            const tempId = Date.now().toString();
+
             const msgData = {
                 chatId: selectedChat.id,
                 senderId: selectedChat.operator_id,
                 content: imageUrl,
-                type: 'image'
+                type: 'image',
+                tempId: tempId
             };
 
             socketRef.current.emit('send_message', msgData);
 
             // Optimistic update
             const optimisticMsg = {
-                id: Date.now(),
+                id: tempId,
                 sender_id: selectedChat.operator_id,
                 content: imageUrl,
                 content_type: 'image',
                 chat_id: selectedChat.id,
                 created_at: new Date().toISOString(),
-                is_optimistic: true
+                is_optimistic: true,
+                tempId: tempId
             };
 
             setMessages((prev) => [...prev, optimisticMsg]);

@@ -41,31 +41,48 @@ export default function SplashScreen({ navigation }) {
 
         const checkSession = async () => {
             try {
+                // Log start
+                console.log('[Splash] Checking session...');
+
                 const token = await AsyncStorage.getItem('token');
                 const userJson = await AsyncStorage.getItem('user');
-                const userData = userJson ? JSON.parse(userJson) : null;
+
+                let userData = null;
+                try {
+                    userData = userJson ? JSON.parse(userJson) : null;
+                } catch (e) {
+                    console.warn('[Splash] Corrupt user data, clearing.');
+                    await AsyncStorage.multiRemove(['token', 'user']);
+                    navigation.replace('Welcome');
+                    return;
+                }
 
                 if (token && userData) {
                     try {
+                        console.log('[Splash] Validating token with server...');
                         const res = await axios.get(`${API_URL}/auth/me`, {
-                            headers: { Authorization: `Bearer ${token}` }
+                            headers: { Authorization: `Bearer ${token}` },
+                            timeout: 10000 // 10s timeout to prevent hanging
                         });
+
                         const freshUser = res.data;
                         await AsyncStorage.setItem('user', JSON.stringify(freshUser));
+                        console.log('[Splash] Session valid, navigating to Main');
 
-                        if (freshUser.onboarding_completed) {
+                        if (freshUser.onboarding_completed !== false) { // Default to true if undefined to avoid lock
                             navigation.replace('Main', { user: { ...freshUser, token } });
                         } else {
                             navigation.replace('Onboarding', { userId: freshUser.id, token });
                         }
                     } catch (verifyErr) {
                         console.warn("[Session] Token verification failed:", verifyErr.message);
-                        if (verifyErr.response?.status === 401 || verifyErr.response?.status === 403) {
-                            await AsyncStorage.multiRemove(['token', 'user']);
-                        }
+                        // If 401/403 OR Timeout OR Network Error -> Logout
+                        // We want to force login if we can't verify session to stay safe
+                        await AsyncStorage.multiRemove(['token', 'user']);
                         navigation.replace('Welcome');
                     }
                 } else {
+                    console.log('[Splash] No session found, navigating to Welcome');
                     navigation.replace('Welcome');
                 }
             } catch (err) {

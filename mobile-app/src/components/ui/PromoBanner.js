@@ -10,7 +10,7 @@ import Animated, {
     withRepeat,
     withSequence,
     withTiming,
-    Extrapolate
+    Extrapolation
 } from 'react-native-reanimated';
 
 const { width } = Dimensions.get('window');
@@ -33,7 +33,7 @@ const AnimatedBannerItem = ({ item, index, scrollX, navigation }) => {
             scrollX.value,
             inputRange,
             [0.9, 1, 0.9],
-            Extrapolate.CLAMP
+            Extrapolation.CLAMP
         );
 
         return {

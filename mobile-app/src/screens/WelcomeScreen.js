@@ -260,7 +260,7 @@ export default function WelcomeScreen({ navigation }) {
                                     >
                                         Gizlilik
                                     </Text>
-                                    {' kabul etmiş olursun.'}
+                                    {' Politikasını kabul etmiş olursun.'}
                                 </Text>
                             </Animated.View>
                         </View>

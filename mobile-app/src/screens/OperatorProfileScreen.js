@@ -162,9 +162,28 @@ export default function OperatorProfileScreen({ route, navigation }) {
                             )}
                         </View>
 
-                        {/* Hakkımda Bölümü */}
                         <Motion.Fade delay={400}>
-                            {/* Personal Info Section */}
+                            {/* 1. Fotoğraf Albümü (En Üstte) */}
+                            {operator.photos && operator.photos.length > 0 && (
+                                <View style={styles.section}>
+                                    <Text style={styles.sectionTitle}>Fotoğraf Albümü</Text>
+                                    <Animated.ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.albumScroll}>
+                                        {operator.photos.map((photo, index) => (
+                                            <Motion.SlideUp delay={500 + (index * 100)} key={index}>
+                                                <Image source={{ uri: photo }} style={styles.albumPhoto} />
+                                            </Motion.SlideUp>
+                                        ))}
+                                    </Animated.ScrollView>
+                                </View>
+                            )}
+
+                            {/* 2. Hakkımda */}
+                            <View style={styles.section}>
+                                <Text style={styles.sectionTitle}>Hakkımda</Text>
+                                <Text style={styles.bioText}>{operator.bio || 'Merhaba! Seninle tanışmak için sabırsızlanıyorum.'}</Text>
+                            </View>
+
+                            {/* 3. Kişisel Bilgiler ve İlgi Alanları */}
                             {(operator.relationship || operator.zodiac || operator.interests) && (
                                 <View style={styles.section}>
                                     <Text style={styles.sectionTitle}>Kişisel Bilgiler</Text>
@@ -203,26 +222,7 @@ export default function OperatorProfileScreen({ route, navigation }) {
                                     )}
                                 </View>
                             )}
-
-                            <View style={styles.section}>
-                                <Text style={styles.sectionTitle}>Hakkımda</Text>
-                                <Text style={styles.bioText}>{operator.bio || 'Merhaba! Seninle tanışmak için sabırsızlanıyorum.'}</Text>
-                            </View>
                         </Motion.Fade>
-
-                        {/* Albüm */}
-                        {operator.photos && operator.photos.length > 0 && (
-                            <View style={styles.section}>
-                                <Text style={styles.sectionTitle}>Fotoğraf Albümü</Text>
-                                <Animated.ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.albumScroll}>
-                                    {operator.photos.map((photo, index) => (
-                                        <Motion.SlideUp delay={600 + (index * 100)} key={index}>
-                                            <Image source={{ uri: photo }} style={styles.albumPhoto} />
-                                        </Motion.SlideUp>
-                                    ))}
-                                </Animated.ScrollView>
-                            </View>
-                        )}
 
                         <View style={{ height: 100 }} />
                     </GlassCard>

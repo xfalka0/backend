@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, FlatList, Image, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, FlatList, Image, TouchableOpacity, ActivityIndicator, TextInput } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
@@ -12,31 +12,15 @@ import VipFrame from '../components/ui/VipFrame';
 export default function MessagesScreen({ navigation, route }) {
     const { theme, themeMode } = useTheme();
     const { user } = route.params || {};
-    const [chats, setChats] = useState([]);
-    const [loading, setLoading] = useState(true);
+    const [searchText, setSearchText] = useState('');
+    const [showSearch, setShowSearch] = useState(false);
 
-    useFocusEffect(
-        React.useCallback(() => {
-            if (user?.id) {
-                fetchChats();
-            } else {
-                console.log('MessagesScreen: No user ID, stop loading');
-                setLoading(false);
-            }
-        }, [user])
-    );
-
-
-    const fetchChats = async () => {
-        try {
-            const res = await axios.get(`${API_URL}/users/${user.id}/chats`);
-            setChats(res.data);
-        } catch (error) {
-            console.error('Fetch Chats Error:', error);
-        } finally {
-            setLoading(false);
-        }
-    };
+    const filteredChats = React.useMemo(() => {
+        if (!searchText) return chats;
+        return chats.filter(chat =>
+            chat.name.toLowerCase().includes(searchText.toLowerCase())
+        );
+    }, [chats, searchText]);
 
     const renderChatItem = ({ item }) => {
         const hasUnread = item.unread_count > 0;
@@ -125,7 +109,7 @@ export default function MessagesScreen({ navigation, route }) {
                 </View>
             ) : (
                 <FlatList
-                    data={chats}
+                    data={filteredChats}
                     keyExtractor={item => item.id.toString()}
                     renderItem={renderChatItem}
                     contentContainerStyle={styles.list}
@@ -135,10 +119,42 @@ export default function MessagesScreen({ navigation, route }) {
                             <PromoBanner navigation={navigation} />
                             <View style={styles.headerContainer}>
                                 <Text style={[styles.title, { color: theme.colors.text }]}>Sohbetler</Text>
-                                <TouchableOpacity>
-                                    <Ionicons name="search-outline" size={24} color={theme.colors.text} />
+                                <TouchableOpacity
+                                    onPress={() => setShowSearch(!showSearch)}
+                                    style={{
+                                        padding: 8,
+                                        borderRadius: 20,
+                                        backgroundColor: showSearch ? 'rgba(139, 92, 246, 0.2)' : 'transparent'
+                                    }}
+                                >
+                                    <Ionicons name="search-outline" size={24} color={showSearch ? '#8b5cf6' : theme.colors.text} />
                                 </TouchableOpacity>
                             </View>
+
+                            {/* Search Bar */}
+                            {showSearch && (
+                                <View style={{ paddingHorizontal: 20, marginBottom: 15 }}>
+                                    <View style={{
+                                        flexDirection: 'row', alignItems: 'center',
+                                        backgroundColor: themeMode === 'dark' ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)',
+                                        borderRadius: 12, paddingHorizontal: 12, height: 46
+                                    }}>
+                                        <Ionicons name="search" size={20} color={theme.colors.textSecondary} style={{ marginRight: 10 }} />
+                                        <TextInput
+                                            placeholder="Sohbetlerde ara..."
+                                            placeholderTextColor={theme.colors.textSecondary}
+                                            style={{ flex: 1, color: theme.colors.text, fontSize: 14 }}
+                                            value={searchText}
+                                            onChangeText={setSearchText}
+                                        />
+                                        {searchText.length > 0 && (
+                                            <TouchableOpacity onPress={() => setSearchText('')}>
+                                                <Ionicons name="close-circle" size={18} color={theme.colors.textSecondary} />
+                                            </TouchableOpacity>
+                                        )}
+                                    </View>
+                                </View>
+                            )}
                         </>
                     )}
                 />

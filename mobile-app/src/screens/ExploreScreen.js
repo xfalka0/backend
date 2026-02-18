@@ -270,7 +270,7 @@ export default function ExploreScreen({ route, navigation }) {
     });
 
     const renderHeader = () => (
-        <View style={{ backgroundColor: theme.colors.background }}>
+        <View>
             <View style={styles.header}>
                 <Text style={[styles.headerTitle, { color: theme.colors.text, fontSize: 22, fontWeight: '800' }]}>Hikayeler</Text>
             </View>

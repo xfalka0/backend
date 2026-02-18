@@ -621,9 +621,8 @@ app.put('/api/users/:id/profile', async (req, res) => {
 // --- END DATABASE INITIALIZATION ---
 
 // Health Check
-app.get('/', (req, res) => {
-    res.send('Chat System Backend is Running (FIX_V18)');
-});
+// Serve static files from the React app
+app.use(express.static(path.join(__dirname, 'web-admin', 'dist')));
 
 // Account Deletion Page (Google Play Requirement)
 app.get('/account-deletion', (req, res) => {
@@ -2880,6 +2879,16 @@ const startPinger = () => {
     }, 60000);
 };
 
+
+// Handle React routing, return all requests to React app
+app.get('*', (req, res) => {
+    // Exclude API routes from being handled by React
+    if (req.path.startsWith('/api')) {
+        return res.status(404).json({ error: 'API route not found' });
+    }
+    res.sendFile(path.join(__dirname, 'web-admin', 'dist', 'index.html'));
+});
+
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, '0.0.0.0', () => {
     console.log(`ðŸš€ [BACKEND] Server listening on http://0.0.0.0:${PORT}`);
@@ -2896,7 +2905,7 @@ server.listen(PORT, '0.0.0.0', () => {
          / /   A u t h o r i z a t i o n   c h e c k :   U s e r   c a n   u p d a t e   o w n   p r o f i l e ,   A d m i n s   c a n   u p d a t e   a n y  
          / /   C o m p a r e   s t r i n g   I D s   t o   b e   s a f e  
          i f   ( r e q . u s e r . i d . t o S t r i n g ( )   ! = =   i d . t o S t r i n g ( )   & &   r e q . u s e r . r o l e   ! = =   ' a d m i n '   & &   r e q . u s e r . r o l e   ! = =   ' s u p e r _ a d m i n ' )   {  
-                 r e t u r n   r e s . s t a t u s ( 4 0 3 ) . j s o n ( {   e r r o r :   ' Y e t k i s i z   i Å xl e m . '   } ) ;  
+                 r e t u r n   r e s . s t a t u s ( 4 0 3 ) . j s o n ( {   e r r o r :   ' Y e t k i s i z   i ï¿½ xl e m . '   } ) ;  
          }  
   
          t r y   {  
@@ -2920,7 +2929,7 @@ server.listen(PORT, '0.0.0.0', () => {
                  ) ;  
   
                  i f   ( r e s u l t . r o w s . l e n g t h   = = =   0 )   {  
-                         r e t u r n   r e s . s t a t u s ( 4 0 4 ) . j s o n ( {   e r r o r :   ' K u l l a n Ä ± c Ä ±   b u l u n a m a d Ä ± . '   } ) ;  
+                         r e t u r n   r e s . s t a t u s ( 4 0 4 ) . j s o n ( {   e r r o r :   ' K u l l a n ï¿½ ï¿½ c ï¿½ ï¿½   b u l u n a m a d ï¿½ ï¿½ . '   } ) ;  
                  }  
   
                  / /   A l s o   u p d a t e   o p e r a t o r s   t a b l e   b i o   i f   u s e r   i s   a n   o p e r a t o r  

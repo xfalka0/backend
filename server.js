@@ -2895,54 +2895,3 @@ server.listen(PORT, '0.0.0.0', () => {
     console.log(`📡 [BACKEND] Accessible on http://localhost:${PORT}`);
     startPinger();
 });
-/ /   . . .   e x i s t i n g   c o d e   . . .  
-  
- / /   U P D A T E   U S E R   P R O F I L E   ( G e n e r i c )  
- a p p . p u t ( ' / a p i / u s e r s / : i d / p r o f i l e ' ,   a u t h e n t i c a t e T o k e n ,   a s y n c   ( r e q ,   r e s )   = >   {  
-         c o n s t   {   i d   }   =   r e q . p a r a m s ;  
-         c o n s t   {   n a m e ,   b i o ,   j o b ,   r e l a t i o n s h i p ,   z o d i a c ,   i n t e r e s t s   }   =   r e q . b o d y ;  
-  
-         / /   A u t h o r i z a t i o n   c h e c k :   U s e r   c a n   u p d a t e   o w n   p r o f i l e ,   A d m i n s   c a n   u p d a t e   a n y  
-         / /   C o m p a r e   s t r i n g   I D s   t o   b e   s a f e  
-         i f   ( r e q . u s e r . i d . t o S t r i n g ( )   ! = =   i d . t o S t r i n g ( )   & &   r e q . u s e r . r o l e   ! = =   ' a d m i n '   & &   r e q . u s e r . r o l e   ! = =   ' s u p e r _ a d m i n ' )   {  
-                 r e t u r n   r e s . s t a t u s ( 4 0 3 ) . j s o n ( {   e r r o r :   ' Y e t k i s i z   i � xl e m . '   } ) ;  
-         }  
-  
-         t r y   {  
-                 / /   P r e p a r e   i n t e r e s t s   s t r i n g   ( a s s u m i n g   f r o n t e n d   s e n d s   a r r a y   o r   s t r i n g )  
-                 l e t   i n t e r e s t s S t r   =   i n t e r e s t s ;  
-                 i f   ( A r r a y . i s A r r a y ( i n t e r e s t s ) )   {  
-                         i n t e r e s t s S t r   =   J S O N . s t r i n g i f y ( i n t e r e s t s ) ;  
-                 }  
-  
-                 c o n s t   r e s u l t   =   a w a i t   d b . q u e r y (  
-                         ` U P D A T E   u s e r s    
-                           S E T   d i s p l a y _ n a m e   =   C O A L E S C E ( $ 1 ,   d i s p l a y _ n a m e ) ,    
-                                   b i o   =   C O A L E S C E ( $ 2 ,   b i o ) ,    
-                                   j o b   =   C O A L E S C E ( $ 3 ,   j o b ) ,    
-                                   r e l a t i o n s h i p   =   C O A L E S C E ( $ 4 ,   r e l a t i o n s h i p ) ,    
-                                   z o d i a c   =   C O A L E S C E ( $ 5 ,   z o d i a c ) ,    
-                                   i n t e r e s t s   =   C O A L E S C E ( $ 6 ,   i n t e r e s t s )    
-                           W H E R E   i d   =   $ 7    
-                           R E T U R N I N G   * ` ,  
-                         [ n a m e ,   b i o ,   j o b ,   r e l a t i o n s h i p ,   z o d i a c ,   i n t e r e s t s S t r ,   i d ]  
-                 ) ;  
-  
-                 i f   ( r e s u l t . r o w s . l e n g t h   = = =   0 )   {  
-                         r e t u r n   r e s . s t a t u s ( 4 0 4 ) . j s o n ( {   e r r o r :   ' K u l l a n � � c � �   b u l u n a m a d � � . '   } ) ;  
-                 }  
-  
-                 / /   A l s o   u p d a t e   o p e r a t o r s   t a b l e   b i o   i f   u s e r   i s   a n   o p e r a t o r  
-                 i f   ( r e q . u s e r . r o l e   = = =   ' o p e r a t o r ' )   {  
-                         a w a i t   d b . q u e r y ( ' U P D A T E   o p e r a t o r s   S E T   b i o   =   C O A L E S C E ( $ 1 ,   b i o )   W H E R E   u s e r _ i d   =   $ 2 ' ,   [ b i o ,   i d ] ) ;  
-                 }  
-  
-                 r e s . j s o n ( {   s u c c e s s :   t r u e ,   u s e r :   s a n i t i z e U s e r ( r e s u l t . r o w s [ 0 ] ,   r e q )   } ) ;  
-         }   c a t c h   ( e r r )   {  
-                 c o n s o l e . e r r o r ( ' U p d a t e   P r o f i l e   E r r o r : ' ,   e r r . m e s s a g e ) ;  
-                 r e s . s t a t u s ( 5 0 0 ) . j s o n ( {   e r r o r :   e r r . m e s s a g e   } ) ;  
-         }  
- } ) ;  
-  
- / /   . . .   e x i s t i n g   c o d e   . . .  
- 

@@ -20,7 +20,11 @@ export default function ProfilesPage() {
         gender: 'kadin',
         photos: [],
         age: 18,
-        vip_level: 0
+        vip_level: 0,
+        job: '',
+        relationship: '',
+        zodiac: '',
+        interests: '[]'
     });
 
     const [hobbies, setHobbies] = useState([]);
@@ -115,6 +119,7 @@ export default function ProfilesPage() {
 
     const handleEdit = (profile) => {
         setEditingId(profile.id);
+        const ints = profile.interests ? (Array.isArray(profile.interests) ? JSON.stringify(profile.interests) : profile.interests) : '[]';
         setFormData({
             name: profile.name,
             job: profile.job || '',
@@ -124,7 +129,10 @@ export default function ProfilesPage() {
             gender: profile.gender || 'kadin',
             photos: profile.photos || [],
             age: profile.age || 18,
-            vip_level: profile.vip_level || 0
+            vip_level: profile.vip_level || 0,
+            relationship: profile.relationship || '',
+            zodiac: profile.zodiac || '',
+            interests: ints // Store as stringified JSON in form
         });
         setHobbies(profile.category ? [profile.category] : []);
         setShowAddForm(true);
@@ -167,7 +175,10 @@ export default function ProfilesPage() {
                 gender: 'kadin',
                 photos: [],
                 age: 18,
-                vip_level: 0
+                vip_level: 0,
+                relationship: '',
+                zodiac: '',
+                interests: '[]'
             });
             setHobbies([]);
             fetchProfiles();
@@ -189,7 +200,7 @@ export default function ProfilesPage() {
                 <button
                     onClick={() => {
                         if (showAddForm) {
-                            setFormData({ name: '', job: '', category: 'Flirty', bio: '', avatar_url: '', gender: 'kadin', photos: [], age: 18, vip_level: 0 });
+                            setFormData({ name: '', job: '', category: 'Flirty', bio: '', avatar_url: '', gender: 'kadin', photos: [], age: 18, vip_level: 0, relationship: '', zodiac: '', interests: '[]' });
                             setHobbies([]);
                         }
                         setShowAddForm(!showAddForm);
@@ -302,13 +313,51 @@ export default function ProfilesPage() {
                                                 />
                                             </div>
                                         </div>
+                                        <div className="relative">
+                                            <p className="text-[10px] font-black uppercase text-slate-500 mb-1 ml-1 tracking-widest">Burç</p>
+                                            <select
+                                                className="w-full bg-slate-900 border border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 appearance-none transition-all text-white font-bold"
+                                                value={formData.zodiac || ''}
+                                                onChange={(e) => setFormData({ ...formData, zodiac: e.target.value })}
+                                            >
+                                                <option value="">Seçiniz</option>
+                                                <option value="Koç">Koç (Aries)</option>
+                                                <option value="Boğa">Boğa (Taurus)</option>
+                                                <option value="İkizler">İkizler (Gemini)</option>
+                                                <option value="Yengeç">Yengeç (Cancer)</option>
+                                                <option value="Aslan">Aslan (Leo)</option>
+                                                <option value="Başak">Başak (Virgo)</option>
+                                                <option value="Terazi">Terazi (Libra)</option>
+                                                <option value="Akrep">Akrep (Scorpio)</option>
+                                                <option value="Yay">Yay (Sagittarius)</option>
+                                                <option value="Oğlak">Oğlak (Capricorn)</option>
+                                                <option value="Kova">Kova (Aquarius)</option>
+                                                <option value="Balık">Balık (Pisces)</option>
+                                            </select>
+                                        </div>
+                                        <div className="relative">
+                                            <p className="text-[10px] font-black uppercase text-slate-500 mb-1 ml-1 tracking-widest">İlişki Durumu</p>
+                                            <select
+                                                className="w-full bg-slate-900 border border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 appearance-none transition-all text-white font-bold"
+                                                value={formData.relationship || ''}
+                                                onChange={(e) => setFormData({ ...formData, relationship: e.target.value })}
+                                            >
+                                                <option value="">Seçiniz</option>
+                                                <option value="Bekar">Bekar</option>
+                                                <option value="İlişkisi Var">İlişkisi Var</option>
+                                                <option value="Nişanlı">Nişanlı</option>
+                                                <option value="Evli">Evli</option>
+                                                <option value="Karmaşık">Karmaşık</option>
+                                                <option value="Arkadaşlık">Arkadaşlık Arıyor</option>
+                                            </select>
+                                        </div>
                                     </div>
                                 </div>
 
                                 <div className="space-y-6">
                                     <div className="space-y-2">
                                         <p className="text-[10px] font-black uppercase text-slate-500 mb-1 ml-1 tracking-widest flex items-center gap-2">
-                                            <Hash size={12} className="text-purple-400" /> Hobiler
+                                            <Hash size={12} className="text-purple-400" /> Kategori / Unvan
                                         </p>
                                         <div className="flex items-center gap-2">
                                             <input
@@ -317,7 +366,7 @@ export default function ProfilesPage() {
                                                 onChange={(e) => setNewHobby(e.target.value)}
                                                 onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), addHobby())}
                                                 className="flex-1 bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-sm focus:outline-none focus:border-purple-500 transition-all"
-                                                placeholder="Egzersiz, Dans, Satranç..."
+                                                placeholder="Örn: Flirty, Gamer..."
                                             />
                                             <button type="button" onClick={addHobby} className="p-2 bg-purple-600 rounded-xl hover:bg-purple-500 transition-all"><Plus size={20} /></button>
                                         </div>
@@ -326,6 +375,53 @@ export default function ProfilesPage() {
                                                 <span key={h} className="group flex items-center gap-1.5 px-3 py-1 bg-purple-500/10 text-purple-400 border border-purple-500/20 text-[10px] font-black uppercase rounded-lg">
                                                     {h}
                                                     <XCircle size={10} className="hover:text-rose-500 cursor-pointer" onClick={() => setHobbies(hobbies.filter(i => i !== h))} />
+                                                </span>
+                                            ))}
+                                        </div>
+                                        <p className="text-[10px] text-slate-600">Bu alan profilin ana kategorisini belirler (tek seçim önerilir).</p>
+                                    </div>
+
+                                    <div className="space-y-2">
+                                        <p className="text-[10px] font-black uppercase text-slate-500 mb-1 ml-1 tracking-widest flex items-center gap-2">
+                                            <Heart size={12} className="text-pink-400" /> İlgi Alanları (Yeni)
+                                        </p>
+                                        <div className="flex items-center gap-2">
+                                            <input
+                                                type="text"
+                                                id="interestInput"
+                                                className="flex-1 bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-sm focus:outline-none focus:border-pink-500 transition-all"
+                                                placeholder="Örn: Yüzme, Kitap, Müzik..."
+                                                onKeyPress={(e) => {
+                                                    if (e.key === 'Enter') {
+                                                        e.preventDefault();
+                                                        const val = e.target.value.trim();
+                                                        if (val) {
+                                                            const current = formData.interests ? (Array.isArray(formData.interests) ? formData.interests : JSON.parse(formData.interests || '[]')) : [];
+                                                            setFormData({ ...formData, interests: JSON.stringify([...current, val]) });
+                                                            e.target.value = '';
+                                                        }
+                                                    }
+                                                }}
+                                            />
+                                            <button type="button" onClick={() => {
+                                                const input = document.getElementById('interestInput');
+                                                const val = input.value.trim();
+                                                if (val) {
+                                                    const current = formData.interests ? (Array.isArray(formData.interests) ? formData.interests : JSON.parse(formData.interests || '[]')) : [];
+                                                    setFormData({ ...formData, interests: JSON.stringify([...current, val]) });
+                                                    input.value = '';
+                                                }
+                                            }} className="p-2 bg-pink-600 rounded-xl hover:bg-pink-500 transition-all"><Plus size={20} /></button>
+                                        </div>
+                                        <div className="flex flex-wrap gap-2 pt-2">
+                                            {(formData.interests ? (Array.isArray(formData.interests) ? formData.interests : JSON.parse(formData.interests || '[]')) : []).map((int, i) => (
+                                                <span key={i} className="group flex items-center gap-1.5 px-3 py-1 bg-pink-500/10 text-pink-400 border border-pink-500/20 text-[10px] font-black uppercase rounded-lg">
+                                                    {int}
+                                                    <XCircle size={10} className="hover:text-rose-500 cursor-pointer" onClick={() => {
+                                                        const current = formData.interests ? (Array.isArray(formData.interests) ? formData.interests : JSON.parse(formData.interests || '[]')) : [];
+                                                        const filtered = current.filter((_, idx) => idx !== i);
+                                                        setFormData({ ...formData, interests: JSON.stringify(filtered) });
+                                                    }} />
                                                 </span>
                                             ))}
                                         </div>
@@ -450,7 +546,7 @@ export default function ProfilesPage() {
                                 <Plus size={32} />
                             </div>
                             <p className="font-black text-slate-500 group-hover:text-white transition-colors uppercase tracking-widest">Profil Ekle</p>
-                            <p className="text-xs text-slate-600 mt-2 font-medium">Yeni bir operatör veya vitrin profili oluşturun.</p>
+                            <p className="text-sm text-slate-600 mt-2 font-medium">Yeni bir operatör veya vitrin profili oluşturun.</p>
                         </div>
                     </button>
                 </div>

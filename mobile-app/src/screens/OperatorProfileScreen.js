@@ -126,7 +126,7 @@ export default function OperatorProfileScreen({ route, navigation }) {
                                                     operator.vip_level === 2 ? ['#3b82f6', '#8b5cf6'] :
                                                         operator.vip_level === 3 ? ['#a855f7', '#ec4899'] :
                                                             operator.vip_level === 4 ? ['#fbbf24', '#7c3aed'] :
-                                                                operator.vip_level === 5 ? ['#fbbf24', '#ff00ff'] :
+                                                                operator.vip_level === 5 ? ['#e879f9', '#d946ef'] :
                                                                     ['#000000', '#1a1a1a']
                                             }
                                             start={{ x: 0, y: 0 }}

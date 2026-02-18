@@ -211,7 +211,8 @@ export default function HomeScreen({ navigation, route }) {
                                                 setTimeout(() => {
                                                     console.log('[HiButton] Disconnecting socket.');
                                                     socket.disconnect();
-                                                }, 2000);
+                                                    // No navigation here anymore as requested
+                                                }, 750);
                                             });
 
                                             socket.on('connect_error', (err) => {
@@ -223,14 +224,18 @@ export default function HomeScreen({ navigation, route }) {
                                     console.error('[HiButton] Error in onHiPress:', e.message);
                                 }
                             }}
-                            onPress={() => navigation.navigate('Chat', {
-                                operatorId: item.id,
-                                name: item.name,
-                                avatar_url: item.avatar_url,
-                                is_online: item.is_online,
-                                vip_level: item.vip_level,
-                                user: user
-                            })}
+                            onPress={() => {
+                                setTimeout(() => {
+                                    navigation.navigate('Chat', {
+                                        operatorId: item.id,
+                                        name: item.name,
+                                        avatar_url: item.avatar_url,
+                                        is_online: item.is_online,
+                                        vip_level: item.vip_level,
+                                        user: user
+                                    });
+                                }, 500);
+                            }}
                         />
                     </View>
                 </View>

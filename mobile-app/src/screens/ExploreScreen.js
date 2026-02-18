@@ -33,7 +33,32 @@ export default function ExploreScreen({ route, navigation }) {
     const [comments, setComments] = useState([]);
     const [newComment, setNewComment] = useState('');
     const [isPostingComment, setIsPostingComment] = useState(false);
+    const [isOptionsVisible, setOptionsVisible] = useState(false);
+    const [selectedPostForOptions, setSelectedPostForOptions] = useState(null);
     const scrollY = useSharedValue(0);
+
+    const handleOpenOptions = (post) => {
+        setSelectedPostForOptions(post);
+        setOptionsVisible(true);
+    };
+
+    const handleReport = () => {
+        setOptionsVisible(false);
+        showAlert({
+            title: "Bildirildi 🚨",
+            message: "Bu gönderi incelenmek üzere bildirildi.",
+            type: "success"
+        });
+    };
+
+    const handleBlock = () => {
+        setOptionsVisible(false);
+        showAlert({
+            title: "Engellendi 🚫",
+            message: "Bu kullanıcı engellendi.",
+            type: "success"
+        });
+    };
 
     useFocusEffect(
         React.useCallback(() => {
@@ -373,8 +398,15 @@ export default function ExploreScreen({ route, navigation }) {
                         )}
                     </View>
                 </View>
-                <TouchableOpacity>
-                    <Ionicons name="ellipsis-horizontal" size={20} color={themeMode === 'dark' ? 'white' : theme.colors.text} />
+                <TouchableOpacity
+                    onPress={() => {
+                        // console.log('3-dots pressed');
+                        handleOpenOptions(item);
+                    }}
+                    hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}
+                    style={{ position: 'absolute', top: 15, right: 15, zIndex: 999 }}
+                >
+                    <Ionicons name="ellipsis-horizontal" size={24} color={themeMode === 'dark' ? 'white' : theme.colors.text} />
                 </TouchableOpacity>
             </View>
 
@@ -503,6 +535,45 @@ export default function ExploreScreen({ route, navigation }) {
                         </View>
                     </View>
                     <TouchableOpacity style={styles.dismissOverlay} onPress={() => setCommentsVisible(false)} />
+                </View>
+            </Modal>
+
+            {/* Options Modal */}
+            <Modal
+                visible={isOptionsVisible}
+                transparent
+                animationType="fade"
+                onRequestClose={() => setOptionsVisible(false)}
+            >
+                <View style={[styles.modalOverlay, { justifyContent: 'flex-end' }]}>
+                    <TouchableOpacity style={StyleSheet.absoluteFill} onPress={() => setOptionsVisible(false)} />
+                    <View style={[styles.optionsContainer, { backgroundColor: theme.colors.backgroundSecondary, borderColor: theme.colors.glassBorder }]}>
+                        <View style={styles.optionsHandle} />
+                        <Text style={[styles.optionsTitle, { color: theme.colors.text }]}>Seçenekler</Text>
+
+                        <TouchableOpacity style={styles.optionItem} onPress={handleReport}>
+                            <View style={[styles.optionIcon, { backgroundColor: 'rgba(239, 68, 68, 0.1)' }]}>
+                                <Ionicons name="flag" size={20} color="#ef4444" />
+                            </View>
+                            <Text style={[styles.optionText, { color: '#ef4444' }]}>Bu Gönderiyi Bildir</Text>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity style={styles.optionItem} onPress={handleBlock}>
+                            <View style={[styles.optionIcon, { backgroundColor: 'rgba(100, 116, 139, 0.1)' }]}>
+                                <Ionicons name="ban" size={20} color={theme.colors.text} />
+                            </View>
+                            <Text style={[styles.optionText, { color: theme.colors.text }]}>Kullanıcıyı Engelle</Text>
+                        </TouchableOpacity>
+
+                        <View style={{ height: 1, backgroundColor: theme.colors.glassBorder, marginVertical: 10 }} />
+
+                        <TouchableOpacity style={styles.optionItem} onPress={() => setOptionsVisible(false)}>
+                            <View style={[styles.optionIcon, { backgroundColor: 'rgba(100, 116, 139, 0.1)' }]}>
+                                <Ionicons name="close" size={20} color={theme.colors.text} />
+                            </View>
+                            <Text style={[styles.optionText, { color: theme.colors.text }]}>Vazgeç</Text>
+                        </TouchableOpacity>
+                    </View>
                 </View>
             </Modal>
         </View>
@@ -785,7 +856,7 @@ const styles = StyleSheet.create({
     },
     fabContainer: {
         position: 'absolute',
-        bottom: 100, // Navigation bar üstünde kalması için yükseltildi
+        bottom: 100, // Restore original position
         right: 25,
         borderRadius: 30,
         elevation: 8,
@@ -797,6 +868,62 @@ const styles = StyleSheet.create({
         shadowOpacity: 0.3,
         shadowRadius: 4.65,
         zIndex: 50,
+    },
+    fabGradient: {
+        width: 56,
+        height: 56,
+        borderRadius: 28,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    // Options Modal Styles
+    optionsContainer: {
+        position: 'absolute',
+        bottom: 0,
+        left: 0,
+        right: 0,
+        borderTopLeftRadius: 25,
+        borderTopRightRadius: 25,
+        padding: 20,
+        paddingBottom: 40,
+        borderTopWidth: 1,
+        elevation: 20, // Increased elevation
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: -5 }, // Stronger shadow
+        shadowOpacity: 0.2, // Increased opacity
+        shadowRadius: 15,
+        zIndex: 1000, // Ensure it's on top
+    },
+    optionsHandle: {
+        width: 40,
+        height: 4,
+        backgroundColor: 'rgba(148, 163, 184, 0.3)',
+        borderRadius: 2,
+        alignSelf: 'center',
+        marginBottom: 15,
+    },
+    optionsTitle: {
+        fontSize: 18,
+        fontWeight: '800',
+        marginBottom: 20,
+        textAlign: 'center',
+    },
+    optionItem: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingVertical: 12,
+    },
+    optionIcon: {
+        width: 40,
+        height: 40,
+        borderRadius: 12,
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginRight: 15,
+    },
+    optionText: {
+        fontSize: 16,
+        fontWeight: '600',
     },
     fabGradient: {
         width: 60,

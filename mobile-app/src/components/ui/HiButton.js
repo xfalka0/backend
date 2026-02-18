@@ -8,12 +8,13 @@ import Animated, {
     useAnimatedStyle,
     withSpring,
     withTiming,
+    withSequence,
     interpolate,
 } from 'react-native-reanimated';
 
 const BUBBLE_COUNT = 15;
 const RESET_DURATION = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
-const DAILY_LIMIT = 10;
+const DAILY_LIMIT = 1000;
 
 const Bubble = memo(({ index, triggerValue }) => {
     const progress = useSharedValue(0);
@@ -60,7 +61,6 @@ export default function HiButton({ onPress, operatorId, onHiPress }) {
     }, [operatorId]);
 
     const checkHiStatus = async () => {
-        if (!operatorId) return;
         try {
             const lastHiStr = await AsyncStorage.getItem(`lastHi_${operatorId}`);
             if (lastHiStr) {
@@ -98,6 +98,16 @@ export default function HiButton({ onPress, operatorId, onHiPress }) {
     };
 
     const handlePress = async () => {
+        // Hızlı tıklamalarda animasyonun görünmesi için zorla çalıştırıyoruz
+        // Önce küçült (0.85), sonra geri büyüt (1.0)
+        scale.value = withSequence(
+            withTiming(0.85, { duration: 100 }),
+            withTiming(1, { duration: 250 })
+        );
+
+        // Animasyonun bitmesi için bekle
+        await new Promise(resolve => setTimeout(resolve, 350));
+
         if (!isChatMode) {
             try {
                 const now = Date.now();

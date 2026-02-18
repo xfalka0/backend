@@ -213,12 +213,12 @@ export default function SettingsScreen({ navigation, route }) {
                     <SettingItem
                         icon="document-text-outline"
                         label="Kullanım Koşulları"
-                        onPress={() => Linking.openURL('https://falkasoft.com/terms')}
+                        onPress={() => navigation.navigate('Legal', { type: 'terms' })}
                     />
                     <SettingItem
                         icon="shield-checkmark-outline"
                         label="Gizlilik Sözleşmesi"
-                        onPress={() => Linking.openURL('https://falkasoft.com/privacy')}
+                        onPress={() => navigation.navigate('Legal', { type: 'privacy' })}
                     />
                     <SettingItem
                         icon="trash-outline"

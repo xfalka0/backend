@@ -653,6 +653,53 @@ app.get('/account-deletion', (req, res) => {
     `);
 });
 
+// Safety Standards Page (Google Play Requirement)
+app.get('/safety-standards', (req, res) => {
+    res.send(`
+        <!DOCTYPE html>
+        <html lang="tr">
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Güvenlik Standartları - Fiva</title>
+            <style>
+                body { font-family: sans-serif; padding: 20px; max-width: 800px; margin: 0 auto; line-height: 1.6; color: #333; }
+                h1 { color: #2563eb; }
+                h2 { color: #1e40af; border-bottom: 2px solid #e5e7eb; padding-bottom: 10px; margin-top: 30px; }
+                .policy-box { background: #f9fafb; padding: 20px; border-radius: 8px; border: 1px solid #e5e7eb; margin-bottom: 20px; }
+                strong { color: #111; }
+            </style>
+        </head>
+        <body>
+            <h1>Fiva Güvenlik Standartları ve Politikası</h1>
+            <p>Son Güncelleme: 18 Şubat 2026</p>
+
+            <div class="policy-box">
+                <h2>Çocukların Güvenliği (CSAE) Politikası</h2>
+                <p><strong>Fiva olarak, çocuk istismarı ve sömürüsüne (CSAE) karşı kesinlikle sıfır tolerans politikası izliyoruz.</strong> Platformumuzda çocukların güvenliğini tehdit eden hiçbir içeriğe, davranışa veya kullanıcıya izin verilmez.</p>
+                
+                <h3>Temel İlkelerimiz:</h3>
+                <ul>
+                    <li><strong>Sıfır Tolerans:</strong> Çocuk istismarı (CSAE) içeren veya teşvik eden her türlü içerik derhal kaldırılır ve sorumlular platformdan kalıcı olarak yasaklanır.</li>
+                    <li><strong>Raporlama:</strong> Bu tür içerikleri tespit ettiğimizde, derhal NCMEC (Ulusal Kayıp ve Sömürülen Çocuklar Merkezi) ve yerel kolluk kuvvetlerine (CyberTipline) bildiriyoruz.</li>
+                    <li><strong>Yapay Zeka ve Moderasyon:</strong> Platformumuzdaki görseller ve metinler, zararlı içerikleri tespit etmek için gelişmiş filtreleme sistemleri ve 7/24 moderasyon ekibi tarafından izlenmektedir.</li>
+                </ul>
+
+                <h3>Kullanıcı Yükümlülükleri:</h3>
+                <p>Kullanıcılarımız, Hizmet Şartlarımızı kabul ederek platformda yasa dışı, zararlı veya çocuk güvenliğini tehlikeye atan içerik paylaşmayacaklarını taahhüt ederler. İhlaller yasal işlem gerektirir.</p>
+
+                <h3>Şikayet ve İletişim:</h3>
+                <p>Güvenlik ihlali veya şüpheli bir durum fark ederseniz, lütfen anında bize bildirin:</p>
+                <p>E-posta: <strong>falkasoft@gmail.com</strong></p>
+            </div>
+
+            <h2>Topluluk Kuralları</h2>
+            <p>Fiva, saygılı ve güvenli bir ortam sağlamayı amaçlar. Taciz, nefret söylemi, şiddet ve müstehcenlik içeren paylaşımlar yasaktır.</p>
+        </body>
+        </html>
+    `);
+});
+
 // DEBUG: DB Check
 app.get('/api/debug/db-check', async (req, res) => {
     try {

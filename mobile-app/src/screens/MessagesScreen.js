@@ -14,6 +14,30 @@ export default function MessagesScreen({ navigation, route }) {
     const { user } = route.params || {};
     const [searchText, setSearchText] = useState('');
     const [showSearch, setShowSearch] = useState(false);
+    const [chats, setChats] = useState([]);
+    const [loading, setLoading] = useState(true);
+
+    useFocusEffect(
+        React.useCallback(() => {
+            if (user?.id) {
+                fetchChats();
+            } else {
+                console.log('MessagesScreen: No user ID, stop loading');
+                setLoading(false);
+            }
+        }, [user])
+    );
+
+    const fetchChats = async () => {
+        try {
+            const res = await axios.get(`${API_URL}/users/${user.id}/chats`);
+            setChats(res.data);
+        } catch (error) {
+            console.error('Fetch Chats Error:', error);
+        } finally {
+            setLoading(false);
+        }
+    };
 
     const filteredChats = React.useMemo(() => {
         if (!searchText) return chats;

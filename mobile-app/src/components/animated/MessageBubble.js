@@ -71,7 +71,7 @@ const MessageBubble = ({ children, isMine, index, isRead, avatar, vipLevel = 0, 
                     styles.timeText,
                     isMine ? styles.timeMine : [
                         styles.timeTheirs,
-                        { color: themeMode === 'dark' ? 'rgba(255, 255, 255, 0.5)' : theme.colors.textSecondary }
+                        { color: themeMode === 'dark' ? 'rgba(255, 255, 255, 0.7)' : theme.colors.textSecondary }
                     ]
                 ]}>
                     {formatTime(timestamp)}

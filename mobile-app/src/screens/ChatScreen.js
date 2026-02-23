@@ -600,9 +600,9 @@ export default function ChatScreen({ route, navigation }) {
                                 resizeMode="contain"
                             />
                             <View style={styles.giftInfo}>
-                                <Text style={styles.giftNameText}>{gift.name}</Text>
+                                <Text style={[styles.giftNameText, { color: theme.colors.text }]}>{gift.name}</Text>
                                 <View style={styles.giftPriceBadge}>
-                                    <Text style={styles.giftPriceText}>{gift.price} COIN</Text>
+                                    <Text style={[styles.giftPriceText, { color: theme.colors.text }]}>{gift.price} COIN</Text>
                                 </View>
                             </View>
                         </View>
@@ -611,7 +611,7 @@ export default function ChatScreen({ route, navigation }) {
             );
         }
 
-        let content = <Text style={styles.messageText}>{item.content}</Text>;
+        let content = <Text style={[styles.messageText, { color: theme.colors.text }]}>{item.content}</Text>;
 
         if (item.content_type === 'image' || item.type === 'image') {
             content = (

@@ -1,8 +1,8 @@
-
 import React, { useEffect } from 'react';
 import { View, Text, StyleSheet, Pressable, Dimensions } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
+import GlassCard from './ui/GlassCard';
 import Animated, {
     useSharedValue,
     useAnimatedStyle,
@@ -22,29 +22,49 @@ const DestinyHero = ({ onPress }) => {
     const scale = useSharedValue(1);
     const pulseGlow = useSharedValue(1);
     const rotate = useSharedValue(0);
+    const float = useSharedValue(0);
 
     useEffect(() => {
-        // Continuous Pulse Animation (Breathing)
-        pulseGlow.value = withRepeat(
+        // Continuous Breathing Animation for the whole card
+        scale.value = withRepeat(
             withSequence(
-                withTiming(1.2, { duration: 2000, easing: Easing.inOut(Easing.ease) }),
-                withTiming(1, { duration: 2000, easing: Easing.inOut(Easing.ease) })
+                withTiming(1.02, { duration: 2500, easing: Easing.inOut(Easing.ease) }),
+                withTiming(1, { duration: 2500, easing: Easing.inOut(Easing.ease) })
             ),
             -1,
             true
         );
 
-        // Slow Rotation for the ring
+        // Continuous Pulse Animation (Glow)
+        pulseGlow.value = withRepeat(
+            withSequence(
+                withTiming(1.3, { duration: 2000, easing: Easing.inOut(Easing.ease) }),
+                withTiming(1, { duration: 2000, easing: Easing.inOut(Easing.ease) })
+            ),
+            -1,
+            true
+        );
+        // ... existing slow rotation and float code ...
         // Slow Rotation for the ring
         rotate.value = withRepeat(
             withTiming(360, { duration: 20000, easing: Easing.linear }),
             -1,
             false
         );
+
+        // Floating Animation for the Icon
+        float.value = withRepeat(
+            withSequence(
+                withTiming(1, { duration: 1500, easing: Easing.inOut(Easing.ease) }),
+                withTiming(0, { duration: 1500, easing: Easing.inOut(Easing.ease) })
+            ),
+            -1,
+            true
+        );
     }, []);
 
     const handlePressIn = () => {
-        scale.value = withSpring(0.95);
+        scale.value = withTiming(0.92, { duration: 150 });
     };
 
     const handlePressOut = () => {
@@ -62,6 +82,10 @@ const DestinyHero = ({ onPress }) => {
 
     const animatedRingStyle = useAnimatedStyle(() => ({
         transform: [{ rotate: `${rotate.value}deg` }]
+    }));
+
+    const animatedFloatStyle = useAnimatedStyle(() => ({
+        transform: [{ translateY: interpolate(float.value, [0, 1], [0, -8]) }]
     }));
 
     return (
@@ -83,40 +107,40 @@ const DestinyHero = ({ onPress }) => {
                 </Animated.View>
 
                 {/* Main Card */}
-                <View style={styles.card}>
+                <GlassCard style={styles.card} intensity={60} tint="dark">
                     <LinearGradient
-                        colors={['#2e1065', '#4c1d95', '#1e1b4b']}
+                        colors={['rgba(46, 16, 101, 0.8)', 'rgba(30, 27, 75, 0.8)']}
                         start={{ x: 0, y: 0 }}
                         end={{ x: 0.8, y: 1 }}
-                        style={styles.cardGradient}
-                    >
-                        {/* Background Decorative Ring */}
-                        <Animated.View style={[styles.ringContainer, animatedRingStyle]} pointerEvents="none">
-                            <View style={styles.ring} />
+                        style={StyleSheet.absoluteFill}
+                    />
+
+                    {/* Background Decorative Ring */}
+                    <Animated.View style={[styles.ringContainer, animatedRingStyle]} pointerEvents="none">
+                        <View style={styles.ring} />
+                    </Animated.View>
+
+                    {/* Content */}
+                    <View style={styles.content}>
+                        <Animated.View style={[styles.centerIconContainer, animatedFloatStyle]}>
+                            <LinearGradient
+                                colors={['#ec4899', '#8b5cf6']}
+                                style={styles.iconGradient}
+                            >
+                                <Ionicons name="infinite" size={29} color="white" />
+                            </LinearGradient>
                         </Animated.View>
 
-                        {/* Content */}
-                        <View style={styles.content}>
-                            <View style={styles.centerIconContainer}>
-                                <LinearGradient
-                                    colors={['#ec4899', '#8b5cf6']}
-                                    style={styles.iconGradient}
-                                >
-                                    <Ionicons name="infinite" size={29} color="white" />
-                                </LinearGradient>
-                            </View>
+                        <Text style={styles.mainText} adjustsFontSizeToFit numberOfLines={2}>
+                            Kaderindeki kişiyi{'\n'}keşfet
+                        </Text>
 
-                            <Text style={styles.mainText}>
-                                Kaderindeki kişiyi{'\n'}keşfet
-                            </Text>
-
-                            <View style={styles.bottomBadge}>
-                                <Text style={styles.bottomText}>Dokun ve eşleşmeni başlat</Text>
-                                <Ionicons name="sparkles" size={12} color="#ec4899" style={{ marginLeft: 6 }} />
-                            </View>
+                        <View style={styles.bottomBadge}>
+                            <Text style={styles.bottomText} adjustsFontSizeToFit numberOfLines={1}>Dokun ve eşleşmeni başlat</Text>
+                            <Ionicons name="sparkles" size={12} color="#ec4899" style={{ marginLeft: 6 }} />
                         </View>
-                    </LinearGradient>
-                </View>
+                    </View>
+                </GlassCard>
             </Animated.View>
         </Pressable>
     );
@@ -148,19 +172,16 @@ const styles = StyleSheet.create({
     card: {
         width: '100%',
         height: '100%',
-        borderRadius: 25, // Adjusted
+        borderRadius: 28,
         overflow: 'hidden',
         borderWidth: 1,
-        borderColor: 'rgba(255,255,255,0.15)',
+        borderColor: 'rgba(255,255,255,0.2)',
         elevation: 15,
         shadowColor: '#ec4899',
         shadowOffset: { width: 0, height: 10 },
         shadowOpacity: 0.5,
         shadowRadius: 20,
-    },
-    cardGradient: {
-        flex: 1,
-        padding: 15, // Reduced padding
+        padding: 20,
         alignItems: 'center',
         justifyContent: 'center',
     },
@@ -170,69 +191,62 @@ const styles = StyleSheet.create({
         height: 400,
         justifyContent: 'center',
         alignItems: 'center',
-        opacity: 0.1,
+        opacity: 0.15,
     },
     ring: {
-        width: 300,
-        height: 300,
-        borderRadius: 150,
-        borderWidth: 40,
+        width: 320,
+        height: 320,
+        borderRadius: 160,
+        borderWidth: 50,
         borderColor: '#ec4899',
         borderStyle: 'dashed',
     },
     content: {
         alignItems: 'center',
         zIndex: 10,
-        justifyContent: 'center', // Ensure centering
-        flex: 1, // Take available space
-    },
-    topText: {
-        color: 'rgba(236, 72, 153, 0.9)',
-        fontSize: 10, // Smaller
-        fontWeight: '900',
-        letterSpacing: 3,
-        marginBottom: 8, // Reduced margin
-        textTransform: 'uppercase',
+        justifyContent: 'center',
+        flex: 1,
     },
     centerIconContainer: {
-        marginBottom: 8, // Reduced margin
+        marginBottom: 12,
         shadowColor: '#ec4899',
         shadowOffset: { width: 0, height: 0 },
         shadowOpacity: 0.8,
-        shadowRadius: 20,
-        elevation: 10,
+        shadowRadius: 25,
+        elevation: 12,
     },
     iconGradient: {
-        width: 48, // Smaller icon container
-        height: 48,
-        borderRadius: 24,
+        width: 60,
+        height: 60,
+        borderRadius: 30,
         alignItems: 'center',
         justifyContent: 'center',
         borderWidth: 2,
-        borderColor: 'white',
+        borderColor: 'rgba(255,255,255,0.8)',
     },
     mainText: {
         color: 'white',
-        fontSize: 20, // Smaller font
-        fontWeight: '800',
+        fontSize: 20, // Reduced from 24
+        fontWeight: '900',
         textAlign: 'center',
-        marginBottom: 10, // Reduced margin
-        lineHeight: 26, // Tighter line height
+        marginBottom: 10, // Reduced from 14
+        lineHeight: 26, // Reduced from 30
+        letterSpacing: -0.5,
     },
     bottomBadge: {
         flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: 'rgba(255, 255, 255, 0.1)',
-        paddingHorizontal: 12,
-        paddingVertical: 6, // Smaller padding
-        borderRadius: 16,
+        backgroundColor: 'rgba(255, 255, 255, 0.15)',
+        paddingHorizontal: 16,
+        paddingVertical: 8,
+        borderRadius: 20,
         borderWidth: 1,
-        borderColor: 'rgba(255, 255, 255, 0.1)',
+        borderColor: 'rgba(255, 255, 255, 0.2)',
     },
     bottomText: {
-        color: 'rgba(255, 255, 255, 0.9)',
-        fontSize: 11, // Smaller font
-        fontWeight: '600',
+        color: 'white',
+        fontSize: 11, // Reduced from 13
+        fontWeight: '800',
     }
 });
 

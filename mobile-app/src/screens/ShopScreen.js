@@ -132,7 +132,7 @@ export default function ShopScreen({ navigation, route }) {
                 activeOpacity={0.8}
             >
                 <LinearGradient
-                    colors={isBestValue ? (themeMode === 'dark' ? ['#1e293b', '#0f172a'] : [theme.colors.card, theme.colors.backgroundSecondary]) : (themeMode === 'dark' ? ['rgba(255,255,255,0.05)', 'rgba(255,255,255,0.02)'] : [theme.colors.card, theme.colors.card])}
+                    colors={isBestValue ? (themeMode === 'dark' ? ['#1e293b', '#0f172a'] : ['#fef3c7', '#fffbeb']) : (themeMode === 'dark' ? ['rgba(255,255,255,0.05)', 'rgba(255,255,255,0.02)'] : [theme.colors.card, theme.colors.card])}
                     style={[styles.card, isBestValue && styles.bestValueCard, { borderColor: isBestValue ? '#fbbf24' : theme.colors.glassBorder }]}
                 >
                     {isBestValue && (

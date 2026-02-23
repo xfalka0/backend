@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { StyleSheet, View, Animated, Easing } from 'react-native';
+import GlassCard from '../ui/GlassCard';
 
 const Dot = ({ index }) => {
     const translateY = useRef(new Animated.Value(0)).current;
@@ -35,10 +36,12 @@ const Dot = ({ index }) => {
 
 const TypingIndicator = () => {
     return (
-        <View style={styles.container}>
-            <Dot index={0} />
-            <Dot index={1} />
-            <Dot index={2} />
+        <View style={{ marginLeft: 16, marginBottom: 8, alignSelf: 'flex-start' }}>
+            <GlassCard intensity={30} tint="dark" style={styles.container}>
+                <Dot index={0} />
+                <Dot index={1} />
+                <Dot index={2} />
+            </GlassCard>
         </View>
     );
 };
@@ -47,16 +50,10 @@ const styles = StyleSheet.create({
     container: {
         flexDirection: 'row',
         alignItems: 'center',
-        paddingVertical: 10,
+        paddingVertical: 12,
         paddingHorizontal: 16,
-        backgroundColor: 'rgba(255, 255, 255, 0.15)',
-        borderRadius: 18,
-        alignSelf: 'flex-start',
-        marginLeft: 16,
-        marginBottom: 8,
+        borderRadius: 20,
         gap: 6,
-        borderWidth: 1,
-        borderColor: 'rgba(255, 255, 255, 0.1)',
     },
     dot: {
         width: 7,

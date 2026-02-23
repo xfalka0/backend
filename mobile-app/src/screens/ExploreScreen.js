@@ -304,16 +304,27 @@ export default function ExploreScreen({ route, navigation }) {
                     ]}
                     renderItem={({ item }) => (
                         <TouchableOpacity
-                            style={[styles.featuredCard, { backgroundColor: theme.colors.backgroundSecondary, borderColor: theme.colors.glassBorder }]}
+                            activeOpacity={0.8}
+                            style={[
+                                styles.featuredCard,
+                                {
+                                    backgroundColor: themeMode === 'dark' ? 'rgba(30, 41, 59, 0.5)' : 'rgba(255,255,255,0.8)',
+                                    borderColor: theme.colors.glassBorder
+                                }
+                            ]}
                             onPress={() => navigation.navigate('OperatorProfile', { operator: item, user })}
                         >
                             <LinearGradient
-                                colors={['rgba(139, 92, 246, 0.3)', 'transparent']}
+                                colors={['rgba(139, 92, 246, 0.2)', 'transparent']}
                                 style={StyleSheet.absoluteFill}
                             />
-                            <VipFrame level={item.level} avatar={item.avatar} size={80} isStatic={true} />
+                            <View style={styles.featuredAvatarWrapper}>
+                                <VipFrame level={item.level} avatar={item.avatar} size={70} isStatic={true} />
+                            </View>
                             <Text style={[styles.featuredName, { color: theme.colors.text }]}>{item.name}</Text>
-                            <Text style={[styles.featuredCategory, { color: theme.colors.textSecondary }]}>{item.category}</Text>
+                            <View style={styles.featuredCategoryBadge}>
+                                <Text style={styles.featuredCategoryText}>{item.category}</Text>
+                            </View>
                         </TouchableOpacity>
                     )}
                     keyExtractor={item => item.id}
@@ -451,10 +462,12 @@ export default function ExploreScreen({ route, navigation }) {
 
     return (
         <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
-            <LinearGradient
-                colors={themeMode === 'dark' ? ['#030712', '#0f172a'] : [theme.colors.background, theme.colors.backgroundSecondary]}
-                style={StyleSheet.absoluteFill}
-            />
+            <View pointerEvents="none" style={StyleSheet.absoluteFill}>
+                <LinearGradient
+                    colors={themeMode === 'dark' ? ['#030712', '#0f172a'] : [theme.colors.background, theme.colors.backgroundSecondary]}
+                    style={StyleSheet.absoluteFill}
+                />
+            </View>
 
             <Animated.FlatList
                 onScroll={scrollHandler}
@@ -961,15 +974,34 @@ const styles = StyleSheet.create({
         width: 140,
         borderRadius: 24,
         padding: 15,
-        paddingBottom: 20, // Extra bottom padding
         alignItems: 'center',
         marginHorizontal: 8,
         borderWidth: 1,
         overflow: 'hidden',
     },
+    featuredAvatarWrapper: {
+        shadowColor: '#8b5cf6',
+        shadowOffset: { width: 0, height: 8 },
+        shadowOpacity: 0.4,
+        shadowRadius: 12,
+        elevation: 10,
+    },
+    featuredCategoryBadge: {
+        backgroundColor: 'rgba(139, 92, 246, 0.15)',
+        paddingHorizontal: 8,
+        paddingVertical: 2,
+        borderRadius: 8,
+        marginTop: 6,
+    },
+    featuredCategoryText: {
+        color: '#8b5cf6',
+        fontSize: 10,
+        fontWeight: '900',
+        textTransform: 'uppercase',
+    },
     featuredName: {
-        marginTop: 14, // More space from avatar
-        fontSize: 15,
+        marginTop: 10,
+        fontSize: 14,
         fontWeight: '800',
     },
     featuredCategory: {

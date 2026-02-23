@@ -114,8 +114,8 @@ export default function SettingsScreen({ navigation, route }) {
                 <Switch
                     value={value}
                     onValueChange={onValueChange}
-                    trackColor={{ false: '#1e293b', true: '#8b5cf6' }}
-                    thumbColor={Platform.OS === 'android' ? (value ? '#8b5cf6' : '#94a3b8') : undefined}
+                    trackColor={{ false: themeMode === 'dark' ? '#1e293b' : '#e2e8f0', true: '#8b5cf6' }}
+                    thumbColor={Platform.OS === 'android' ? (value ? '#8b5cf6' : (themeMode === 'dark' ? '#94a3b8' : '#ffffff')) : undefined}
                 />
             )}
         </TouchableOpacity>
@@ -142,7 +142,7 @@ export default function SettingsScreen({ navigation, route }) {
                     <SettingItem
                         icon="person-outline"
                         label="Profil Bilgilerini Düzenle"
-                        onPress={() => navigation.navigate('Profile')}
+                        onPress={() => navigation.navigate('Profil')}
                     />
                     <SettingItem
                         icon="eye-off-outline"
@@ -257,7 +257,6 @@ export default function SettingsScreen({ navigation, route }) {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#0f172a',
     },
     header: {
         flexDirection: 'row',
@@ -276,7 +275,6 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
     },
     headerTitle: {
-        color: 'white',
         fontSize: 20,
         fontWeight: '900',
     },
@@ -293,11 +291,9 @@ const styles = StyleSheet.create({
         marginLeft: 5,
     },
     sectionCard: {
-        backgroundColor: 'rgba(30, 41, 59, 0.4)',
         borderRadius: 24,
         padding: 8,
         borderWidth: 1,
-        borderColor: 'rgba(255,255,255,0.05)',
     },
     settingItem: {
         flexDirection: 'row',
@@ -317,7 +313,6 @@ const styles = StyleSheet.create({
         marginLeft: 15,
     },
     itemLabel: {
-        color: 'white',
         fontSize: 15,
         fontWeight: '600',
     },

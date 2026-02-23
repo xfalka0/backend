@@ -9,8 +9,9 @@ import Animated, {
     withSequence,
     interpolate,
     useSharedValue,
+    Easing,
 } from 'react-native-reanimated';
-import SafeLottie from './SafeLottie';
+
 
 const { width } = Dimensions.get('window');
 const CARD_WIDTH = width * 0.85;
@@ -65,6 +66,8 @@ const VipCard = ({ level, userAvatar }) => {
     const config = VIP_CONFIGS[level] || VIP_CONFIGS[1];
     const pulseValue = useSharedValue(1);
     const shineValue = useSharedValue(-CARD_WIDTH);
+    const rotateX = useSharedValue(0);
+    const rotateY = useSharedValue(0);
 
     useEffect(() => {
         pulseValue.value = withRepeat(
@@ -81,10 +84,33 @@ const VipCard = ({ level, userAvatar }) => {
             -1,
             false
         );
+
+        rotateX.value = withRepeat(
+            withSequence(
+                withTiming(4, { duration: 2500, easing: Easing.inOut(Easing.sin) }),
+                withTiming(-4, { duration: 2500, easing: Easing.inOut(Easing.sin) })
+            ),
+            -1,
+            true
+        );
+
+        rotateY.value = withRepeat(
+            withSequence(
+                withTiming(-5, { duration: 3000, easing: Easing.inOut(Easing.sin) }),
+                withTiming(5, { duration: 3000, easing: Easing.inOut(Easing.sin) })
+            ),
+            -1,
+            true
+        );
     }, [level]);
 
     const animatedGlow = useAnimatedStyle(() => ({
-        transform: [{ scale: pulseValue.value }],
+        transform: [
+            { perspective: 1000 },
+            { scale: pulseValue.value },
+            { rotateX: `${rotateX.value}deg` },
+            { rotateY: `${rotateY.value}deg` }
+        ],
         shadowOpacity: interpolate(pulseValue.value, [1, 1.05], [0.3, 0.6]),
     }));
 
@@ -120,15 +146,9 @@ const VipCard = ({ level, userAvatar }) => {
                     {/* VIP 6 Special: Rays of Light */}
                     {level === 6 && (
                         <View style={StyleSheet.absoluteFill}>
-                            <SafeLottie
-                                source={require('../../assets/lottie/vip_particles.json')}
-                                style={styles.lottieOverlay}
-                                fallback={
-                                    <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-                                        <Ionicons name="sparkles" size={200} color="rgba(251, 191, 36, 0.05)" />
-                                    </View>
-                                }
-                            />
+                            <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+                                <Ionicons name="sparkles" size={200} color="rgba(251, 191, 36, 0.05)" />
+                            </View>
                         </View>
                     )}
 
@@ -145,15 +165,9 @@ const VipCard = ({ level, userAvatar }) => {
                             style={[styles.avatar, level === 6 && styles.ultimateAvatar]}
                         />
                         {level === 6 && (
-                            <SafeLottie
-                                source={require('../../assets/lottie/vip_crown.json')}
-                                style={styles.crownLottie}
-                                fallback={
-                                    <View style={{ position: 'absolute', top: -35, left: 10 }}>
-                                        <Ionicons name="ribbon" size={44} color="#fbbf24" />
-                                    </View>
-                                }
-                            />
+                            <View style={{ position: 'absolute', top: -35, left: 10 }}>
+                                <Ionicons name="ribbon" size={44} color="#fbbf24" />
+                            </View>
                         )}
                     </View>
 

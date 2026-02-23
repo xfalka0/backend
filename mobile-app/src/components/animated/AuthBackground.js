@@ -72,7 +72,7 @@ const Blob = ({ color, size, duration, delay }) => {
 
 export default function AuthBackground({ hideCircles = false }) {
     return (
-        <View style={styles.container}>
+        <View style={styles.container} pointerEvents="none">
             <LinearGradient
                 colors={['#030712', '#0f172a', '#1e1b4b']}
                 style={StyleSheet.absoluteFill}

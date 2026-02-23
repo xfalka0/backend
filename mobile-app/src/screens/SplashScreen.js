@@ -6,6 +6,7 @@ import Animated, {
     useSharedValue,
     useAnimatedStyle,
     withTiming,
+    withSequence,
     withSpring,
     withDelay,
     withRepeat,
@@ -18,7 +19,7 @@ const { width, height } = Dimensions.get('window');
 
 export default function SplashScreen({ navigation }) {
     // Animation Values
-    const scale = useSharedValue(0.8);
+    const scale = useSharedValue(0.95);
     const textOpacity = useSharedValue(0);
     const textTranslateY = useSharedValue(20);
 
@@ -26,18 +27,38 @@ export default function SplashScreen({ navigation }) {
     const gradientOpacity = useSharedValue(0);
 
     useEffect(() => {
-        // Continuous Background Animation: Smoothly pulse between two gradients
-        // 0 -> 1 -> 0 (Infinite)
+        // Background Animation (0 -> 1 -> 0)
         gradientOpacity.value = withRepeat(
             withTiming(1, { duration: 3000, easing: Easing.inOut(Easing.quad) }),
-            -1, // Infinite
-            true // Reverse (ping-pong)
+            -1,
+            true
         );
 
-        // Text Animation
-        scale.value = withTiming(1, { duration: 1500, easing: Easing.out(Easing.quad) });
-        textOpacity.value = withDelay(300, withTiming(1, { duration: 800 }));
-        textTranslateY.value = withDelay(300, withSpring(0, { damping: 12 }));
+        // Text Entrance & Continuous Pulse (Even more subtle and slow)
+        textTranslateY.value = withTiming(0, { duration: 2500, easing: Easing.out(Easing.ease) });
+        textOpacity.value = withTiming(1, { duration: 2500 });
+        scale.value = withSequence(
+            withTiming(1, { duration: 2500, easing: Easing.out(Easing.ease) }),
+            withRepeat(
+                withSequence(
+                    withTiming(1.04, { duration: 2000, easing: Easing.inOut(Easing.ease) }),
+                    withTiming(1, { duration: 2000, easing: Easing.inOut(Easing.ease) })
+                ),
+                -1,
+                true
+            )
+        );
+
+        const triggerExit = (routeName, params) => {
+            // Exit Transition: Very subtle scale-up & snap fade out
+            scale.value = withTiming(1.5, { duration: 400, easing: Easing.out(Easing.ease) });
+            textOpacity.value = withTiming(0, { duration: 300 });
+            gradientOpacity.value = withTiming(0, { duration: 300 });
+
+            setTimeout(() => {
+                navigation.replace(routeName, params);
+            }, 300);
+        };
 
         const checkSession = async () => {
             try {
@@ -53,7 +74,7 @@ export default function SplashScreen({ navigation }) {
                 } catch (e) {
                     console.warn('[Splash] Corrupt user data, clearing.');
                     await AsyncStorage.multiRemove(['token', 'user']);
-                    navigation.replace('Welcome');
+                    triggerExit('Welcome');
                     return;
                 }
 
@@ -62,36 +83,35 @@ export default function SplashScreen({ navigation }) {
                         console.log('[Splash] Validating token with server...');
                         const res = await axios.get(`${API_URL}/auth/me`, {
                             headers: { Authorization: `Bearer ${token}` },
-                            timeout: 10000 // 10s timeout to prevent hanging
+                            timeout: 10000
                         });
 
                         const freshUser = res.data;
                         await AsyncStorage.setItem('user', JSON.stringify(freshUser));
                         console.log('[Splash] Session valid, navigating to Main');
 
-                        if (freshUser.onboarding_completed !== false) { // Default to true if undefined to avoid lock
-                            navigation.replace('Main', { user: { ...freshUser, token } });
+                        if (freshUser.onboarding_completed !== false) {
+                            triggerExit('Main', { user: { ...freshUser, token } });
                         } else {
-                            navigation.replace('Onboarding', { userId: freshUser.id, token });
+                            triggerExit('Onboarding', { userId: freshUser.id, token });
                         }
                     } catch (verifyErr) {
                         console.warn("[Session] Token verification failed:", verifyErr.message);
-                        // If 401/403 OR Timeout OR Network Error -> Logout
-                        // We want to force login if we can't verify session to stay safe
                         await AsyncStorage.multiRemove(['token', 'user']);
-                        navigation.replace('Welcome');
+                        triggerExit('Welcome');
                     }
                 } else {
                     console.log('[Splash] No session found, navigating to Welcome');
-                    navigation.replace('Welcome');
+                    triggerExit('Welcome');
                 }
             } catch (err) {
                 console.error("Session Check Error:", err);
-                navigation.replace('Welcome');
+                triggerExit('Welcome');
             }
         };
 
-        const timer = setTimeout(checkSession, 2500);
+        // Start the session check after a shorter delay
+        const timer = setTimeout(checkSession, 1000);
         return () => clearTimeout(timer);
     }, []);
 
@@ -105,11 +125,11 @@ export default function SplashScreen({ navigation }) {
     }));
 
     return (
-        <View style={styles.container}>
+        <View style={styles.container} pointerEvents="none">
             <StatusBar barStyle="dark-content" />
 
             {/* Layer 1: Base Gradient (Static) - WHITE/PASTEL */}
-            <View style={StyleSheet.absoluteFill}>
+            <View style={StyleSheet.absoluteFill} pointerEvents="none">
                 <LinearGradient
                     // Bembeyazdan çok açık lila/pembe tonlarına
                     colors={['#ffffff', '#fdf4ff', '#fae8ff']}
@@ -120,7 +140,7 @@ export default function SplashScreen({ navigation }) {
             </View>
 
             {/* Layer 2: Overlay Gradient (Animated Opacity) - SLIGHTLY DIFFERENT WHITE/PASTEL */}
-            <Animated.View style={[StyleSheet.absoluteFill, animatedGradientStyle]}>
+            <Animated.View style={[StyleSheet.absoluteFill, animatedGradientStyle]} pointerEvents="none">
                 <LinearGradient
                     // Bembeyazdan çok açık mavi/indigo tonlarına
                     colors={['#ffffff', '#f5f3ff', '#ede9fe']}
@@ -130,7 +150,10 @@ export default function SplashScreen({ navigation }) {
                 />
             </Animated.View>
 
-            <Animated.View style={[styles.contentContainer, animatedTextStyle]}>
+            <Animated.View
+                pointerEvents="none"
+                style={[styles.contentContainer, animatedTextStyle]}
+            >
                 <Text style={styles.brandText}>Fiva</Text>
             </Animated.View>
         </View>

@@ -16,7 +16,6 @@ import Animated, {
 } from 'react-native-reanimated';
 import VipUpgradeModal from '../components/ui/VipUpgradeModal';
 import { Motion } from '../components/motion/MotionSystem';
-import SafeLottie from '../components/ui/SafeLottie';
 import VipFrame from '../components/ui/VipFrame';
 import axios from 'axios';
 import { API_URL } from '../config';
@@ -107,6 +106,8 @@ const VipScreen = ({ route, navigation }) => {
     const haloOpacity = useSharedValue(0.5);
     const pulseScale = useSharedValue(1);
     const frameRotate = useSharedValue(0);
+    const rotateX = useSharedValue(0);
+    const rotateY = useSharedValue(0);
 
     useEffect(() => {
         // Continuous Floating Animation
@@ -114,6 +115,25 @@ const VipScreen = ({ route, navigation }) => {
             withSequence(
                 withTiming(-12, { duration: 2500, easing: Easing.inOut(Easing.sin) }),
                 withTiming(0, { duration: 2500, easing: Easing.inOut(Easing.sin) })
+            ),
+            -1,
+            true
+        );
+
+        // Continuous 3D Rotation (Tilt)
+        rotateX.value = withRepeat(
+            withSequence(
+                withTiming(3, { duration: 3000, easing: Easing.inOut(Easing.sin) }),
+                withTiming(-3, { duration: 3000, easing: Easing.inOut(Easing.sin) })
+            ),
+            -1,
+            true
+        );
+
+        rotateY.value = withRepeat(
+            withSequence(
+                withTiming(-4, { duration: 3500, easing: Easing.inOut(Easing.sin) }),
+                withTiming(4, { duration: 3500, easing: Easing.inOut(Easing.sin) })
             ),
             -1,
             true
@@ -172,7 +192,12 @@ const VipScreen = ({ route, navigation }) => {
 
     // Animated Styles
     const floatingStyle = useAnimatedStyle(() => ({
-        transform: [{ translateY: floatingY.value }],
+        transform: [
+            { perspective: 1000 },
+            { translateY: floatingY.value },
+            { rotateX: `${rotateX.value}deg` },
+            { rotateY: `${rotateY.value}deg` }
+        ],
     }));
 
     const shineStyle = useAnimatedStyle(() => ({
@@ -231,6 +256,9 @@ const VipScreen = ({ route, navigation }) => {
                 colors={[`${currentConfig.colors[0]}33`, '#030712']}
                 style={StyleSheet.absoluteFill}
             />
+
+            {/* Ambient Particles Removed due to missing JSON file */}
+            <View style={[StyleSheet.absoluteFill, { zIndex: 0 }]} pointerEvents="none" />
 
             <SafeAreaView style={styles.safeArea}>
                 {/* Header */}

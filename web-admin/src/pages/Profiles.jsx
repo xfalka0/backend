@@ -190,7 +190,7 @@ export default function ProfilesPage() {
     };
 
     const handleDelete = async (id) => {
-        if (!window.confirm('Bu profili ve bağlı tüm verileri (mesajlar, hikayeler vb.) silmek istediğinize emin misiniz? Bu işlem geri alınamaz!')) {
+        if (!window.confirm('Bu profili silmek istediğinize emin misiniz? Not: Veri güvenliği gereği profil tamamen silinmez, sadece yayından kaldırılır ve arşivlenir.')) {
             return;
         }
 

@@ -1,5 +1,8 @@
-import React from 'react';
-import { View, Text, Image, StyleSheet, TouchableOpacity, Dimensions } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, Image, StyleSheet, TouchableOpacity, Dimensions, Pressable } from 'react-native';
+import axios from 'axios';
+import { API_URL } from '../config';
+import * as Haptics from 'expo-haptics';
 import Animated, {
     useSharedValue,
     useAnimatedStyle,
@@ -11,14 +14,57 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons';
 import GlassCard from '../components/ui/GlassCard';
+import { useTheme } from '../contexts/ThemeContext';
 import { Motion } from '../components/motion/MotionSystem';
 import VipFrame from '../components/ui/VipFrame';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import ImageViewing from 'react-native-image-viewing';
 
 const { width } = Dimensions.get('window');
 const HEADER_HEIGHT = width * 1.2;
 
 export default function OperatorProfileScreen({ route, navigation }) {
+    const insets = useSafeAreaInsets();
+    const { theme, themeMode } = useTheme();
     const { operator, user } = route.params;
+
+    const [isFavorited, setIsFavorited] = useState(false);
+    const [isImageViewerVisible, setIsImageViewerVisible] = useState(false);
+    const [currentImageIndex, setCurrentImageIndex] = useState(0);
+
+    useEffect(() => {
+        // Track Profile View
+        if (user && operator) {
+            axios.post(`${API_URL}/views`, {
+                viewerId: user.id,
+                viewedUserId: operator.id || operator.user_id // Handle operator vs user objects
+            }).catch(e => console.log('View track err', e));
+        }
+
+        // Check if favorited
+        if (user && operator) {
+            axios.get(`${API_URL}/favorites/check/${user.id}/${operator.id || operator.user_id}`)
+                .then(res => setIsFavorited(res.data.isFavorited))
+                .catch(e => console.log('Fav check err', e));
+        }
+    }, [user, operator]);
+
+    const handleFavorite = async () => {
+        if (!user || !operator) return;
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+        try {
+            const targetId = operator.id || operator.user_id;
+            if (isFavorited) {
+                await axios.delete(`${API_URL}/favorites/${targetId}`, { data: { userId: user.id } });
+                setIsFavorited(false);
+            } else {
+                await axios.post(`${API_URL}/favorites`, { userId: user.id, targetUserId: targetId });
+                setIsFavorited(true);
+            }
+        } catch (e) {
+            console.error('Fav action err', e);
+        }
+    };
 
     // 1. Scroll pozisyonunu takip etmek için bir sharedValue oluşturuyoruz.
     // Bu değer, sayfa her kaydırıldığında Reanimated tarafından güncellenecek.
@@ -38,19 +84,31 @@ export default function OperatorProfileScreen({ route, navigation }) {
         return {
             transform: [
                 {
-                    // Sayfayı aşağı çektiğimizde (bounce) resmin büyümesini sağlıyoruz.
+                    // Daha derin bir bounce efekti için input range'i artırdık (-300)
                     scale: interpolate(
                         scrollY.value,
-                        [-200, 0],
-                        [1.5, 1],
+                        [-300, 0],
+                        [2, 1],
                         Extrapolate.CLAMP
                     ),
                 },
                 {
-                    // Sayfayı yukarı kaydırdığımızda resmin aşağı inmesini engelliyoruz (Sabitliyoruz).
-                    translateY: 0
+                    // Sayfayı yukarı kaydırdığımızda resmin parallax efektiyle yavaşça yukarı kaymasını sağladık
+                    translateY: interpolate(
+                        scrollY.value,
+                        [0, HEADER_HEIGHT],
+                        [0, -HEADER_HEIGHT * 0.4],
+                        Extrapolate.CLAMP
+                    ),
                 }
             ],
+            // Resim yukarı çıktıkça yavaşça solmasını sağlıyoruz
+            opacity: interpolate(
+                scrollY.value,
+                [0, HEADER_HEIGHT * 0.8],
+                [1, 0.4],
+                Extrapolate.CLAMP
+            )
         };
     });
 
@@ -70,31 +128,51 @@ export default function OperatorProfileScreen({ route, navigation }) {
     return (
         <View style={styles.container}>
             {/* Animasyonlu Header Arka Planı */}
-            <Animated.View style={[styles.imageContainer, animatedImageStyle]}>
+            <Animated.View
+                pointerEvents="none"
+                style={[styles.imageContainer, animatedImageStyle]}
+            >
                 <Image
                     source={{ uri: operator.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(operator.name)}&background=random&color=fff` }}
                     style={styles.mainImage}
                 />
                 <LinearGradient
-                    colors={['transparent', 'rgba(15, 23, 42, 0.4)', '#0f172a']}
+                    colors={themeMode === 'dark'
+                        ? ['rgba(15, 23, 42, 0.2)', 'rgba(15, 23, 42, 0.4)', '#0f172a']
+                        : ['rgba(255,255,255,0.1)', 'rgba(255,255,255,0.3)', theme.colors.background]}
                     style={styles.gradientOverlay}
                 />
 
                 {/* Scroll ile aktive olan Blur efekti */}
                 <Animated.View style={[StyleSheet.absoluteFill, animatedBlurStyle]}>
-                    <BlurView intensity={30} tint="dark" style={StyleSheet.absoluteFill} />
+                    <BlurView intensity={20} tint={themeMode === 'dark' ? 'dark' : 'light'} style={StyleSheet.absoluteFill} />
                 </Animated.View>
             </Animated.View>
 
-            {/* Geri Dön Butonu */}
-            <TouchableOpacity
-                style={styles.backButton}
-                onPress={() => navigation.goBack()}
-            >
-                <BlurView intensity={40} tint="dark" style={styles.backButtonBlur}>
-                    <Ionicons name="arrow-back" size={24} color="white" />
-                </BlurView>
-            </TouchableOpacity>
+            {/* Modern Floating Header */}
+            <View style={[styles.floatingHeader, { paddingTop: insets.top + 10 }]}>
+                <TouchableOpacity
+                    onPress={() => navigation.goBack()}
+                    style={styles.headerIconButton}
+                >
+                    <BlurView intensity={50} tint="dark" style={styles.iconBlur}>
+                        <Ionicons name="chevron-back" size={24} color="white" />
+                    </BlurView>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                    onPress={handleFavorite}
+                    style={styles.headerIconButton}
+                >
+                    <BlurView intensity={50} tint="dark" style={styles.iconBlur}>
+                        <Ionicons
+                            name={isFavorited ? "heart" : "heart-outline"}
+                            size={24}
+                            color={isFavorited ? "#ef4444" : "white"}
+                        />
+                    </BlurView>
+                </TouchableOpacity>
+            </View>
 
             <Animated.ScrollView
                 onScroll={scrollHandler}
@@ -103,11 +181,32 @@ export default function OperatorProfileScreen({ route, navigation }) {
                 contentContainerStyle={styles.scrollContent}
             >
                 {/* Header için boşluk bırakıyoruz çünkü resim statik olarak arkada duruyor */}
-                <View style={{ height: HEADER_HEIGHT - 60 }} />
+                <View style={{ height: HEADER_HEIGHT - 90 }} />
+
+                {/* Profil Aksiyon Butonları (Resmin üstüne binen) */}
+                <Motion.SlideUp delay={100}>
+                    <View style={styles.heroActionsRow}>
+                        {/* Video, Mic, Gift actions removed as requested */}
+                        <TouchableOpacity
+                            style={[styles.heroActionButton, { backgroundColor: isFavorited ? 'rgba(239, 68, 68, 0.95)' : 'rgba(255, 255, 255, 0.15)' }]}
+                            activeOpacity={0.8}
+                            onPress={handleFavorite}
+                        >
+                            <Ionicons name="heart" size={24} color={isFavorited ? "white" : "#cbd5e1"} />
+                        </TouchableOpacity>
+                    </View>
+                </Motion.SlideUp>
 
                 {/* İçerik Alanı: Glassmorphism kullanarak arka planı hafif gösteriyoruz */}
                 <Motion.Fade delay={200}>
-                    <GlassCard style={styles.contentCard}>
+                    <GlassCard
+                        style={[
+                            styles.contentCard,
+                            { backgroundColor: themeMode === 'dark' ? '#0f172a' : theme.colors.surface }
+                        ]}
+                        intensity={70}
+                        tint="dark"
+                    >
                         <View style={styles.nameRow}>
                             <View style={{ marginRight: 15 }}>
                                 <VipFrame
@@ -177,7 +276,12 @@ export default function OperatorProfileScreen({ route, navigation }) {
                                     <Animated.ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.albumScroll}>
                                         {operator.photos.map((photo, index) => (
                                             <Motion.SlideUp delay={500 + (index * 100)} key={index}>
-                                                <Image source={{ uri: photo }} style={styles.albumPhoto} />
+                                                <Pressable onPress={() => {
+                                                    setCurrentImageIndex(index);
+                                                    setIsImageViewerVisible(true);
+                                                }}>
+                                                    <Image source={{ uri: photo }} style={styles.albumPhoto} />
+                                                </Pressable>
                                             </Motion.SlideUp>
                                         ))}
                                     </Animated.ScrollView>
@@ -263,6 +367,18 @@ export default function OperatorProfileScreen({ route, navigation }) {
                     </TouchableOpacity>
                 </BlurView>
             </View>
+
+            {/* Tam Ekran Fotoğraf Görüntüleyici */}
+            {operator.photos && operator.photos.length > 0 && (
+                <ImageViewing
+                    images={operator.photos.map(p => ({ uri: p }))}
+                    imageIndex={currentImageIndex}
+                    visible={isImageViewerVisible}
+                    onRequestClose={() => setIsImageViewerVisible(false)}
+                    swipeToCloseEnabled={true}
+                    doubleTapToZoomEnabled={true}
+                />
+            )}
         </View>
     );
 }
@@ -293,19 +409,47 @@ const styles = StyleSheet.create({
         right: 0,
         height: HEADER_HEIGHT,
     },
-    backButton: {
+    floatingHeader: {
         position: 'absolute',
-        top: 50,
-        left: 20,
-        zIndex: 10,
-        overflow: 'hidden',
-        borderRadius: 20,
+        top: 0,
+        left: 0,
+        right: 0,
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        paddingHorizontal: 20,
+        zIndex: 100,
     },
-    backButtonBlur: {
-        width: 40,
-        height: 40,
+    headerIconButton: {
+        width: 44,
+        height: 44,
+        borderRadius: 22,
+        overflow: 'hidden',
+    },
+    iconBlur: {
+        flex: 1,
         alignItems: 'center',
         justifyContent: 'center',
+    },
+    heroActionsRow: {
+        flexDirection: 'row',
+        justifyContent: 'center',
+        alignItems: 'center',
+        gap: 20,
+        marginBottom: 20,
+        paddingHorizontal: 20,
+        zIndex: 10,
+    },
+    heroActionButton: {
+        width: 56,
+        height: 56,
+        borderRadius: 28,
+        alignItems: 'center',
+        justifyContent: 'center',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 8,
+        elevation: 8,
     },
     contentCard: {
         marginHorizontal: 15,

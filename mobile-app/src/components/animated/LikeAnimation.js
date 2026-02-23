@@ -60,7 +60,7 @@ const LikeAnimation = React.forwardRef(({ onLike, showIcon = false }, ref) => {
 
     return (
         <GestureDetector gesture={doubleTap}>
-            <View style={styles.container}>
+            <View style={styles.container} pointerEvents="box-none">
                 <Animated.View style={[styles.heartBurst, animatedHeartStyle]}>
                     <Ionicons name="heart" size={120} color="#EC4899" />
                 </Animated.View>

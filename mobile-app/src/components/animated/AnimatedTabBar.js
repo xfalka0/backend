@@ -4,17 +4,47 @@ import Animated, {
     useSharedValue,
     useAnimatedStyle,
     withSpring,
-    interpolate,
+    withSequence,
+    withTiming,
+    Easing,
 } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
+import GlassCard from '../ui/GlassCard';
+import * as Haptics from 'expo-haptics';
 
 const { width } = Dimensions.get('window');
 
 const AnimatedTab = ({ state, descriptors, navigation }) => {
+    // 4 tabs + padding calculations
+    const tabWidth = (width - 60) / state.routes.length;
+
+    const indicatorPos = useSharedValue(0);
+
+    useEffect(() => {
+        indicatorPos.value = withSpring(state.index * tabWidth, {
+            damping: 14,
+            stiffness: 120,
+        });
+    }, [state.index]);
+
+    const indicatorStyle = useAnimatedStyle(() => ({
+        transform: [{ translateX: indicatorPos.value }],
+    }));
+
     return (
-        <View style={styles.container}>
-            <View style={styles.tabBar}>
+        <View style={styles.container} pointerEvents="box-none">
+            <GlassCard style={styles.tabBar} intensity={80} tint="dark" pointerEvents="auto">
+                {/* Sliding Indicator */}
+                <Animated.View style={[styles.indicatorWrapper, { width: tabWidth }, indicatorStyle]}>
+                    <LinearGradient
+                        colors={['#8B5CF6', '#EC4899']}
+                        style={styles.slidingIndicator}
+                        start={{ x: 0, y: 0 }}
+                        end={{ x: 1, y: 1 }}
+                    />
+                </Animated.View>
+
                 {state.routes.map((route, index) => {
                     const { options } = descriptors[route.key];
                     const isFocused = state.index === index;
@@ -27,6 +57,7 @@ const AnimatedTab = ({ state, descriptors, navigation }) => {
                         });
 
                         if (!isFocused && !event.defaultPrevented) {
+                            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                             navigation.navigate(route.name);
                         }
                     };
@@ -40,27 +71,33 @@ const AnimatedTab = ({ state, descriptors, navigation }) => {
                         />
                     );
                 })}
-            </View>
+            </GlassCard>
         </View>
     );
 };
 
 const TabItem = ({ isFocused, onPress, icon }) => {
     const scale = useSharedValue(1);
-    const dotOpacity = useSharedValue(0);
+    const translateY = useSharedValue(0);
 
     useEffect(() => {
-        scale.value = withSpring(isFocused ? 1.2 : 1, { damping: 10 });
-        dotOpacity.value = withSpring(isFocused ? 1 : 0, { damping: 15 });
+        if (isFocused) {
+            scale.value = withSpring(1.2, { damping: 10 });
+            translateY.value = withSequence(
+                withTiming(-8, { duration: 150, easing: Easing.out(Easing.ease) }),
+                withSpring(-4, { damping: 8, stiffness: 200 })
+            );
+        } else {
+            scale.value = withSpring(1, { damping: 10 });
+            translateY.value = withSpring(0, { damping: 10 });
+        }
     }, [isFocused]);
 
     const animatedStyle = useAnimatedStyle(() => ({
-        transform: [{ scale: scale.value }],
-    }));
-
-    const dotStyle = useAnimatedStyle(() => ({
-        opacity: dotOpacity.value,
-        transform: [{ scale: dotOpacity.value }],
+        transform: [
+            { scale: scale.value },
+            { translateY: translateY.value }
+        ],
     }));
 
     return (
@@ -69,15 +106,7 @@ const TabItem = ({ isFocused, onPress, icon }) => {
                 <Ionicons
                     name={icon}
                     size={26}
-                    color={isFocused ? '#EC4899' : 'rgba(255,255,255,0.4)'}
-                />
-            </Animated.View>
-            <Animated.View style={[dotStyle]}>
-                <LinearGradient
-                    colors={['#8B5CF6', '#EC4899']}
-                    style={styles.dot}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 1 }}
+                    color={isFocused ? '#ffffff' : 'rgba(255,255,255,0.4)'}
                 />
             </Animated.View>
         </Pressable>
@@ -87,37 +116,46 @@ const TabItem = ({ isFocused, onPress, icon }) => {
 const styles = StyleSheet.create({
     container: {
         position: 'absolute',
-        bottom: 20,
+        bottom: 25,
         left: 20,
         right: 20,
         alignItems: 'center',
+        paddingBottom: 5, // For shadow visibility
     },
     tabBar: {
         flexDirection: 'row',
-        backgroundColor: 'rgba(15, 23, 42, 0.95)',
-        paddingVertical: 15,
+        paddingVertical: 18,
         paddingHorizontal: 10,
-        borderRadius: 30,
-        borderWidth: 1,
-        borderColor: 'rgba(255,255,255,0.1)',
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 10 },
-        shadowOpacity: 0.3,
-        shadowRadius: 20,
-        elevation: 10,
+        borderRadius: 40,
         width: width - 40,
-        justifyContent: 'space-around',
+        justifyContent: 'flex-start',
+        alignItems: 'center',
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.15)',
+        shadowColor: '#EC4899',
+        shadowOffset: { width: 0, height: 8 },
+        shadowOpacity: 0.15,
+        shadowRadius: 20,
+        elevation: 15,
+    },
+    indicatorWrapper: {
+        position: 'absolute',
+        left: 10,
+        height: '100%',
+        alignItems: 'center',
+        justifyContent: 'flex-end',
+        paddingBottom: 2,
+    },
+    slidingIndicator: {
+        width: 16,
+        height: 4,
+        borderRadius: 2,
     },
     tabItem: {
+        flex: 1,
         alignItems: 'center',
         justifyContent: 'center',
-        width: 50,
-    },
-    dot: {
-        width: 6,
-        height: 6,
-        borderRadius: 3,
-        marginTop: 4,
+        height: 30,
     },
 });
 

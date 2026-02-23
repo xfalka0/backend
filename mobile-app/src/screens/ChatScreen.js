@@ -1,6 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, TextInput, FlatList, StyleSheet, KeyboardAvoidingView, Platform, TouchableOpacity, Image, RefreshControl } from 'react-native';
+import { View, Text, TextInput, FlatList, StyleSheet, KeyboardAvoidingView, Platform, TouchableOpacity, Image, RefreshControl, Animated } from 'react-native';
+import { BlurView } from 'expo-blur';
+import * as Haptics from 'expo-haptics';
 import { LinearGradient } from 'expo-linear-gradient';
+import { StatusBar } from 'expo-status-bar';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import io from 'socket.io-client';
 import { Ionicons } from '@expo/vector-icons';
@@ -10,122 +13,15 @@ import { Audio } from 'expo-av'; // Import Audio
 import { API_URL, SOCKET_URL } from '../config';
 import MessageBubble from '../components/animated/MessageBubble';
 import TypingIndicator from '../components/animated/TypingIndicator';
+import ChatBackground from '../components/animated/ChatBackground';
 import VipFrame from '../components/ui/VipFrame';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAlert } from '../contexts/AlertContext';
 import { GIFTS } from '../constants/gifts';
+import GlassCard from '../components/ui/GlassCard';
+import ModernAlert from '../components/ui/ModernAlert';
 
-// ...
-
-// This top-level socketRef and recording state are likely placeholders or incorrect.
-// The actual state and ref should be inside the functional component.
-// const socketRef = useRef(null);
-// const [recording, setRecording] = useState(null); // Recording State
-
-// ...
-
-// --- VOICE MESSAGE LOGIC ---
-// The original voice message logic block is moved inside the component.
-// const startRecording = async () => {
-//     try {
-//         const permission = await Audio.requestPermissionsAsync();
-//         if (permission.status === 'granted') {
-//             await Audio.setAudioModeAsync({
-//                 allowsRecordingIOS: true,
-//                 playsInSilentModeIOS: true,
-//             });
-//             const { recording } = await Audio.Recording.createAsync(
-//                 Audio.RecordingOptionsPresets.HIGH_QUALITY
-//             );
-//             setRecording(recording);
-//         } else {
-//             Alert.alert('İzin Gerekli', 'Mikrofon izni vermelisiniz.');
-//         }
-//     } catch (err) {
-//         console.error('Failed to start recording', err);
-//     }
-// };
-
-// const stopRecording = async () => {
-//     if (!recording) return;
-//     setRecording(null);
-//     await recording.stopAndUnloadAsync();
-//     const uri = recording.getURI();
-//     uploadAndSendAudio(uri);
-// };
-
-// const uploadAndSendAudio = async (uri) => {
-//     try {
-//         const formData = new FormData();
-//         formData.append('audio', {
-//             uri: uri,
-//             type: 'audio/m4a', // Expo default is m4a
-//             name: 'voice_message.m4a',
-//         });
-
-//         const res = await axios.post(`${API_URL}/upload`, formData, {
-//             headers: { 'Content-Type': 'multipart/form-data' },
-//         });
-
-//         const audioUrl = res.data.url || `${API_URL}${res.data.relativePath}`;
-
-//         const msgData = {
-//             chatId: chatId,
-//             senderId: user.id,
-//             content: audioUrl,
-//             type: 'audio'
-//         };
-//         socketRef.current.emit('send_message', msgData);
-
-//     } catch (error) {
-//         console.error('Audio Upload Error:', error);
-//         Alert.alert('Hata', 'Ses gönderilemedi.');
-//     }
-// };
-
-// const playAudio = async (uri) => {
-//     try {
-//         const { sound } = await Audio.Sound.createAsync({ uri });
-//         await sound.playAsync();
-//     } catch (error) {
-//         console.error('Play Audio Error:', error);
-//     }
-// };
-
-// ...
-
-// The original renderMessage and mic button are replaced below.
-// const renderMessage = ({ item }) => {
-//     const isUser = item.sender_id === user.id;
-
-//     let content = <Text style={styles.messageText}>{item.content}</Text>;
-
-//     if (item.content_type === 'image') {
-//         content = (
-//             <Image
-//                 source={{ uri: item.content }}
-//                 style={{ width: 200, height: 200, borderRadius: 12 }}
-//                 resizeMode="cover"
-//             />
-//         );
-//     } else if (item.content_type === 'audio') {
-//         content = (
-//             <TouchableOpacity onPress={() => playAudio(item.content)} style={{ flexDirection: 'row', alignItems: 'center' }}>
-//                 <Ionicons name="play-circle" size={32} color="white" />
-//                 <Text style={{ color: 'white', marginLeft: 8 }}>Ses Kaydı Oynat</Text>
-//             </TouchableOpacity>
-//         );
-//     }
-
-//     return (
-//         <View style={[styles.messageBubble, isUser ? styles.userBubble : styles.operatorBubble]}>
-//     // ...
-//             // ... inside Action Bar:
-//             <TouchableOpacity style={styles.actionIcon} onPress={recording ? stopRecording : startRecording}>
-//                 <Ionicons name={recording ? "stop-circle" : "mic-outline"} size={26} color={recording ? "#ef4444" : "#94a3b8"} />
-//             </TouchableOpacity>
-
-import { COLORS, GRADIENTS, SHADOWS } from '../theme';
+import { SHADOWS, COLORS } from '../theme';
 import ReportModal from '../components/ReportModal';
 import InsufficientCoinsModal from '../components/InsufficientCoinsModal';
 import GiftPickerModal from '../components/GiftPickerModal';
@@ -159,10 +55,30 @@ export default function ChatScreen({ route, navigation }) {
     const socketRef = useRef(null);
     const flatListRef = useRef(null);
     const typingTimeoutRef = useRef(null);
+    const giftAnim = useRef(new Animated.Value(0)).current;
+
+    // Gift Floating Animation
+    useEffect(() => {
+        Animated.loop(
+            Animated.sequence([
+                Animated.timing(giftAnim, {
+                    toValue: 1,
+                    duration: 1500,
+                    useNativeDriver: true,
+                }),
+                Animated.timing(giftAnim, {
+                    toValue: 0,
+                    duration: 1500,
+                    useNativeDriver: true,
+                }),
+            ])
+        ).start();
+    }, []);
 
     // Header Config
     React.useLayoutEffect(() => {
         navigation.setOptions({
+            headerShown: true,
             headerTitle: () => (
                 <View style={{ alignItems: 'center' }}>
                     <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 1 }}>
@@ -205,6 +121,11 @@ export default function ChatScreen({ route, navigation }) {
                     </View>
                 </View>
             ),
+            headerLeft: () => (
+                <TouchableOpacity onPress={() => navigation.goBack()} style={{ marginLeft: 10, padding: 5 }}>
+                    <Ionicons name="chevron-back" size={28} color={theme.colors.text} />
+                </TouchableOpacity>
+            ),
             headerRight: () => (
                 <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                     <TouchableOpacity
@@ -214,16 +135,23 @@ export default function ChatScreen({ route, navigation }) {
                         <VipFrame
                             level={vip_level}
                             avatar={avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(name || 'User')}&background=random&color=fff`}
-                            size={50}
+                            size={40}
                             isStatic={true}
                         />
                     </TouchableOpacity>
-                    <TouchableOpacity onPress={() => setShowOptions(!showOptions)} style={{ padding: 5 }}>
+                    <TouchableOpacity onPress={() => setShowOptions(!showOptions)} style={{ padding: 5, marginRight: 5 }}>
                         <Ionicons name="ellipsis-vertical" size={24} color={theme.colors.text} />
                     </TouchableOpacity>
                 </View>
             ),
             headerTitleAlign: 'center',
+            headerTransparent: true,
+            headerStyle: {
+                backgroundColor: 'transparent',
+                elevation: 0,
+                shadowOpacity: 0,
+            },
+            headerTintColor: theme.colors.text,
         });
     }, [navigation, showOptions, name, is_online, avatar_url, operatorId, user, vip_level]);
 
@@ -241,25 +169,22 @@ export default function ChatScreen({ route, navigation }) {
                 realChatId = chatRes.data.id;
                 setChatId(realChatId);
                 console.log('[ChatScreen] Created/Fetched chatId:', realChatId);
-            } else {
-                console.log('[ChatScreen] Using existing chatId:', realChatId);
             }
 
-            // 2. Fetch Latest User Balance & History
+            // 2. Parallelize: Balance, History and Read Status
+            // We can do these in parallel now that we have realChatId
             const [balanceRes, historyRes] = await Promise.all([
                 axios.get(`${API_URL}/users/${user.id}`),
-                axios.get(`${API_URL}/messages/${realChatId}`)
+                axios.get(`${API_URL}/messages/${realChatId}`),
+                axios.put(`${API_URL}/chats/${realChatId}/read`, { userId: user.id })
             ]);
-
-            // Mark messages as read
-            await axios.put(`${API_URL}/chats/${realChatId}/read`, { userId: user.id });
 
             if (balanceRes.data && balanceRes.data.balance !== undefined) {
                 setCurrentBalance(balanceRes.data.balance);
             }
             setMessages(historyRes.data);
 
-            // 3. Connect Socket
+            // 3. Connect Socket (Keep this at the end)
             if (socketRef.current) socketRef.current.disconnect();
 
             const token = await AsyncStorage.getItem('token');
@@ -409,7 +334,7 @@ export default function ChatScreen({ route, navigation }) {
 
     const sendMessage = () => {
         if (input.trim() === '' || !chatId) return;
-
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
         // Check Balance
         if (currentBalance < 10 && vip_level < 1) { // Assuming 10 is cost and VIPs might bypass or checking balance logic
             setShowCoinModal(true);
@@ -563,6 +488,7 @@ export default function ChatScreen({ route, navigation }) {
         }
 
         try {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
             const permission = await Audio.requestPermissionsAsync();
             if (permission.status === 'granted') {
                 await Audio.setAudioModeAsync({
@@ -583,6 +509,7 @@ export default function ChatScreen({ route, navigation }) {
 
     const stopRecording = async () => {
         if (!recording) return;
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         setRecording(null);
         await recording.stopAndUnloadAsync();
         const uri = recording.getURI();
@@ -706,7 +633,14 @@ export default function ChatScreen({ route, navigation }) {
         }
 
         return (
-            <MessageBubble isMine={isUser} index={index} isRead={item.is_read}>
+            <MessageBubble
+                isMine={isUser}
+                index={index}
+                isRead={item.is_read}
+                avatar={isUser ? user.avatar : avatar_url}
+                vipLevel={isUser ? user.vip_level : vip_level}
+                timestamp={item.created_at}
+            >
                 {content}
             </MessageBubble>
         );
@@ -736,22 +670,20 @@ export default function ChatScreen({ route, navigation }) {
                 // Load More: [Msg0, Msg1, Msg2]. Visual Top: Msg0.
                 // So we should PREPEND to state.
                 setMessages(prev => [...res.data, ...prev]);
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
             }
         } catch (error) {
             console.error('Load Previous Messages Error:', error);
         } finally {
             setRefreshing(false);
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         }
     };
 
     return (
-        <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
-            {themeMode === 'dark' && (
-                <LinearGradient
-                    colors={['#0f172a', '#1e1b4b', '#0f172a']}
-                    style={styles.background}
-                />
-            )}
+        <View style={styles.container}>
+            <StatusBar style="light" translucent backgroundColor="transparent" />
+            <ChatBackground themeMode={themeMode} />
 
             <FlatList
                 ref={flatListRef}
@@ -765,48 +697,83 @@ export default function ChatScreen({ route, navigation }) {
 
             {isTyping && <TypingIndicator />}
 
-            <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} keyboardVerticalOffset={90}>
-                <View style={[styles.inputContainer, { backgroundColor: theme.colors.background, borderTopColor: theme.colors.glassBorder }]}>
-                    <TextInput
-                        style={[styles.input, { backgroundColor: theme.colors.glass, borderColor: theme.colors.glassBorder, color: theme.colors.text }]}
-                        value={input}
-                        onChangeText={handleTyping}
-                        placeholder="Mesaj yaz..."
-                        placeholderTextColor={theme.colors.textSecondary}
-                    />
+            <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 70}>
+                <View style={styles.modernInputWrapper}>
+                    <GlassCard intensity={40} tint="dark" style={styles.glassInputContainer}>
+                        <View style={styles.inputRow}>
+                            <TextInput
+                                style={[styles.input, { color: theme.colors.text }]}
+                                value={input}
+                                onChangeText={handleTyping}
+                                placeholder="Mesaj yaz..."
+                                placeholderTextColor="rgba(255,255,255,0.4)"
+                                multiline
+                                maxHeight={100}
+                            />
 
-                    <TouchableOpacity onPress={sendMessage} style={styles.sendButton}>
-                        <LinearGradient colors={theme.gradients.primary} style={styles.sendGradient}>
-                            <Ionicons name="send" size={20} color="white" />
-                        </LinearGradient>
-                    </TouchableOpacity>
-                </View>
+                            <TouchableOpacity onPress={sendMessage} style={styles.sendButton}>
+                                <LinearGradient colors={theme.gradients.primary} style={styles.sendGradient}>
+                                    <Ionicons name="send" size={20} color="white" />
+                                </LinearGradient>
+                            </TouchableOpacity>
+                        </View>
 
-                {/* Bottom Action Bar */}
-                <View style={styles.actionBar}>
-                    <TouchableOpacity style={styles.actionIcon} onPress={() => navigation.navigate('VideoCall', { name, avatar_url })}>
-                        <Ionicons name="videocam-outline" size={26} color="#94a3b8" />
-                    </TouchableOpacity>
+                        {/* Bottom Action Bar */}
+                        <View style={styles.actionBar}>
+                            <TouchableOpacity style={styles.modernActionBtn} onPress={() => {
+                                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                                navigation.navigate('VideoCall', { name, avatar_url });
+                            }}>
+                                <BlurView intensity={20} tint="light" style={styles.btnBlur}>
+                                    <Ionicons name="videocam" size={22} color="rgba(255,255,255,0.8)" />
+                                </BlurView>
+                            </TouchableOpacity>
 
-                    <TouchableOpacity style={styles.actionIcon} onPress={() => navigation.navigate('VoiceCall', { name, avatar_url })}>
-                        <Ionicons name="call-outline" size={24} color="#94a3b8" />
-                    </TouchableOpacity>
+                            <TouchableOpacity style={styles.modernActionBtn} onPress={() => {
+                                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                                navigation.navigate('VoiceCall', { name, avatar_url });
+                            }}>
+                                <BlurView intensity={20} tint="light" style={styles.btnBlur}>
+                                    <Ionicons name="call" size={20} color="rgba(255,255,255,0.8)" />
+                                </BlurView>
+                            </TouchableOpacity>
 
-                    <TouchableOpacity style={styles.giftIconContainer} onPress={() => setShowGiftModal(true)}>
-                        <Image
-                            source={require('../assets/gift_icon.webp')}
-                            style={styles.giftLogoLarge}
-                            resizeMode="contain"
-                        />
-                    </TouchableOpacity>
+                            <TouchableOpacity style={styles.giftIconContainer} onPress={() => {
+                                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                                setShowGiftModal(true);
+                            }}>
+                                <Animated.View style={{
+                                    transform: [{
+                                        translateY: giftAnim.interpolate({
+                                            inputRange: [0, 1],
+                                            outputRange: [0, -8]
+                                        })
+                                    }]
+                                }}>
+                                    <Image
+                                        source={require('../assets/gift_icon.webp')}
+                                        style={styles.giftLogoLarge}
+                                        resizeMode="contain"
+                                    />
+                                </Animated.View>
+                            </TouchableOpacity>
 
-                    <TouchableOpacity style={styles.actionIcon} onPress={recording ? stopRecording : startRecording}>
-                        <Ionicons name={recording ? "stop-circle" : "mic-outline"} size={26} color={recording ? "#ef4444" : "#94a3b8"} />
-                    </TouchableOpacity>
+                            <TouchableOpacity style={styles.modernActionBtn} onPress={recording ? stopRecording : startRecording}>
+                                <BlurView intensity={20} tint={recording ? "default" : "light"} style={[styles.btnBlur, recording && { backgroundColor: 'rgba(239, 68, 68, 0.2)' }]}>
+                                    <Ionicons name={recording ? "stop" : "mic"} size={22} color={recording ? "#ef4444" : "rgba(255,255,255,0.8)"} />
+                                </BlurView>
+                            </TouchableOpacity>
 
-                    <TouchableOpacity style={styles.actionIcon} onPress={handleSendImage}>
-                        <Ionicons name="image-outline" size={26} color="#94a3b8" />
-                    </TouchableOpacity>
+                            <TouchableOpacity style={styles.modernActionBtn} onPress={() => {
+                                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                                handleSendImage();
+                            }}>
+                                <BlurView intensity={20} tint="light" style={styles.btnBlur}>
+                                    <Ionicons name="image" size={22} color="rgba(255,255,255,0.8)" />
+                                </BlurView>
+                            </TouchableOpacity>
+                        </View>
+                    </GlassCard>
                 </View>
             </KeyboardAvoidingView>
 
@@ -869,14 +836,15 @@ export default function ChatScreen({ route, navigation }) {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
+        backgroundColor: '#0f051a', // Fallback color
     },
     background: {
         ...StyleSheet.absoluteFillObject,
     },
     messagesList: {
         paddingHorizontal: 16,
-        paddingTop: 20,    // Visual BOTTOM padding (inverted)
-        paddingBottom: 100, // Visual TOP padding (inverted - space for header)
+        paddingTop: 10,
+        paddingBottom: 90,
     },
     messageBubble: {
         maxWidth: '75%',
@@ -892,44 +860,50 @@ const styles = StyleSheet.create({
     operatorBubble: {
         alignSelf: 'flex-start',
         borderBottomLeftRadius: 4,
-        backgroundColor: COLORS.card,
         borderWidth: 1,
-        borderColor: COLORS.glassBorder,
     },
     bubbleGradient: {
         paddingHorizontal: 20,
         paddingVertical: 14,
     },
     messageText: {
-        color: COLORS.text,
         fontSize: 15,
         lineHeight: 22,
     },
-    inputContainer: {
+    inputRow: {
         flexDirection: 'row',
-        alignItems: 'center',
-        paddingHorizontal: 16, // Restored to symmetric padding
-        paddingVertical: 12,
-        backgroundColor: 'rgba(9, 9, 11, 0.8)',
-        borderTopWidth: 1,
-        borderTopColor: COLORS.glassBorder,
+        alignItems: 'flex-end',
+        paddingHorizontal: 16,
+        paddingTop: 12,
+        paddingBottom: 8,
+    },
+    modernInputWrapper: {
+        paddingBottom: Platform.OS === 'ios' ? 20 : 10,
+        backgroundColor: 'transparent',
+    },
+    glassInputContainer: {
+        marginHorizontal: 12,
+        borderRadius: 32,
+        overflow: 'hidden',
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.15)',
     },
     input: {
         flex: 1,
-        backgroundColor: COLORS.glass,
-        borderRadius: 24,
+        backgroundColor: 'rgba(255, 255, 255, 0.05)',
+        borderRadius: 20,
         paddingHorizontal: 16,
         paddingVertical: 10,
-        color: COLORS.text,
+        minHeight: 44,
         fontSize: 15,
         borderWidth: 1,
-        borderColor: COLORS.glassBorder,
+        borderColor: 'rgba(255, 255, 255, 0.1)',
     },
     sendButton: {
         width: 44,
         height: 44,
         borderRadius: 22,
-        marginLeft: 12,
+        marginLeft: 10,
         ...SHADOWS.glow,
     },
     sendGradient: {
@@ -940,34 +914,34 @@ const styles = StyleSheet.create({
     },
     actionBar: {
         flexDirection: 'row',
-        justifyContent: 'space-around',
+        justifyContent: 'space-between',
         alignItems: 'center',
-        paddingVertical: 16,
-        backgroundColor: COLORS.card,
-        marginHorizontal: 16,
-        marginBottom: Platform.OS === 'ios' ? 0 : 16,
-        borderRadius: 24,
-        borderWidth: 1,
-        borderColor: COLORS.glassBorder,
-        ...SHADOWS.medium,
+        paddingHorizontal: 20,
+        paddingBottom: 16,
+        paddingTop: 4,
     },
-    actionIcon: {
-        width: 40,
-        height: 40,
+    modernActionBtn: {
+        width: 44,
+        height: 44,
+        borderRadius: 22,
+        overflow: 'hidden',
+    },
+    btnBlur: {
+        flex: 1,
         alignItems: 'center',
         justifyContent: 'center',
-        borderRadius: 20,
-        backgroundColor: COLORS.glass,
+        backgroundColor: 'rgba(255,255,255,0.05)',
     },
     giftIconContainer: {
         alignItems: 'center',
         justifyContent: 'center',
-        marginTop: -32, // Adjusted for slightly smaller logo
+        height: 50,
+        width: 60,
     },
     giftLogoLarge: {
-        width: 54, // Reduced from 70
-        height: 54,
-        ...SHADOWS.glow,
+        width: 52,
+        height: 52,
+        zIndex: 2,
     },
     giftEmoji: {
         fontSize: 24,
@@ -976,11 +950,24 @@ const styles = StyleSheet.create({
         position: 'absolute',
         top: 60,
         right: 20,
-        backgroundColor: COLORS.card,
         borderRadius: 16,
         padding: 8,
         width: 160,
         zIndex: 100,
+        borderWidth: 1,
+        ...SHADOWS.medium,
+    },
+    optionsContainer: {
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        borderBottomLeftRadius: 30,
+        borderBottomRightRadius: 30,
+        padding: 20,
+        elevation: 10,
+        zIndex: 1000,
+        borderBottomWidth: 1,
         borderWidth: 1,
         borderColor: COLORS.glassBorder,
         ...SHADOWS.medium,
@@ -993,15 +980,23 @@ const styles = StyleSheet.create({
         borderRadius: 8,
     },
     optionText: {
-        color: COLORS.text,
         marginLeft: 12,
         fontSize: 14,
         fontWeight: '600',
     },
     divider: {
         height: 1,
-        backgroundColor: COLORS.glassBorder,
         marginVertical: 4,
+    },
+    inputContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 15,
+        paddingVertical: 10,
+        borderRadius: 30,
+        marginHorizontal: 15,
+        marginBottom: 10,
+        borderWidth: 1,
     },
     giftBubbleContainer: {
         marginVertical: 8,

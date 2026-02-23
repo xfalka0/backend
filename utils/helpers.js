@@ -66,7 +66,49 @@ const logActivity = async (io, userId, actionType, description) => {
     }
 };
 
+// Add fake social interactions for new users (Favorites and Views)
+const assignFakeInteractions = async (newUserId) => {
+    try {
+        // Find some random active users to act as fake admirers/viewers (min 3, max 8)
+        const limitCount = Math.floor(Math.random() * 6) + 3;
+        const randomUsers = await db.query(
+            "SELECT id FROM users WHERE id != $1 AND account_status = 'active' ORDER BY RANDOM() LIMIT $2",
+            [newUserId, limitCount]
+        );
+
+        if (randomUsers.rows.length === 0) return;
+
+        const fakeUsers = randomUsers.rows;
+
+        for (let i = 0; i < fakeUsers.length; i++) {
+            const actorId = fakeUsers[i].id;
+
+            // 60% chance for favorite
+            if (Math.random() > 0.4) {
+                await db.query(
+                    'INSERT INTO favorites (user_id, target_user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING',
+                    [actorId, newUserId]
+                );
+            }
+
+            // 80% chance for profile view
+            if (Math.random() > 0.2) {
+                // Insert with a random past timestamp between now and 24 hours ago
+                const randomSeconds = Math.floor(Math.random() * 86400);
+                await db.query(
+                    `INSERT INTO profile_views (viewer_id, viewed_user_id, created_at) 
+                     VALUES ($1, $2, NOW() - INTERVAL '${randomSeconds} seconds')`,
+                    [actorId, newUserId]
+                );
+            }
+        }
+    } catch (err) {
+        console.error("Fake Interaction Error:", err.message);
+    }
+};
+
 module.exports = {
     sanitizeUser,
-    logActivity
+    logActivity,
+    assignFakeInteractions
 };

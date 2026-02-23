@@ -67,7 +67,7 @@ export default function FloatingProfiles() {
     const col3 = [PROFILES[6], PROFILES[7], PROFILES[0]];
 
     return (
-        <View style={styles.container}>
+        <View style={styles.container} pointerEvents="none">
             <View style={styles.columnsWrapper}>
                 <Column images={col1} speed={40000} reverse={false} />
                 <Column images={col2} speed={35000} reverse={true} />

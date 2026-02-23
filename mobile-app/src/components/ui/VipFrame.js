@@ -9,7 +9,7 @@ import Animated, {
     Easing
 } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
-import SafeLottie from './SafeLottie';
+
 import { useTheme } from '../../contexts/ThemeContext';
 
 /**
@@ -73,7 +73,7 @@ const VIP_FRAME_CONFIGS = {
     },
     6: {
         colors: ['#1a1a1a', '#000000', '#fbbf24'],
-        lottie: require('../../assets/lottie/vip_particles.json'),
+
         asset: require('../../assets/vip_frames/vip6_v2.png'),
         hasGoldenRain: true,
         glow: 'rgba(251, 191, 36, 1)',
@@ -213,17 +213,7 @@ const VipFrame = memo(({ level = 0, avatar, size = 80, isStatic = false }) => {
                     zIndex: 1,
                 }} />
 
-                {/* 2. Lottie Internal (Absolute) */}
-                {config.lottie && !isStatic && (
-                    <View style={[StyleSheet.absoluteFill, { zIndex: 2 }]}>
-                        <SafeLottie
-                            source={config.lottie}
-                            style={{ width: '100%', height: '100%', opacity: 0.6 }}
-                            autoPlay
-                            loop
-                        />
-                    </View>
-                )}
+                {/* 2. Lottie Internal (Absolute) Removed */}
 
                 {/* 3. Avatar (Absolute Center + Manual Offset) */}
                 <View style={{
@@ -261,24 +251,7 @@ const VipFrame = memo(({ level = 0, avatar, size = 80, isStatic = false }) => {
                     resizeMode="contain"
                 />
 
-                {/* 5. Crown (Absolute Top Offset) */}
-                {config.hasCrown && !isStatic && (
-                    <View style={{
-                        position: 'absolute',
-                        top: -frameSize * 0.12,
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        zIndex: 5,
-                        elevation: 7
-                    }}>
-                        <SafeLottie
-                            source={require('../../assets/lottie/vip_crown.json')}
-                            style={{ width: frameSize * 0.45, height: frameSize * 0.45 }}
-                            autoPlay
-                            loop
-                        />
-                    </View>
-                )}
+                {/* 5. Crown (Absolute Top Offset) Removed */}
 
             </Animated.View>
         </View>

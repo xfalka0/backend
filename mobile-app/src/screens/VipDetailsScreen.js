@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { View, Text, StyleSheet, Image, ScrollView, TouchableOpacity, SafeAreaView, Dimensions, Platform } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
+import Animated, { useSharedValue, useAnimatedStyle, withRepeat, withTiming, withSequence, Easing } from 'react-native-reanimated';
 
 const { width } = Dimensions.get('window');
 
@@ -17,16 +18,13 @@ const PRIVILEGES = [
     { id: 9, label: 'Hediye\nBildirimi', icon: 'megaphone', minLevel: 6 },
 ];
 
-const getVipColors = (level) => {
-    switch (level) {
-        case 1: return ['#cd7f32', '#a05a2c']; // Bronze
-        case 2: return ['#e2e8f0', '#94a3b8']; // Silver
-        case 3: return ['#fbbf24', '#d97706']; // Gold
-        case 4: return ['#22d3ee', '#0891b2']; // Platinum
-        case 5: return ['#e879f9', '#d946ef']; // Diamond
-        case 6: return ['#ff0000', '#990000']; // Ruby (Added for VIP 6)
-        default: return ['#334155', '#1e293b']; // Basic
-    }
+const VIP_CONFIGS = {
+    1: { bg: ['#92400e', '#451a03'], frame: ['#cd7f32', '#a05a2c'], glow: 'rgba(146, 64, 14, 0.4)' },
+    2: { bg: ['#475569', '#1e293b'], frame: ['#cbd5e1', '#94a3b8'], glow: 'rgba(71, 85, 105, 0.4)' },
+    3: { bg: ['#b45309', '#78350f'], frame: ['#fbbf24', '#d97706'], glow: 'rgba(180, 83, 9, 0.5)' },
+    4: { bg: ['#0e7490', '#164e63'], frame: ['#22d3ee', '#0891b2'], glow: 'rgba(14, 116, 144, 0.6)' },
+    5: { bg: ['#be185d', '#831843'], frame: ['#e879f9', '#d946ef'], glow: 'rgba(190, 24, 93, 0.7)' },
+    6: { bg: ['#1a1a1a', '#000000'], frame: ['#fbbf24', '#fde68a'], glow: 'rgba(251, 191, 36, 0.9)' }
 };
 
 export default function VipDetailsScreen({ navigation, route }) {
@@ -35,13 +33,31 @@ export default function VipDetailsScreen({ navigation, route }) {
     const [selectedLevel, setSelectedLevel] = useState(vipLevel > 0 ? vipLevel : 1);
 
     const avatarUri = user?.profile_image || user?.avatar || 'https://via.placeholder.com/150';
-    const frameColors = getVipColors(selectedLevel);
+    const config = VIP_CONFIGS[selectedLevel] || VIP_CONFIGS[1];
+    const frameColors = config.frame;
 
-    // Filter privileges based on selected level - REMOVED per request
-    // const currentPrivileges = PRIVILEGES.filter(p => p.minLevel <= selectedLevel);
+    const floatingY = useSharedValue(0);
+
+    React.useEffect(() => {
+        floatingY.value = withRepeat(
+            withSequence(
+                withTiming(-8, { duration: 2500, easing: Easing.inOut(Easing.sin) }),
+                withTiming(0, { duration: 2500, easing: Easing.inOut(Easing.sin) })
+            ),
+            -1,
+            true
+        );
+    }, [selectedLevel]);
+
+    const floatingStyle = useAnimatedStyle(() => ({
+        transform: [{ translateY: floatingY.value }]
+    }));
 
     return (
         <SafeAreaView style={styles.container}>
+            {/* Ambient Background Particles Removed */}
+            <View style={[StyleSheet.absoluteFill, { zIndex: 0 }]} pointerEvents="none" />
+
             <View style={styles.header}>
                 <TouchableOpacity onPress={() => navigation.goBack()} style={styles.iconBtn}>
                     <Ionicons name="arrow-back" size={24} color="white" />
@@ -54,13 +70,15 @@ export default function VipDetailsScreen({ navigation, route }) {
 
             <ScrollView contentContainerStyle={{ paddingBottom: 120 }}>
                 {/* VIP CARD */}
-                <View style={{ paddingHorizontal: 20, marginTop: 20 }}>
+                <Animated.View style={[{ paddingHorizontal: 20, marginTop: 20 }, floatingStyle]}>
                     <LinearGradient
-                        colors={['#334155', '#0f172a']}
+                        colors={config.bg}
                         start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
-                        style={styles.card}
+                        style={[styles.card, { borderColor: config.frame[0], borderWidth: 1.5 }]}
                     >
-                        <Text style={styles.bgVipText}>VIP {selectedLevel}</Text>
+                        <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(255,255,255,0.05)' }]} />
+                        <Text style={[styles.bgVipText, { color: config.frame[0], opacity: 0.15 }]}>VIP {selectedLevel}</Text>
+
 
                         <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                             <View style={{ padding: 3, borderWidth: 1, borderColor: '#fff', borderRadius: 50, marginRight: 15 }}>
@@ -81,7 +99,7 @@ export default function VipDetailsScreen({ navigation, route }) {
                             </View>
                         </View>
                     </LinearGradient>
-                </View>
+                </Animated.View>
 
                 {/* LEVEL TABS */}
                 <View style={{ marginTop: 30 }}>

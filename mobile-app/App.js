@@ -1,65 +1,67 @@
-import 'react-native-gesture-handler'; // MUST BE AT THE TOP
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import React, { useEffect } from 'react';
+import { View, StyleSheet, Dimensions } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import { Ionicons } from '@expo/vector-icons';
-import { StatusBar } from 'expo-status-bar';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFonts, Outfit_800ExtraBold, Outfit_500Medium, Outfit_400Regular } from '@expo-google-fonts/outfit';
+import { StatusBar } from 'expo-status-bar';
+import * as SplashScreenNative from 'expo-splash-screen';
+
+// Keep the splash screen visible while we fetch resources
+SplashScreenNative.preventAutoHideAsync().catch(() => {
+    /* reloading the app might cause some errors here, safe to ignore */
+});
 
 // Theme & Context
 import { ThemeProvider, useTheme } from './src/contexts/ThemeContext';
 import { AlertProvider } from './src/contexts/AlertContext';
 import { PurchaseService } from './src/services/purchaseService';
-import AnimatedTabBar from './src/components/animated/AnimatedTabBar';
 
 // Screens
-import LegalScreen from './src/screens/LegalScreen';
-import SplashScreen from './src/screens/SplashScreen';
-import LoginScreen from './src/screens/LoginScreen';
-import SignupScreen from './src/screens/SignupScreen';
 import HomeScreen from './src/screens/HomeScreen';
-import ChatScreen from './src/screens/ChatScreen';
-import VideoCallScreen from './src/screens/VideoCallScreen';
-import GenderScreen from './src/screens/GenderScreen';
-import RelationshipScreen from './src/screens/RelationshipScreen';
-import InterestsScreen from './src/screens/InterestsScreen';
-import JobEducationScreen from './src/screens/JobEducationScreen';
-import NameScreen from './src/screens/NameScreen';
-import PhotoScreen from './src/screens/PhotoScreen';
-import BioScreen from './src/screens/BioScreen';
-import ThemeSelectionScreen from './src/screens/ThemeSelectionScreen';
-import OperatorProfileScreen from './src/screens/OperatorProfileScreen';
 import ExploreScreen from './src/screens/ExploreScreen';
-import StoryScreen from './src/screens/StoryScreen';
-import CreatePostScreen from './src/screens/CreatePostScreen';
 import MessagesScreen from './src/screens/MessagesScreen';
 import ProfileScreen from './src/screens/ProfileScreen';
-import ShopScreen from './src/screens/ShopScreen';
-import VipDetailsScreen from './src/screens/VipDetailsScreen';
-import VipScreen from './src/screens/VipScreen';
-import VipFrameDemoScreen from './src/screens/VipFrameDemoScreen';
+import OperatorProfileScreen from './src/screens/OperatorProfileScreen';
+import ChatScreen from './src/screens/ChatScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
-import OnboardingScreen from './src/screens/OnboardingScreen';
-import WelcomeScreen from './src/screens/WelcomeScreen';
-import AuthScreen from './src/screens/AuthScreen';
+import VipScreen from './src/screens/VipScreen';
+import VipDetailsScreen from './src/screens/VipDetailsScreen';
+import ShopScreen from './src/screens/ShopScreen';
+import FavoritesScreen from './src/screens/FavoritesScreen';
+import WhoFavoritedMeScreen from './src/screens/WhoFavoritedMeScreen';
+import ProfileVisitorsScreen from './src/screens/ProfileVisitorsScreen';
+import NotificationsScreen from './src/screens/NotificationsScreen';
+import LegalScreen from './src/screens/LegalScreen';
+import VipProgressionScreen from './src/screens/VipProgressionScreen';
+import VipFrameDemoScreen from './src/screens/VipFrameDemoScreen';
+import ThemeSelectionScreen from './src/screens/ThemeSelectionScreen';
+import StoryScreen from './src/screens/StoryScreen';
 import VoiceCallScreen from './src/screens/VoiceCallScreen';
+import VideoCallScreen from './src/screens/VideoCallScreen';
+import CreatePostScreen from './src/screens/CreatePostScreen';
+import AuthScreen from './src/screens/AuthScreen';
+import SplashScreen from './src/screens/SplashScreen';
+import WelcomeScreen from './src/screens/WelcomeScreen';
+import OnboardingScreen from './src/screens/OnboardingScreen';
+
+import AnimatedTabBar from './src/components/animated/AnimatedTabBar';
+
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
 
 function MainTabs({ route }) {
-    const TEST_USER_ID = 'c917f7d6-cc44-4b04-8917-1dbbed0b1e9b'; // Valid UUID from DB
+    const TEST_USER_ID = 'c917f7d6-cc44-4b04-8917-1dbbed0b1e9b';
     const paramsUser = route.params?.user;
-    const user = paramsUser ? { ...paramsUser, name: paramsUser.display_name || paramsUser.username || 'Kullanıcı' } : { id: TEST_USER_ID, name: 'Misafir', hearts: 0 };
+    const user = paramsUser ? paramsUser : { id: TEST_USER_ID, name: 'Test Kullanıcı', hearts: 100 };
 
     return (
         <Tab.Navigator
-            tabBar={(props) => <AnimatedTabBar {...props} />}
-            screenOptions={{
-                headerShown: false,
-            }}
+            tabBar={props => <AnimatedTabBar {...props} />}
+            screenOptions={{ headerShown: false }}
         >
             <Tab.Screen
                 name="Ana Sayfa"
@@ -94,64 +96,42 @@ function AppContent() {
 
     return (
         <NavigationContainer>
-            <StatusBar style={themeMode === 'dark' ? 'light' : 'dark'} />
+            <StatusBar style={themeMode === 'dark' ? 'light' : 'dark'} translucent backgroundColor="transparent" />
             <Stack.Navigator
                 initialRouteName="Splash"
                 screenOptions={{
                     headerShown: false,
+                    animation: 'none',
                     contentStyle: { backgroundColor: theme.colors.background }
                 }}
             >
+                <Stack.Screen name="Main" component={MainTabs} />
+                <Stack.Screen name="OperatorProfile" component={OperatorProfileScreen} />
+                <Stack.Screen name="Chat" component={ChatScreen} />
+                <Stack.Screen name="Settings" component={SettingsScreen} />
+                <Stack.Screen name="Vip" component={VipScreen} />
+                <Stack.Screen name="VipDetails" component={VipDetailsScreen} />
+                <Stack.Screen name="Shop" component={ShopScreen} />
+                <Stack.Screen name="Favorites" component={FavoritesScreen} />
+                <Stack.Screen name="WhoFavoritedMe" component={WhoFavoritedMeScreen} />
+                <Stack.Screen name="ProfileVisitors" component={ProfileVisitorsScreen} />
+                <Stack.Screen name="Notifications" component={NotificationsScreen} />
                 <Stack.Screen name="Legal" component={LegalScreen} />
+                <Stack.Screen name="VipProgression" component={VipProgressionScreen} />
+                <Stack.Screen name="VipFrameDemo" component={VipFrameDemoScreen} />
+                <Stack.Screen name="ThemeSelection" component={ThemeSelectionScreen} />
+                <Stack.Screen name="Story" component={StoryScreen} />
+                <Stack.Screen name="VoiceCall" component={VoiceCallScreen} />
+                <Stack.Screen name="VideoCall" component={VideoCallScreen} />
+                <Stack.Screen name="CreatePost" component={CreatePostScreen} />
+                <Stack.Screen name="Auth" component={AuthScreen} />
                 <Stack.Screen name="Splash" component={SplashScreen} />
                 <Stack.Screen name="Welcome" component={WelcomeScreen} />
-                <Stack.Screen name="Auth" component={AuthScreen} />
-                <Stack.Screen name="Login" component={AuthScreen} />
-                <Stack.Screen name="Signup" component={AuthScreen} />
-
-                {/* Main App with Tabs */}
-                <Stack.Screen name="Main" component={MainTabs} />
-
-                {/* Secondary Screens */}
-                <Stack.Screen
-                    name="Chat"
-                    component={ChatScreen}
-                    options={{
-                        headerShown: true,
-                        title: '',
-                        headerTransparent: true,
-                        headerTintColor: theme.colors.text
-                    }}
-                />
-                <Stack.Screen name="VideoCall" component={VideoCallScreen} />
-                <Stack.Screen name="VoiceCall" component={VoiceCallScreen} />
-                <Stack.Screen name="OperatorProfile" component={OperatorProfileScreen} />
-                <Stack.Screen name="Story" component={StoryScreen} options={{ animation: 'fade' }} />
-                <Stack.Screen name="CreatePost" component={CreatePostScreen} />
-                <Stack.Screen name="Shop" component={ShopScreen} />
-                <Stack.Screen name="VipDetails" component={VipDetailsScreen} />
-                <Stack.Screen name="Vip" component={VipScreen} />
-                <Stack.Screen name="VipFrameDemo" component={VipFrameDemoScreen} />
-                <Stack.Screen name="Settings" component={SettingsScreen} />
                 <Stack.Screen name="Onboarding" component={OnboardingScreen} />
-
-                {/* Onboarding Flow */}
-                <Stack.Screen name="Gender" component={GenderScreen} />
-                <Stack.Screen name="Relationship" component={RelationshipScreen} />
-                <Stack.Screen name="Interests" component={InterestsScreen} />
-                <Stack.Screen name="JobEducation" component={JobEducationScreen} />
-                <Stack.Screen name="Name" component={NameScreen} />
-                <Stack.Screen name="Photo" component={PhotoScreen} />
-                <Stack.Screen name="Bio" component={BioScreen} />
-                <Stack.Screen name="ThemeSelection" component={ThemeSelectionScreen} />
             </Stack.Navigator>
         </NavigationContainer>
     );
 }
-
-// ... imports moved to top
-
-// ... existing code ...
 
 export default function App() {
     const [fontsLoaded] = useFonts({
@@ -165,7 +145,6 @@ export default function App() {
             try {
                 const userData = await AsyncStorage.getItem('user');
                 const user = userData ? JSON.parse(userData) : null;
-                // Initialize with UID if logged in (must be string), otherwise null
                 const appUserID = user?.id ? String(user.id) : null;
                 await PurchaseService.init(appUserID);
             } catch (err) {
@@ -175,17 +154,29 @@ export default function App() {
         setupPurchases();
     }, []);
 
-    if (!fontsLoaded) {
-        return null;
-    }
+    useEffect(() => {
+        if (fontsLoaded) {
+            SplashScreenNative.hideAsync().catch(() => { });
+        }
+    }, [fontsLoaded]);
+
+    if (!fontsLoaded) return <View style={{ flex: 1, backgroundColor: '#ffffff' }} />;
 
     return (
         <GestureHandlerRootView style={{ flex: 1 }}>
-            <ThemeProvider>
-                <AlertProvider>
-                    <AppContent />
-                </AlertProvider>
-            </ThemeProvider>
+            <SafeAreaProvider>
+                <ThemeProvider>
+                    <AlertProvider>
+                        <AppContent />
+                    </AlertProvider>
+                </ThemeProvider>
+            </SafeAreaProvider>
         </GestureHandlerRootView>
     );
 }
+
+const styles = StyleSheet.create({
+    container: {
+        flex: 1,
+    }
+});

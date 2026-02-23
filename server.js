@@ -11,6 +11,9 @@ const { getVipLevel, getVipProgress } = require('./utils/vipUtils');
 const jwt = require('jsonwebtoken');
 const socialRoutes = require('./routes/socialRoutes');
 const authRoutes = require('./routes/authRoutes');
+const favoritesRoutes = require('./routes/favorites');
+const viewsRoutes = require('./routes/views');
+const boostsRoutes = require('./routes/boosts');
 const { sanitizeUser, logActivity } = require('./utils/helpers');
 
 const app = express();
@@ -140,6 +143,16 @@ const initializeDatabase = async () => {
         if (!columnNames.includes('bio')) {
             console.log('[DB] Adding missing column: bio');
             await db.query('ALTER TABLE users ADD COLUMN bio TEXT');
+        }
+
+        if (!columnNames.includes('boy')) {
+            console.log('[DB] Adding missing column: boy');
+            await db.query('ALTER TABLE users ADD COLUMN boy VARCHAR(20)');
+        }
+
+        if (!columnNames.includes('kilo')) {
+            console.log('[DB] Adding missing column: kilo');
+            await db.query('ALTER TABLE users ADD COLUMN kilo VARCHAR(20)');
         }
 
         if (!columnNames.includes('avatar_url')) {
@@ -435,6 +448,9 @@ app.use('/admin', express.static(path.join(__dirname, 'public/admin')));
 app.use('/api', socialRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api', authRoutes); // Proxy for /api/me /api/login etc
+app.use('/api/favorites', favoritesRoutes);
+app.use('/api/views', viewsRoutes);
+app.use('/api/boosts', boostsRoutes);
 
 // CLOUDINARY UPLOAD ENDPOINT
 app.post('/api/upload', (req, res, next) => {
@@ -576,8 +592,11 @@ app.put('/api/users/:id/profile', async (req, res) => {
                 age = COALESCE($8::INTEGER, age),
                 relationship = COALESCE($9, relationship),
                 zodiac = COALESCE($10, zodiac),
-                job = COALESCE($11, job)
-             WHERE id = $12 RETURNING *`,
+                job = COALESCE($11, job),
+                edu = COALESCE($12, edu),
+                boy = COALESCE($13, boy),
+                kilo = COALESCE($14, kilo)
+             WHERE id = $15 RETURNING *`,
             [
                 req.body.display_name || null,
                 req.body.name || null,
@@ -590,6 +609,9 @@ app.put('/api/users/:id/profile', async (req, res) => {
                 req.body.relationship || null,
                 req.body.zodiac || null,
                 req.body.job || null,
+                req.body.edu || null,
+                req.body.boy || null,
+                req.body.kilo || null,
                 id
             ]
         );
@@ -1152,8 +1174,8 @@ app.delete('/api/admin/staff/:id', authenticateToken, authorizeRole('admin', 'su
     if (req.user.id === parseInt(id)) return res.status(400).json({ error: 'Kendinizi silemezsiniz.' });
 
     try {
-        await db.query('DELETE FROM users WHERE id = $1', [id]);
-        res.json({ success: true });
+        await db.query("UPDATE users SET account_status = 'deleted', email = email || '_deleted_' || id, username = username || '_deleted_' || id WHERE id = $1", [id]);
+        res.json({ success: true, message: 'Personel silindi (Soft Delete).' });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
@@ -1334,17 +1356,13 @@ app.delete('/api/users/:id', authenticateToken, async (req, res) => {
     try {
         await db.query('BEGIN');
 
-        console.log(`[DELETE] Starting deletion for user ${id}`);
+        console.log(`[SOFT_DELETE] Marking user ${id} as deleted`);
 
-        // Delete related data (Cascade manually to be safe)
-        await db.query('DELETE FROM messages WHERE sender_id = $1', [id]);
-        await db.query('DELETE FROM chats WHERE user_id = $1 OR operator_id = $1', [id]);
-        await db.query('DELETE FROM operators WHERE user_id = $1', [id]);
-        await db.query('DELETE FROM stories WHERE operator_id = $1', [id]);
-        await db.query('DELETE FROM activities WHERE user_id = $1', [id]);
-
-        // Finally delete user
-        const result = await db.query('DELETE FROM users WHERE id = $1 RETURNING id', [id]);
+        // Instead of deleting, we set account_status to 'deleted'
+        const result = await db.query(
+            "UPDATE users SET account_status = 'deleted', email = email || '_deleted_' || id, username = username || '_deleted_' || id WHERE id = $1 RETURNING id",
+            [id]
+        );
 
         if (result.rowCount === 0) {
             await db.query('ROLLBACK');
@@ -1352,11 +1370,11 @@ app.delete('/api/users/:id', authenticateToken, async (req, res) => {
         }
 
         await db.query('COMMIT');
-        console.log(`[DELETE] User ${id} deleted successfully.`);
-        res.json({ success: true, message: 'Hesap başarıyla silindi.' });
+        console.log(`[SOFT_DELETE] User ${id} marked as deleted successfully.`);
+        res.json({ success: true, message: 'Hesap başarıyla silindi (Soft Delete).' });
     } catch (err) {
         await db.query('ROLLBACK');
-        console.error('Delete User Error:', err.message);
+        console.error('Soft Delete User Error:', err.message);
         res.status(500).json({ error: err.message });
     }
 });
@@ -1370,8 +1388,8 @@ app.delete('/api/admin/users/:id', authenticateToken, authorizeRole('admin', 'su
     }
 
     try {
-        await db.query('DELETE FROM users WHERE id = $1', [id]);
-        res.json({ success: true, message: 'Kullanıcı silindi.' });
+        await db.query("UPDATE users SET account_status = 'deleted', email = email || '_deleted_' || id, username = username || '_deleted_' || id WHERE id = $1", [id]);
+        res.json({ success: true, message: 'Kullanıcı silindi (Soft Delete).' });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
@@ -1484,7 +1502,7 @@ app.post('/api/purchase', authenticateToken, async (req, res) => {
         );
 
         // Log Purchase Activity
-        logActivity(userId, 'purchase', `${price} TL tutarında ${packageName} satın aldı.`);
+        logActivity(io, userId, 'purchase', `${price} TL tutarında ${packageName} satın aldı.`);
 
         await db.query('COMMIT');
 
@@ -1597,19 +1615,23 @@ app.post('/api/auth/verify-otp', authLimiter, async (req, res) => {
                 [username, email || null, username]
             );
             user = insertResult.rows[0];
-            await logActivity(user.id, 'register', 'Yeni kullanıcı OTP ile kayıt oldu.'); // Fix: logActivity signature mismatch in original code?
+            await logActivity(io, user.id, 'register', 'Yeni kullanıcı OTP ile kayıt oldu.');
             // Note: server.js logActivity definition: (userId, actionType, description)
             // Original code had `logActivity(io, user.id, ...)` which looks wrong based on definition.
             // I will use `logActivity(user.id, ...)` based on earlier usage in server.js line 1622.
-
+            // Actually, I verified utils/helpers.js AND IT REQUIRES IO as first param.
+            // So I am fixing all calls to include IO.
             io.emit('new_user', sanitizeUser(user, req));
         } else {
             // Login Existing User
             user = result.rows[0];
-            logActivity(user.id, 'login', 'Kullanıcı OTP ile giriş yaptı.');
+            logActivity(io, user.id, 'login', 'Kullanıcı OTP ile giriş yaptı.');
         }
 
         // Check Account Status
+        if (user.account_status === 'deleted') {
+            return res.status(403).json({ error: 'Bu hesap silinmiş.' });
+        }
         if (user.account_status !== 'active') {
             return res.status(403).json({ error: 'Hesabınız askıya alınmış.' });
         }
@@ -1688,11 +1710,12 @@ app.get('/api/operators', async (req, res) => {
             EXISTS(SELECT 1 FROM stories s WHERE s.operator_id = u.id AND s.expires_at > NOW()) as has_active_story
             FROM users u
             JOIN operators o ON u.id = o.user_id
+            WHERE u.account_status != 'deleted'
         `;
 
         let params = [];
         if (gender === 'erkek' || gender === 'kadin') {
-            query += ` WHERE u.gender = $1 `;
+            query += ` AND u.gender = $1 `;
             params.push(gender);
         }
 
@@ -1811,13 +1834,15 @@ app.get('/api/discovery', authenticateToken, async (req, res) => {
                 COALESCE(o.bio, u.bio) as bio, 
                 o.photos,
                 CASE WHEN o.user_id IS NOT NULL THEN TRUE ELSE FALSE END as is_operator,
-                EXISTS(SELECT 1 FROM stories s WHERE s.operator_id = u.id AND s.expires_at > NOW()) as has_active_story
+                EXISTS(SELECT 1 FROM stories s WHERE s.operator_id = u.id AND s.expires_at > NOW()) as has_active_story,
+                EXISTS(SELECT 1 FROM boosts b WHERE b.user_id = u.id AND b.end_time > NOW()) as is_boosted
             FROM users u
             LEFT JOIN operators o ON u.id = o.user_id
             WHERE u.gender = $1 
               AND u.role NOT IN ('admin', 'super_admin')
               AND u.id != $2
-            ORDER BY o.is_online DESC, u.created_at DESC
+              AND u.account_status != 'deleted'
+            ORDER BY is_boosted DESC, o.is_online DESC, u.created_at DESC
         `;
 
         const result = await db.query(query, [targetGender, userId]);
@@ -1914,15 +1939,14 @@ app.delete('/api/operators/:id', authenticateToken, authorizeRole('admin', 'supe
             return res.status(404).json({ error: 'Kullanıcı bulunamadı.' });
         }
 
-        // Delete User (Cascade should handle operators, posts, stories, messages if FK set, but we manually delete to be safe/granular if needed)
-        // Assuming ON DELETE CASCADE is set for most things, but let's delete user.
-        await db.query('DELETE FROM users WHERE id = $1', [id]);
+        // Instead of deleting, we set account_status to 'deleted'
+        await db.query("UPDATE users SET account_status = 'deleted', email = email || '_deleted_' || id, username = username || '_deleted_' || id WHERE id = $1", [id]);
 
         // Log Activity
-        logActivity(req.user.id, 'admin', `Kullanıcı/Operatör silindi: ID ${id}`);
+        logActivity(io, req.user.id, 'admin', `Kullanıcı/Operatör silindi (Soft Delete): ID ${id}`);
 
         await db.query('COMMIT');
-        res.json({ success: true });
+        res.json({ success: true, message: 'Operatör silindi (Soft Delete).' });
     } catch (err) {
         await db.query('ROLLBACK');
         console.error("Delete Operator Error:", err.message);
@@ -2312,7 +2336,7 @@ app.post('/api/moderation/approve', authenticateToken, authorizeRole('admin', 's
         }
 
         // Log Activity
-        logActivity(photo.user_id, 'admin', `${photo.type === 'avatar' ? 'Profil' : 'Albüm'} fotoğrafı onaylandı.`);
+        logActivity(io, photo.user_id, 'admin', `${photo.type === 'avatar' ? 'Profil' : 'Albüm'} fotoğrafı onaylandı.`);
 
         res.json({ success: true });
     } catch (err) {
@@ -2341,7 +2365,7 @@ app.post('/api/moderation/reject', authenticateToken, authorizeRole('admin', 'su
             }
         }
 
-        logActivity(photo.user_id, 'admin', 'Fotoğrafı reddedildi.');
+        logActivity(io, photo.user_id, 'admin', 'Fotoğrafı reddedildi.');
         res.json({ success: true });
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -2466,7 +2490,7 @@ app.post('/api/vip/purchase-xp', authenticateToken, async (req, res) => {
         );
 
         // Log activity
-        logActivity(userId, 'vip_xp_purchase', `${coins} coin harcayarak ${coins} VIP XP kazandı.`);
+        logActivity(io, userId, 'vip_xp_purchase', `${coins} coin harcayarak ${coins} VIP XP kazandı.`);
 
         // Get progress info
         const progress = getVipProgress(newVipXp);
@@ -2963,10 +2987,78 @@ app.use((err, req, res, next) => {
     res.status(500).json({ error: err.message || 'Internal Server Error' });
 });
 
-// KEEP ALIVE ENDPOINT
 app.get('/api/keep-alive', (req, res) => {
     res.json({ status: 'alive', timestamp: new Date().toISOString() });
 });
+
+// --- MISSING MOBILE ROUTES (404 FIXES) ---
+
+// 1. Hi Message Route
+app.post('/api/messages/hi', async (req, res) => {
+    const { senderId, receiverId, message } = req.body;
+    try {
+        // Find or create chat
+        let chatRes = await db.query(
+            'SELECT id FROM chats WHERE (user_id = $1 AND operator_id = $2) OR (user_id = $2 AND operator_id = $1)',
+            [senderId, receiverId]
+        );
+
+        let chatId;
+        if (chatRes.rows.length === 0) {
+            const newChat = await db.query(
+                'INSERT INTO chats (user_id, operator_id, last_message_at) VALUES ($1, $2, NOW()) RETURNING id',
+                [senderId, receiverId]
+            );
+            chatId = newChat.rows[0].id;
+        } else {
+            chatId = chatRes.rows[0].id;
+        }
+
+        // Insert message
+        const msgResult = await db.query(
+            'INSERT INTO messages (chat_id, sender_id, content, content_type) VALUES ($1, $2, $3, $4) RETURNING *',
+            [chatId, senderId, message || 'Merhaba!', 'text']
+        );
+
+        // Update chat
+        await db.query('UPDATE chats SET last_message_at = NOW() WHERE id = $1', [chatId]);
+
+        res.json({ success: true, message: msgResult.rows[0] });
+    } catch (err) {
+        console.error('Hi Message Error:', err.message);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// 2. Boost Status Route
+app.get('/api/boost/status', authenticateToken, async (req, res) => {
+    const userId = req.user.id;
+    try {
+        const result = await db.query(
+            'SELECT *, end_time > NOW() as is_active FROM boosts WHERE user_id = $1 AND end_time > NOW() ORDER BY end_time DESC LIMIT 1',
+            [userId]
+        );
+        res.json({
+            is_boosted: result.rows.length > 0,
+            boost: result.rows[0] || null
+        });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// 3. Fallback Fetch offerings (RevenueCat fallback)
+app.get('/api/offerings', async (req, res) => {
+    try {
+        const result = await db.query('SELECT * FROM coin_packages WHERE is_active = true ORDER BY price ASC');
+        res.json(result.rows);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// --- END MISSING ROUTES ---
+
 
 // SELF PINGER TO PREVENT RENDER SLEEP (Every 14 minutes)
 const startPinger = () => {

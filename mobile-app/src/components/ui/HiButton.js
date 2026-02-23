@@ -3,6 +3,8 @@ import { View, Text, StyleSheet, TouchableWithoutFeedback, Alert } from 'react-n
 import ModernAlert from './ModernAlert';
 import { LinearGradient } from 'expo-linear-gradient';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Ionicons } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
 import Animated, {
     useSharedValue,
     useAnimatedStyle,
@@ -10,6 +12,8 @@ import Animated, {
     withTiming,
     withSequence,
     interpolate,
+    withRepeat,
+    Easing,
 } from 'react-native-reanimated';
 
 const BUBBLE_COUNT = 15;
@@ -45,20 +49,38 @@ const Bubble = memo(({ index, triggerValue }) => {
     }, [triggerValue.value]);
 
     return (
-        <Animated.View style={[styles.bubble, animatedStyle]} />
+        <Animated.View style={[styles.bubble, animatedStyle, { backgroundColor: 'transparent', elevation: 0, shadowOpacity: 0 }]}>
+            <Ionicons name="heart" size={12 + (index % 6)} color="#ff5e95" />
+        </Animated.View>
     );
 });
 
-export default function HiButton({ onPress, operatorId, onHiPress }) {
+const HiButton = memo(({ onPress, operatorId, onHiPress }) => {
     const scale = useSharedValue(1);
     const triggerValue = useSharedValue(0);
     const [renderKey, setRenderKey] = useState(0);
     const [isChatMode, setIsChatMode] = useState(false);
     const [alertVisible, setAlertVisible] = useState(false);
 
+    const pulse = useSharedValue(1);
+
     useEffect(() => {
         checkHiStatus();
     }, [operatorId]);
+
+    // Pulsing heartbeat animation setup - Optimized for performance
+    useEffect(() => {
+        pulse.value = withRepeat(
+            withSequence(
+                withTiming(1.03, { duration: 1000, easing: Easing.inOut(Easing.ease) }),
+                withTiming(1, { duration: 1000, easing: Easing.inOut(Easing.ease) }),
+                withTiming(1.03, { duration: 1000, easing: Easing.inOut(Easing.ease) }),
+                withTiming(1, { duration: 2000, easing: Easing.inOut(Easing.ease) })
+            ),
+            -1, // Infinite repeat
+            false
+        );
+    }, []);
 
     const checkHiStatus = async () => {
         try {
@@ -81,7 +103,7 @@ export default function HiButton({ onPress, operatorId, onHiPress }) {
     };
 
     const animatedStyle = useAnimatedStyle(() => ({
-        transform: [{ scale: scale.value }]
+        transform: [{ scale: scale.value * pulse.value }]
     }));
 
     const handlePressIn = () => {
@@ -90,6 +112,9 @@ export default function HiButton({ onPress, operatorId, onHiPress }) {
             // Instant feedback
             triggerValue.value += 1;
             setRenderKey(prev => prev + 1);
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+        } else {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
         }
     };
 
@@ -98,17 +123,13 @@ export default function HiButton({ onPress, operatorId, onHiPress }) {
     };
 
     const handlePress = async () => {
-        // Hızlı tıklamalarda animasyonun görünmesi için zorla çalıştırıyoruz
-        // Önce küçült (0.85), sonra geri büyüt (1.0)
-        scale.value = withSequence(
-            withTiming(0.85, { duration: 100 }),
-            withTiming(1, { duration: 250 })
-        );
-
-        // Animasyonun bitmesi için bekle
-        await new Promise(resolve => setTimeout(resolve, 350));
-
         if (!isChatMode) {
+            // Hi Mode: Trigget animation and save status
+            scale.value = withSequence(
+                withTiming(0.85, { duration: 100 }),
+                withTiming(1, { duration: 250 })
+            );
+
             try {
                 const now = Date.now();
 
@@ -139,10 +160,17 @@ export default function HiButton({ onPress, operatorId, onHiPress }) {
                 console.error('HiButton save error:', e);
             }
         } else {
-            // Second click: Normal navigation
-            if (onPress) {
-                onPress();
-            }
+            // Chat Mode: 250ms delay for animation
+            scale.value = withSequence(
+                withTiming(0.9, { duration: 100 }),
+                withTiming(1, { duration: 150 })
+            );
+
+            setTimeout(() => {
+                if (onPress) {
+                    onPress();
+                }
+            }, 250);
         }
     };
 
@@ -167,20 +195,18 @@ export default function HiButton({ onPress, operatorId, onHiPress }) {
                         {isChatMode ? (
                             <View style={styles.chatButtonContent}>
                                 <LinearGradient
-                                    colors={['#ff8a4c', '#ff5e95']}
+                                    colors={['#FF4D8D', '#FF7A5C']}
                                     start={{ x: 0, y: 0 }}
                                     end={{ x: 1, y: 0 }}
-                                    style={styles.chatModeBorder}
+                                    style={styles.chatModeGradient}
                                 >
-                                    <View style={styles.chatModeInner}>
-                                        <Text style={styles.chatText}>Chat</Text>
-                                    </View>
+                                    <Text style={styles.chatText}>Chat</Text>
+                                    <View style={styles.bubbleTailGradient} />
                                 </LinearGradient>
-                                <View style={styles.bubbleTail} />
                             </View>
                         ) : (
                             <LinearGradient
-                                colors={['#ff8a4c', '#ff5e95']}
+                                colors={['#FF4D8D', '#FF7A5C']}
                                 start={{ x: 0, y: 0 }}
                                 end={{ x: 1, y: 0 }}
                                 style={styles.hiButton}
@@ -202,7 +228,9 @@ export default function HiButton({ onPress, operatorId, onHiPress }) {
             />
         </View>
     );
-}
+});
+
+export default HiButton;
 
 const styles = StyleSheet.create({
     container: {
@@ -244,11 +272,25 @@ const styles = StyleSheet.create({
         paddingVertical: 9,
         borderRadius: 20,
         position: 'relative',
-        shadowColor: "#ff5e95",
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.4,
-        shadowRadius: 10,
-        elevation: 8,
+        shadowColor: "#FF4D8D",
+        shadowOffset: { width: 0, height: 6 },
+        shadowOpacity: 0.35,
+        shadowRadius: 16,
+        elevation: 10,
+        minWidth: 80,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    chatModeGradient: {
+        paddingHorizontal: 28,
+        paddingVertical: 9,
+        borderRadius: 20,
+        position: 'relative',
+        shadowColor: "#FF4D8D",
+        shadowOffset: { width: 0, height: 6 },
+        shadowOpacity: 0.35,
+        shadowRadius: 16,
+        elevation: 10,
         minWidth: 80,
         alignItems: 'center',
         justifyContent: 'center',
@@ -259,18 +301,16 @@ const styles = StyleSheet.create({
     chatButtonContent: {
         position: 'relative',
     },
-    chatModeBorder: {
-        padding: 1.5, // Border width
-        borderRadius: 20,
-        minWidth: 80,
-    },
-    chatModeInner: {
-        backgroundColor: 'rgba(255, 255, 255, 0.85)', // Semi-transparent white
-        paddingHorizontal: 26.5, // 28 - 1.5
-        paddingVertical: 7.5, // 9 - 1.5
-        borderRadius: 18.5,
-        alignItems: 'center',
-        justifyContent: 'center',
+    bubbleTailGradient: {
+        position: 'absolute',
+        bottom: -2,
+        right: 4,
+        width: 11,
+        height: 11,
+        backgroundColor: '#FF7A5C', // Matches the end color of the gradient
+        transform: [{ rotate: '45deg' }],
+        borderBottomRightRadius: 3,
+        zIndex: -1,
     },
     bubbleTail: {
         position: 'absolute',
@@ -278,9 +318,10 @@ const styles = StyleSheet.create({
         right: 4,
         width: 11,
         height: 11,
-        backgroundColor: '#ff5e95',
+        backgroundColor: '#FF7A5C',
         transform: [{ rotate: '45deg' }],
         borderBottomRightRadius: 3,
+        zIndex: -1,
     },
     hiText: {
         color: 'white',
@@ -291,8 +332,11 @@ const styles = StyleSheet.create({
         textShadowRadius: 2,
     },
     chatText: {
-        color: '#ff5e95',
-        fontWeight: '950', // Match Hi text weight
+        color: 'white',
+        fontWeight: '950',
         fontSize: 14,
+        textShadowColor: 'rgba(0, 0, 0, 0.2)',
+        textShadowOffset: { width: 0, height: 1 },
+        textShadowRadius: 2,
     }
 });

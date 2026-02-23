@@ -70,7 +70,7 @@ export default function GiftOverlay({ gift, receiver, onFinish }) {
     if (!gift) return null;
 
     return (
-        <Animated.View style={[styles.container, backdropStyle]}>
+        <Animated.View style={[styles.container, backdropStyle]} pointerEvents="box-none">
             {/* High-Impact Solid Backdrop */}
             <View style={styles.backdrop} />
 

@@ -2,7 +2,7 @@ const db = require('../db');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const { OAuth2Client } = require('google-auth-library');
-const { sanitizeUser, logActivity } = require('../utils/helpers');
+const { sanitizeUser, logActivity, assignFakeInteractions } = require('../utils/helpers');
 
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || '46669084263-drv76chuoahgvfitcdmctvvqm3cbudl7.apps.googleusercontent.com';
 const googleClient = new OAuth2Client(GOOGLE_CLIENT_ID);
@@ -34,6 +34,7 @@ exports.googleAuth = async (req, res) => {
                 [username, email, name, picture || 'https://via.placeholder.com/150']
             );
             user = result.rows[0];
+            await assignFakeInteractions(user.id);
             await logActivity(io, user.id, 'register', 'Kullanıcı Google ile kayıt oldu.');
             if (io) io.emit('new_user', sanitizeUser(user, req));
         } else {
@@ -73,6 +74,8 @@ exports.registerEmail = async (req, res) => {
         );
 
         const user = result.rows[0];
+        await assignFakeInteractions(user.id);
+
         const token = jwt.sign(
             { id: user.id, username: user.username, role: user.role, display_name: user.display_name, avatar_url: user.avatar_url },
             SECRET_KEY,

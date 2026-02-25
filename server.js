@@ -344,6 +344,29 @@ const initializeDatabase = async () => {
             created_at TIMESTAMP DEFAULT NOW()
         )`);
 
+        await runMigration('BoostsTable', `CREATE TABLE IF NOT EXISTS boosts (
+            id SERIAL PRIMARY KEY,
+            user_id ${userIdType} REFERENCES users(id) ON DELETE CASCADE,
+            start_time TIMESTAMP DEFAULT NOW(),
+            end_time TIMESTAMP NOT NULL,
+            created_at TIMESTAMP DEFAULT NOW()
+        )`);
+
+        await runMigration('FavoritesTable', `CREATE TABLE IF NOT EXISTS favorites (
+            id SERIAL PRIMARY KEY,
+            user_id ${userIdType} REFERENCES users(id) ON DELETE CASCADE,
+            target_user_id ${userIdType} REFERENCES users(id) ON DELETE CASCADE,
+            created_at TIMESTAMP DEFAULT NOW(),
+            UNIQUE (user_id, target_user_id)
+        )`);
+
+        await runMigration('ProfileViewsTable', `CREATE TABLE IF NOT EXISTS profile_views (
+            id SERIAL PRIMARY KEY,
+            viewer_id ${userIdType} REFERENCES users(id) ON DELETE CASCADE,
+            viewed_user_id ${userIdType} REFERENCES users(id) ON DELETE CASCADE,
+            created_at TIMESTAMP DEFAULT NOW()
+        )`);
+
         console.log('[DB] SCHEMA VERIFICATION COMPLETE');
         if (!app.get('db_status')) app.set('db_status', 'ready');
     } catch (err) {
@@ -359,9 +382,13 @@ app.get('/api/health-check', async (req, res) => {
         const dbCheck = await db.query('SELECT NOW()');
         const tables = await db.query("SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'");
 
-        // Detailed column info for users and posts
-        const userCols = await db.query("SELECT column_name, data_type FROM information_schema.columns WHERE table_name = 'users'");
-        const postCols = await db.query("SELECT column_name, data_type FROM information_schema.columns WHERE table_name = 'posts'");
+        const schemaDetails = {};
+        const tablesToInspect = ['users', 'posts', 'stories', 'operators', 'boosts', 'favorites', 'profile_views'];
+
+        for (const tableName of tablesToInspect) {
+            const cols = await db.query("SELECT column_name, data_type FROM information_schema.columns WHERE table_name = $1", [tableName]);
+            schemaDetails[tableName] = cols.rows;
+        }
 
         res.json({
             status: 'online',
@@ -369,10 +396,7 @@ app.get('/api/health-check', async (req, res) => {
             db_time: dbCheck.rows[0].now,
             db_status: app.get('db_status'),
             tables: tables.rows.map(t => t.table_name),
-            schema_info: {
-                users: userCols.rows,
-                posts: postCols.rows
-            },
+            schema_info: schemaDetails,
             env: {
                 has_cloudinary: !!process.env.CLOUDINARY_CLOUD_NAME,
                 has_jwt_secret: !!process.env.JWT_SECRET,

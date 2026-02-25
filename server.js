@@ -3096,8 +3096,12 @@ app.get('*', (req, res) => {
 });
 
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, '0.0.0.0', () => {
-    console.log(`🚀 [BACKEND] Server listening on http://0.0.0.0:${PORT}`);
-    console.log(`📡 [BACKEND] Accessible on http://localhost:${PORT}`);
+server.listen(PORT, '0.0.0.0', async () => {
+    console.log(`🚀 [BACKEND] Server listening on port ${PORT}`);
+
+    // Initialize Database Schema and Packages
+    await initializeDatabase();
+    await initializePackages();
+
     startPinger();
 });

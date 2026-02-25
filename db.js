@@ -1,18 +1,15 @@
 const { Pool } = require('pg');
 require('dotenv').config();
 
-const config = process.env.DATABASE_URL
-  ? {
-    connectionString: process.env.DATABASE_URL,
-    ssl: { rejectUnauthorized: false } // Required for Render/Cloud DBs
-  }
-  : {
-    user: process.env.DB_USER || 'postgres',
-    host: process.env.DB_HOST || 'localhost',
-    database: process.env.DB_NAME || 'dating',
-    password: process.env.DB_PASSWORD || '123',
-    port: process.env.DB_PORT || 5432,
-  };
+// STRICT PRODUCTION CONFIG (RENDER ONLY)
+const config = {
+  connectionString: process.env.DATABASE_URL,
+  ssl: { rejectUnauthorized: false } // Required for Render/Cloud DBs
+};
+
+if (!process.env.DATABASE_URL) {
+  console.error('❌ [CRITICAL] DATABASE_URL is missing! Server cannot connect to production DB.');
+}
 
 const pool = new Pool(config);
 

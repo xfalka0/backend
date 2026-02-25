@@ -15,7 +15,7 @@ exports.getExplore = async (req, res) => {
             const storiesRes = await db.query(`
                 SELECT s.*, u.display_name as name, u.avatar_url as avatar, u.vip_level as level,
                 EXISTS(SELECT 1 FROM stories s2 WHERE s2.operator_id = u.id AND s2.expires_at > NOW()) as "hasStory",
-                CASE WHEN $1::TEXT IS NOT NULL AND $1::TEXT <> '' AND EXISTS(SELECT 1 FROM story_likes WHERE story_id = s.id AND user_id = $1::${userIdType}) THEN true ELSE false END as "liked"
+                CASE WHEN $1::TEXT IS NOT NULL AND $1::TEXT <> '' AND EXISTS(SELECT 1 FROM story_likes WHERE story_id = s.id AND user_id = NULLIF($1, '')::${userIdType}) THEN true ELSE false END as "liked"
                 FROM stories s
                 JOIN users u ON s.operator_id = u.id
                 WHERE s.expires_at > NOW()
@@ -41,7 +41,7 @@ exports.getExplore = async (req, res) => {
                     u.gender,
                     (SELECT COUNT(*) FROM post_likes WHERE post_id = p.id) as "likes_count",
                     (SELECT COUNT(*) FROM post_comments WHERE post_id = p.id) as "comments_count",
-                    CASE WHEN $1::TEXT IS NOT NULL AND $1::TEXT <> '' AND EXISTS(SELECT 1 FROM post_likes WHERE post_id = p.id AND user_id = $1::${userIdType}) THEN true ELSE false END as "liked",
+                    CASE WHEN $1::TEXT IS NOT NULL AND $1::TEXT <> '' AND EXISTS(SELECT 1 FROM post_likes WHERE post_id = p.id AND user_id = NULLIF($1, '')::${userIdType}) THEN true ELSE false END as "liked",
                     EXISTS(SELECT 1 FROM stories s WHERE s.operator_id = u.id AND s.expires_at > NOW()) as "hasStory"
                 FROM posts p
                 JOIN users u ON p.operator_id = u.id

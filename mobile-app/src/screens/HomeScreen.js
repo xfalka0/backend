@@ -310,18 +310,37 @@ export default function HomeScreen({ navigation, route }) {
                     <View style={styles.hiButtonContainer}>
                         <HiButton
                             operatorId={item.id}
+                            userBalance={balance}
+                            cost={10}
                             onPress={() => navigation.navigate('Chat', { operatorId: item.id, name: item.name, avatar_url: item.avatar_url, user })}
                             onHiPress={async () => {
                                 try {
                                     // Send automatic "Merhaba" message
-                                    await axios.post(`${API_URL}/messages/send-hi`, {
+                                    const res = await axios.post(`${API_URL}/messages/send-hi`, {
                                         userId: user.id,
                                         operatorId: item.id,
                                         content: 'Merhaba 👋'
                                     });
-                                    console.log(`[HomeScreen] Sent 'Hi' to ${item.name}`);
+
+                                    if (res.data.success) {
+                                        console.log(`[HomeScreen] Sent 'Hi' to ${item.name}`);
+                                        if (res.data.newBalance !== undefined) {
+                                            setBalance(res.data.newBalance);
+                                            // Update stored user object if necessary
+                                            const storedUser = await AsyncStorage.getItem('user');
+                                            if (storedUser) {
+                                                const parsed = JSON.parse(storedUser);
+                                                parsed.balance = res.data.newBalance;
+                                                parsed.hearts = res.data.newBalance;
+                                                await AsyncStorage.setItem('user', JSON.stringify(parsed));
+                                            }
+                                        }
+                                    }
                                 } catch (e) {
                                     console.error('[HomeScreen] Hi message err', e);
+                                    if (e.response?.data?.insufficientFunds) {
+                                        Alert.alert("Bakiye Yetersiz", e.response.data.error);
+                                    }
                                 }
                             }}
                         />

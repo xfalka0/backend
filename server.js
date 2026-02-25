@@ -3023,38 +3023,80 @@ app.get('/api/keep-alive', (req, res) => {
 
 // --- MISSING MOBILE ROUTES (404 FIXES) ---
 
-// 1. Hi Message Route
-app.post('/api/messages/hi', async (req, res) => {
-    const { senderId, receiverId, message } = req.body;
+// 1. Hi Message Route (Optimized with Coin Deduction)
+app.post('/api/messages/send-hi', async (req, res) => {
+    const { userId, senderId, operatorId, receiverId, content, message } = req.body;
+    const finalSenderId = userId || senderId;
+    const finalReceiverId = operatorId || receiverId;
+    const finalContent = content || message || 'Merhaba 👋';
+    const HI_COST = 10;
+
+    if (!finalSenderId || !finalReceiverId) {
+        return res.status(400).json({ error: 'Missing sender or receiver ID' });
+    }
+
     try {
+        await db.query('BEGIN');
+
+        // Check balance
+        const userRes = await db.query('SELECT balance FROM users WHERE id = $1', [finalSenderId]);
+        if (userRes.rows.length === 0) {
+            await db.query('ROLLBACK');
+            return res.status(404).json({ error: 'User not found' });
+        }
+
+        const currentBalance = userRes.rows[0].balance;
+        if (currentBalance < HI_COST) {
+            await db.query('ROLLBACK');
+            return res.status(400).json({ error: 'Yetersiz bakiye. Hi mesajı göndermek için 50 Coin gereklidir.', insufficientFunds: true });
+        }
+
         // Find or create chat
         let chatRes = await db.query(
             'SELECT id FROM chats WHERE (user_id = $1 AND operator_id = $2) OR (user_id = $2 AND operator_id = $1)',
-            [senderId, receiverId]
+            [finalSenderId, finalReceiverId]
         );
 
         let chatId;
         if (chatRes.rows.length === 0) {
             const newChat = await db.query(
                 'INSERT INTO chats (user_id, operator_id, last_message_at) VALUES ($1, $2, NOW()) RETURNING id',
-                [senderId, receiverId]
+                [finalSenderId, finalReceiverId]
             );
             chatId = newChat.rows[0].id;
         } else {
             chatId = chatRes.rows[0].id;
         }
 
+        // Deduct coins
+        await db.query('UPDATE users SET balance = balance - $1 WHERE id = $2', [HI_COST, finalSenderId]);
+
+        // Record transaction
+        await db.query(
+            'INSERT INTO transactions (user_id, amount, type, description) VALUES ($1, $2, $3, $4)',
+            [finalSenderId, -HI_COST, 'spend_hi', 'Hi Mesajı']
+        );
+
         // Insert message
         const msgResult = await db.query(
             'INSERT INTO messages (chat_id, sender_id, content, content_type) VALUES ($1, $2, $3, $4) RETURNING *',
-            [chatId, senderId, message || 'Merhaba!', 'text']
+            [chatId, finalSenderId, finalContent, 'text']
         );
 
         // Update chat
         await db.query('UPDATE chats SET last_message_at = NOW() WHERE id = $1', [chatId]);
 
-        res.json({ success: true, message: msgResult.rows[0] });
+        await db.query('COMMIT');
+
+        res.json({
+            success: true,
+            message: 'Hi sent!',
+            chatId,
+            newBalance: currentBalance - HI_COST,
+            sentMessage: msgResult.rows[0]
+        });
     } catch (err) {
+        await db.query('ROLLBACK');
         console.error('Hi Message Error:', err.message);
         res.status(500).json({ error: err.message });
     }

@@ -55,12 +55,13 @@ const Bubble = memo(({ index, triggerValue }) => {
     );
 });
 
-const HiButton = memo(({ onPress, operatorId, onHiPress }) => {
+const HiButton = memo(({ onPress, operatorId, onHiPress, userBalance = 0, cost = 10 }) => {
     const scale = useSharedValue(1);
     const triggerValue = useSharedValue(0);
     const [renderKey, setRenderKey] = useState(0);
     const [isChatMode, setIsChatMode] = useState(false);
     const [alertVisible, setAlertVisible] = useState(false);
+    const [insufficientFundsAlert, setInsufficientFundsAlert] = useState(false);
 
     const pulse = useSharedValue(1);
 
@@ -109,7 +110,8 @@ const HiButton = memo(({ onPress, operatorId, onHiPress }) => {
     const handlePressIn = () => {
         scale.value = withSpring(0.85);
         if (!isChatMode) {
-            // Instant feedback
+            // Check funds first for animation trigger too? 
+            // Let's allow animation but prevent the action in handlePress
             triggerValue.value += 1;
             setRenderKey(prev => prev + 1);
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
@@ -124,6 +126,13 @@ const HiButton = memo(({ onPress, operatorId, onHiPress }) => {
 
     const handlePress = async () => {
         if (!isChatMode) {
+            // --- COIN CHECK ---
+            if (userBalance < cost) {
+                setInsufficientFundsAlert(true);
+                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+                return;
+            }
+
             // Hi Mode: Trigget animation and save status
             scale.value = withSequence(
                 withTiming(0.85, { duration: 100 }),
@@ -225,6 +234,14 @@ const HiButton = memo(({ onPress, operatorId, onHiPress }) => {
                 message="Günde en fazla 10 kişiye 'Hi' diyebilirsin. Yarın tekrar dene!"
                 type="warning"
                 onClose={() => setAlertVisible(false)}
+            />
+
+            <ModernAlert
+                visible={insufficientFundsAlert}
+                title="Bakiye Yetersiz"
+                message={`'Hi' mesajı göndermek için ${cost} Coin gereklidir. Mağazadan coin alabilirsin.`}
+                type="error"
+                onClose={() => setInsufficientFundsAlert(false)}
             />
         </View>
     );

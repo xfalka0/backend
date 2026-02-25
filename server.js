@@ -1855,8 +1855,14 @@ app.get('/api/discovery', authenticateToken, async (req, res) => {
 
         res.json(rows);
     } catch (err) {
-        console.error("Discovery Error:", err.message);
-        res.status(500).json({ error: err.message });
+        console.error("❌ [DISCOVERY ERROR]:", err);
+        res.status(500).json({
+            error: "Discovery failed",
+            message: err.message,
+            detail: err.detail,
+            hint: err.hint,
+            code: err.code
+        });
     }
 });
 

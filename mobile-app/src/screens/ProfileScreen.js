@@ -30,6 +30,7 @@ import PremiumBackground from '../components/animated/PremiumBackground';
 import VipFrame from '../components/ui/VipFrame';
 import ModernAlert from '../components/ui/ModernAlert';
 import GlassCard from '../components/ui/GlassCard';
+import BoostPromoCard from '../components/home/BoostPromoCard';
 
 const RELATIONSHIP_OPTIONS = ['Ciddi', 'Flörtöz', 'Sohbet', 'Arkadaşlık', 'Evlilik Düşünen'];
 const EDU_OPTIONS = ['Lise', 'Üniversite', 'Yüksek Lisans', 'Doktora', 'Öğrenci'];
@@ -67,6 +68,11 @@ export default function ProfileScreen({ route, navigation }) {
 
     const scrollY = useSharedValue(0);
     const floatAnim = useSharedValue(0);
+    const boostScale = useSharedValue(1);
+    const walletCoinScale = useSharedValue(1);
+    const walletCoinRotate = useSharedValue(0);
+    const topUpScale = useSharedValue(1);
+    const vipBtnScale = useSharedValue(1);
 
     useEffect(() => {
         floatAnim.value = withRepeat(
@@ -77,7 +83,30 @@ export default function ProfileScreen({ route, navigation }) {
             -1,
             true
         );
+
+        walletCoinScale.value = withRepeat(
+            withTiming(1.1, { duration: 2000, easing: Easing.inOut(Easing.ease) }),
+            -1,
+            true
+        );
+
+        walletCoinRotate.value = withRepeat(
+            withTiming(10, { duration: 3000, easing: Easing.inOut(Easing.ease) }),
+            -1,
+            true
+        );
     }, []);
+
+    const floatingStyle = useAnimatedStyle(() => ({
+        transform: [{ translateY: floatAnim.value }],
+    }));
+
+    const coinAnimatedStyle = useAnimatedStyle(() => ({
+        transform: [
+            { scale: walletCoinScale.value },
+            { rotateY: `${walletCoinRotate.value}deg` }
+        ],
+    }));
 
     const scrollHandler = useAnimatedScrollHandler((event) => {
         scrollY.value = event.contentOffset.y;
@@ -110,10 +139,6 @@ export default function ProfileScreen({ route, navigation }) {
             transform: [{ scale }, { translateY }]
         };
     });
-
-    const floatingStyle = useAnimatedStyle(() => ({
-        transform: [{ translateY: floatAnim.value }]
-    }));
 
     const parseInterests = (data) => {
         if (!data) return ['Spor', 'Müzik'];
@@ -522,75 +547,87 @@ export default function ProfileScreen({ route, navigation }) {
                         </View>
                     ) : (
                         <View style={styles.sectionContainer}>
-                            <TouchableOpacity activeOpacity={0.9} onPress={() => setShowBoostModal(true)}>
-                                <LinearGradient
-                                    colors={['#ec4899', '#8b5cf6']}
-                                    start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
-                                    style={styles.boostPromoContainer}
-                                >
-                                    <View style={styles.boostPromoIcon}>
-                                        <Ionicons name="rocket" size={28} color="white" />
-                                    </View>
-                                    <View style={styles.boostPromoTextWrapper}>
-                                        <Text style={styles.boostPromoTitle}>Profilini Öne Çıkar!</Text>
-                                        <Text style={styles.boostPromoDesc}>30 dakika boyunca keşfette en üstte yer alarak daha fazla etkileşim kazan.</Text>
-                                    </View>
-                                </LinearGradient>
-                            </TouchableOpacity>
+                            <BoostPromoCard onPress={() => setShowBoostModal(true)} />
                         </View>
                     )}
 
                     {/* Wallet Section */}
                     <View style={styles.sectionContainer}>
-                        <LinearGradient
-                            colors={getWalletBg()}
-                            style={[styles.premiumInfoCard, { padding: 24, borderRadius: 30 }]}
-                        >
-                            <View style={styles.walletHeader}>
-                                <View style={styles.walletLabel}>
-                                    <Ionicons name="wallet-outline" size={16} color="#fbbf24" />
-                                    <Text style={styles.walletLabelText}>CÜZDAN</Text>
+                        <GlassCard intensity={80} tint="dark" noBorder style={{ padding: 0, borderRadius: 30, overflow: 'hidden' }}>
+                            <LinearGradient
+                                colors={themeMode === 'dark' ? ['rgba(30,41,59,0.5)', 'rgba(15,23,42,0.5)'] : ['rgba(255,255,255,0.9)', 'rgba(241,245,249,0.9)']}
+                                style={{ padding: 16 }}
+                            >
+                                <View style={styles.walletHeader}>
+                                    <View style={styles.walletLabel}>
+                                        <View style={{ backgroundColor: 'rgba(251,191,36,0.15)', padding: 6, borderRadius: 10, marginRight: 8 }}>
+                                            <Ionicons name="wallet" size={18} color="#fbbf24" />
+                                        </View>
+                                        <Text style={[styles.walletLabelText, { color: theme.colors.text, fontSize: 10, letterSpacing: 1.2 }]}>CÜZDAN</Text>
+                                    </View>
+                                    <View style={[styles.statusBadge, { backgroundColor: 'rgba(255,255,255,0.05)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' }]}>
+                                        <View style={[styles.statusDot, { backgroundColor: vipLevel > 0 ? '#10b981' : '#64748b', shadowColor: vipLevel > 0 ? '#10b981' : '#64748b', shadowOpacity: 1, shadowRadius: 4, elevation: 5 }]} />
+                                        <Text style={[styles.statusText, { color: theme.colors.textSecondary, fontWeight: '700' }]}>{vipLevel > 0 ? 'PREMIUM' : 'STANDART'}</Text>
+                                    </View>
                                 </View>
-                                <View style={styles.statusBadge}>
-                                    <View style={[styles.statusDot, { backgroundColor: vipLevel > 0 ? '#10b981' : '#64748b' }]} />
-                                    <Text style={[styles.statusText, { color: theme.colors.textSecondary }]}>{vipLevel > 0 ? 'PREMIUM' : 'STANDART'}</Text>
+
+                                <View style={styles.walletBalanceRow}>
+                                    <View>
+                                        <Text style={[styles.balanceNum, { color: theme.colors.text, fontSize: 32, fontWeight: '900', marginBottom: -2 }]}>{balance}</Text>
+                                        <Text style={[styles.balanceLabel, { color: theme.colors.textSecondary, fontSize: 12, fontWeight: '600' }]}>Kullanılabilir Coin</Text>
+                                    </View>
+                                    <Animated.View style={coinAnimatedStyle}>
+                                        <Image source={require('../../assets/gold_coin_3f.png')} style={[styles.coinImgLarge, { width: 60, height: 60 }]} resizeMode="contain" />
+                                    </Animated.View>
                                 </View>
-                            </View>
 
-                            <View style={styles.walletBalanceRow}>
-                                <View>
-                                    <Text style={[styles.balanceNum, { color: theme.colors.text }]}>{balance}</Text>
-                                    <Text style={[styles.balanceLabel, { color: theme.colors.textSecondary }]}>Kullanılabilir Coin</Text>
+                                <View style={[styles.walletActions, { gap: 8, marginTop: 12 }]}>
+                                    <Animated.View style={{ flex: 1, transform: [{ scale: topUpScale }] }}>
+                                        <TouchableOpacity
+                                            activeOpacity={1}
+                                            onPressIn={() => topUpScale.value = withSpring(0.95)}
+                                            onPressOut={() => topUpScale.value = withSpring(1)}
+                                            style={{ borderRadius: 14, overflow: 'hidden' }}
+                                            onPress={() => {
+                                                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                                                navigation.navigate('Shop', { initialTab: 'coins', user: { ...user, balance } });
+                                            }}
+                                        >
+                                            <LinearGradient
+                                                colors={['#fbbf24', '#f59e0b', '#d97706']}
+                                                start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+                                                style={[styles.btnGradient, { paddingVertical: 12, borderRadius: 14, shadowColor: '#fbbf24', shadowOpacity: 0.2, shadowRadius: 6, elevation: 5 }]}
+                                            >
+                                                <Ionicons name="add-circle" size={16} color="white" style={{ marginRight: 4 }} />
+                                                <Text style={[styles.btnText, { fontSize: 14, fontWeight: '900' }]}>Yükle</Text>
+                                            </LinearGradient>
+                                        </TouchableOpacity>
+                                    </Animated.View>
+
+                                    <Animated.View style={{ flex: 1.2, transform: [{ scale: vipBtnScale }] }}>
+                                        <TouchableOpacity
+                                            activeOpacity={1}
+                                            onPressIn={() => vipBtnScale.value = withSpring(0.95)}
+                                            onPressOut={() => vipBtnScale.value = withSpring(1)}
+                                            style={{ borderRadius: 14, overflow: 'hidden' }}
+                                            onPress={() => {
+                                                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                                                navigation.navigate('Vip', { userVip: vipLevel, user: { ...user, ...info, balance, vip_level: vipLevel, profile_image: profileAvatar } });
+                                            }}
+                                        >
+                                            <LinearGradient
+                                                colors={['#8b5cf6', '#7c3aed', '#6d28d9']}
+                                                start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+                                                style={[styles.btnGradient, { paddingVertical: 12, borderRadius: 14, shadowColor: '#8b5cf6', shadowOpacity: 0.2, shadowRadius: 6, elevation: 5 }]}
+                                            >
+                                                <Ionicons name="ribbon" size={16} color="white" style={{ marginRight: 4 }} />
+                                                <Text style={[styles.btnText, { fontSize: 14, fontWeight: '900' }]}>VIP AL</Text>
+                                            </LinearGradient>
+                                        </TouchableOpacity>
+                                    </Animated.View>
                                 </View>
-                                <Image source={require('../../assets/gold_coin_3f.png')} style={styles.coinImgLarge} resizeMode="contain" />
-                            </View>
-
-                            <View style={styles.walletActions}>
-                                <TouchableOpacity
-                                    style={styles.actionBtn}
-                                    onPress={() => {
-                                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                                        navigation.navigate('Shop', { initialTab: 'coins', user: { ...user, balance } });
-                                    }}
-                                >
-                                    <LinearGradient colors={['#fbbf24', '#f59e0b']} style={styles.btnGradient}>
-                                        <Text style={styles.btnText}>Yükle</Text>
-                                    </LinearGradient>
-                                </TouchableOpacity>
-
-                                <TouchableOpacity
-                                    style={styles.actionBtn}
-                                    onPress={() => {
-                                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                                        navigation.navigate('Vip', { userVip: vipLevel, user: { ...user, ...info, balance, vip_level: vipLevel, profile_image: profileAvatar } });
-                                    }}
-                                >
-                                    <LinearGradient colors={['#8b5cf6', '#7c3aed']} style={styles.btnGradient}>
-                                        <Text style={styles.btnText}>VIP Al</Text>
-                                    </LinearGradient>
-                                </TouchableOpacity>
-                            </View>
-                        </LinearGradient>
+                            </LinearGradient>
+                        </GlassCard>
                     </View>
 
                     {/* Bio Section */}
@@ -812,38 +849,63 @@ export default function ProfileScreen({ route, navigation }) {
                         <GlassCard intensity={80} tint="dark" noBorder style={styles.modernModalContent}>
                             <View style={styles.modalHeaderIndicator} />
 
-                            <View style={{ alignItems: 'center', marginBottom: 20 }}>
-                                <LinearGradient
-                                    colors={['rgba(236,72,153,0.2)', 'rgba(139,92,246,0.2)']}
-                                    style={{ width: 80, height: 80, borderRadius: 40, alignItems: 'center', justifyContent: 'center', marginBottom: 16 }}
-                                >
-                                    <Ionicons name="rocket" size={40} color="#ec4899" />
-                                </LinearGradient>
-                                <Text style={[styles.modalTitle, { color: theme.colors.text }]}>Öne Çık!</Text>
-                                <Text style={[styles.modalSubtitle, { color: theme.colors.textSecondary }]}>
-                                    30 dakika boyunca daha fazla kişinin seni görmesini sağla.
+                            <View style={{ alignItems: 'center', marginBottom: 25 }}>
+                                <View style={{ height: 140, justifyContent: 'center', alignItems: 'center' }}>
+                                    {/* Sub-glow behind rocket */}
+                                    <View style={{ position: 'absolute', width: 120, height: 120, borderRadius: 60, backgroundColor: 'rgba(236,72,153,0.3)', filter: 'blur(30px)', zIndex: -1 }} />
+
+                                    <Animated.View style={floatingStyle}>
+                                        <LinearGradient
+                                            colors={['#ec4899', '#8b5cf6', '#6366f1']}
+                                            style={{ width: 110, height: 110, borderRadius: 55, alignItems: 'center', justifyContent: 'center', shadowColor: '#ec4899', shadowOffset: { width: 0, height: 12 }, shadowOpacity: 0.6, shadowRadius: 25, elevation: 18, borderWidth: 2, borderColor: 'rgba(255,255,255,0.3)' }}
+                                        >
+                                            <Ionicons name="rocket" size={56} color="white" />
+                                        </LinearGradient>
+                                    </Animated.View>
+                                </View>
+
+                                <Text style={[styles.modalTitle, { color: theme.colors.text, fontSize: 28, fontWeight: '900', letterSpacing: -0.5 }]}>Öne Çık!</Text>
+                                <Text style={[styles.modalSubtitle, { color: theme.colors.textSecondary, textAlign: 'center', paddingHorizontal: 20, fontSize: 14, lineHeight: 20 }]}>
+                                    Profilini keşfette en üst sıraya taşıyarak etkileşimini **10 kat** artırabilirsin.
                                 </Text>
                             </View>
 
-                            <View style={{ backgroundColor: 'rgba(0,0,0,0.3)', borderRadius: 16, padding: 16, marginBottom: 24, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                                <Text style={{ color: theme.colors.text, fontSize: 16, fontWeight: '700' }}>Tutar</Text>
-                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                                    <Text style={{ color: '#fbbf24', fontSize: 20, fontWeight: '900' }}>100</Text>
-                                    <Image source={require('../../assets/gold_coin_3f.png')} style={{ width: 20, height: 20 }} />
+                            <GlassCard intensity={30} tint="dark" style={{ marginBottom: 25, padding: 20, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderRadius: 24, borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' }}>
+                                <View>
+                                    <Text style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12, fontWeight: '800', textTransform: 'uppercase', marginBottom: 4 }}>İşlem Tutarı</Text>
+                                    <Text style={{ color: theme.colors.text, fontSize: 18, fontWeight: '900' }}>30 Dakika Boost</Text>
                                 </View>
-                            </View>
+                                <View style={{ alignItems: 'flex-end' }}>
+                                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: 'rgba(251,191,36,0.15)', paddingHorizontal: 15, paddingVertical: 8, borderRadius: 20 }}>
+                                        <Text style={{ color: '#fbbf24', fontSize: 24, fontWeight: '900' }}>100</Text>
+                                        <Image source={require('../../assets/gold_coin_3f.png')} style={{ width: 22, height: 22 }} />
+                                    </View>
+                                </View>
+                            </GlassCard>
 
                             <TouchableOpacity
-                                style={{ borderRadius: 16, overflow: 'hidden', marginBottom: 12 }}
+                                activeOpacity={0.8}
+                                style={{ borderRadius: 20, overflow: 'hidden', marginBottom: 15, elevation: 10, shadowColor: '#ec4899', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.4, shadowRadius: 15 }}
                                 onPress={handleActivateBoost}
                             >
-                                <LinearGradient colors={['#ec4899', '#8b5cf6']} style={{ paddingVertical: 18, alignItems: 'center' }}>
-                                    <Text style={{ color: 'white', fontSize: 16, fontWeight: '800' }}>{balance >= 100 ? 'Onayla ve Öne Çık' : 'Yetersiz Bakiye - Yükle'}</Text>
+                                <LinearGradient
+                                    colors={['#ec4899', '#8b5cf6', '#6366f1']}
+                                    start={{ x: 0, y: 0 }}
+                                    end={{ x: 1, y: 0 }}
+                                    style={{ paddingVertical: 20, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 10 }}
+                                >
+                                    <Ionicons name={balance >= 100 ? "flash" : "cart"} size={22} color="white" />
+                                    <Text style={{ color: 'white', fontSize: 18, fontWeight: '900' }}>
+                                        {balance >= 100 ? 'HEMEN AKTİV ET' : 'COİN YÜKLE'}
+                                    </Text>
                                 </LinearGradient>
                             </TouchableOpacity>
 
-                            <TouchableOpacity style={styles.modalCancelBtn} onPress={() => setShowBoostModal(false)}>
-                                <Text style={[styles.modalCancelText, { color: theme.colors.textSecondary }]}>Vazgeç</Text>
+                            <TouchableOpacity
+                                style={{ paddingVertical: 10, alignItems: 'center' }}
+                                onPress={() => setShowBoostModal(false)}
+                            >
+                                <Text style={{ color: theme.colors.textSecondary, fontSize: 14, fontWeight: '700' }}>Belki Daha Sonra</Text>
                             </TouchableOpacity>
                         </GlassCard>
                     </View>

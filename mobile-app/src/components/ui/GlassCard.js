@@ -15,7 +15,7 @@ export default function GlassCard({ children, style, intensity = 20, tint = "def
     const radius = flatStyle.borderRadius !== undefined ? flatStyle.borderRadius : 24;
 
     return (
-        <View style={style} {...props}>
+        <View style={[{ backgroundColor: 'transparent', overflow: 'hidden' }, style]} {...props}>
             {/* Absolute Background Layer */}
             <View pointerEvents="none" style={[StyleSheet.absoluteFill, { borderRadius: radius, overflow: 'hidden', borderWidth: noBorder ? 0 : 1, borderColor: theme.colors.glassBorder }]}>
                 <BlurView intensity={intensity} tint={resolvedTint} style={StyleSheet.absoluteFill} />

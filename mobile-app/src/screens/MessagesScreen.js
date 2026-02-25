@@ -124,9 +124,10 @@ export default function MessagesScreen({ navigation, route }) {
                     <GlassCard
                         intensity={hasUnread ? 40 : 20}
                         tint={themeMode === 'dark' ? 'dark' : 'light'}
+                        noBorder={!hasUnread}
                         style={[
                             styles.chatItem,
-                            hasUnread && { borderColor: 'rgba(236, 72, 153, 0.5)', borderWidth: 1 }
+                            hasUnread && { borderColor: 'rgba(236, 72, 153, 0.5)', borderWidth: 1.5 }
                         ]}
                     >
                         <View style={styles.avatarContainer}>
@@ -316,12 +317,14 @@ const styles = StyleSheet.create({
         paddingVertical: 18,
         paddingHorizontal: 16,
         borderRadius: 24,
+        backgroundColor: 'transparent',
+        overflow: 'hidden',
         // Premium Shadow
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 6 },
-        shadowOpacity: 0.25,
-        shadowRadius: 20,
-        elevation: 6,
+        shadowOpacity: 0.2, // slightly reduced
+        shadowRadius: 15,
+        elevation: 0, // Removed elevation to fix rectangular artifact in Android
     },
     avatarContainer: {
         position: 'relative',

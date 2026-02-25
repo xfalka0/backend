@@ -107,8 +107,98 @@ const assignFakeInteractions = async (newUserId) => {
     }
 };
 
+// Auto-Engagement: Send messages from operators to new users over time
+const triggerAutoEngagement = async (io, newUserId) => {
+    try {
+        console.log(`[AUTO-ENGAGEMENT] Triggered for user: ${newUserId}`);
+
+        // 1. Find 3 random operators
+        const opsRes = await db.query(
+            "SELECT u.id, u.username FROM users u JOIN operators o ON u.id = o.user_id WHERE u.account_status = 'active' ORDER BY RANDOM() LIMIT 3"
+        );
+
+        if (opsRes.rows.length === 0) {
+            console.log("[AUTO-ENGAGEMENT] No operators found to send messages.");
+            return;
+        }
+
+        const operators = opsRes.rows;
+        const messages = [
+            "Selam, yeni misin buralarda? 😊",
+            "Merhaba, profilin çok hoşuma gitti, tanışabilir miyiz?",
+            "Hey! Sesin olsa nasıl olurdu merak ettim, burası çok eğlenceli!",
+            "Günün nasıl geçiyor? Seninle sohbet etmek isterim.",
+            "Selamlar! Profilini gördüm ve kayıtsız kalamadım ✨",
+            "Hoş geldin! Aradığın birisi var mı yoksa sadece takılıyor musun? :)"
+        ];
+
+        // Schedule 3 messages
+        const schedule = [
+            { delay: 90 * 1000, op: operators[0], msg: messages[Math.floor(Math.random() * 2)] }, // ~1.5m
+            { delay: 270 * 1000, op: operators[1] || operators[0], msg: messages[Math.floor(Math.random() * 2) + 2] }, // ~4.5m
+            { delay: 480 * 1000, op: operators[2] || operators[0], msg: messages[Math.floor(Math.random() * 2) + 4] } // ~8m
+        ];
+
+        schedule.forEach(item => {
+            setTimeout(async () => {
+                try {
+                    // Check if chat exists or create it
+                    let chatRes = await db.query(
+                        'SELECT id FROM chats WHERE (user_id = $1 AND operator_id = $2) OR (user_id = $2 AND operator_id = $1)',
+                        [newUserId, item.op.id]
+                    );
+
+                    let chatId;
+                    if (chatRes.rows.length === 0) {
+                        const newChat = await db.query(
+                            'INSERT INTO chats (user_id, operator_id, last_message, last_message_at) VALUES ($1, $2, $3, NOW()) RETURNING id',
+                            [newUserId, item.op.id, item.msg]
+                        );
+                        chatId = newChat.rows[0].id;
+                    } else {
+                        chatId = chatRes.rows[0].id;
+                    }
+
+                    // Insert message
+                    const msgResult = await db.query(
+                        'INSERT INTO messages (chat_id, sender_id, content, content_type) VALUES ($1, $2, $3, $4) RETURNING *',
+                        [chatId, item.op.id, item.msg, 'text']
+                    );
+                    const savedMsg = msgResult.rows[0];
+
+                    // Update last message in chat
+                    await db.query('UPDATE chats SET last_message = $1, last_message_at = NOW() WHERE id = $2', [item.msg, chatId]);
+
+                    // Emit to user via socket
+                    if (io) {
+                        const roomName = chatId.toString();
+                        const msgToEmit = {
+                            ...savedMsg,
+                            chat_id: roomName,
+                            sender_username: item.op.username
+                        };
+
+                        console.log(`[AUTO-MESSAGE] Sending to ${newUserId} from ${item.op.username}`);
+                        // Emit to the specific chat room
+                        io.to(roomName).emit('receive_message', msgToEmit);
+                        // Emit to global admin feed
+                        io.emit('admin_notification', msgToEmit);
+                    }
+
+                } catch (err) {
+                    console.error("[AUTO-ENGAGEMENT ERROR] Failed to send scheduled message:", err.message);
+                }
+            }, item.delay);
+        });
+
+    } catch (err) {
+        console.error("[AUTO-ENGAGEMENT ERROR]:", err.message);
+    }
+};
+
 module.exports = {
     sanitizeUser,
     logActivity,
-    assignFakeInteractions
+    assignFakeInteractions,
+    triggerAutoEngagement
 };

@@ -152,6 +152,7 @@ export default function ChatScreen({ route, navigation }) {
                 shadowOpacity: 0,
             },
             headerTintColor: theme.colors.text,
+            headerBackVisible: false,
         });
     }, [navigation, showOptions, name, is_online, avatar_url, operatorId, user, vip_level]);
 
@@ -842,7 +843,7 @@ const styles = StyleSheet.create({
         ...StyleSheet.absoluteFillObject,
     },
     messagesList: {
-        paddingHorizontal: 16,
+        paddingHorizontal: 8,
         paddingTop: 10,
         paddingBottom: 90,
     },

@@ -168,7 +168,7 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'flex-end',
         marginVertical: 4,
-        paddingHorizontal: 8,
+        paddingHorizontal: 4,
     },
     containerMine: {
         justifyContent: 'flex-end',
@@ -177,7 +177,7 @@ const styles = StyleSheet.create({
         justifyContent: 'flex-start',
     },
     bubbleWrapper: {
-        maxWidth: '70%',
+        maxWidth: '80%',
     },
     bubble: {
         paddingHorizontal: 14,

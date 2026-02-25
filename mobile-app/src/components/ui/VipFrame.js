@@ -208,7 +208,6 @@ const VipFrame = memo(({ level = 0, avatar, size = 80, isStatic = false }) => {
                     shadowOffset: { width: 0, height: 0 },
                     shadowOpacity: 0.8,
                     shadowRadius: 20,
-                    elevation: 10,
                     backgroundColor: 'transparent',
                     zIndex: 1,
                 }} />
@@ -244,8 +243,6 @@ const VipFrame = memo(({ level = 0, avatar, size = 80, isStatic = false }) => {
                         width: frameSize,
                         height: frameSize,
                         zIndex: 4,
-                        elevation: 6,
-                        marginTop: frameOffset.top,
                         marginLeft: frameOffset.left,
                     }}
                     resizeMode="contain"

@@ -331,19 +331,19 @@ export default function ProfileScreen({ route, navigation }) {
     };
 
     const handleActivateBoost = async () => {
-        if (balance < 100) {
+        if (balance < 1000) {
             setShowBoostModal(false);
-            setAlert({ visible: true, title: 'Yetersiz Bakiye', message: 'Öne çıkmak için en az 100 Coin gereklidir.', type: 'error' });
+            setAlert({ visible: true, title: 'Yetersiz Bakiye', message: 'Öne çıkmak için en az 1000 Coin gereklidir.', type: 'error' });
             return;
         }
 
         try {
-            const res = await axios.post(`${API_URL}/boosts/${user.id}`, { durationMinutes: 30, cost: 100 });
+            const res = await axios.post(`${API_URL}/boosts/${user.id}`, { durationMinutes: 1440, cost: 1000 });
             setBalance(res.data.newBalance);
             setIsBoosted(true);
             setBoostEndTime(res.data.endTime);
             setShowBoostModal(false);
-            setAlert({ visible: true, title: 'Başarı', message: 'Profiliniz 30 dakika boyunca öne çıkarıldı!', type: 'success' });
+            setAlert({ visible: true, title: 'Başarı', message: 'Profiliniz 24 saat boyunca öne çıkarıldı!', type: 'success' });
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         } catch (err) {
             console.error('Boost error:', err);
@@ -683,7 +683,7 @@ export default function ProfileScreen({ route, navigation }) {
                                         <Ionicons name={item.icon} size={18} color={theme.colors.primary} />
                                     </View>
                                     <View style={{ flex: 1 }}>
-                                        <Text style={styles.gridLabel}>{item.label}</Text>
+                                        <Text style={[styles.gridLabel, { color: theme.colors.textSecondary }]}>{item.label}</Text>
                                         {isEditingInfo ? (
                                             <TouchableOpacity
                                                 style={[styles.gridValueInputContainer, { borderBottomColor: theme.colors.border }]}
@@ -756,7 +756,7 @@ export default function ProfileScreen({ route, navigation }) {
                                 </View>
                                 <View style={styles.socialTextContainer}>
                                     <Text style={[styles.socialTitle, { color: theme.colors.text }]}>Favorilerim</Text>
-                                    <Text style={styles.socialDesc}>Senin beğendiğin kişiler</Text>
+                                    <Text style={[styles.socialDesc, { color: theme.colors.textSecondary }]}>Senin beğendiğin kişiler</Text>
                                 </View>
                                 <Ionicons name="chevron-forward" size={20} color={theme.colors.border} />
                             </TouchableOpacity>
@@ -773,7 +773,7 @@ export default function ProfileScreen({ route, navigation }) {
                                 </View>
                                 <View style={styles.socialTextContainer}>
                                     <Text style={[styles.socialTitle, { color: theme.colors.text }]}>Gizli Hayranlar</Text>
-                                    <Text style={styles.socialDesc}>Seni favorilere ekleyenler</Text>
+                                    <Text style={[styles.socialDesc, { color: theme.colors.textSecondary }]}>Seni favorilere ekleyenler</Text>
                                 </View>
                                 <Ionicons name="chevron-forward" size={20} color={theme.colors.border} />
                             </TouchableOpacity>
@@ -790,7 +790,7 @@ export default function ProfileScreen({ route, navigation }) {
                                 </View>
                                 <View style={styles.socialTextContainer}>
                                     <Text style={[styles.socialTitle, { color: theme.colors.text }]}>Profil Ziyaretçileri</Text>
-                                    <Text style={styles.socialDesc}>Profiline kimler baktı?</Text>
+                                    <Text style={[styles.socialDesc, { color: theme.colors.textSecondary }]}>Profiline kimler baktı?</Text>
                                 </View>
                                 <Ionicons name="chevron-forward" size={20} color={theme.colors.border} />
                             </TouchableOpacity>
@@ -873,11 +873,11 @@ export default function ProfileScreen({ route, navigation }) {
                             <GlassCard intensity={30} tint="dark" style={{ marginBottom: 25, padding: 20, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderRadius: 24, borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' }}>
                                 <View>
                                     <Text style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12, fontWeight: '800', textTransform: 'uppercase', marginBottom: 4 }}>İşlem Tutarı</Text>
-                                    <Text style={{ color: theme.colors.text, fontSize: 18, fontWeight: '900' }}>30 Dakika Boost</Text>
+                                    <Text style={{ color: theme.colors.text, fontSize: 18, fontWeight: '900' }}>24 Saat Boost</Text>
                                 </View>
                                 <View style={{ alignItems: 'flex-end' }}>
                                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: 'rgba(251,191,36,0.15)', paddingHorizontal: 15, paddingVertical: 8, borderRadius: 20 }}>
-                                        <Text style={{ color: '#fbbf24', fontSize: 24, fontWeight: '900' }}>100</Text>
+                                        <Text style={{ color: '#fbbf24', fontSize: 24, fontWeight: '900' }}>1000</Text>
                                         <Image source={require('../../assets/gold_coin_3f.png')} style={{ width: 22, height: 22 }} />
                                     </View>
                                 </View>
@@ -894,9 +894,9 @@ export default function ProfileScreen({ route, navigation }) {
                                     end={{ x: 1, y: 0 }}
                                     style={{ paddingVertical: 20, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 10 }}
                                 >
-                                    <Ionicons name={balance >= 100 ? "flash" : "cart"} size={22} color="white" />
+                                    <Ionicons name={balance >= 1000 ? "flash" : "cart"} size={22} color="white" />
                                     <Text style={{ color: 'white', fontSize: 18, fontWeight: '900' }}>
-                                        {balance >= 100 ? 'HEMEN AKTİV ET' : 'COİN YÜKLE'}
+                                        {balance >= 1000 ? 'HEMEN AKTİV ET' : 'COİN YÜKLE'}
                                     </Text>
                                 </LinearGradient>
                             </TouchableOpacity>

@@ -1604,7 +1604,7 @@ app.post('/api/auth/request-otp', authLimiter, async (req, res) => {
 });
 
 app.post('/api/auth/verify-otp', authLimiter, async (req, res) => {
-    const { email, phone, otp } = req.body;
+    const { email, phone, otp, deviceId } = req.body;
     const identifier = email || phone;
 
     try {
@@ -1631,12 +1631,19 @@ app.post('/api/auth/verify-otp', authLimiter, async (req, res) => {
 
         let user;
         if (result.rows.length === 0) {
-            // Register New User
+            // Register New User (Check device limit)
+            if (deviceId) {
+                const limitCheck = await db.query('SELECT count(*) FROM users WHERE device_id = $1', [deviceId]);
+                if (parseInt(limitCheck.rows[0].count, 10) >= 2) {
+                    return res.status(403).json({ error: 'Bu cihazdan en fazla 2 hesap oluşturulabilir veya kullanılabilir.' });
+                }
+            }
+
             const email = identifier;
             const username = email ? email.split('@')[0] : `user_${Math.floor(1000 + Math.random() * 9000)}`;
             const insertResult = await db.query(
-                "INSERT INTO users (username, email, role, balance, avatar_url, display_name) VALUES ($1, $2, 'user', 100, 'https://via.placeholder.com/150', $3) RETURNING *",
-                [username, email || null, username]
+                "INSERT INTO users (username, email, role, balance, avatar_url, display_name, device_id) VALUES ($1, $2, 'user', 100, 'https://via.placeholder.com/150', $3, $4) RETURNING *",
+                [username, email || null, username, deviceId || null]
             );
             user = insertResult.rows[0];
             await logActivity(io, user.id, 'register', 'Yeni kullanıcı OTP ile kayıt oldu.');
@@ -1658,6 +1665,16 @@ app.post('/api/auth/verify-otp', authLimiter, async (req, res) => {
         }
         if (user.account_status !== 'active') {
             return res.status(403).json({ error: 'Hesabınız askıya alınmış.' });
+        }
+
+        // Check device limit if switching to a new device for existing user
+        if (deviceId && user.device_id !== deviceId && result.rows.length > 0) {
+            const limitCheck = await db.query('SELECT count(*) FROM users WHERE device_id = $1 AND id != $2', [deviceId, user.id]);
+            if (parseInt(limitCheck.rows[0].count, 10) >= 2) {
+                return res.status(403).json({ error: 'Bu cihazdan en fazla 2 hesap oluşturulabilir veya kullanılabilir.' });
+            }
+            await db.query('UPDATE users SET device_id = $1 WHERE id = $2', [deviceId, user.id]);
+            user.device_id = deviceId;
         }
 
         // Generate Token
@@ -1726,8 +1743,9 @@ app.get('/api/me', authenticateToken, (req, res) => {
 // GET OPERATORS
 app.get('/api/operators', async (req, res) => {
     try {
-        const { gender } = req.query;
-        console.log(`[DEBUG] Fetching operators list. Filter Gender: ${gender || 'none'}`);
+        const { gender, page = 1, limit = 10 } = req.query;
+        const offset = (parseInt(page) - 1) * parseInt(limit);
+        console.log(`[DEBUG] Fetching operators list. Filter Gender: ${gender || 'none'}, Page: ${page}, Limit: ${limit}`);
 
         let query = `
             SELECT u.id, COALESCE(u.display_name, u.username) as name, u.avatar_url, u.gender, u.age, u.vip_level, u.job, u.relationship, u.zodiac, u.interests, o.category, o.rating, o.is_online, COALESCE(o.bio, u.bio) as bio, o.photos, u.role,
@@ -1738,12 +1756,15 @@ app.get('/api/operators', async (req, res) => {
         `;
 
         let params = [];
+        let paramCount = 1;
         if (gender === 'erkek' || gender === 'kadin') {
-            query += ` AND u.gender = $1 `;
+            query += ` AND u.gender = $${paramCount} `;
             params.push(gender);
+            paramCount++;
         }
 
-        query += ` ORDER BY u.created_at DESC `;
+        query += ` ORDER BY u.created_at DESC LIMIT $${paramCount} OFFSET $${paramCount + 1}`;
+        params.push(parseInt(limit), offset);
 
         const result = await db.query(query, params);
         console.log(`[DEBUG] Found ${result.rows.length} operators in DB.`);
@@ -1835,9 +1856,11 @@ app.get('/api/discovery', authenticateToken, async (req, res) => {
     try {
         const userGender = req.user.gender || 'erkek'; // Default to male if unknown
         const targetGender = userGender === 'kadin' ? 'erkek' : 'kadin';
+        const { page = 1, limit = 10 } = req.query;
+        const offset = (parseInt(page) - 1) * parseInt(limit);
         const userId = req.user.id;
 
-        console.log(`[DISCOVERY] User ${userId} (${userGender}) exploring ${targetGender}...`);
+        console.log(`[DISCOVERY] User ${userId} (${userGender}) exploring ${targetGender}... Page: ${page}, Limit: ${limit}`);
 
         const query = `
             SELECT 
@@ -1867,9 +1890,10 @@ app.get('/api/discovery', authenticateToken, async (req, res) => {
               AND u.id != $2
               AND u.account_status != 'deleted'
             ORDER BY is_boosted DESC, o.is_online DESC, u.created_at DESC
+            LIMIT $3 OFFSET $4
         `;
 
-        const result = await db.query(query, [targetGender, userId]);
+        const result = await db.query(query, [targetGender, userId, parseInt(limit), offset]);
         const protocol = req.protocol;
         const host = req.get('host');
 

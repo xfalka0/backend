@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, FlatList, Image, TouchableOpacity, StyleSheet, Dimensions, ScrollView, Alert, TextInput, Modal } from 'react-native';
+import { View, Text, FlatList, Image, TouchableOpacity, StyleSheet, Dimensions, ScrollView, Alert, TextInput, Modal, Pressable, ActivityIndicator } from 'react-native';
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -14,6 +14,8 @@ import HiButton from '../components/ui/HiButton';
 import PromoBanner from '../components/ui/PromoBanner';
 import StoryRing from '../components/animated/StoryRing';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { InteractionManager, Platform } from 'react-native';
+import { FadeIn } from 'react-native-reanimated';
 import DestinyMatchModal from '../components/DestinyMatchModal';
 import DestinyHero from '../components/DestinyHero';
 import GlassCard from '../components/ui/GlassCard';
@@ -22,6 +24,7 @@ import SwipeDeck from '../components/discovery/SwipeDeck';
 import HeroSection from '../components/hero/HeroSection';
 import PremiumBackground from '../components/animated/PremiumBackground';
 import PromotedProfiles from '../components/home/PromotedProfiles';
+import ModernAlert from '../components/ui/ModernAlert';
 
 import Animated, {
     useSharedValue,
@@ -38,12 +41,101 @@ const { width } = Dimensions.get('window');
 const BANNER_WIDTH = width * 0.85;
 const BANNER_SPACER = (width - BANNER_WIDTH) / 2;
 
+let lastProfileTap = 0;
+
+const OperatorItem = React.memo(({ item, navigation, user, theme, themeMode, balance, onHiPress }) => (
+    <View>
+        <GlassCard style={styles.userCard} intensity={40}>
+            <View style={styles.cardHeader}>
+                <TouchableOpacity
+                    activeOpacity={0.7}
+                    delayPressIn={0}
+                    style={{ flexDirection: 'row', flex: 1, alignItems: 'center' }}
+                    onPress={() => {
+                        const now = Date.now();
+                        if (now - lastProfileTap < 800) return;
+                        lastProfileTap = now;
+                        navigation.navigate('OperatorProfile', { operator: item, user });
+                    }}
+                >
+                    <View style={styles.avatarContainer}>
+                        <StoryRing hasNewStory={!!item.has_active_story} size={68}>
+                            <VipFrame level={item.vip_level || 0} avatar={item.avatar_url} size={65} isStatic={true} />
+                        </StoryRing>
+                        {item.is_online && <View style={styles.onlineBadge} />}
+                    </View>
+                    <View style={styles.infoContainer}>
+                        <View style={styles.nameRow}>
+                            <Text
+                                style={[styles.name, { color: theme.colors.text, flexShrink: 1 }]}
+                                numberOfLines={1}
+                                ellipsizeMode="tail"
+                            >
+                                {item.name}
+                            </Text>
+                            {item.vip_level > 0 && (
+                                <LinearGradient
+                                    colors={item.vip_level >= 6 ? ['#1a1a1b', '#000000'] : item.vip_level >= 4 ? ['#fbbf24', '#7c3aed'] : ['#a855f7', '#ec4899']}
+                                    start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+                                    style={styles.premiumVipBadge}
+                                >
+                                    <Ionicons name="star" size={10} color="#fff" />
+                                    <Text style={styles.premiumVipText}>VIP {item.vip_level}</Text>
+                                </LinearGradient>
+                            )}
+                            <View style={styles.verifiedBadge}><Ionicons name="checkmark-circle" size={16} color="#3b82f6" /></View>
+                        </View>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4 }}>
+                            <Text style={[styles.jobText, { color: theme.colors.textSecondary }]} numberOfLines={1}>{item.job || 'Öğrenci'}</Text>
+                            {item.age && (
+                                <View style={[styles.ageBadge, { backgroundColor: item.gender === 'erkek' ? '#3b82f6' : '#f472b6' }]}>
+                                    <Ionicons name={item.gender === 'erkek' ? "male" : "female"} size={12} color="white" />
+                                    <Text style={styles.ageBadgeText}>{item.age}</Text>
+                                </View>
+                            )}
+                        </View>
+                    </View>
+                </TouchableOpacity>
+                <View style={styles.hiButtonContainer}>
+                    <HiButton
+                        operatorId={item.id}
+                        userBalance={balance}
+                        cost={10}
+                        onPress={() => navigation.navigate('Chat', { operatorId: item.id, name: item.name, avatar_url: item.avatar_url, user })}
+                        onHiPress={() => onHiPress(item)}
+                    />
+                </View>
+            </View>
+
+            {item.bio && (
+                <View style={[styles.cardBioContainer, { backgroundColor: themeMode === 'dark' ? 'rgba(15, 23, 42, 0.4)' : 'rgba(15, 23, 42, 0.05)' }]}>
+                    <Text style={[styles.cardBioBody, { color: theme.colors.textSecondary }]} numberOfLines={3}>{item.bio}</Text>
+                </View>
+            )}
+
+            {item.photos && item.photos.length > 0 && (
+                <View style={styles.albumContainer}>
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.albumScroll}>
+                        {item.photos.filter(p => p && p.startsWith('http')).map((photoUrl, idx) => (
+                            <View key={idx} style={styles.albumImageWrapper}>
+                                <Image source={{ uri: photoUrl }} style={[styles.albumImage, { backgroundColor: theme.colors.glass }]} />
+                            </View>
+                        ))}
+                    </ScrollView>
+                </View>
+            )}
+        </GlassCard>
+    </View>
+));
+
 export default function HomeScreen({ navigation, route }) {
     const insets = useSafeAreaInsets();
     const { theme, themeMode } = useTheme();
     const { user: routeUser, gender } = route.params || {};
     const TEST_USER_ID = 'c917f7d6-cc44-4b04-8917-1dbbed0b1e9b';
-    const user = routeUser ? { ...routeUser, name: routeUser.name || routeUser.display_name || routeUser.username || 'Kullanıcı' } : { id: TEST_USER_ID, name: 'Misafir', hearts: 0 };
+    const user = React.useMemo(() => {
+        return routeUser ? { ...routeUser, name: routeUser.name || routeUser.display_name || routeUser.username || 'Kullanıcı' } : { id: TEST_USER_ID, name: 'Misafir', hearts: 0 };
+    }, [routeUser]);
     const [balance, setBalance] = useState(user.hearts || 0);
     const [operators, setOperators] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -53,42 +145,85 @@ export default function HomeScreen({ navigation, route }) {
     const [searchText, setSearchText] = useState('');
     const [showSearch, setShowSearch] = useState(false);
     const [showFilterModal, setShowFilterModal] = useState(false);
+    const [showWelcomeAlert, setShowWelcomeAlert] = useState(false);
     const [filterOptions, setFilterOptions] = useState({ gender: 'all', online: false });
+    const [page, setPage] = useState(1);
+    const [hasMore, setHasMore] = useState(true);
+    const [isMoreLoading, setIsMoreLoading] = useState(false);
+    const LIMIT = 10;
 
     useFocusEffect(
         React.useCallback(() => {
-            fetchOperators();
+            fetchOperators(true);
             // Refresh balance if needed
         }, [])
     );
 
-    const fetchOperators = async () => {
+    useEffect(() => {
+        const checkFirstLaunch = async () => {
+            try {
+                const hasSeenAlert = await AsyncStorage.getItem('has_seen_welcome_alert');
+                if (!hasSeenAlert) {
+                    setShowWelcomeAlert(true);
+                    await AsyncStorage.setItem('has_seen_welcome_alert', 'true');
+                }
+            } catch (error) {
+                console.error("Welcome alert check error:", error);
+            }
+        };
+        checkFirstLaunch();
+    }, []);
+
+    const fetchOperators = async (reset = false, isLoadMore = false) => {
+        if (isLoadMore && (isMoreLoading || !hasMore)) return;
+
         try {
+            if (isLoadMore) setIsMoreLoading(true);
+            else setLoading(true);
+
+            const currentPage = reset ? 1 : page;
             const token = user?.token || await AsyncStorage.getItem('token');
 
+            let res;
             if (!token) {
-                const res = await axios.get(`${API_URL}/operators?gender=kadin`);
-                setOperators(res.data);
-                return;
+                res = await axios.get(`${API_URL}/operators?gender=kadin&page=${currentPage}&limit=${LIMIT}`);
+            } else {
+                res = await axios.get(`${API_URL}/discovery`, {
+                    params: { page: currentPage, limit: LIMIT },
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
             }
 
-            const res = await axios.get(`${API_URL}/discovery`, {
-                headers: { 'Authorization': `Bearer ${token}` }
-            });
+            const newData = res.data?.data || res.data || [];
 
-            setOperators(res.data);
+            if (reset) {
+                setOperators(newData);
+                setPage(2);
+                setHasMore(newData.length === LIMIT);
 
-            // Generate promoted profiles (shuffled subset of operators only)
-            if (res.data && res.data.length > 0) {
-                // Filtrleme ekleniyor: is_operator flag'i varsa onu kullanıyoruz ya da direkt operators listesinden alıyoruz
-                const opOnly = res.data.filter(u => u.is_operator || u.role === 'operator' || true); // Endpoint zaten operatörleri döndürüyor
-                const shuffled = [...opOnly].sort(() => Math.random() - 0.5).slice(0, 10);
-                setPromotedProfiles(shuffled);
+                // Generate promoted profiles (only on first load)
+                if (newData.length > 0) {
+                    const shuffled = [...newData].sort(() => Math.random() - 0.5).slice(0, 10);
+                    setPromotedProfiles(shuffled);
+                }
+                setLoading(false);
+                setIsMoreLoading(false);
+            } else {
+                setOperators(prev => {
+                    // Filter out duplicates just in case
+                    const existingIds = new Set(prev.map(op => op.id));
+                    const uniqueNewData = newData.filter(op => !existingIds.has(op.id));
+                    return [...prev, ...uniqueNewData];
+                });
+                setPage(prev => prev + 1);
+                setHasMore(newData.length === LIMIT);
+                setLoading(false);
+                setIsMoreLoading(false);
             }
+
         } catch (error) {
             console.error("Fetch Discovery Error:", error);
 
-            // If 403 Forbidden, token is invalid, clear and redirect
             if (error.response?.status === 401 || error.response?.status === 403) {
                 console.warn("[Home] Token invalid detected, clearing session.");
                 await AsyncStorage.multiRemove(['token', 'user']);
@@ -96,16 +231,26 @@ export default function HomeScreen({ navigation, route }) {
                 return;
             }
 
+            // Fallback
             try {
                 const res = await axios.get(`${API_URL}/operators`);
                 setOperators(res.data);
+                setHasMore(false);
             } catch (inner) {
                 console.error("Fallback error:", inner);
+            } finally {
+                setLoading(false);
+                setIsMoreLoading(false);
             }
-        } finally {
-            setLoading(false);
         }
     };
+
+    const handleLoadMore = React.useCallback(() => {
+        if (!loading && !isMoreLoading && hasMore) {
+            console.log(`[HomeScreen] Triggering load more. Current page: ${page}`);
+            fetchOperators(false, true);
+        }
+    }, [loading, isMoreLoading, hasMore, page]);
 
     const [showMatchModal, setShowMatchModal] = useState(false);
 
@@ -246,127 +391,58 @@ export default function HomeScreen({ navigation, route }) {
         return result;
     }, [operators, searchText, filterOptions]);
 
-    const handleTabPress = (tab) => {
-        if (activeTab === tab) return;
+    const handleTabPress = (tabName) => {
+        if (activeTab === tabName) return;
+        setActiveTab(tabName);
 
-        setActiveTab(tab);
-        setLoading(true);
-        // Simulate fetch/shuffle
-        setTimeout(() => {
-            const shuffled = [...operators].sort(() => Math.random() - 0.5);
-            setOperators(shuffled);
-            setLoading(false);
-        }, 200);
+        // Defer heavy data fetching after the tab switch animation/interaction is done
+        InteractionManager.runAfterInteractions(() => {
+            setPage(1);
+            setOperators([]);
+            setHasMore(true);
+            fetchOperators(true);
+        });
     };
 
-    const renderOperator = ({ item }) => (
-        <Motion.SlideUp key={item.id}>
-            <GlassCard style={styles.userCard} intensity={40}>
-                {/* User Card Content (Avatar, info, bio, photos) - Keeping same structure */}
-                <View style={styles.cardHeader}>
-                    <TouchableOpacity
-                        activeOpacity={0.7}
-                        style={{ flexDirection: 'row', flex: 1, alignItems: 'center' }}
-                        onPress={() => navigation.navigate('OperatorProfile', { operator: item, user })}
-                    >
-                        <View style={styles.avatarContainer}>
-                            <StoryRing hasNewStory={!!item.has_active_story} size={68} onPress={() => navigation.navigate('OperatorProfile', { operator: item, user })}>
-                                <VipFrame level={item.vip_level || 0} avatar={item.avatar_url} size={65} isStatic={true} />
-                            </StoryRing>
-                            {item.is_online && <View style={styles.onlineBadge} />}
-                        </View>
-                        <View style={styles.infoContainer}>
-                            <View style={styles.nameRow}>
-                                <Text
-                                    style={[styles.name, { color: theme.colors.text, flexShrink: 1 }]}
-                                    numberOfLines={1}
-                                    ellipsizeMode="tail"
-                                >
-                                    {item.name}
-                                </Text>
-                                {item.vip_level > 0 && (
-                                    <LinearGradient
-                                        colors={item.vip_level >= 6 ? ['#1a1a1b', '#000000'] : item.vip_level >= 4 ? ['#fbbf24', '#7c3aed'] : ['#a855f7', '#ec4899']}
-                                        start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
-                                        style={styles.premiumVipBadge}
-                                    >
-                                        <Ionicons name="star" size={10} color="#fff" />
-                                        <Text style={styles.premiumVipText}>VIP {item.vip_level}</Text>
-                                    </LinearGradient>
-                                )}
-                                <View style={styles.verifiedBadge}><Ionicons name="checkmark-circle" size={16} color="#3b82f6" /></View>
-                            </View>
-                            <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4 }}>
-                                <Text style={[styles.jobText, { color: theme.colors.textSecondary }]} numberOfLines={1}>{item.job || 'Öğrenci'}</Text>
-                                {item.age && (
-                                    <View style={[styles.ageBadge, { backgroundColor: item.gender === 'erkek' ? '#3b82f6' : '#f472b6' }]}>
-                                        <Ionicons name={item.gender === 'erkek' ? "male" : "female"} size={12} color="white" />
-                                        <Text style={styles.ageBadgeText}>{item.age}</Text>
-                                    </View>
-                                )}
-                            </View>
-                        </View>
-                    </TouchableOpacity>
-                    <View style={styles.hiButtonContainer}>
-                        <HiButton
-                            operatorId={item.id}
-                            userBalance={balance}
-                            cost={10}
-                            onPress={() => navigation.navigate('Chat', { operatorId: item.id, name: item.name, avatar_url: item.avatar_url, user })}
-                            onHiPress={async () => {
-                                try {
-                                    // Send automatic "Merhaba" message
-                                    const res = await axios.post(`${API_URL}/messages/send-hi`, {
-                                        userId: user.id,
-                                        operatorId: item.id,
-                                        content: 'Merhaba 👋'
-                                    });
+    const handleHiPress = React.useCallback(async (item) => {
+        try {
+            const res = await axios.post(`${API_URL}/messages/send-hi`, {
+                userId: user.id,
+                operatorId: item.id,
+                content: 'Merhaba 👋'
+            });
 
-                                    if (res.data.success) {
-                                        console.log(`[HomeScreen] Sent 'Hi' to ${item.name}`);
-                                        if (res.data.newBalance !== undefined) {
-                                            setBalance(res.data.newBalance);
-                                            // Update stored user object if necessary
-                                            const storedUser = await AsyncStorage.getItem('user');
-                                            if (storedUser) {
-                                                const parsed = JSON.parse(storedUser);
-                                                parsed.balance = res.data.newBalance;
-                                                parsed.hearts = res.data.newBalance;
-                                                await AsyncStorage.setItem('user', JSON.stringify(parsed));
-                                            }
-                                        }
-                                    }
-                                } catch (e) {
-                                    console.error('[HomeScreen] Hi message err', e);
-                                    if (e.response?.data?.insufficientFunds) {
-                                        Alert.alert("Bakiye Yetersiz", e.response.data.error);
-                                    }
-                                }
-                            }}
-                        />
-                    </View>
-                </View>
+            if (res.data.success) {
+                if (res.data.newBalance !== undefined) {
+                    setBalance(res.data.newBalance);
+                    const storedUser = await AsyncStorage.getItem('user');
+                    if (storedUser) {
+                        const parsed = JSON.parse(storedUser);
+                        parsed.balance = res.data.newBalance;
+                        parsed.hearts = res.data.newBalance;
+                        await AsyncStorage.setItem('user', JSON.stringify(parsed));
+                    }
+                }
+            }
+        } catch (e) {
+            console.error('[HomeScreen] Hi message err', e);
+            if (e.response?.data?.insufficientFunds) {
+                Alert.alert("Bakiye Yetersiz", e.response.data.error);
+            }
+        }
+    }, [user.id, API_URL]);
 
-                {item.bio && (
-                    <View style={[styles.cardBioContainer, { backgroundColor: themeMode === 'dark' ? 'rgba(15, 23, 42, 0.4)' : 'rgba(15, 23, 42, 0.05)' }]}>
-                        <Text style={[styles.cardBioBody, { color: theme.colors.textSecondary }]} numberOfLines={3}>{item.bio}</Text>
-                    </View>
-                )}
-
-                {item.photos && item.photos.length > 0 && (
-                    <View style={styles.albumContainer}>
-                        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.albumScroll}>
-                            {item.photos.map((photoUrl, idx) => (
-                                <View key={idx} style={styles.albumImageWrapper}>
-                                    <Image source={{ uri: photoUrl }} style={[styles.albumImage, { backgroundColor: theme.colors.glass }]} />
-                                </View>
-                            ))}
-                        </ScrollView>
-                    </View>
-                )}
-            </GlassCard>
-        </Motion.SlideUp>
-    );
+    const renderOperator = React.useCallback(({ item }) => (
+        <OperatorItem
+            item={item}
+            navigation={navigation}
+            user={user}
+            theme={theme}
+            themeMode={themeMode}
+            balance={balance}
+            onHiPress={handleHiPress}
+        />
+    ), [navigation, user, theme, themeMode, balance, handleHiPress]);
 
     const renderActionCards = () => (
         <ScrollView
@@ -437,27 +513,23 @@ export default function HomeScreen({ navigation, route }) {
         </ScrollView>
     );
 
-    const renderListHeader = () => (
+    const ListHeader = React.useMemo(() => (
         <View>
             <HeroSection
-                onCoinPress={() => navigation.navigate('Vip')}
+                onCoinPress={() => navigation.navigate('PurchaseInfo')}
+                onExplorePress={() => setActiveTab('Önerilen')}
                 onDestinyPress={() => setShowMatchModal(true)}
             />
-
             <PromotedProfiles
                 data={promotedProfiles}
-                onProfilePress={(profile) => navigation.navigate('OperatorProfile', { operator: profile, user })}
+                onProfilePress={(profile) => {
+                    console.log(`[HomeScreen] Promoted profile click: ${profile.name}`);
+                    navigation.navigate('OperatorProfile', { operator: profile, user });
+                }}
                 user={user}
             />
-
-            {/* Filter Section (Modern Glass) */}
             <View style={{ marginHorizontal: 16, marginBottom: 15, marginTop: 10 }}>
-                <View style={{
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                }}>
-                    {/* Tabs */}
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
                     <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flex: 1, marginRight: 10 }}>
                         {['Önerilen', 'Yeni', 'Popüler'].map((tab) => (
                             <TouchableOpacity
@@ -473,16 +545,10 @@ export default function HomeScreen({ navigation, route }) {
                                     borderColor: activeTab === tab ? theme.colors.primary : theme.colors.glassBorder
                                 }}
                             >
-                                <Text style={{
-                                    fontSize: 13,
-                                    fontWeight: '600',
-                                    color: activeTab === tab ? 'white' : theme.colors.textSecondary
-                                }}>{tab}</Text>
+                                <Text style={{ fontSize: 13, fontWeight: '600', color: activeTab === tab ? 'white' : theme.colors.textSecondary }}>{tab}</Text>
                             </TouchableOpacity>
                         ))}
                     </ScrollView>
-
-                    {/* Actions */}
                     <View style={{ flexDirection: 'row', gap: 8 }}>
                         <TouchableOpacity
                             onPress={() => setIsSwipeMode(!isSwipeMode)}
@@ -512,50 +578,46 @@ export default function HomeScreen({ navigation, route }) {
                                 alignItems: 'center', justifyContent: 'center',
                                 borderWidth: 1, borderColor: (filterOptions.gender !== 'all' || filterOptions.online) ? theme.colors.primary : theme.colors.glassBorder
                             }}>
-                            <Ionicons name="options" size={18} color={(filterOptions.gender !== 'all' || filterOptions.online) ? 'white' : theme.colors.text} />
+                            <Ionicons name="options" size={10} color={(filterOptions.gender !== 'all' || filterOptions.online) ? 'white' : theme.colors.text} />
                         </TouchableOpacity>
                     </View>
                 </View>
-
-                {/* Search Bar (Collapsible) */}
-                {
-                    showSearch && (
-                        <Motion.SlideUp>
-                            <View style={{ marginTop: 15 }}>
-                                <View style={{
-                                    flexDirection: 'row', alignItems: 'center',
-                                    backgroundColor: theme.colors.glass,
-                                    borderColor: theme.colors.glassBorder,
-                                    borderWidth: 1,
-                                    borderRadius: 12, paddingHorizontal: 12, height: 46
-                                }}>
-                                    <Ionicons name="search" size={20} color={theme.colors.textSecondary} style={{ marginRight: 10 }} />
-                                    <TextInput
-                                        placeholder="Bir isim ara"
-                                        placeholderTextColor={theme.colors.textSecondary}
-                                        style={{ flex: 1, color: theme.colors.text, fontSize: 14 }}
-                                        value={searchText}
-                                        onChangeText={setSearchText}
-                                    />
-                                    {searchText.length > 0 && (
-                                        <TouchableOpacity onPress={() => setSearchText('')}>
-                                            <Ionicons name="close-circle" size={18} color={theme.colors.textSecondary} />
-                                        </TouchableOpacity>
-                                    )}
-                                </View>
+                {showSearch && (
+                    <Motion.SlideUp>
+                        <View style={{ marginTop: 15 }}>
+                            <View style={{
+                                flexDirection: 'row', alignItems: 'center',
+                                backgroundColor: theme.colors.glass,
+                                borderColor: theme.colors.glassBorder,
+                                borderWidth: 1,
+                                borderRadius: 12, paddingHorizontal: 12, height: 46
+                            }}>
+                                <Ionicons name="search" size={20} color={theme.colors.textSecondary} style={{ marginRight: 10 }} />
+                                <TextInput
+                                    placeholder="Bir isim ara"
+                                    placeholderTextColor={theme.colors.textSecondary}
+                                    style={{ flex: 1, color: theme.colors.text, fontSize: 14 }}
+                                    value={searchText}
+                                    onChangeText={setSearchText}
+                                />
+                                {searchText.length > 0 && (
+                                    <TouchableOpacity onPress={() => setSearchText('')}>
+                                        <Ionicons name="close-circle" size={18} color={theme.colors.textSecondary} />
+                                    </TouchableOpacity>
+                                )}
                             </View>
-                        </Motion.SlideUp>
-                    )
-                }
+                        </View>
+                    </Motion.SlideUp>
+                )}
             </View>
         </View>
-    );
+    ), [activeTab, promotedProfiles, showSearch, isSwipeMode, searchText, filterOptions, theme, user]);
+
+    // Removed faulty getItemLayout which caused phantom scrolling space on Android due to dynamic item heights
 
     return (
         <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
-            {/* Premium Multi-Layered Background for Dark Mode */}
             {themeMode === 'dark' && <PremiumBackground />}
-
             {isSwipeMode ? (
                 <View style={{ flex: 1, marginTop: 20 }}>
                     <SwipeDeck
@@ -576,99 +638,95 @@ export default function HomeScreen({ navigation, route }) {
                     data={filteredOperators}
                     keyExtractor={item => item.id.toString()}
                     renderItem={renderOperator}
+                    // getItemLayout removed to fix dynamic height calculating bug
                     contentContainerStyle={styles.listContent}
                     showsVerticalScrollIndicator={false}
-                    ListHeaderComponent={renderListHeader()}
+                    ListHeaderComponent={ListHeader}
+                    onEndReached={handleLoadMore}
+                    onEndReachedThreshold={0.5} // Trigger earlier for seamless scroll
+                    initialNumToRender={10}
+
+                    maxToRenderPerBatch={10}
+                    windowSize={11}
+                    removeClippedSubviews={false}
+                    keyboardShouldPersistTaps="handled"
+                    bounces={false}
+                    overScrollMode="never"
+                    ListFooterComponent={
+                        <View style={{
+                            paddingTop: 10,
+                            paddingBottom: 40,
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            width: '100%'
+                        }}>
+                            {isMoreLoading && (
+                                <ActivityIndicator size="small" color={theme.colors.primary} style={{ marginVertical: 15 }} />
+                            )}
+                            {!hasMore && operators.length > 0 && (
+                                <Text style={{ color: theme.colors.textSecondary, fontSize: 13, marginTop: 15, opacity: 0.8 }}>
+                                    Şimdilik bu kadar...
+                                </Text>
+                            )}
+                        </View>
+                    }
                     ListEmptyComponent={
                         loading ? (
                             <View style={{ paddingTop: 10 }}>
-                                <SkeletonCard theme={theme} />
-                                <SkeletonCard theme={theme} />
-                                <SkeletonCard theme={theme} />
-                                <SkeletonCard theme={theme} />
+                                <SkeletonCard />
+                                <SkeletonCard />
+                                <SkeletonCard />
+                                <SkeletonCard />
                             </View>
                         ) : (
-                            <View style={styles.emptyContainer}><Text style={[styles.emptyText, { color: theme.colors.textSecondary }]}>Sonuç bulunamadı.</Text></View>
+                            <View style={styles.emptyContainer}>
+                                <Text style={[styles.emptyText, { color: theme.colors.textSecondary }]}>Sonuç bulunamadı.</Text>
+                            </View>
                         )
                     }
                 />
             )}
-
-            {showMatchModal && (
-                <DestinyMatchModal
-                    visible={showMatchModal}
-                    onClose={() => setShowMatchModal(false)}
-                    operators={operators}
-                    navigation={navigation}
-                    user={user}
-                />
-            )}
-
-            {/* Filter Modal */}
-            <Modal
-                visible={showFilterModal}
-                transparent
-                animationType="slide"
-                onRequestClose={() => setShowFilterModal(false)}
-            >
+            {showMatchModal && <DestinyMatchModal visible={showMatchModal} onClose={() => setShowMatchModal(false)} operators={operators} navigation={navigation} user={user} />}
+            <Modal visible={showFilterModal} transparent animationType="slide" onRequestClose={() => setShowFilterModal(false)}>
                 <View style={styles.modalOverlay}>
                     <GlassCard style={styles.modalContent} intensity={80} tint="dark">
                         <View style={styles.modalHeader}>
                             <Text style={styles.modalTitle}>Kriterlerini Belirle</Text>
-                            <TouchableOpacity onPress={() => setShowFilterModal(false)} style={styles.closeButton}>
-                                <Ionicons name="close" size={24} color="white" />
-                            </TouchableOpacity>
+                            <TouchableOpacity onPress={() => setShowFilterModal(false)} style={styles.closeButton}><Ionicons name="close" size={24} color="white" /></TouchableOpacity>
                         </View>
-
                         <View style={styles.filterSection}>
                             <Text style={styles.filterLabel}>Cinsiyet</Text>
                             <View style={styles.filterOptions}>
                                 {['all', 'female', 'male'].map((g) => (
-                                    <TouchableOpacity
-                                        key={g}
-                                        style={[styles.filterChip, filterOptions.gender === g && styles.filterChipActive]}
-                                        onPress={() => setFilterOptions(prev => ({ ...prev, gender: g }))}
-                                    >
-                                        <Text style={[styles.filterChipText, filterOptions.gender === g && styles.filterChipTextActive]}>
-                                            {g === 'all' ? 'Hepsi' : g === 'female' ? 'Kadın' : 'Erkek'}
-                                        </Text>
+                                    <TouchableOpacity key={g} style={[styles.filterChip, filterOptions.gender === g && styles.filterChipActive]} onPress={() => setFilterOptions(prev => ({ ...prev, gender: g }))}>
+                                        <Text style={[styles.filterChipText, filterOptions.gender === g && styles.filterChipTextActive]}>{g === 'all' ? 'Hepsi' : g === 'female' ? 'Kadın' : 'Erkek'}</Text>
                                     </TouchableOpacity>
                                 ))}
                             </View>
                         </View>
-
                         <View style={styles.filterSection}>
                             <Text style={styles.filterLabel}>Durum</Text>
-                            <TouchableOpacity
-                                style={[styles.filterChip, filterOptions.online && styles.filterChipActive]}
-                                onPress={() => setFilterOptions(prev => ({ ...prev, online: !prev.online }))}
-                            >
-                                <Ionicons
-                                    name={filterOptions.online ? "radio-button-on" : "radio-button-off"}
-                                    size={16}
-                                    color={filterOptions.online ? "white" : "#64748b"}
-                                    style={{ marginRight: 8 }}
-                                />
+                            <TouchableOpacity style={[styles.filterChip, filterOptions.online && styles.filterChipActive]} onPress={() => setFilterOptions(prev => ({ ...prev, online: !prev.online }))}>
+                                <Ionicons name={filterOptions.online ? "radio-button-on" : "radio-button-off"} size={16} color={filterOptions.online ? "white" : "#64748b"} style={{ marginRight: 8 }} />
                                 <Text style={[styles.filterChipText, filterOptions.online && styles.filterChipTextActive]}>Sadece Online</Text>
                             </TouchableOpacity>
                         </View>
-
-                        <TouchableOpacity
-                            style={styles.applyButton}
-                            onPress={() => setShowFilterModal(false)}
-                        >
-                            <LinearGradient
-                                colors={['#8b5cf6', '#ec4899']}
-                                style={styles.applyButtonGradient}
-                                start={{ x: 0, y: 0 }}
-                                end={{ x: 1, y: 0 }}
-                            >
+                        <TouchableOpacity style={styles.applyButton} onPress={() => setShowFilterModal(false)}>
+                            <LinearGradient colors={['#8b5cf6', '#ec4899']} style={styles.applyButtonGradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}>
                                 <Text style={styles.applyButtonText}>Filtreleri Uygula</Text>
                             </LinearGradient>
                         </TouchableOpacity>
                     </GlassCard>
                 </View>
             </Modal>
+
+            <ModernAlert
+                visible={showWelcomeAlert}
+                title="Hoş Geldiniz! 👋"
+                message="Uygulamamız henüz çok yenidir. Sizlere daha iyi bir deneyim sunabilmek için değerli önerilerinizi ve geri bildirimlerinizi bekliyoruz. Keyifli vakit geçirmeniz dileğiyle!"
+                type="info"
+                onClose={() => setShowWelcomeAlert(false)}
+            />
         </View>
     );
 }
@@ -677,7 +735,8 @@ const styles = StyleSheet.create({
     container: { flex: 1 },
     background: { ...StyleSheet.absoluteFillObject },
     listContent: {
-        paddingBottom: 40,
+        flexGrow: 1,
+        paddingBottom: 110, // Just enough to clear the bottom tab bar
     },
     headerContainer: { paddingHorizontal: 20, marginBottom: 15, marginTop: 10 },
     topBar: { flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', marginBottom: 20 },
@@ -774,10 +833,10 @@ const styles = StyleSheet.create({
     nameRow: {
         flexDirection: 'row',
         alignItems: 'center',
-        marginBottom: 2,
+        marginBottom: -5,
     },
     name: {
-        fontSize: 18,
+        fontSize: 17,
         fontWeight: 'bold',
         marginRight: 6,
     },
@@ -808,7 +867,7 @@ const styles = StyleSheet.create({
     },
     ageBadgeText: {
         color: 'white',
-        fontSize: 11,
+        fontSize: 8,
         fontWeight: 'bold',
         marginLeft: 2,
     },
@@ -816,7 +875,7 @@ const styles = StyleSheet.create({
 
     // Bio Stilleri
     cardBioContainer: {
-        padding: 12,
+        padding: 2,
         borderRadius: 16,
         marginBottom: 12,
     },
@@ -835,15 +894,15 @@ const styles = StyleSheet.create({
 
     // Albüm Stilleri
     albumContainer: {
-        marginTop: 4,
+        marginTop: 1,
     },
     albumScroll: {
         paddingRight: 10,
     },
     albumImage: {
-        width: 65, // Reduced from 80
-        height: 80, // Reduced from 100
-        borderRadius: 10,
+        width: 50, // Reduced from 80
+        height: 100, // Reduced from 100
+        borderRadius: 5,
         marginRight: 8,
     },
 

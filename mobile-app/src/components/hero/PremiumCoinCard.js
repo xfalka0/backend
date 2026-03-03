@@ -8,6 +8,7 @@ import Animated, {
     withRepeat,
     withSequence,
     withTiming,
+    withDelay,
     Easing,
     useDerivedValue,
     interpolate,
@@ -26,29 +27,93 @@ const slides = [
         buttonText: 'ŞİMDİ AL',
         icon: 'sparkles',
         colors: ['rgba(245, 158, 11, 0.9)', 'rgba(217, 119, 6, 0.9)'],
+        buttonColors: ['#FBBF24', '#D97706', '#B45309'],
         image: require('../../../assets/gold_coin_3f.png'),
         isCoin: true
     },
     {
         id: '2',
-        tag: 'ÖZEL FIRSAT',
         title: 'Kaderindeki kişiyi keşfet',
         subtitle: 'Dokun ve eşleşmeni başlat ✨',
         buttonText: 'İNCELE',
         icon: 'star',
-        colors: ['rgba(139, 92, 246, 0.9)', 'rgba(109, 40, 217, 0.9)'],
-        image: require('../../../assets/gold_coin_3d.png'),
-        isCoin: false
+        colors: ['rgba(244, 63, 94, 0.9)', 'rgba(225, 29, 72, 0.9)'], // Rose/Pink gradient
+        buttonColors: ['#FDA4AF', '#FB7185', '#E11D48'], // Pink/Rose button gradient
+        image: require('../../../assets/heart_3d.png'),
+        isCoin: false,
+        isHeart: true
     }
 ];
 
-const PremiumCoinCard = ({ onPress }) => {
+const FloatingHeart = ({ delay }) => {
+    const translateY = useSharedValue(0);
+    const translateX = useSharedValue(0);
+    const opacity = useSharedValue(0);
+    const scale = useSharedValue(0);
+
+    useEffect(() => {
+        const randomX = (Math.random() - 0.5) * 100;
+        const randomY = -150 - Math.random() * 50;
+        const duration = 2000 + Math.random() * 1000;
+        const startDelay = delay || Math.random() * 2000;
+
+        opacity.value = withDelay(startDelay, withRepeat(
+            withSequence(
+                withTiming(1, { duration: 500 }),
+                withDelay(duration - 1000, withTiming(0, { duration: 500 }))
+            ),
+            -1,
+            false
+        ));
+
+        scale.value = withDelay(startDelay, withRepeat(
+            withSequence(
+                withTiming(0.8 + Math.random() * 0.5, { duration: 1000 }),
+                withDelay(duration - 2000, withTiming(0, { duration: 1000 }))
+            ),
+            -1,
+            false
+        ));
+
+        translateY.value = withDelay(startDelay, withRepeat(
+            withTiming(randomY, { duration, easing: Easing.out(Easing.quad) }),
+            -1,
+            false
+        ));
+
+        translateX.value = withDelay(startDelay, withRepeat(
+            withTiming(randomX, { duration, easing: Easing.inOut(Easing.ease) }),
+            -1,
+            false
+        ));
+    }, []);
+
+    const animatedStyle = useAnimatedStyle(() => ({
+        transform: [
+            { translateY: translateY.value },
+            { translateX: translateX.value },
+            { scale: scale.value }
+        ],
+        opacity: opacity.value,
+        position: 'absolute'
+    }));
+
+    return (
+        <Animated.View style={animatedStyle}>
+            <Ionicons name="heart" size={15} color="#fb7185" />
+        </Animated.View>
+    );
+};
+
+const PremiumCoinCard = ({ onCoinPress, onExplorePress }) => {
     const shineX = useSharedValue(-200);
-    const bannerShineX = useSharedValue(-500);
+    const bannerShineX = useSharedValue(-width * 1.5);
     const cardScale = useSharedValue(1);
     const ambientOpacity = useSharedValue(0.12);
     const buttonScale = useSharedValue(1);
     const pressScale = useSharedValue(1);
+    const heartRotate = useSharedValue(0);
+    const coinTranslateY = useSharedValue(0);
     const [activeIndex, setActiveIndex] = useState(0);
 
     useEffect(() => {
@@ -75,9 +140,9 @@ const PremiumCoinCard = ({ onPress }) => {
         // Periodic Banner Sweep (Every 8 seconds)
         bannerShineX.value = withRepeat(
             withSequence(
-                withTiming(600, { duration: 4000, easing: Easing.bezier(0.4, 0, 0.2, 1) }),
-                withTiming(-500, { duration: 0 }),
-                withTiming(-500, { duration: 4000 })
+                withTiming(width * 2.5, { duration: 4000, easing: Easing.bezier(0.4, 0, 0.2, 1) }),
+                withTiming(-width * 2, { duration: 0 }),
+                withTiming(-width * 2, { duration: 4000 })
             ),
             -1,
             false
@@ -97,6 +162,26 @@ const PremiumCoinCard = ({ onPress }) => {
             withSequence(
                 withTiming(1.05, { duration: 1000, easing: Easing.inOut(Easing.ease) }),
                 withTiming(1, { duration: 1000, easing: Easing.inOut(Easing.ease) })
+            ),
+            -1,
+            true
+        );
+
+        // Heart Sway
+        heartRotate.value = withRepeat(
+            withSequence(
+                withTiming(-5, { duration: 1500, easing: Easing.inOut(Easing.ease) }),
+                withTiming(5, { duration: 1500, easing: Easing.inOut(Easing.ease) })
+            ),
+            -1,
+            true
+        );
+
+        // Coin Float
+        coinTranslateY.value = withRepeat(
+            withSequence(
+                withTiming(-8, { duration: 2000, easing: Easing.inOut(Easing.ease) }),
+                withTiming(0, { duration: 2000, easing: Easing.inOut(Easing.ease) })
             ),
             -1,
             true
@@ -126,6 +211,20 @@ const PremiumCoinCard = ({ onPress }) => {
         transform: [{ scale: buttonScale.value * pressScale.value }]
     }));
 
+    const heartAnimatedStyle = useAnimatedStyle(() => ({
+        transform: [
+            { rotate: `${heartRotate.value}deg` },
+            { scale: 1.15 } // Base enlargement
+        ]
+    }));
+
+    const coinAnimatedStyle = useAnimatedStyle(() => ({
+        transform: [
+            { translateY: coinTranslateY.value },
+            { scale: 1.05 }
+        ]
+    }));
+
     const handlePressIn = () => {
         pressScale.value = withTiming(0.97, { duration: 100 });
     };
@@ -141,51 +240,42 @@ const PremiumCoinCard = ({ onPress }) => {
     };
 
     const renderItem = ({ item }) => {
+        const handlePress = () => {
+            if (item.isCoin) {
+                onCoinPress?.();
+            } else if (item.isHeart) {
+                onExplorePress?.();
+            }
+        };
+
         return (
-            <TouchableOpacity activeOpacity={0.9} onPress={onPress} style={{ width }}>
-                {/* Passive Ambient Glow */}
+            <TouchableOpacity activeOpacity={0.9} onPress={handlePress} style={{ width }}>
                 <Animated.View style={[styles.ambientGlow, ambientGlowStyle]} />
-
-                {/* Back Glow Layer (Static) */}
-                <View style={styles.cardGlow} />
-
+                {item.isCoin && <View style={styles.cardGlow} />}
                 <Animated.View style={[styles.cardWrapper, cardAnimatedStyle]}>
                     <GlassCard style={styles.cardContainer} intensity={30} tint="dark">
                         <LinearGradient
-                            colors={[
-                                item.colors[0],
-                                item.colors[1],
-                                'rgba(0, 0, 0, 0.8)'
-                            ]}
-                            start={{ x: 0, y: 0 }}
-                            end={{ x: 1, y: 1 }}
+                            colors={[item.colors[0], item.colors[1], 'rgba(0, 0, 0, 0.8)']}
+                            start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
                             style={StyleSheet.absoluteFill}
                         />
-
-                        {/* Periodic Banner Sweep */}
                         <Animated.View style={[styles.bannerSweep, bannerShineStyle]}>
                             <LinearGradient
                                 colors={['transparent', 'rgba(255, 255, 255, 0.05)', 'rgba(255, 255, 255, 0.15)', 'rgba(255, 255, 255, 0.05)', 'transparent']}
-                                start={{ x: 0, y: 0.5 }}
-                                end={{ x: 1, y: 0.5 }}
+                                start={{ x: 0, y: 0.5 }} end={{ x: 1, y: 0.5 }}
                                 style={StyleSheet.absoluteFill}
                             />
                         </Animated.View>
-
-                        {/* Add subtle radial lighting effect */}
                         <View style={styles.radialOverlay} />
-
-                        {/* Subtle Full-Card Overlay */}
-                        <LinearGradient
-                            colors={['rgba(0, 0, 0, 0)', 'rgba(0, 0, 0, 0.2)']}
-                            style={styles.vignette}
-                        />
+                        <LinearGradient colors={['rgba(0, 0, 0, 0)', 'rgba(0, 0, 0, 0.2)']} style={styles.vignette} />
 
                         <View style={styles.content}>
                             <View style={styles.textContainer}>
-                                <View style={styles.tag}>
-                                    <Text style={styles.tagText}>{item.tag}</Text>
-                                </View>
+                                {item.tag && (
+                                    <View style={styles.tag}>
+                                        <Text style={styles.tagText}>{item.tag}</Text>
+                                    </View>
+                                )}
 
                                 <View style={styles.typographyContainer}>
                                     {item.isCoin ? (
@@ -208,10 +298,10 @@ const PremiumCoinCard = ({ onPress }) => {
                                 <Pressable
                                     onPressIn={handlePressIn}
                                     onPressOut={handlePressOut}
-                                    onPress={onPress}>
-                                    <Animated.View style={[styles.button, buttonAnimatedStyle]}>
+                                    onPress={handlePress}>
+                                    <Animated.View style={[styles.button, buttonAnimatedStyle, item.isHeart && { shadowColor: '#E11D48', borderColor: 'rgba(255, 255, 255, 0.5)' }]}>
                                         <LinearGradient
-                                            colors={['#FBBF24', '#D97706', '#B45309']}
+                                            colors={item.buttonColors}
                                             start={{ x: 0, y: 0 }}
                                             end={{ x: 1, y: 1 }}
                                             style={[StyleSheet.absoluteFill, { borderRadius: 30 }]}
@@ -221,20 +311,11 @@ const PremiumCoinCard = ({ onPress }) => {
                                             <Text style={styles.buttonText}>{item.buttonText}</Text>
                                             <Ionicons name={item.icon} size={15} color="white" style={{ marginLeft: 6 }} />
                                         </View>
-
-                                        {/* Top-Level Shine Layer (High Visibility) */}
                                         <View style={[StyleSheet.absoluteFill, { overflow: 'hidden', borderRadius: 30 }]}>
                                             <Animated.View style={[styles.shine, shineStyle]}>
                                                 <LinearGradient
-                                                    colors={[
-                                                        'rgba(255, 255, 255, 0)',
-                                                        'rgba(255, 255, 255, 0.2)',
-                                                        'rgba(255, 255, 255, 0.7)',
-                                                        'rgba(255, 255, 255, 0.2)',
-                                                        'rgba(255, 255, 255, 0)'
-                                                    ]}
-                                                    start={{ x: 0, y: 0.5 }}
-                                                    end={{ x: 1, y: 0.5 }}
+                                                    colors={['rgba(255, 255, 255, 0)', 'rgba(255, 255, 255, 0.2)', 'rgba(255, 255, 255, 0.7)', 'rgba(255, 255, 255, 0.2)', 'rgba(255, 255, 255, 0)']}
+                                                    start={{ x: 0, y: 0.5 }} end={{ x: 1, y: 0.5 }}
                                                     style={StyleSheet.absoluteFill}
                                                 />
                                             </Animated.View>
@@ -244,22 +325,17 @@ const PremiumCoinCard = ({ onPress }) => {
                             </View>
 
                             <View style={styles.imageContainer}>
-                                <View style={styles.coinGlow} />
-                                <Image
+                                {item.isHeart && [1, 2, 3, 4, 5].map(i => <FloatingHeart key={i} delay={i * 400} />)}
+                                <Animated.Image
                                     source={item.image}
-                                    style={styles.coinImage}
+                                    style={[styles.coinImage, item.isHeart ? heartAnimatedStyle : (item.isCoin ? coinAnimatedStyle : {})]}
                                     resizeMode="contain"
                                 />
                             </View>
                         </View>
                     </GlassCard>
                 </Animated.View>
-
-                {/* Bottom Aura Glow */}
-                <LinearGradient
-                    colors={['rgba(255, 170, 0, 0.15)', 'transparent']}
-                    style={styles.bottomAura}
-                />
+                <LinearGradient colors={['rgba(255, 170, 0, 0.15)', 'transparent']} style={styles.bottomAura} />
             </TouchableOpacity>
         );
     };
@@ -279,7 +355,6 @@ const PremiumCoinCard = ({ onPress }) => {
                 decelerationRate="fast"
                 snapToInterval={width}
             />
-            {/* Pagination Lines */}
             <View style={styles.paginationContainer}>
                 {slides.map((_, i) => (
                     <View
@@ -495,7 +570,12 @@ const styles = StyleSheet.create({
     coinImage: {
         width: 100,
         height: 100,
-        zIndex: 2,
+        zIndex: 5,
+    },
+    heartImageLarge: {
+        width: 130,
+        height: 130,
+        transform: [{ scale: 1.1 }],
     },
     coinGlow: {
         position: 'absolute',

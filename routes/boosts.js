@@ -2,10 +2,10 @@ const express = require('express');
 const router = express.Router();
 const pool = require('../db');
 
-// Activate Boost for 30 minutes
+// Activate Boost for 24 hours (1440 minutes)
 router.post('/:userId', async (req, res) => {
     const { userId } = req.params;
-    const { durationMinutes = 30, cost = 100 } = req.body; // Default 30 mins, 100 coins
+    const { durationMinutes = 1440, cost = 1000 } = req.body; // Default 1 day, 1000 coins
 
     try {
         await pool.query('BEGIN');
@@ -36,7 +36,7 @@ router.post('/:userId', async (req, res) => {
         // A simple approach is just insert a new one, and the discovery logic uses the latest end_time
         const boostRes = await pool.query(`
             INSERT INTO boosts (user_id, start_time, end_time) 
-            VALUES ($1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP + ($2 || ' minutes')::interval)
+            VALUES ($1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP + ($2 * interval '1 minute'))
             RETURNING end_time
         `, [userId, durationMinutes]);
 

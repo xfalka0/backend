@@ -1,5 +1,5 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { View, Text, StyleSheet, Image, TouchableOpacity, Dimensions, Modal, TextInput, FlatList, Alert, ActivityIndicator } from 'react-native';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
+import { View, Text, StyleSheet, Image, TouchableOpacity, Dimensions, Modal, TextInput, FlatList, Alert, ActivityIndicator, RefreshControl } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Animated, {
     useSharedValue,
@@ -30,6 +30,7 @@ export default function ExploreScreen({ route, navigation }) {
     const [loading, setLoading] = useState(true);
     const [isCommentsVisible, setCommentsVisible] = useState(false);
     const [activePostId, setActivePostId] = useState(null);
+    const [operators, setOperators] = useState([]);
     const [comments, setComments] = useState([]);
     const [newComment, setNewComment] = useState('');
     const [isPostingComment, setIsPostingComment] = useState(false);
@@ -82,9 +83,13 @@ export default function ExploreScreen({ route, navigation }) {
     const fetchExploreData = async () => {
         try {
             setLoading(true);
-            const res = await axios.get(`${API_URL}/social/explore`, { params: { user_id: user?.id } });
-            setPosts(res.data.posts);
-            setStories(res.data.stories);
+            const [exploreRes, operatorsRes] = await Promise.all([
+                axios.get(`${API_URL}/social/explore`, { params: { user_id: user?.id } }),
+                axios.get(`${API_URL}/operators`)
+            ]);
+            setPosts(exploreRes.data.posts);
+            setStories(exploreRes.data.stories);
+            setOperators(operatorsRes.data);
         } catch (err) {
             console.error('Fetch Explore Error:', err);
         } finally {
@@ -263,6 +268,28 @@ export default function ExploreScreen({ route, navigation }) {
         );
     };
 
+    const dailyFavorites = useMemo(() => {
+        if (!operators || operators.length === 0) return [];
+
+        const date = new Date();
+        const seed = date.getFullYear() * 10000 + (date.getMonth() + 1) * 100 + date.getDate();
+
+        const shuffled = [...operators].sort((a, b) => {
+            const idA = (a.id || '').toString();
+            const idB = (b.id || '').toString();
+            const valA = (parseInt(idA.replace(/-/g, '').substring(0, 8), 16) + seed) % 1000;
+            const valB = (parseInt(idB.replace(/-/g, '').substring(0, 8), 16) + seed) % 1000;
+            return valA - valB;
+        });
+
+        return shuffled.slice(0, 5).map(op => ({
+            ...op,
+            level: op.vip_level || 1,
+            avatar: op.avatar_url,
+            category: op.category || 'Popüler'
+        }));
+    }, [operators]);
+
     const scrollHandler = useAnimatedScrollHandler({
         onScroll: (event) => {
             scrollY.value = event.contentOffset.y;
@@ -297,11 +324,7 @@ export default function ExploreScreen({ route, navigation }) {
                 <FlatList
                     horizontal
                     showsHorizontalScrollIndicator={false}
-                    data={[
-                        { id: 'fav_1_zeynep', name: 'Zeynep', level: 2, avatar: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=400', category: 'Kültür' },
-                        { id: 'fav_2_asli', name: 'Aslı', level: 4, avatar: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=400', category: 'Seyahat' },
-                        { id: 'fav_3_merve', name: 'Merve', level: 3, avatar: 'https://images.unsplash.com/photo-1531746020798-e6953c6e8e04?w=400', category: 'Fitness' }
-                    ]}
+                    data={dailyFavorites}
                     renderItem={({ item }) => (
                         <TouchableOpacity
                             activeOpacity={0.8}

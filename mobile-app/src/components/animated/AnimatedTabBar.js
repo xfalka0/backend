@@ -29,7 +29,10 @@ const AnimatedTab = ({ state, descriptors, navigation }) => {
     }, [state.index]);
 
     const indicatorStyle = useAnimatedStyle(() => ({
-        transform: [{ translateX: indicatorPos.value }],
+        transform: [
+            { translateX: indicatorPos.value },
+            { translateY: 15 } // Move even further down
+        ],
     }));
 
     return (
@@ -143,13 +146,12 @@ const styles = StyleSheet.create({
         left: 10,
         height: '100%',
         alignItems: 'center',
-        justifyContent: 'flex-end',
-        paddingBottom: 2,
+        justifyContent: 'center', // Center vertically first
     },
     slidingIndicator: {
-        width: 16,
-        height: 4,
-        borderRadius: 2,
+        width: 12, // Shorten it
+        height: 3, // Thinner
+        borderRadius: 1.5,
     },
     tabItem: {
         flex: 1,

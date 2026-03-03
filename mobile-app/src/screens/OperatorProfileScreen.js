@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, Image, StyleSheet, TouchableOpacity, Dimensions, Pressable } from 'react-native';
+import { View, Text, Image, StyleSheet, TouchableOpacity, Dimensions, Pressable, Platform, InteractionManager } from 'react-native';
 import axios from 'axios';
 import { API_URL } from '../config';
 import * as Haptics from 'expo-haptics';
@@ -15,7 +15,7 @@ import { BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons';
 import GlassCard from '../components/ui/GlassCard';
 import { useTheme } from '../contexts/ThemeContext';
-import { Motion } from '../components/motion/MotionSystem';
+// import { Motion } from '../components/motion/MotionSystem';
 import VipFrame from '../components/ui/VipFrame';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import ImageViewing from 'react-native-image-viewing';
@@ -145,7 +145,7 @@ export default function OperatorProfileScreen({ route, navigation }) {
 
                 {/* Scroll ile aktive olan Blur efekti */}
                 <Animated.View style={[StyleSheet.absoluteFill, animatedBlurStyle]}>
-                    <BlurView intensity={20} tint={themeMode === 'dark' ? 'dark' : 'light'} style={StyleSheet.absoluteFill} />
+                    <View style={[StyleSheet.absoluteFill, { backgroundColor: themeMode === 'dark' ? 'rgba(15, 23, 42, 0.7)' : 'rgba(255, 255, 255, 0.7)' }]} />
                 </Animated.View>
             </Animated.View>
 
@@ -155,22 +155,22 @@ export default function OperatorProfileScreen({ route, navigation }) {
                     onPress={() => navigation.goBack()}
                     style={styles.headerIconButton}
                 >
-                    <BlurView intensity={50} tint="dark" style={styles.iconBlur}>
+                    <View style={[styles.iconBlur, { backgroundColor: 'rgba(0,0,0,0.5)' }]}>
                         <Ionicons name="chevron-back" size={24} color="white" />
-                    </BlurView>
+                    </View>
                 </TouchableOpacity>
 
                 <TouchableOpacity
                     onPress={handleFavorite}
                     style={styles.headerIconButton}
                 >
-                    <BlurView intensity={50} tint="dark" style={styles.iconBlur}>
+                    <View style={[styles.iconBlur, { backgroundColor: 'rgba(0,0,0,0.5)' }]}>
                         <Ionicons
                             name={isFavorited ? "heart" : "heart-outline"}
                             size={24}
                             color={isFavorited ? "#ef4444" : "white"}
                         />
-                    </BlurView>
+                    </View>
                 </TouchableOpacity>
             </View>
 
@@ -184,9 +184,8 @@ export default function OperatorProfileScreen({ route, navigation }) {
                 <View style={{ height: HEADER_HEIGHT - 90 }} />
 
                 {/* Profil Aksiyon Butonları (Resmin üstüne binen) */}
-                <Motion.SlideUp delay={100}>
+                <View>
                     <View style={styles.heroActionsRow}>
-                        {/* Video, Mic, Gift actions removed as requested */}
                         <TouchableOpacity
                             style={[styles.heroActionButton, { backgroundColor: isFavorited ? 'rgba(239, 68, 68, 0.95)' : 'rgba(255, 255, 255, 0.15)' }]}
                             activeOpacity={0.8}
@@ -195,10 +194,10 @@ export default function OperatorProfileScreen({ route, navigation }) {
                             <Ionicons name="heart" size={24} color={isFavorited ? "white" : "#cbd5e1"} />
                         </TouchableOpacity>
                     </View>
-                </Motion.SlideUp>
+                </View>
 
                 {/* İçerik Alanı: Glassmorphism kullanarak arka planı hafif gösteriyoruz */}
-                <Motion.Fade delay={200}>
+                <View>
                     <GlassCard
                         style={[
                             styles.contentCard,
@@ -246,7 +245,6 @@ export default function OperatorProfileScreen({ route, navigation }) {
                                 </View>
                                 <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 8 }}>
                                     <Text style={styles.category}>
-                                        {operator.is_operator && operator.category ? `${operator.category} • ` : ''}
                                         {operator.job || (operator.is_operator ? 'Öğrenci' : 'Kullanıcı')}
                                     </Text>
                                     {operator.age && (
@@ -268,21 +266,19 @@ export default function OperatorProfileScreen({ route, navigation }) {
                             )}
                         </View>
 
-                        <Motion.Fade delay={400}>
+                        <View>
                             {/* 1. Fotoğraf Albümü (En Üstte) */}
                             {operator.photos && operator.photos.length > 0 && (
                                 <View style={styles.section}>
                                     <Text style={styles.sectionTitle}>Fotoğraf Albümü</Text>
                                     <Animated.ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.albumScroll}>
-                                        {operator.photos.map((photo, index) => (
-                                            <Motion.SlideUp delay={500 + (index * 100)} key={index}>
-                                                <Pressable onPress={() => {
-                                                    setCurrentImageIndex(index);
-                                                    setIsImageViewerVisible(true);
-                                                }}>
-                                                    <Image source={{ uri: photo }} style={styles.albumPhoto} />
-                                                </Pressable>
-                                            </Motion.SlideUp>
+                                        {operator.photos.filter(p => p && p.startsWith('http')).map((photo, index) => (
+                                            <Pressable key={index} onPress={() => {
+                                                setCurrentImageIndex(index);
+                                                setIsImageViewerVisible(true);
+                                            }}>
+                                                <Image source={{ uri: photo }} style={styles.albumPhoto} />
+                                            </Pressable>
                                         ))}
                                     </Animated.ScrollView>
                                 </View>
@@ -333,39 +329,69 @@ export default function OperatorProfileScreen({ route, navigation }) {
                                     )}
                                 </View>
                             )}
-                        </Motion.Fade>
-
+                        </View>
                         <View style={{ height: 100 }} />
                     </GlassCard>
-                </Motion.Fade>
+                </View>
             </Animated.ScrollView>
 
             {/* Alttaki Mesaj Butonu */}
             <View style={styles.bottomContainer}>
-                <BlurView intensity={60} tint="dark" style={styles.bottomBlur}>
-                    <TouchableOpacity
-                        style={styles.messageButton}
-                        onPress={() => navigation.navigate('Chat', {
-                            operatorId: operator.id,
-                            name: operator.name,
-                            job: operator.job || 'Öğrenci',
-                            avatar_url: operator.avatar_url,
-                            is_online: operator.is_online,
-                            vip_level: operator.vip_level,
-                            user
-                        })}
-                    >
-                        <LinearGradient
-                            colors={['#8b5cf6', '#d946ef']}
-                            start={{ x: 0, y: 0 }}
-                            end={{ x: 1, y: 0 }}
-                            style={styles.gradientButton}
+                {Platform.OS === 'ios' ? (
+                    <BlurView intensity={60} tint="dark" style={styles.bottomBlur}>
+                        <TouchableOpacity
+                            style={styles.messageButton}
+                            onPress={() => {
+                                navigation.navigate('Chat', {
+                                    operatorId: operator.id,
+                                    name: operator.name,
+                                    job: operator.job || 'Öğrenci',
+                                    avatar_url: operator.avatar_url,
+                                    is_online: operator.is_online,
+                                    vip_level: operator.vip_level,
+                                    user
+                                });
+                            }}
                         >
-                            <Ionicons name="chatbubble-ellipses" size={20} color="white" />
-                            <Text style={styles.buttonText}>Mesaj Gönder</Text>
-                        </LinearGradient>
-                    </TouchableOpacity>
-                </BlurView>
+                            <LinearGradient
+                                colors={['#8b5cf6', '#d946ef']}
+                                start={{ x: 0, y: 0 }}
+                                end={{ x: 1, y: 0 }}
+                                style={styles.gradientButton}
+                            >
+                                <Ionicons name="chatbubble-ellipses" size={20} color="white" />
+                                <Text style={styles.buttonText}>Mesaj Gönder</Text>
+                            </LinearGradient>
+                        </TouchableOpacity>
+                    </BlurView>
+                ) : (
+                    <View style={[styles.bottomBlur, { backgroundColor: '#0f172a' }]}>
+                        <TouchableOpacity
+                            style={styles.messageButton}
+                            onPress={() => {
+                                navigation.navigate('Chat', {
+                                    operatorId: operator.id,
+                                    name: operator.name,
+                                    job: operator.job || 'Öğrenci',
+                                    avatar_url: operator.avatar_url,
+                                    is_online: operator.is_online,
+                                    vip_level: operator.vip_level,
+                                    user
+                                });
+                            }}
+                        >
+                            <LinearGradient
+                                colors={['#8b5cf6', '#d946ef']}
+                                start={{ x: 0, y: 0 }}
+                                end={{ x: 1, y: 0 }}
+                                style={styles.gradientButton}
+                            >
+                                <Ionicons name="chatbubble-ellipses" size={20} color="white" />
+                                <Text style={styles.buttonText}>Mesaj Gönder</Text>
+                            </LinearGradient>
+                        </TouchableOpacity>
+                    </View>
+                )}
             </View>
 
             {/* Tam Ekran Fotoğraf Görüntüleyici */}

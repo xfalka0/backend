@@ -54,14 +54,12 @@ const ProfileItem = React.memo(({ profile, index, onPress, theme, sharedPulse, s
                     style={styles.profileItem}
                 >
                     <View style={styles.avatarWrapper}>
-                        {/* Pulsing Outer Glow - Standard premium ring for everyone */}
                         <AnimatedGradient
-                            colors={['#ec4899', '#8b5cf6', '#ec4899']}
+                            colors={['#FBBF24', '#D97706', '#FBBF24']}
                             start={{ x: 0, y: 0 }}
                             end={{ x: 1, y: 1 }}
                             style={[styles.glowBorder, animatedGlowStyle]}
                         />
-
                         <View style={[styles.avatarContainer, { backgroundColor: theme.colors.glass }]}>
                             <Image
                                 source={{ uri: profile.avatar_url }}
@@ -69,15 +67,11 @@ const ProfileItem = React.memo(({ profile, index, onPress, theme, sharedPulse, s
                                 resizeMode="cover"
                             />
                         </View>
-
-                        {/* Online Badge */}
                         {profile.is_online && (
                             <View style={styles.onlineBadge}>
                                 <View style={styles.onlineInner} />
                             </View>
                         )}
-
-                        {/* Action Label */}
                         <View style={styles.boostBadge}>
                             <Ionicons name="rocket" size={8} color="white" />
                         </View>
@@ -105,62 +99,14 @@ export default function PromotedProfiles({ data = [], onProfilePress, user }) {
     const driftY = useSharedValue(0);
     const shinePos = useSharedValue(-width);
 
-    // Living Background Drift
+    // Living Background Drift - Disabled for performance
     useEffect(() => {
-        // 1. Sync Pulse & Rotation
-        sharedPulse.value = withRepeat(
-            withTiming(1, { duration: 2000, easing: Easing.inOut(Easing.ease) }),
-            -1,
-            true
-        );
-        sharedRotation.value = withRepeat(
-            withTiming(360, { duration: 8000, easing: Easing.linear }),
-            -1,
-            false
-        );
-
-        // 2. Wiggle for Flame
-        wiggle.value = withRepeat(
-            withSequence(
-                withTiming(18, { duration: 250, easing: Easing.out(Easing.ease) }),
-                withTiming(-14, { duration: 400, easing: Easing.inOut(Easing.ease) }),
-                withTiming(10, { duration: 350, easing: Easing.inOut(Easing.ease) }),
-                withTiming(-6, { duration: 300, easing: Easing.inOut(Easing.ease) }),
-                withTiming(0, { duration: 250, easing: Easing.in(Easing.ease) }),
-                withDelay(2000, withTiming(0, { duration: 0 }))
-            ),
-            -1,
-            false
-        );
-
-        // 3. BG Drift
-        driftX.value = withRepeat(
-            withSequence(
-                withTiming(20, { duration: 5000, easing: Easing.inOut(Easing.ease) }),
-                withTiming(-20, { duration: 5000, easing: Easing.inOut(Easing.ease) })
-            ),
-            -1,
-            true
-        );
-        driftY.value = withRepeat(
-            withSequence(
-                withTiming(-15, { duration: 7000, easing: Easing.inOut(Easing.ease) }),
-                withTiming(15, { duration: 7000, easing: Easing.inOut(Easing.ease) })
-            ),
-            -1,
-            true
-        );
-
-        // 4. Shine Sweep
-        shinePos.value = withRepeat(
-            withSequence(
-                withTiming(width, { duration: 1500, easing: Easing.out(Easing.ease) }),
-                withTiming(-width, { duration: 0 }),
-                withDelay(5500, withTiming(-width, { duration: 0 }))
-            ),
-            -1,
-            false
-        );
+        sharedPulse.value = 1;
+        sharedRotation.value = 0;
+        wiggle.value = 0;
+        driftX.value = 0;
+        driftY.value = 0;
+        shinePos.value = -width;
     }, []);
 
     const animatedWiggleStyle = useAnimatedStyle(() => ({
@@ -186,40 +132,36 @@ export default function PromotedProfiles({ data = [], onProfilePress, user }) {
             <View style={styles.header}>
                 <View style={styles.titleRow}>
                     <LinearGradient
-                        colors={['#f472b6', '#a855f7']}
+                        colors={['#FBBF24', '#D97706']}
                         start={{ x: 0, y: 0 }}
                         end={{ x: 1, y: 0 }}
                         style={styles.fireIconBg}
                     >
                         <Animated.View style={animatedWiggleStyle}>
-                            <Ionicons name="flame" size={14} color="white" />
+                            <Ionicons name="sparkles" size={14} color="white" />
                         </Animated.View>
                     </LinearGradient>
                     <Text style={[styles.title, { color: theme.colors.text }]}>Profilini Öne Çıkaranlar</Text>
                 </View>
             </View>
 
-            <GlassCard intensity={themeMode === 'dark' ? 40 : 25} style={styles.card}>
-                {/* Background Ornaments - "Living UI" */}
-                <View style={styles.ornamentContainer} pointerEvents="none">
-                    <Animated.View style={[styles.ornament, { backgroundColor: '#ec4899', top: -30, left: -30, opacity: 0.15 }, animatedDriftStyle1]} />
-                    <Animated.View style={[styles.ornament, { backgroundColor: '#8b5cf6', bottom: -30, right: -40, opacity: 0.15 }, animatedDriftStyle2]} />
-                </View>
-
-                {/* Shine Sweep Overlay */}
+            <View style={styles.premiumCardContainer}>
+                <LinearGradient
+                    colors={themeMode === 'dark' ? ['#0f172a', '#1e293b', '#0f172a'] : ['#ffffff', '#f8fafc', '#ffffff']}
+                    start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+                    style={StyleSheet.absoluteFill}
+                />
+                <LinearGradient
+                    colors={['rgba(251, 191, 36, 0.08)', 'transparent']}
+                    style={[StyleSheet.absoluteFill, { borderRadius: 24 }]}
+                />
                 <AnimatedGradient
-                    colors={['transparent', 'rgba(255,255,255,0.0)', 'rgba(255,255,255,0.15)', 'rgba(255,255,255,0.0)', 'transparent']}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 0 }}
+                    colors={['transparent', 'rgba(251, 191, 36, 0.0)', 'rgba(251, 191, 36, 0.1)', 'rgba(251, 191, 36, 0.0)', 'transparent']}
+                    start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
                     style={[StyleSheet.absoluteFill, styles.shineSweep, animatedShineStyle]}
                     pointerEvents="none"
                 />
-
-                <ScrollView
-                    horizontal
-                    showsHorizontalScrollIndicator={false}
-                    contentContainerStyle={styles.scrollContent}
-                >
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
                     {data.map((profile, index) => (
                         <ProfileItem
                             key={profile.id || index}
@@ -232,7 +174,7 @@ export default function PromotedProfiles({ data = [], onProfilePress, user }) {
                         />
                     ))}
                 </ScrollView>
-            </GlassCard>
+            </View>
         </View>
     );
 }
@@ -267,21 +209,24 @@ const styles = StyleSheet.create({
         fontWeight: '800',
         letterSpacing: 0.3,
     },
-    card: {
+    premiumCardContainer: {
         borderRadius: 24,
         paddingVertical: 18,
-        overflow: 'hidden', // Standard required for ornament clipping
+        overflow: 'hidden',
+        borderWidth: 1.5,
+        borderColor: 'rgba(217, 119, 6, 0.4)', // Sharp Gold Border
+        backgroundColor: '#0f172a',
+        shadowColor: '#FBBF24',
+        shadowOffset: { width: 0, height: 10 },
+        shadowOpacity: 0.2,
+        shadowRadius: 20,
+        elevation: 10,
     },
     ornamentContainer: {
-        ...StyleSheet.absoluteFillObject,
-        overflow: 'hidden',
+        display: 'none',
     },
     ornament: {
-        position: 'absolute',
-        width: 120,
-        height: 120,
-        borderRadius: 60,
-        backgroundColor: 'red', // Overridden by inline
+        display: 'none',
     },
     shineSweep: {
         width: width * 0.4,
@@ -346,7 +291,7 @@ const styles = StyleSheet.create({
         position: 'absolute',
         top: -2,
         right: -2,
-        backgroundColor: '#f472b6',
+        backgroundColor: '#D97706',
         width: 16,
         height: 16,
         borderRadius: 8,
@@ -354,7 +299,7 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         borderWidth: 1.5,
         borderColor: 'white',
-        shadowColor: '#f472b6',
+        shadowColor: '#FBBF24',
         shadowOffset: { width: 0, height: 0 },
         shadowOpacity: 1,
         shadowRadius: 5,

@@ -13,6 +13,7 @@ import {
     ActivityIndicator,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Application from 'expo-application';
 import { LinearGradient } from 'expo-linear-gradient';
 import Animated, {
     FadeIn,
@@ -75,6 +76,19 @@ export default function AuthScreen({ navigation, route }) {
         transform: [{ translateY: sheetY.value }],
     }));
 
+    const getDeviceId = async () => {
+        try {
+            if (Platform.OS === 'android') {
+                return Application.getAndroidId();
+            } else {
+                return await Application.getIosIdForVendorAsync();
+            }
+        } catch (e) {
+            console.log('Error getting device ID:', e);
+            return null; // Fallback gracefully if impossible
+        }
+    };
+
     const handleEmailAuth = async () => {
         if (!email || !password) {
             setAlert({ visible: true, title: 'Hata', message: 'Lütfen tüm alanları doldurun.', type: 'error' });
@@ -84,7 +98,8 @@ export default function AuthScreen({ navigation, route }) {
         setLoading(true);
         try {
             const endpoint = isRegisterMode ? '/auth/register-email' : '/auth/login-email';
-            const payload = { email, password };
+            const deviceId = await getDeviceId();
+            const payload = { email, password, deviceId };
             const res = await axios.post(`${API_URL}${endpoint}`, payload);
 
             if (res.data.user) {
@@ -139,7 +154,8 @@ export default function AuthScreen({ navigation, route }) {
 
         setLoading(true);
         try {
-            const payload = { phone, otp };
+            const deviceId = await getDeviceId();
+            const payload = { phone, otp, deviceId };
             const res = await axios.post(`${API_URL}/auth/verify-otp`, payload);
 
             if (res.data.user) {
@@ -167,9 +183,10 @@ export default function AuthScreen({ navigation, route }) {
             await GoogleSignin.hasPlayServices();
             const userInfo = await GoogleSignin.signIn();
             const idToken = userInfo.idToken;
+            const deviceId = await getDeviceId();
 
             // Verify with backend
-            const res = await axios.post(`${API_URL}/auth/google`, { idToken });
+            const res = await axios.post(`${API_URL}/auth/google`, { idToken, deviceId });
 
             if (res.data.user) {
                 const { user, token } = res.data;

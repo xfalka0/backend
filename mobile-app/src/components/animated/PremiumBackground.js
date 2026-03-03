@@ -82,38 +82,14 @@ const PremiumBackground = React.memo(() => {
                 style={StyleSheet.absoluteFill}
             />
 
-            {/* 2. Ambient Glow Layers */}
+            {/* 2. Ambient Glow Layers - Static */}
             <View style={styles.glowContainer}>
-                {/* Gold Glow Top-Left */}
                 <View style={[styles.glowBase, styles.goldGlow]} />
-                {/* Purple Glow Middle-Right */}
                 <View style={[styles.glowBase, styles.purpleGlow]} />
             </View>
 
-            {/* 3. Floating Blur Blobs */}
-            <View style={StyleSheet.absoluteFill}>
-                <AnimatedBlob
-                    color="rgba(138, 43, 226, 0.08)"
-                    size={width * 0.8}
-                    duration={15000}
-                    initialPosition={{ x: width * 0.1, y: -height * 0.2 }}
-                />
-                <AnimatedBlob
-                    color="rgba(255, 215, 0, 0.05)"
-                    size={width * 0.6}
-                    duration={18000}
-                    initialPosition={{ x: -width * 0.3, y: height * 0.1 }}
-                />
-            </View>
-
-            {/* 4. Glass/Blur Overlay to soften everything */}
-            <BlurView intensity={20} tint="dark" style={StyleSheet.absoluteFill} />
-
-            {/* 5. Subtle Noise Texture Overlay */}
-            {/* Note: In a real app, we'd use a small tiled noise PNG. 
-                Using a semi-transparent black overlay with very low opacity to simulate depth if image is missing,
-                but I will attempt to use a standard noise representation if possible or just style it. */}
-            <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.02)', opacity: 0.3 }]} />
+            {/* 3. Subtle Noise Texture Overlay - Static */}
+            <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.01)' }]} />
         </View>
     );
 });

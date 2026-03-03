@@ -120,7 +120,7 @@ const BoostPromoCard = ({ onPress }) => {
 
                             <View style={styles.textWrapper}>
                                 <Text style={styles.title}>Profilini Öne Çıkar!</Text>
-                                <Text style={styles.desc}>30 dakika boyunca keşfette en üstte yer alarak etkileşimini artır.</Text>
+                                <Text style={styles.desc}>1 gün boyunca keşfette en üstte yer alarak etkileşimini artır.</Text>
                             </View>
 
                             <View style={styles.badge}>

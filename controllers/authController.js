@@ -10,7 +10,7 @@ const SECRET_KEY = process.env.JWT_SECRET || 'falka_super_secret_2024_key_change
 
 // Google Auth
 exports.googleAuth = async (req, res) => {
-    const { idToken } = req.body;
+    const { idToken, deviceId } = req.body;
     const io = req.app.get('io');
     if (!idToken) return res.status(400).json({ error: 'Token gerekli.' });
 
@@ -26,12 +26,20 @@ exports.googleAuth = async (req, res) => {
         let user;
 
         if (userResult.rows.length === 0) {
+            // Check device limit for NEW account
+            if (deviceId) {
+                const limitCheck = await db.query('SELECT count(*) FROM users WHERE device_id = $1', [deviceId]);
+                if (parseInt(limitCheck.rows[0].count, 10) >= 2) {
+                    return res.status(403).json({ error: 'Bu cihazdan en fazla 2 hesap oluşturulabilir veya kullanılabilir.' });
+                }
+            }
+
             const username = email.split('@')[0] + '_' + Math.floor(Math.random() * 10000);
             const result = await db.query(
-                `INSERT INTO users (username, email, display_name, avatar_url, role, balance) 
-                 VALUES ($1, $2, $3, $4, 'user', 100) 
+                `INSERT INTO users (username, email, display_name, avatar_url, role, balance, device_id) 
+                 VALUES ($1, $2, $3, $4, 'user', 100, $5) 
                  RETURNING *`,
-                [username, email, name, picture || 'https://via.placeholder.com/150']
+                [username, email, name, picture || 'https://via.placeholder.com/150', deviceId || null]
             );
             user = result.rows[0];
             await assignFakeInteractions(user.id);
@@ -43,6 +51,18 @@ exports.googleAuth = async (req, res) => {
             if (user.account_status !== 'active') {
                 return res.status(403).json({ error: 'Hesabınız askıya alınmış.' });
             }
+
+            // Check device limit if switching to a new device
+            if (deviceId && user.device_id !== deviceId) {
+                const limitCheck = await db.query('SELECT count(*) FROM users WHERE device_id = $1 AND id != $2', [deviceId, user.id]);
+                if (parseInt(limitCheck.rows[0].count, 10) >= 2) {
+                    return res.status(403).json({ error: 'Bu cihazdan en fazla 2 hesap oluşturulabilir veya kullanılabilir.' });
+                }
+                // Update device_id
+                await db.query('UPDATE users SET device_id = $1 WHERE id = $2', [deviceId, user.id]);
+                user.device_id = deviceId;
+            }
+
             await logActivity(io, user.id, 'login', 'Kullanıcı Google ile giriş yaptı.');
         }
 
@@ -61,17 +81,24 @@ exports.googleAuth = async (req, res) => {
 
 // Register Email
 exports.registerEmail = async (req, res) => {
-    const { email, password, username, display_name } = req.body;
+    const { email, password, username, display_name, deviceId } = req.body;
     const io = req.app.get('io');
     if (!email || !password) return res.status(400).json({ error: 'Email ve şifre zorunludur.' });
 
     try {
+        if (deviceId) {
+            const limitCheck = await db.query('SELECT count(*) FROM users WHERE device_id = $1', [deviceId]);
+            if (parseInt(limitCheck.rows[0].count, 10) >= 2) {
+                return res.status(403).json({ error: 'Bu cihazdan en fazla 2 hesap oluşturulabilir veya kullanılabilir.' });
+            }
+        }
+
         const hashedPassword = await bcrypt.hash(password, 10);
         const finalUsername = username || email.split('@')[0] + '_' + Math.floor(Math.random() * 1000);
 
         const result = await db.query(
-            "INSERT INTO users (username, email, password_hash, role, balance, display_name, avatar_url) VALUES ($1, $2, $3, 'user', 100, $4, 'https://via.placeholder.com/150') RETURNING *",
-            [finalUsername, email, hashedPassword, display_name || finalUsername]
+            "INSERT INTO users (username, email, password_hash, role, balance, display_name, avatar_url, device_id) VALUES ($1, $2, $3, 'user', 100, $4, 'https://via.placeholder.com/150', $5) RETURNING *",
+            [finalUsername, email, hashedPassword, display_name || finalUsername, deviceId || null]
         );
 
         const user = result.rows[0];
@@ -95,7 +122,7 @@ exports.registerEmail = async (req, res) => {
 
 // Login Email
 exports.loginEmail = async (req, res) => {
-    const { email, password } = req.body;
+    const { email, password, deviceId } = req.body;
     const io = req.app.get('io');
 
     try {
@@ -112,6 +139,15 @@ exports.loginEmail = async (req, res) => {
 
         if (user.account_status !== 'active') {
             return res.status(403).json({ error: 'Hesabınız askıya alınmış.' });
+        }
+
+        if (deviceId && user.device_id !== deviceId) {
+            const limitCheck = await db.query('SELECT count(*) FROM users WHERE device_id = $1 AND id != $2', [deviceId, user.id]);
+            if (parseInt(limitCheck.rows[0].count, 10) >= 2) {
+                return res.status(403).json({ error: 'Bu cihazdan en fazla 2 hesap oluşturulabilir veya kullanılabilir.' });
+            }
+            await db.query('UPDATE users SET device_id = $1 WHERE id = $2', [deviceId, user.id]);
+            user.device_id = deviceId;
         }
 
         const token = jwt.sign(

@@ -13,18 +13,7 @@ const StoryRing = ({ children, onPress, hasNewStory = true, size = 76 }) => {
     const rotation = useSharedValue(0);
 
     useEffect(() => {
-        if (hasNewStory) {
-            rotation.value = withRepeat(
-                withTiming(360, {
-                    duration: 3000,
-                    easing: Easing.linear,
-                }),
-                -1, // Infinite
-                false
-            );
-        } else {
-            rotation.value = 0;
-        }
+        rotation.value = 0; // Infinite rotation disabled for FlatList performance
     }, [hasNewStory]);
 
     const animatedStyle = useAnimatedStyle(() => ({

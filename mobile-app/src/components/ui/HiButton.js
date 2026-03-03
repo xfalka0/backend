@@ -69,18 +69,9 @@ const HiButton = memo(({ onPress, operatorId, onHiPress, userBalance = 0, cost =
         checkHiStatus();
     }, [operatorId]);
 
-    // Pulsing heartbeat animation setup - Optimized for performance
+    // Pulsing heartbeat animation setup - Stopped for FlatList performance
     useEffect(() => {
-        pulse.value = withRepeat(
-            withSequence(
-                withTiming(1.03, { duration: 1000, easing: Easing.inOut(Easing.ease) }),
-                withTiming(1, { duration: 1000, easing: Easing.inOut(Easing.ease) }),
-                withTiming(1.03, { duration: 1000, easing: Easing.inOut(Easing.ease) }),
-                withTiming(1, { duration: 2000, easing: Easing.inOut(Easing.ease) })
-            ),
-            -1, // Infinite repeat
-            false
-        );
+        pulse.value = 1;
     }, []);
 
     const checkHiStatus = async () => {

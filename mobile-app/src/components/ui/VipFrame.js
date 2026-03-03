@@ -11,6 +11,7 @@ import Animated, {
 import { Ionicons } from '@expo/vector-icons';
 
 import { useTheme } from '../../contexts/ThemeContext';
+import { API_URL } from '../../config';
 
 /**
  * VIP_FRAME_CONFIGS: Grand Sugo Style Assets

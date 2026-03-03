@@ -56,6 +56,15 @@ export const Motion = {
             </Animated.View>
         );
     },
+
+    Scale: ({ children, delay = 0 }) => (
+        <Animated.View
+            entering={ZoomIn.delay(delay).springify()}
+            exiting={ZoomOut}
+        >
+            {children}
+        </Animated.View>
+    ),
 };
 
 export const SpringConfig = {

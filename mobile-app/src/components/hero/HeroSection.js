@@ -6,28 +6,21 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const { width } = Dimensions.get('window');
 
-const HeroSection = ({ onCoinPress, onDestinyPress }) => {
+const HeroSection = ({ onCoinPress, onExplorePress, onDestinyPress }) => {
     const insets = useSafeAreaInsets();
 
     return (
         <View style={styles.container}>
-            {/* Background Particles (now directly over main background) */}
-
-            {/* Background Particles */}
             <FloatingParticles />
-
-            {/* Content Container */}
             <View style={[styles.content, { paddingTop: insets.top + 10 }]}>
-
-                {/* Promotional Experience */}
-                <PremiumCoinCard onPress={onCoinPress} />
-
-                {/* Interactive Destiny Experience */}
+                <PremiumCoinCard
+                    onCoinPress={onCoinPress}
+                    onExplorePress={onExplorePress}
+                />
                 <View style={styles.destinyContainer}>
                     <DestinyHero onPress={onDestinyPress} />
                 </View>
             </View>
-
         </View>
     );
 };

@@ -31,7 +31,7 @@ export default function ShopScreen({ navigation, route }) {
                 } else {
                     // 2. Fallback to our Backend
                     console.log('[Shop] No RevenueCat offerings found, falling back to backend API.');
-                    const res = await axios.get(`${API_URL}/api/public/packages`);
+                    const res = await axios.get(`${API_URL}/public/packages`);
                     // Transform DB packages to a compatible format for render
                     const transformed = res.data.map(pkg => ({
                         isLocal: true,
@@ -79,7 +79,7 @@ export default function ShopScreen({ navigation, route }) {
 
             if (success) {
                 // Sync with backend
-                const res = await axios.post(`${API_URL}/api/purchase`, {
+                const res = await axios.post(`${API_URL}/purchase`, {
                     userId: currentUserId,
                     productId: pack.product.identifier,
                     transactionId: transactionId

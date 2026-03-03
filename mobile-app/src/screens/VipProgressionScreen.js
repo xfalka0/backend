@@ -91,7 +91,7 @@ const VipProgressionScreen = ({ navigation, route }) => {
             const userData = JSON.parse(userDataStr);
 
             // Get VIP progress
-            const progressRes = await fetch(`${API_URL}/api/vip/progress`, {
+            const progressRes = await fetch(`${API_URL}/vip/progress`, {
                 headers: { Authorization: `Bearer ${token}` }
             });
             const progressData = await progressRes.json();
@@ -124,7 +124,7 @@ const VipProgressionScreen = ({ navigation, route }) => {
         setPurchasing(true);
         try {
             const token = await AsyncStorage.getItem('token');
-            const response = await fetch(`${API_URL}/api/vip/purchase-xp`, {
+            const response = await fetch(`${API_URL}/vip/purchase-xp`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',

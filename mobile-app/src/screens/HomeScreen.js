@@ -134,9 +134,9 @@ export default function HomeScreen({ navigation, route }) {
     const { user: routeUser, gender } = route.params || {};
     const TEST_USER_ID = 'c917f7d6-cc44-4b04-8917-1dbbed0b1e9b';
     const user = React.useMemo(() => {
-        return routeUser ? { ...routeUser, name: routeUser.name || routeUser.display_name || routeUser.username || 'Kullanıcı' } : { id: TEST_USER_ID, name: 'Misafir', hearts: 0 };
+        return routeUser ? { ...routeUser, name: routeUser.name || routeUser.display_name || routeUser.username || 'Kullanıcı' } : { id: TEST_USER_ID, name: 'Misafir', hearts: 0, balance: 0 };
     }, [routeUser]);
-    const [balance, setBalance] = useState(user.hearts || 0);
+    const [balance, setBalance] = useState(user.balance || user.hearts || 0);
     const [operators, setOperators] = useState([]);
     const [loading, setLoading] = useState(true);
     const [promotedProfiles, setPromotedProfiles] = useState([]);
@@ -155,7 +155,18 @@ export default function HomeScreen({ navigation, route }) {
     useFocusEffect(
         React.useCallback(() => {
             fetchOperators(true);
-            // Refresh balance if needed
+
+            // Sync balance from local storage if updated elsewhere (e.g. ShopScreen)
+            AsyncStorage.getItem('user').then(userDataStr => {
+                if (userDataStr) {
+                    const parsedUser = JSON.parse(userDataStr);
+                    if (parsedUser.balance !== undefined) {
+                        setBalance(parsedUser.balance);
+                    } else if (parsedUser.hearts !== undefined) {
+                        setBalance(parsedUser.hearts);
+                    }
+                }
+            }).catch(e => console.error('Error syncing balance:', e));
         }, [])
     );
 

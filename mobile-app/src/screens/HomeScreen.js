@@ -439,6 +439,10 @@ export default function HomeScreen({ navigation, route }) {
             console.error('[HomeScreen] Hi message err', e);
             if (e.response?.data?.insufficientFunds) {
                 Alert.alert("Bakiye Yetersiz", e.response.data.error);
+            } else if (e.response?.data?.error) {
+                Alert.alert("Mesaj Hatası", e.response.data.error);
+            } else {
+                Alert.alert("Hata", "Sunucuya ulaşılamadı. Lütfen tekrar deneyin.");
             }
         }
     }, [user.id, API_URL]);

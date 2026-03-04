@@ -249,7 +249,12 @@ const PremiumCoinCard = ({ onCoinPress, onExplorePress }) => {
         };
 
         return (
-            <TouchableOpacity activeOpacity={0.9} onPress={handlePress} style={{ width }}>
+            <Pressable
+                onPressIn={handlePressIn}
+                onPressOut={handlePressOut}
+                onPress={handlePress}
+                style={{ width }}
+            >
                 <Animated.View style={[styles.ambientGlow, ambientGlowStyle]} />
                 {item.isCoin && <View style={styles.cardGlow} />}
                 <Animated.View style={[styles.cardWrapper, cardAnimatedStyle]}>
@@ -295,33 +300,30 @@ const PremiumCoinCard = ({ onCoinPress, onExplorePress }) => {
                                     </Text>
                                 </View>
 
-                                <Pressable
-                                    onPressIn={handlePressIn}
-                                    onPressOut={handlePressOut}
-                                    onPress={handlePress}>
-                                    <Animated.View style={[styles.button, buttonAnimatedStyle, item.isHeart && { shadowColor: '#E11D48', borderColor: 'rgba(255, 255, 255, 0.5)' }]}>
-                                        <LinearGradient
-                                            colors={item.buttonColors}
-                                            start={{ x: 0, y: 0 }}
-                                            end={{ x: 1, y: 1 }}
-                                            style={[StyleSheet.absoluteFill, { borderRadius: 30 }]}
-                                        />
+                                {/* Button Container */}
+                                <Animated.View style={[styles.button, buttonAnimatedStyle, item.isHeart && { shadowColor: '#E11D48', borderColor: 'rgba(255, 255, 255, 0.5)' }]}>
+                                    <LinearGradient
+                                        colors={item.buttonColors}
+                                        start={{ x: 0, y: 0 }}
+                                        end={{ x: 1, y: 1 }}
+                                        style={[StyleSheet.absoluteFill, { borderRadius: 30 }]}
+                                    />
 
-                                        <View style={styles.buttonContent}>
-                                            <Text style={styles.buttonText}>{item.buttonText}</Text>
-                                            <Ionicons name={item.icon} size={15} color="white" style={{ marginLeft: 6 }} />
-                                        </View>
-                                        <View style={[StyleSheet.absoluteFill, { overflow: 'hidden', borderRadius: 30 }]}>
-                                            <Animated.View style={[styles.shine, shineStyle]}>
-                                                <LinearGradient
-                                                    colors={['rgba(255, 255, 255, 0)', 'rgba(255, 255, 255, 0.2)', 'rgba(255, 255, 255, 0.7)', 'rgba(255, 255, 255, 0.2)', 'rgba(255, 255, 255, 0)']}
-                                                    start={{ x: 0, y: 0.5 }} end={{ x: 1, y: 0.5 }}
-                                                    style={StyleSheet.absoluteFill}
-                                                />
-                                            </Animated.View>
-                                        </View>
-                                    </Animated.View>
-                                </Pressable>
+                                    <View style={styles.buttonContent}>
+                                        <Text style={styles.buttonText}>{item.buttonText}</Text>
+                                        <Ionicons name={item.icon} size={15} color="white" style={{ marginLeft: 6 }} />
+                                    </View>
+                                    <View style={[StyleSheet.absoluteFill, { overflow: 'hidden', borderRadius: 30 }]}>
+                                        <Animated.View style={[styles.shine, shineStyle]}>
+                                            <LinearGradient
+                                                colors={['rgba(255, 255, 255, 0)', 'rgba(255, 255, 255, 0.2)', 'rgba(255, 255, 255, 0.7)', 'rgba(255, 255, 255, 0.2)', 'rgba(255, 255, 255, 0)']}
+                                                start={{ x: 0, y: 0.5 }} end={{ x: 1, y: 0.5 }}
+                                                style={StyleSheet.absoluteFill}
+                                            />
+                                        </Animated.View>
+                                    </View>
+                                </Animated.View>
+                                {/* End Button Container */}
                             </View>
 
                             <View style={styles.imageContainer}>
@@ -336,7 +338,7 @@ const PremiumCoinCard = ({ onCoinPress, onExplorePress }) => {
                     </GlassCard>
                 </Animated.View>
                 <LinearGradient colors={['rgba(255, 170, 0, 0.15)', 'transparent']} style={styles.bottomAura} />
-            </TouchableOpacity>
+            </Pressable>
         );
     };
 

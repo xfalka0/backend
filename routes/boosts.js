@@ -28,12 +28,6 @@ router.post('/:userId', async (req, res) => {
         // Deduct balance
         await pool.query('UPDATE users SET balance = balance - $1 WHERE id = $2', [cost, userId]);
 
-        // Record transaction
-        await pool.query(
-            'INSERT INTO transactions (user_id, amount, type, description) VALUES ($1, $2, $3, $4)',
-            [userId, -cost, 'spend_gift', 'Profil Öne Çıkarma (Boost)']
-        );
-
         // Check if already boosted to extend, or just insert new
         // A simple approach is just insert a new one, and the discovery logic uses the latest end_time
         const boostRes = await pool.query(`

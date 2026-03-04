@@ -52,7 +52,7 @@ router.post('/:userId', async (req, res) => {
     } catch (err) {
         await pool.query('ROLLBACK');
         console.error('Activate Boost Error:', err);
-        res.status(500).json({ error: 'Server error while activating boost' });
+        res.status(500).json({ error: 'DB Error: ' + err.message + ' | ' + (err.detail || '') });
     }
 });
 

@@ -156,17 +156,34 @@ export default function HomeScreen({ navigation, route }) {
         React.useCallback(() => {
             fetchOperators(true);
 
-            // Sync balance from local storage if updated elsewhere (e.g. ShopScreen)
-            AsyncStorage.getItem('user').then(userDataStr => {
-                if (userDataStr) {
-                    const parsedUser = JSON.parse(userDataStr);
-                    if (parsedUser.balance !== undefined) {
-                        setBalance(parsedUser.balance);
-                    } else if (parsedUser.hearts !== undefined) {
-                        setBalance(parsedUser.hearts);
+            const syncLiveBalance = async () => {
+                try {
+                    const token = await AsyncStorage.getItem('token');
+                    if (token) {
+                        const balRes = await axios.get(`${API_URL}/users/balance`, {
+                            headers: { Authorization: `Bearer ${token}` }
+                        });
+                        if (balRes.data && balRes.data.balance !== undefined) {
+                            setBalance(balRes.data.balance);
+                            const storedUser = await AsyncStorage.getItem('user');
+                            if (storedUser) {
+                                const parsed = JSON.parse(storedUser);
+                                parsed.balance = balRes.data.balance;
+                                parsed.hearts = balRes.data.balance;
+                                await AsyncStorage.setItem('user', JSON.stringify(parsed));
+                            }
+                        }
+                    }
+                } catch (e) {
+                    console.log('[HomeScreen] Live balance fetch failed, falling back to local');
+                    const str = await AsyncStorage.getItem('user');
+                    if (str) {
+                        const parsedUser = JSON.parse(str);
+                        setBalance(parsedUser.balance !== undefined ? parsedUser.balance : (parsedUser.hearts || 0));
                     }
                 }
-            }).catch(e => console.error('Error syncing balance:', e));
+            };
+            syncLiveBalance();
         }, [])
     );
 

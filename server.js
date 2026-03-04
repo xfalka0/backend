@@ -1278,12 +1278,6 @@ app.post('/api/admin/users/:id/balance', authenticateToken, authorizeRole('admin
             [amount, id]
         );
 
-        // Log transaction
-        await db.query(
-            'INSERT INTO transactions (user_id, amount, package_name, status) VALUES ($1, $2, $3, $4)',
-            [id, amount, amount > 0 ? 'Admin Ekleme' : 'Admin Ceza', 'completed']
-        );
-
         // 3. Emit Real-time Update
         io.emit('balance_update', { userId: id, newBalance: result.rows[0].balance });
 
@@ -1517,12 +1511,6 @@ app.post('/api/purchase', authenticateToken, async (req, res) => {
         await db.query(
             'UPDATE users SET total_spent = $1, vip_level = $2, balance = $3 WHERE id = $4',
             [newTotal, newVipLevel, newBalance, userId]
-        );
-
-        // 6. Log Transaction
-        await db.query(
-            'INSERT INTO transactions (user_id, amount, package_name, status, description) VALUES ($1, $2, $3, $4, $5)',
-            [userId, price, packageName, 'completed', `Transaction ID: ${transactionId || 'N/A'}`]
         );
 
         // Log Purchase Activity
@@ -3094,12 +3082,6 @@ app.post('/api/messages/send-hi', async (req, res) => {
 
         // Deduct coins
         await db.query('UPDATE users SET balance = balance - $1 WHERE id = $2', [HI_COST, finalSenderId]);
-
-        // Record transaction
-        await db.query(
-            'INSERT INTO transactions (user_id, amount, type, description) VALUES ($1, $2, $3, $4)',
-            [finalSenderId, -HI_COST, 'spend_hi', 'Hi Mesajı']
-        );
 
         // Insert message
         const msgResult = await db.query(

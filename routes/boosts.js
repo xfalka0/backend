@@ -5,7 +5,9 @@ const pool = require('../db');
 // Activate Boost for 24 hours (1440 minutes)
 router.post('/:userId', async (req, res) => {
     const { userId } = req.params;
-    const { durationMinutes = 1440, cost = 1000 } = req.body; // Default 1 day, 1000 coins
+    let { durationMinutes = 1440, cost = 1000 } = req.body; // Default 1 day, 1000 coins
+
+    durationMinutes = parseInt(durationMinutes, 10) || 1440;
 
     try {
         await pool.query('BEGIN');
@@ -29,7 +31,7 @@ router.post('/:userId', async (req, res) => {
         // Record transaction
         await pool.query(
             'INSERT INTO transactions (user_id, amount, type, description) VALUES ($1, $2, $3, $4)',
-            [userId, -cost, 'spend_boost', 'Profil Öne Çıkarma (Boost)']
+            [userId, -cost, 'spend_gift', 'Profil Öne Çıkarma (Boost)']
         );
 
         // Check if already boosted to extend, or just insert new

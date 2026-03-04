@@ -648,6 +648,7 @@ export default function HomeScreen({ navigation, route }) {
                 <FlatList
                     data={filteredOperators}
                     keyExtractor={item => item.id.toString()}
+                    extraData={balance}
                     renderItem={renderOperator}
                     // getItemLayout removed to fix dynamic height calculating bug
                     contentContainerStyle={styles.listContent}

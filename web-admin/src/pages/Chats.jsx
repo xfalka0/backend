@@ -4,7 +4,7 @@ import io from 'socket.io-client';
 
 import { useAuth } from '../context/AuthContext';
 
-const API_URL = 'https://backend-kj17.onrender.com';
+const API_URL = '';
 
 const Chats = () => {
     const { token, user } = useAuth(); // Get token and user from Context

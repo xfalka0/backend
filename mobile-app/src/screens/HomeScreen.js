@@ -175,7 +175,7 @@ export default function HomeScreen({ navigation, route }) {
                         }
                     }
                 } catch (e) {
-                    console.log('[HomeScreen] Live balance fetch failed, falling back to local');
+                    // console.log('[HomeScreen] Live balance fetch failed, falling back to local');
                     const str = await AsyncStorage.getItem('user');
                     if (str) {
                         const parsedUser = JSON.parse(str);

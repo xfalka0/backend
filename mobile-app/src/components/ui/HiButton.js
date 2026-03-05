@@ -117,12 +117,8 @@ const HiButton = memo(({ onPress, operatorId, onHiPress, userBalance = 0, cost =
 
     const handlePress = async () => {
         if (!isChatMode) {
-            // --- COIN CHECK ---
-            if (userBalance < cost) {
-                setInsufficientFundsAlert(true);
-                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-                return;
-            }
+            // --- COIN CHECK BYPASSED LOCALLY ---
+            // Let the server decide if balance is enough
 
             // Hi Mode: Trigget animation and save status
             scale.value = withSequence(

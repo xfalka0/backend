@@ -8,7 +8,7 @@ export const AuthProvider = ({ children }) => {
     const [loading, setLoading] = useState(true);
 
     // URL Configuration - Always use Production Backend (Render)
-    const API_URL = 'https://backend-kj17.onrender.com';
+    const API_URL = '';
 
     useEffect(() => {
         const verifyToken = async () => {

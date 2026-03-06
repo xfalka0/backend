@@ -60,16 +60,19 @@ const initializePackages = async () => {
             )
         `);
 
-        // Check for revenuecat_id column (backend migration)
-        if (!cols.rows.some(c => c.column_name === 'revenuecat_id')) {
+        // Check and update columns
+        const cols = await db.query("SELECT column_name FROM information_schema.columns WHERE table_name = 'coin_packages'");
+        const existingCols = cols.rows.map(c => c.column_name);
+
+        if (!existingCols.includes('revenuecat_id')) {
             console.log('[DB] Adding revenuecat_id to coin_packages...');
             await db.query('ALTER TABLE coin_packages ADD COLUMN revenuecat_id VARCHAR(255)');
         }
-        if (!cols.rows.some(c => c.column_name === 'is_popular')) {
+        if (!existingCols.includes('is_popular')) {
             console.log('[DB] Adding is_popular to coin_packages...');
             await db.query('ALTER TABLE coin_packages ADD COLUMN is_popular BOOLEAN DEFAULT FALSE');
         }
-        if (!cols.rows.some(c => c.column_name === 'description')) {
+        if (!existingCols.includes('description')) {
             console.log('[DB] Adding description to coin_packages...');
             await db.query('ALTER TABLE coin_packages ADD COLUMN description TEXT');
         }
@@ -139,6 +142,10 @@ const initializeDatabase = async () => {
             console.log('[DB] Adding missing column: zodiac');
             await db.query('ALTER TABLE users ADD COLUMN zodiac VARCHAR(50)');
         }
+
+        // --- NEW MIGRATION: Make password_hash nullable for social login ---
+        await db.query('ALTER TABLE users ALTER COLUMN password_hash DROP NOT NULL');
+
 
         if (!columnNames.includes('job')) {
             console.log('[DB] Adding missing column: job');
@@ -1409,6 +1416,51 @@ app.delete('/api/users/:id', authenticateToken, async (req, res) => {
     } catch (err) {
         await db.query('ROLLBACK');
         console.error('Soft Delete User Error:', err.message);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// UPDATE USER PROFILE
+app.put('/api/users/:id/profile', authenticateToken, async (req, res) => {
+    const { id } = req.params;
+    const { name, bio, job, relationship, zodiac, interests, age, edu, boy, kilo } = req.body;
+
+    // Authorization check: User can update own profile, Admins can update any
+    if (req.user.id.toString() !== id.toString() && req.user.role !== 'admin' && req.user.role !== 'super_admin') {
+        return res.status(403).json({ error: 'Yetkisiz işlem.' });
+    }
+
+    try {
+        const result = await db.query(
+            `UPDATE users 
+             SET display_name = COALESCE($1, display_name), 
+                 name = COALESCE($1, name),
+                 bio = COALESCE($2, bio), 
+                 job = COALESCE($3, job), 
+                 relationship = COALESCE($4, relationship), 
+                 zodiac = COALESCE($5, zodiac), 
+                 interests = COALESCE($6, interests),
+                 age = COALESCE($7, age),
+                 edu = COALESCE($8, edu),
+                 boy = COALESCE($9, boy),
+                 kilo = COALESCE($10, kilo)
+             WHERE id = $11 
+             RETURNING *`,
+            [name, bio, job, relationship, zodiac, interests, age, edu, boy, kilo, id]
+        );
+
+        if (result.rows.length === 0) {
+            return res.status(404).json({ error: 'Kullanıcı bulunamadı.' });
+        }
+
+        // Also update operators table bio if user is an operator
+        if (req.user.role === 'operator') {
+            await db.query('UPDATE operators SET bio = COALESCE($1, bio) WHERE user_id = $2', [bio, id]);
+        }
+
+        res.json(sanitizeUser(result.rows[0], req));
+    } catch (err) {
+        console.error('Update Profile Error:', err.message);
         res.status(500).json({ error: err.message });
     }
 });

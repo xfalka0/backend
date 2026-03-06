@@ -22,7 +22,7 @@ export default function LoginScreen({ navigation }) {
 
     useEffect(() => {
         GoogleSignin.configure({
-            webClientId: 'YOUR_WEB_CLIENT_ID.apps.googleusercontent.com', // Get this from Google Cloud Console
+            webClientId: '46669084263-drv76chuoahgvfitcdmctvvqm3cbudl7.apps.googleusercontent.com',
             offlineAccess: true,
         });
     }, []);

@@ -41,7 +41,8 @@
         }
       ],
       "@react-native-google-signin/google-signin",
-      "expo-font"
+      "expo-font",
+      "expo-notifications"
     ]
   }
 }

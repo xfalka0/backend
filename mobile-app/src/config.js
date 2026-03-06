@@ -1,3 +1,5 @@
+import { Platform } from 'react-native';
+
 // Production vs Development environment detection
 const IS_PROD = !__DEV__;
 

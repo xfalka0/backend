@@ -55,15 +55,23 @@ const initializePackages = async () => {
                 icon_url VARCHAR(255),
                 revenuecat_id VARCHAR(255),
                 is_active BOOLEAN DEFAULT TRUE,
+                is_popular BOOLEAN DEFAULT FALSE,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         `);
 
         // Check for revenuecat_id column (backend migration)
-        const cols = await db.query("SELECT column_name FROM information_schema.columns WHERE table_name = 'coin_packages'");
         if (!cols.rows.some(c => c.column_name === 'revenuecat_id')) {
             console.log('[DB] Adding revenuecat_id to coin_packages...');
             await db.query('ALTER TABLE coin_packages ADD COLUMN revenuecat_id VARCHAR(255)');
+        }
+        if (!cols.rows.some(c => c.column_name === 'is_popular')) {
+            console.log('[DB] Adding is_popular to coin_packages...');
+            await db.query('ALTER TABLE coin_packages ADD COLUMN is_popular BOOLEAN DEFAULT FALSE');
+        }
+        if (!cols.rows.some(c => c.column_name === 'description')) {
+            console.log('[DB] Adding description to coin_packages...');
+            await db.query('ALTER TABLE coin_packages ADD COLUMN description TEXT');
         }
 
         // Check if packages exist
@@ -1010,11 +1018,11 @@ app.get('/api/admin/packages', authenticateToken, authorizeRole('admin', 'super_
 });
 
 app.post('/api/admin/packages', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
-    const { name, coins, price, is_popular } = req.body;
+    const { name, coins, price, is_popular, revenuecat_id, description, is_active } = req.body;
     try {
         const result = await db.query(
-            'INSERT INTO coin_packages (name, coins, price, is_popular) VALUES ($1, $2, $3, $4) RETURNING *',
-            [name, coins, price, is_popular || false]
+            'INSERT INTO coin_packages (name, coins, price, is_popular, revenuecat_id, description, is_active) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *',
+            [name, coins, price, is_popular || false, revenuecat_id, description, is_active !== false]
         );
         res.status(201).json(result.rows[0]);
     } catch (err) {
@@ -1024,11 +1032,11 @@ app.post('/api/admin/packages', authenticateToken, authorizeRole('admin', 'super
 
 app.put('/api/admin/packages/:id', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
     const { id } = req.params;
-    const { name, coins, price, is_popular } = req.body;
+    const { name, coins, price, is_popular, revenuecat_id, description, is_active } = req.body;
     try {
         const result = await db.query(
-            'UPDATE coin_packages SET name = $1, coins = $2, price = $3, is_popular = $4 WHERE id = $5 RETURNING *',
-            [name, coins, price, is_popular, id]
+            'UPDATE coin_packages SET name = $1, coins = $2, price = $3, is_popular = $4, revenuecat_id = $5, description = $6, is_active = $7 WHERE id = $8 RETURNING *',
+            [name, coins, price, is_popular, revenuecat_id, description, is_active, id]
         );
         if (result.rows.length === 0) return res.status(404).json({ error: 'Paket bulunamadı.' });
         res.json(result.rows[0]);

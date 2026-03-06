@@ -389,6 +389,16 @@ const initializeDatabase = async () => {
             created_at TIMESTAMP DEFAULT NOW()
         )`);
 
+        await runMigration('PaymentsTable', `CREATE TABLE IF NOT EXISTS payments (
+            id SERIAL PRIMARY KEY,
+            user_id ${userIdType} REFERENCES users(id),
+            package_id INTEGER REFERENCES coin_packages(id),
+            transaction_id VARCHAR(255),
+            amount DECIMAL(10, 2) NOT NULL,
+            status VARCHAR(50) DEFAULT 'completed',
+            created_at TIMESTAMP DEFAULT NOW()
+        )`);
+
         console.log('[DB] SCHEMA VERIFICATION COMPLETE');
         if (!app.get('db_status')) app.set('db_status', 'ready');
     } catch (err) {
@@ -740,9 +750,96 @@ app.use('/api', socialRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api', authRoutes); // Proxy for /api/me /api/login etc
 app.use('/api', webhooksRoutes); // Public Webhooks
-app.use('/api', favoritesRoutes);
-app.use('/api', viewsRoutes);
+app.use('/api/favorites', favoritesRoutes);
+app.use('/api/views', viewsRoutes);
 app.use('/api/boosts', boostsRoutes);
+
+// ADMIN FINANCE ROUTES
+app.get('/api/admin/payments', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
+    try {
+        const query = `
+            SELECT 
+                p.*, 
+                u.username as user_name, 
+                u.email,
+                cp.name as package_name
+            FROM payments p
+            LEFT JOIN users u ON p.user_id = u.id
+            LEFT JOIN coin_packages cp ON p.package_id = cp.id
+            ORDER BY p.created_at DESC
+        `;
+        const result = await db.query(query);
+        res.json(result.rows);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// PUBLIC OFFERINGS (For mobile app fallback)
+app.get('/api/offerings', async (req, res) => {
+    try {
+        const result = await db.query('SELECT * FROM coin_packages WHERE is_active = true ORDER BY price ASC');
+        res.json(result.rows);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// ADMIN PACKAGE MANAGEMENT
+app.get('/api/admin/packages', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
+    try {
+        const result = await db.query('SELECT * FROM coin_packages ORDER BY price ASC');
+        res.json(result.rows);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.post('/api/admin/packages', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
+    const { name, coins, price, revenuecat_id, is_active, is_popular, description } = req.body;
+    try {
+        const result = await db.query(
+            'INSERT INTO coin_packages (name, coins, price, revenuecat_id, is_active, is_popular, description) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *',
+            [name, coins, price, revenuecat_id, is_active !== false, is_popular || false, description || null]
+        );
+        res.json(result.rows[0]);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.put('/api/admin/packages/:id', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
+    const { id } = req.params;
+    const { name, coins, price, revenuecat_id, is_active, is_popular, description } = req.body;
+    try {
+        const result = await db.query(
+            `UPDATE coin_packages 
+             SET name = COALESCE($1, name), 
+                 coins = COALESCE($2, coins), 
+                 price = COALESCE($3, price),
+                 revenuecat_id = COALESCE($4, revenuecat_id),
+                 is_active = COALESCE($5, is_active),
+                 is_popular = COALESCE($6, is_popular),
+                 description = COALESCE($7, description)
+             WHERE id = $8 RETURNING *`,
+            [name, coins, price, revenuecat_id, is_active, is_popular, description, id]
+        );
+        res.json(result.rows[0]);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.delete('/api/admin/packages/:id', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
+    const { id } = req.params;
+    try {
+        // Soft delete or hard delete? Admin panel use hard delete usually for packages
+        await db.query('DELETE FROM coin_packages WHERE id = $1', [id]);
+        res.json({ success: true, message: 'Paket silindi.' });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
 
 // CLOUDINARY UPLOAD ENDPOINT
 app.post('/api/upload', (req, res, next) => {
@@ -1839,6 +1936,12 @@ app.post('/api/purchase', authenticateToken, async (req, res) => {
         await db.query(
             'UPDATE users SET total_spent = $1, vip_level = $2, balance = $3 WHERE id = $4',
             [newTotal, newVipLevel, newBalance, userId]
+        );
+
+        // 6. Record Payment
+        await db.query(
+            'INSERT INTO payments (user_id, package_id, transaction_id, amount, status) VALUES ($1, $2, $3, $4, $5)',
+            [userId, productId && !isNaN(productId) ? productId : null, transactionId || null, price, 'completed']
         );
 
         // Log Purchase Activity

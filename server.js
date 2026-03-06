@@ -1815,12 +1815,20 @@ app.get('/api/me', authenticateToken, (req, res) => {
 app.get('/api/operators', async (req, res) => {
     try {
         const { gender, page = 1, limit = 10, tab = 'Önerilen' } = req.query;
-        const offset = (parseInt(page) - 1) * parseInt(limit);
-        console.log(`[DEBUG] Fetching operators list. Filter Gender: ${gender || 'none'}, Tab: ${tab}, Page: ${page}, Limit: ${limit}`);
+        const pageNum = Math.max(1, parseInt(page) || 1);
+        const limitNum = Math.max(1, parseInt(limit) || 10);
+        const offset = (pageNum - 1) * limitNum;
+
+        console.log(`[OPERATORS] Fetching. Gender: ${gender}, Tab: ${tab}, Page: ${pageNum}`);
 
         let query = `
-            SELECT u.id, COALESCE(u.display_name, u.username) as name, u.avatar_url, u.gender, u.age, u.vip_level, u.job, u.relationship, u.zodiac, u.interests, o.category, o.rating, o.is_online, COALESCE(o.bio, u.bio) as bio, o.photos, u.role,
-            EXISTS(SELECT 1 FROM stories s WHERE s.operator_id = u.id AND s.expires_at > NOW()) as has_active_story
+            SELECT 
+                u.id, 
+                COALESCE(u.display_name, u.username) as name, 
+                u.avatar_url, u.gender, u.age, u.vip_level, u.job, u.relationship, u.zodiac, u.interests, u.role,
+                o.category, o.rating, o.is_online, 
+                COALESCE(o.bio, u.bio) as bio, o.photos,
+                EXISTS(SELECT 1 FROM stories s WHERE s.operator_id = u.id AND s.expires_at > NOW()) as has_active_story
             FROM users u
             JOIN operators o ON u.id = o.user_id
             WHERE u.account_status != 'deleted'
@@ -1828,9 +1836,11 @@ app.get('/api/operators', async (req, res) => {
 
         let params = [];
         let paramCount = 1;
-        if (gender === 'erkek' || gender === 'kadin') {
+
+        if (gender === 'erkek' || gender === 'kadin' || gender === 'male' || gender === 'female') {
+            const normalizedGender = (gender === 'male' || gender === 'erkek') ? 'erkek' : 'kadin';
             query += ` AND u.gender = $${paramCount} `;
-            params.push(gender);
+            params.push(normalizedGender);
             paramCount++;
         }
 
@@ -1844,53 +1854,20 @@ app.get('/api/operators', async (req, res) => {
         }
 
         query += ` ${orderByClause} LIMIT $${paramCount} OFFSET $${paramCount + 1}`;
-        params.push(parseInt(limit), offset);
+        params.push(limitNum, offset);
 
         const result = await db.query(query, params);
-        console.log(`[DEBUG] Found ${result.rows.length} operators in DB.`);
 
-        const protocol = req.protocol;
-        const host = req.get('host');
-
-        const rows = result.rows.map(row => {
-            const protocol = req.protocol;
-            const host = req.get('host');
-
-            // Process Avatar URL
-            let finalAvatarUrl = row.avatar_url;
-            if (finalAvatarUrl) {
-                if (!finalAvatarUrl.startsWith('http')) {
-                    finalAvatarUrl = `${protocol}://${host}${finalAvatarUrl.startsWith('/') ? '' : '/'}${finalAvatarUrl}`;
-                } else if (finalAvatarUrl.includes('localhost:3000')) {
-                    finalAvatarUrl = finalAvatarUrl.replace('localhost:3000', host);
-                }
-            } else {
-                finalAvatarUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(row.name)}&background=random&color=fff`;
-            }
-
-            // Process Photos Array
-            const finalPhotos = (row.photos || []).map(photoUrl => {
-                if (!photoUrl) return photoUrl;
-                if (!photoUrl.startsWith('http')) {
-                    return `${protocol}://${host}${photoUrl.startsWith('/') ? '' : '/'}${photoUrl}`;
-                } else if (photoUrl.includes('localhost:3000')) {
-                    return photoUrl.replace('localhost:3000', host);
-                }
-                return photoUrl;
-            });
-
-            return {
-                ...row,
-                avatar_url: finalAvatarUrl,
-                photos: finalPhotos,
-                gender: row.gender || 'kadin'
-            };
-        });
-
+        const rows = result.rows.map(row => sanitizeUser(row, req));
         res.json(rows);
     } catch (err) {
-        console.error("Fetch Operators Error:", err.message);
-        res.status(500).json({ error: err.message });
+        console.error("❌ [OPERATORS ERROR]:", err);
+        res.status(500).json({
+            error: "Operators fetch failed",
+            message: err.message,
+            code: err.code,
+            detail: err.detail
+        });
     }
 });
 
@@ -1934,13 +1911,17 @@ app.get('/api/health', async (req, res) => {
 // UNIFIED DISCOVERY (Operators + Users of opposite gender)
 app.get('/api/discovery', authenticateToken, async (req, res) => {
     try {
-        const userGender = req.user.gender || 'erkek'; // Default to male if unknown
+        const userGenderRaw = req.user.gender || 'erkek';
+        const userGender = (userGenderRaw === 'male' || userGenderRaw === 'erkek') ? 'erkek' : 'kadin';
         const targetGender = userGender === 'kadin' ? 'erkek' : 'kadin';
+
         const { page = 1, limit = 10, tab = 'Önerilen' } = req.query;
-        const offset = (parseInt(page) - 1) * parseInt(limit);
+        const pageNum = Math.max(1, parseInt(page) || 1);
+        const limitNum = Math.max(1, parseInt(limit) || 10);
+        const offset = (pageNum - 1) * limitNum;
         const userId = req.user.id;
 
-        console.log(`[DISCOVERY] User ${userId} (${userGender}) exploring ${targetGender}... Tab: ${tab}, Page: ${page}, Limit: ${limit}`);
+        console.log(`[DISCOVERY] User ${userId} (${userGender}) -> ${targetGender}. Tab: ${tab}, Page: ${pageNum}`);
 
         let orderByClause = '';
         if (tab === 'Yeni') {
@@ -1949,7 +1930,8 @@ app.get('/api/discovery', authenticateToken, async (req, res) => {
             orderByClause = 'ORDER BY u.vip_level DESC, o.rating DESC NULLS LAST, u.created_at DESC, u.id DESC';
         } else {
             // "Önerilen" or Default
-            orderByClause = 'ORDER BY is_boosted DESC, o.is_online DESC, u.created_at DESC, u.id DESC';
+            // Use subquery results for ordering safely
+            orderByClause = 'ORDER BY (EXISTS(SELECT 1 FROM boosts b WHERE b.user_id = u.id AND b.end_time > NOW())) DESC, o.is_online DESC NULLS LAST, u.created_at DESC, u.id DESC';
         }
 
         const query = `

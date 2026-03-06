@@ -2,9 +2,15 @@ const db = require('../db');
 
 const sanitizeUser = (user, req) => {
     if (!user) return null;
+
+    // Safety check for req
+    if (!req) return user;
+
     // Force HTTPS on Render or if x-forwarded-proto is https
     let protocol = 'http';
-    if (req.get && (req.get('host').includes('onrender.com') || req.headers['x-forwarded-proto'] === 'https')) {
+    const hostHeader = req.get ? req.get('host') : null;
+
+    if (hostHeader && (hostHeader.includes('onrender.com') || req.headers['x-forwarded-proto'] === 'https')) {
         protocol = 'https';
     } else {
         protocol = req?.protocol || 'http';

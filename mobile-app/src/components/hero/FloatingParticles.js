@@ -62,7 +62,7 @@ const Particle = ({ delay = 0 }) => {
 
 const FloatingParticles = () => {
     return (
-        <View style={StyleSheet.absoluteFill}>
+        <View style={StyleSheet.absoluteFill} pointerEvents="none">
             {[...Array(12)].map((_, i) => (
                 <Particle key={i} delay={i * 500} />
             ))}

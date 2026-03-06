@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { View, Text, FlatList, Image, TouchableOpacity, StyleSheet, Dimensions, ScrollView, Alert, TextInput, Modal, Pressable, ActivityIndicator } from 'react-native';
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -25,6 +25,8 @@ import HeroSection from '../components/hero/HeroSection';
 import PremiumBackground from '../components/animated/PremiumBackground';
 import PromotedProfiles from '../components/home/PromotedProfiles';
 import ModernAlert from '../components/ui/ModernAlert';
+import FloatingParticles from '../components/hero/FloatingParticles';
+import { resolveImageUrl } from '../utils/imageUtils';
 
 import Animated, {
     useSharedValue,
@@ -116,11 +118,15 @@ const OperatorItem = React.memo(({ item, navigation, user, theme, themeMode, bal
             {item.photos && item.photos.length > 0 && (
                 <View style={styles.albumContainer}>
                     <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.albumScroll}>
-                        {item.photos.filter(p => p && p.startsWith('http')).map((photoUrl, idx) => (
-                            <View key={idx} style={styles.albumImageWrapper}>
-                                <Image source={{ uri: photoUrl }} style={[styles.albumImage, { backgroundColor: theme.colors.glass }]} />
-                            </View>
-                        ))}
+                        {item.photos.map((rawUrl, idx) => {
+                            const photoUrl = resolveImageUrl(rawUrl);
+                            if (!photoUrl) return null;
+                            return (
+                                <View key={idx} style={styles.albumImageWrapper}>
+                                    <Image source={{ uri: photoUrl }} style={[styles.albumImage, { backgroundColor: theme.colors.glass }]} />
+                                </View>
+                            );
+                        })}
                     </ScrollView>
                 </View>
             )}
@@ -131,6 +137,7 @@ const OperatorItem = React.memo(({ item, navigation, user, theme, themeMode, bal
 export default function HomeScreen({ navigation, route }) {
     const insets = useSafeAreaInsets();
     const { theme, themeMode } = useTheme();
+    const isFetchingRef = useRef(false);
     const { user: routeUser, gender } = route.params || {};
     const TEST_USER_ID = 'c917f7d6-cc44-4b04-8917-1dbbed0b1e9b';
     const user = React.useMemo(() => {
@@ -140,6 +147,7 @@ export default function HomeScreen({ navigation, route }) {
     const [operators, setOperators] = useState([]);
     const [loading, setLoading] = useState(true);
     const [promotedProfiles, setPromotedProfiles] = useState([]);
+    const [isBoosted, setIsBoosted] = useState(false);
     const [activeTab, setActiveTab] = useState('Önerilen');
     const [isSwipeMode, setIsSwipeMode] = useState(false);
     const [searchText, setSearchText] = useState('');
@@ -183,7 +191,25 @@ export default function HomeScreen({ navigation, route }) {
                     }
                 }
             };
+
+            const checkBoostStatus = async () => {
+                if (user && user.id && user.id !== TEST_USER_ID) {
+                    try {
+                        const token = await AsyncStorage.getItem('token');
+                        if (token) {
+                            const res = await axios.get(`${API_URL}/boosts/status/${user.id}`, {
+                                headers: { Authorization: `Bearer ${token}` }
+                            });
+                            setIsBoosted(res.data.isBoosted);
+                        }
+                    } catch (e) {
+                        console.error('[HomeScreen] Boost check failed', e);
+                    }
+                }
+            };
+
             syncLiveBalance();
+            checkBoostStatus();
         }, [])
     );
 
@@ -202,8 +228,11 @@ export default function HomeScreen({ navigation, route }) {
         checkFirstLaunch();
     }, []);
 
-    const fetchOperators = async (reset = false, isLoadMore = false) => {
-        if (isLoadMore && (isMoreLoading || !hasMore)) return;
+    const fetchOperators = async (reset = false, isLoadMore = false, overrideTab = activeTab) => {
+        if (isFetchingRef.current) return;
+        if (isLoadMore && !hasMore) return;
+
+        isFetchingRef.current = true;
 
         try {
             if (isLoadMore) setIsMoreLoading(true);
@@ -214,10 +243,10 @@ export default function HomeScreen({ navigation, route }) {
 
             let res;
             if (!token) {
-                res = await axios.get(`${API_URL}/operators?gender=kadin&page=${currentPage}&limit=${LIMIT}`);
+                res = await axios.get(`${API_URL}/operators?gender=kadin&page=${currentPage}&limit=${LIMIT}&tab=${encodeURIComponent(overrideTab)}`);
             } else {
                 res = await axios.get(`${API_URL}/discovery`, {
-                    params: { page: currentPage, limit: LIMIT },
+                    params: { page: currentPage, limit: LIMIT, tab: overrideTab },
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
             }
@@ -270,11 +299,13 @@ export default function HomeScreen({ navigation, route }) {
                 setLoading(false);
                 setIsMoreLoading(false);
             }
+        } finally {
+            isFetchingRef.current = false;
         }
     };
 
     const handleLoadMore = React.useCallback(() => {
-        if (!loading && !isMoreLoading && hasMore) {
+        if (!loading && !isFetchingRef.current && hasMore) {
             console.log(`[HomeScreen] Triggering load more. Current page: ${page}`);
             fetchOperators(false, true);
         }
@@ -423,13 +454,12 @@ export default function HomeScreen({ navigation, route }) {
         if (activeTab === tabName) return;
         setActiveTab(tabName);
 
-        // Defer heavy data fetching after the tab switch animation/interaction is done
-        InteractionManager.runAfterInteractions(() => {
-            setPage(1);
-            setOperators([]);
-            setHasMore(true);
-            fetchOperators(true);
-        });
+        // InteractionManager tends to hang indefinitely if there are infinite loop animations (like PremiumBackground)
+        // Set state synchronously and fetch data
+        setPage(1);
+        setOperators([]);
+        setHasMore(true);
+        fetchOperators(true, false, tabName);
     };
 
     const handleHiPress = React.useCallback(async (item) => {
@@ -554,6 +584,7 @@ export default function HomeScreen({ navigation, route }) {
             />
             <PromotedProfiles
                 data={promotedProfiles}
+                isBoosted={isBoosted}
                 onProfilePress={(profile) => {
                     console.log(`[HomeScreen] Promoted profile click: ${profile.name}`);
                     navigation.navigate('OperatorProfile', { operator: profile, user });

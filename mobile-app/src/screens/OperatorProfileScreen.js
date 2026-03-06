@@ -207,55 +207,55 @@ export default function OperatorProfileScreen({ route, navigation }) {
                         tint="dark"
                     >
                         <View style={styles.nameRow}>
-                            <View style={{ marginRight: 15 }}>
-                                <VipFrame
-                                    level={operator.vip_level}
-                                    avatar={operator.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(operator.name)}&background=random&color=fff`}
-                                    size={60}
-                                />
-                            </View>
-                            <View style={{ flex: 1 }}>
-                                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                                    <Text
-                                        style={[styles.name, { flexShrink: 1 }]}
-                                        numberOfLines={1}
-                                        adjustsFontSizeToFit
-                                        minimumFontScale={0.8}
-                                    >
-                                        {operator.name}
-                                    </Text>
-                                    {operator.vip_level > 0 && (
-                                        <LinearGradient
-                                            colors={
-                                                operator.vip_level === 1 ? ['#94a3b8', '#64748b'] :
-                                                    operator.vip_level === 2 ? ['#3b82f6', '#8b5cf6'] :
-                                                        operator.vip_level === 3 ? ['#a855f7', '#ec4899'] :
-                                                            operator.vip_level === 4 ? ['#fbbf24', '#7c3aed'] :
-                                                                operator.vip_level === 5 ? ['#e879f9', '#d946ef'] :
-                                                                    ['#000000', '#1a1a1a']
-                                            }
-                                            start={{ x: 0, y: 0 }}
-                                            end={{ x: 1, y: 0 }}
-                                            style={styles.premiumVipBadge}
-                                        >
-                                            <Ionicons name="star" size={12} color={operator.vip_level >= 4 ? "#fff" : "#fbbf24"} />
-                                            <Text style={styles.premiumVipText}>VIP {operator.vip_level}</Text>
-                                        </LinearGradient>
-                                    )}
+                            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                                <View style={{ marginRight: 15 }}>
+                                    <VipFrame
+                                        level={operator.vip_level}
+                                        avatar={operator.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(operator.name)}&background=random&color=fff`}
+                                        size={60}
+                                    />
                                 </View>
-                                <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 8 }}>
+                                <View>
+                                    <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 2 }}>
+                                        <Text
+                                            style={[styles.name, { flexShrink: 1, marginRight: 6 }]}
+                                            numberOfLines={1}
+                                            adjustsFontSizeToFit
+                                            minimumFontScale={0.8}
+                                        >
+                                            {operator.name}
+                                        </Text>
+                                        {operator.age && (
+                                            <View style={[
+                                                styles.ageBadge,
+                                                { backgroundColor: operator.gender === 'erkek' ? '#3b82f6' : '#f472b6' }
+                                            ]}>
+                                                <Ionicons name={operator.gender === 'erkek' ? "male" : "female"} size={10} color="white" />
+                                                <Text style={styles.ageBadgeText}>{operator.age}</Text>
+                                            </View>
+                                        )}
+                                        {operator.vip_level > 0 && (
+                                            <LinearGradient
+                                                colors={
+                                                    operator.vip_level === 1 ? ['#94a3b8', '#64748b'] :
+                                                        operator.vip_level === 2 ? ['#3b82f6', '#8b5cf6'] :
+                                                            operator.vip_level === 3 ? ['#a855f7', '#ec4899'] :
+                                                                operator.vip_level === 4 ? ['#fbbf24', '#7c3aed'] :
+                                                                    operator.vip_level === 5 ? ['#e879f9', '#d946ef'] :
+                                                                        ['#000000', '#1a1a1a']
+                                                }
+                                                start={{ x: 0, y: 0 }}
+                                                end={{ x: 1, y: 0 }}
+                                                style={styles.premiumVipBadge}
+                                            >
+                                                <Ionicons name="star" size={10} color={operator.vip_level >= 4 ? "#fff" : "#fbbf24"} />
+                                                <Text style={styles.premiumVipText}>VIP {operator.vip_level}</Text>
+                                            </LinearGradient>
+                                        )}
+                                    </View>
                                     <Text style={styles.category}>
                                         {operator.job || (operator.is_operator ? 'Öğrenci' : 'Kullanıcı')}
                                     </Text>
-                                    {operator.age && (
-                                        <View style={[
-                                            styles.ageBadge,
-                                            { backgroundColor: operator.gender === 'erkek' ? '#3b82f6' : '#f472b6' }
-                                        ]}>
-                                            <Ionicons name={operator.gender === 'erkek' ? "male" : "female"} size={12} color="white" />
-                                            <Text style={styles.ageBadgeText}>{operator.age}</Text>
-                                        </View>
-                                    )}
                                 </View>
                             </View>
                             {operator.is_online && (
@@ -497,10 +497,9 @@ const styles = StyleSheet.create({
         letterSpacing: -0.7,
     },
     category: {
-        fontSize: 12, // Reduced from 16
+        fontSize: 13,
         color: '#94a3b8',
         fontWeight: '600',
-        marginTop: 4,
     },
     premiumVipBadge: {
         flexDirection: 'row',
@@ -520,10 +519,10 @@ const styles = StyleSheet.create({
     ageBadge: {
         flexDirection: 'row',
         alignItems: 'center',
-        paddingHorizontal: 6, // Reduced from 10
-        paddingVertical: 2, // Reduced from 4
+        paddingHorizontal: 6,
+        paddingVertical: 2,
         borderRadius: 12,
-        marginLeft: 8 // Reduced from 12
+        marginLeft: 0
     },
     ageBadgeText: {
         color: 'white',
@@ -557,10 +556,10 @@ const styles = StyleSheet.create({
         marginBottom: 30,
     },
     sectionTitle: {
-        fontSize: 18, // Reduced from 20
+        fontSize: 15,
         fontWeight: '900',
         color: 'white',
-        marginBottom: 12,
+        marginBottom: 10,
         letterSpacing: 0.5,
     },
     bioText: {

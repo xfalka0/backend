@@ -1731,9 +1731,9 @@ app.get('/api/me', authenticateToken, (req, res) => {
 // GET OPERATORS
 app.get('/api/operators', async (req, res) => {
     try {
-        const { gender, page = 1, limit = 10 } = req.query;
+        const { gender, page = 1, limit = 10, tab = 'Önerilen' } = req.query;
         const offset = (parseInt(page) - 1) * parseInt(limit);
-        console.log(`[DEBUG] Fetching operators list. Filter Gender: ${gender || 'none'}, Page: ${page}, Limit: ${limit}`);
+        console.log(`[DEBUG] Fetching operators list. Filter Gender: ${gender || 'none'}, Tab: ${tab}, Page: ${page}, Limit: ${limit}`);
 
         let query = `
             SELECT u.id, COALESCE(u.display_name, u.username) as name, u.avatar_url, u.gender, u.age, u.vip_level, u.job, u.relationship, u.zodiac, u.interests, o.category, o.rating, o.is_online, COALESCE(o.bio, u.bio) as bio, o.photos, u.role,
@@ -1751,7 +1751,16 @@ app.get('/api/operators', async (req, res) => {
             paramCount++;
         }
 
-        query += ` ORDER BY u.created_at DESC LIMIT $${paramCount} OFFSET $${paramCount + 1}`;
+        let orderByClause = '';
+        if (tab === 'Yeni') {
+            orderByClause = 'ORDER BY u.created_at DESC, u.id DESC';
+        } else if (tab === 'Popüler') {
+            orderByClause = 'ORDER BY u.vip_level DESC, o.rating DESC NULLS LAST, u.created_at DESC, u.id DESC';
+        } else {
+            orderByClause = 'ORDER BY o.is_online DESC, u.created_at DESC, u.id DESC';
+        }
+
+        query += ` ${orderByClause} LIMIT $${paramCount} OFFSET $${paramCount + 1}`;
         params.push(parseInt(limit), offset);
 
         const result = await db.query(query, params);
@@ -1844,11 +1853,21 @@ app.get('/api/discovery', authenticateToken, async (req, res) => {
     try {
         const userGender = req.user.gender || 'erkek'; // Default to male if unknown
         const targetGender = userGender === 'kadin' ? 'erkek' : 'kadin';
-        const { page = 1, limit = 10 } = req.query;
+        const { page = 1, limit = 10, tab = 'Önerilen' } = req.query;
         const offset = (parseInt(page) - 1) * parseInt(limit);
         const userId = req.user.id;
 
-        console.log(`[DISCOVERY] User ${userId} (${userGender}) exploring ${targetGender}... Page: ${page}, Limit: ${limit}`);
+        console.log(`[DISCOVERY] User ${userId} (${userGender}) exploring ${targetGender}... Tab: ${tab}, Page: ${page}, Limit: ${limit}`);
+
+        let orderByClause = '';
+        if (tab === 'Yeni') {
+            orderByClause = 'ORDER BY u.created_at DESC, u.id DESC';
+        } else if (tab === 'Popüler') {
+            orderByClause = 'ORDER BY u.vip_level DESC, o.rating DESC NULLS LAST, u.created_at DESC, u.id DESC';
+        } else {
+            // "Önerilen" or Default
+            orderByClause = 'ORDER BY is_boosted DESC, o.is_online DESC, u.created_at DESC, u.id DESC';
+        }
 
         const query = `
             SELECT 
@@ -1877,7 +1896,7 @@ app.get('/api/discovery', authenticateToken, async (req, res) => {
               AND u.role NOT IN ('admin', 'super_admin')
               AND u.id != $2
               AND u.account_status != 'deleted'
-            ORDER BY is_boosted DESC, o.is_online DESC, u.created_at DESC
+            ${orderByClause}
             LIMIT $3 OFFSET $4
         `;
 

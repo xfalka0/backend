@@ -11,7 +11,7 @@ import Animated, {
 import { Ionicons } from '@expo/vector-icons';
 
 import { useTheme } from '../../contexts/ThemeContext';
-import { API_URL } from '../../config';
+import { resolveImageUrl } from '../../utils/imageUtils';
 
 /**
  * VIP_FRAME_CONFIGS: Grand Sugo Style Assets
@@ -116,14 +116,9 @@ const VipFrame = memo(({ level = 0, avatar, size = 80, isStatic = false }) => {
 
     // Robust image source handler
     const getAvatarSource = () => {
-        if (typeof avatar === 'string' && avatar.trim().length > 0) {
-            let finalUri = avatar.trim();
-            // DOUBLE SAFETY: If still relative, prepend base URL
-            if (finalUri.startsWith('/uploads') && !finalUri.startsWith('http')) {
-                const baseUrl = API_URL.replace('/api', '');
-                finalUri = `${baseUrl}${finalUri}`;
-            }
-            return { uri: finalUri };
+        const resolved = resolveImageUrl(avatar);
+        if (resolved) {
+            return { uri: resolved };
         }
         if (typeof avatar === 'number') {
             return avatar;

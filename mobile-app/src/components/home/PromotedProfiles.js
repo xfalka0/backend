@@ -88,7 +88,7 @@ const ProfileItem = React.memo(({ profile, index, onPress, theme, sharedPulse, s
     );
 });
 
-export default function PromotedProfiles({ data = [], onProfilePress, user }) {
+export default function PromotedProfiles({ data = [], onProfilePress, user, isBoosted }) {
     const { theme, themeMode } = useTheme();
 
     // --- SHARED ANIMATIONS FOR PERFORMANCE ---
@@ -125,7 +125,21 @@ export default function PromotedProfiles({ data = [], onProfilePress, user }) {
         transform: [{ translateX: shinePos.value }, { skewX: '-20deg' }],
     }));
 
-    if (!data || data.length === 0) return null;
+    const displayData = React.useMemo(() => {
+        if (!data) return [];
+        let list = [...data];
+
+        if (isBoosted && user) {
+            // Remove user from the current list if they somehow appear there already
+            list = list.filter(p => p.id !== user.id);
+            // Prepend user
+            list.unshift({ ...user, is_online: true }); // Assume online for their own profile
+        }
+
+        return list;
+    }, [data, user, isBoosted]);
+
+    if (!displayData || displayData.length === 0) return null;
 
     return (
         <View style={styles.container}>
@@ -162,7 +176,7 @@ export default function PromotedProfiles({ data = [], onProfilePress, user }) {
                     pointerEvents="none"
                 />
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-                    {data.map((profile, index) => (
+                    {displayData.map((profile, index) => (
                         <ProfileItem
                             key={profile.id || index}
                             profile={profile}

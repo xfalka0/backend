@@ -14,10 +14,23 @@ const sanitizeUser = (user, req) => {
     const newUser = { ...user };
 
     const rewrite = (url) => {
-        if (url && typeof url === 'string' && !url.startsWith('http')) {
-            return `${protocol}://${host}${url.startsWith('/') ? '' : '/'}${url}`;
+        if (!url || typeof url !== 'string' || url.trim() === '') return url;
+
+        const trimmedUrl = url.trim();
+
+        // 1. If it's already an absolute URL (http/https), just return it
+        if (trimmedUrl.startsWith('http://') || trimmedUrl.startsWith('https://')) {
+            return trimmedUrl;
         }
-        return url;
+
+        // 2. Fix invalid prefixes injected sometimes
+        if (trimmedUrl.startsWith('http')) {
+            return trimmedUrl.replace('http:', 'http://').replace('https:', 'https://');
+        }
+
+        // 3. If it's a relative URL, prepend the server host
+        const cleanRelativePath = trimmedUrl.startsWith('/') ? trimmedUrl : `/${trimmedUrl}`;
+        return `${protocol}://${host}${cleanRelativePath}`;
     };
 
     // Rewrite common image fields

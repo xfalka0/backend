@@ -491,7 +491,252 @@ app.use(cors());
 app.use(express.json());
 app.use('/uploads', express.static(uploadsDir));
 app.use('/admin', express.static(path.join(__dirname, 'public/admin')));
+// --- PRIMARY API ROUTES (Order matters to avoid shadowing) ---
+// --- PRIMARY API ROUTES (Order matters to avoid shadowing) ---
+const rateLimit = require('express-rate-limit');
+const authLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 10,
+    message: { error: 'Çok fazla istek gönderildi, lütfen sonra tekrar deneyin.' }
+});
+
+app.post('/api/auth/request-otp', authLimiter, async (req, res) => {
+    const { email, phone } = req.body;
+    const identifier = email || phone;
+    if (!identifier) return res.status(400).json({ error: 'Email veya Telefon gerekli.' });
+    try {
+        const otp = Math.floor(100000 + Math.random() * 900000).toString();
+        const expires = new Date(Date.now() + 10 * 60 * 1000);
+        await db.query('DELETE FROM otps WHERE identifier = $1', [identifier]);
+        await db.query('INSERT INTO otps (identifier, code, expires_at) VALUES ($1, $2, $3)', [identifier, otp, expires]);
+        console.log(`[AUTH] OTP for ${identifier}: ${otp}`);
+        res.json({ success: true, message: 'OTP gönderildi (Konsol loguna bakınız).' });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.post('/api/auth/verify-otp', async (req, res) => {
+    const { email, phone, code, deviceId } = req.body;
+    const identifier = email || phone;
+    try {
+        const otpRes = await db.query('SELECT * FROM otps WHERE identifier = $1 AND code = $2 AND expires_at > NOW()', [identifier, code]);
+        if (otpRes.rows.length === 0) return res.status(401).json({ error: 'Geçersiz veya süresi dolmuş kod.' });
+        await db.query('DELETE FROM otps WHERE identifier = $1', [identifier]);
+        let result;
+        if (email) result = await db.query('SELECT * FROM users WHERE email = $1', [email]);
+        else result = await db.query('SELECT * FROM users WHERE phone = $1', [phone]);
+        let user;
+        if (result.rows.length === 0) {
+            if (deviceId) {
+                const limitCheck = await db.query('SELECT count(*) FROM users WHERE device_id = $1', [deviceId]);
+                if (parseInt(limitCheck.rows[0].count, 10) >= 2) return res.status(403).json({ error: 'Bu cihazdan en fazla 2 hesap oluşturulabilir.' });
+            }
+            const username = email ? email.split('@')[0] : `user_${Math.floor(1000 + Math.random() * 9000)}`;
+            const insertResult = await db.query("INSERT INTO users (username, email, role, balance, avatar_url, display_name, device_id) VALUES ($1, $2, 'user', 100, 'https://via.placeholder.com/150', $3, $4) RETURNING *", [username, email || null, username, deviceId || null]);
+            user = insertResult.rows[0];
+            await logActivity(io, user.id, 'register', 'Yeni kullanıcı OTP ile kayıt oldu.');
+            io.emit('new_user', sanitizeUser(user, req));
+        } else {
+            user = result.rows[0];
+            logActivity(io, user.id, 'login', 'Kullanıcı OTP ile giriş yaptı.');
+        }
+        if (user.account_status === 'deleted') return res.status(403).json({ error: 'Bu hesap silinmiş.' });
+        if (user.account_status !== 'active') return res.status(403).json({ error: 'Hesabınız askıya alınmış.' });
+        const token = jwt.sign({ id: user.id, username: user.username, role: user.role, display_name: user.display_name, avatar_url: user.avatar_url }, SECRET_KEY, { expiresIn: '30d' });
+        res.json({ user: sanitizeUser(user, req), token });
+    } catch (err) {
+        console.error("OTP Verify Error:", err.message);
+        res.status(500).json({ error: 'Giriş işlemi sırasında bir hata oluştu.' });
+    }
+});
+
+app.get('/api/me', authenticateToken, (req, res) => {
+    res.json({
+        id: req.user.id,
+        username: req.user.username,
+        email: req.user.email,
+        role: req.user.role,
+        avatar_url: req.user.avatar_url,
+        display_name: req.user.display_name,
+        onboarding_completed: req.user.onboarding_completed
+    });
+});
+
+app.get('/api/operators', async (req, res) => {
+    try {
+        const { gender, page = 1, limit = 10, tab = 'Önerilen' } = req.query;
+        const pageNum = Math.max(1, parseInt(page) || 1);
+        const limitNum = Math.max(1, parseInt(limit) || 10);
+        const offset = (pageNum - 1) * limitNum;
+
+        console.log(`[OPERATORS] Fetching. Gender: ${gender}, Tab: ${tab}, Page: ${pageNum}`);
+
+        let query = `
+            SELECT 
+                u.id, 
+                COALESCE(u.display_name, u.username) as name, 
+                u.avatar_url, u.gender, u.age, u.vip_level, u.job, u.relationship, u.zodiac, u.interests, u.role,
+                o.category, o.rating, o.is_online, 
+                COALESCE(o.bio, u.bio) as bio, o.photos,
+                EXISTS(SELECT 1 FROM stories s WHERE s.operator_id = u.id AND s.expires_at > NOW()) as has_active_story
+            FROM users u
+            JOIN operators o ON u.id = o.user_id
+            WHERE u.account_status != 'deleted'
+        `;
+
+        let params = [];
+        let paramCount = 1;
+
+        if (gender === 'erkek' || gender === 'kadin' || gender === 'male' || gender === 'female') {
+            const normalizedGender = (gender === 'male' || gender === 'erkek') ? 'erkek' : 'kadin';
+            query += ` AND u.gender = $${paramCount} `;
+            params.push(normalizedGender);
+            paramCount++;
+        }
+
+        let orderByClause = '';
+        if (tab === 'Yeni') {
+            orderByClause = 'ORDER BY u.created_at DESC, u.id DESC';
+        } else if (tab === 'Popüler') {
+            orderByClause = 'ORDER BY u.vip_level DESC, o.rating DESC NULLS LAST, u.created_at DESC, u.id DESC';
+        } else {
+            orderByClause = 'ORDER BY o.is_online DESC, u.created_at DESC, u.id DESC';
+        }
+
+        query += ` ${orderByClause} LIMIT $${paramCount} OFFSET $${paramCount + 1}`;
+        params.push(limitNum, offset);
+
+        const result = await db.query(query, params);
+
+        const rows = result.rows.map(row => sanitizeUser(row, req));
+        res.json(rows);
+    } catch (err) {
+        console.error("❌ [OPERATORS ERROR]:", err);
+        res.status(500).json({
+            error: "Operators fetch failed",
+            message: err.message,
+            code: err.code,
+            detail: err.detail
+        });
+    }
+});
+
+// GET SINGLE OPERATOR
+app.get('/api/operators/:id', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const result = await db.query('SELECT * FROM operators WHERE user_id = $1', [id]);
+
+        if (result.rows.length === 0) {
+            // Not an operator, but return empty photos to avoid 404 in ProfileScreen
+            return res.json({ photos: [] });
+        }
+
+        res.json(result.rows[0]);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// UNIFIED DISCOVERY (Operators + Users of opposite gender)
+app.get('/api/discovery', authenticateToken, async (req, res) => {
+    try {
+        const userGenderRaw = req.user.gender || 'erkek';
+        const userGender = (userGenderRaw === 'male' || userGenderRaw === 'erkek') ? 'erkek' : 'kadin';
+        const targetGender = userGender === 'kadin' ? 'erkek' : 'kadin';
+
+        const { page = 1, limit = 10, tab = 'Önerilen' } = req.query;
+        const pageNum = Math.max(1, parseInt(page) || 1);
+        const limitNum = Math.max(1, parseInt(limit) || 10);
+        const offset = (pageNum - 1) * limitNum;
+        const userId = req.user.id;
+
+        console.log(`[DISCOVERY] User ${userId} (${userGender}) -> ${targetGender}. Tab: ${tab}, Page: ${pageNum}`);
+
+        let orderByClause = '';
+        if (tab === 'Yeni') {
+            orderByClause = 'ORDER BY u.created_at DESC, u.id DESC';
+        } else if (tab === 'Popüler') {
+            orderByClause = 'ORDER BY u.vip_level DESC, o.rating DESC NULLS LAST, u.created_at DESC, u.id DESC';
+        } else {
+            // "Önerilen" or Default
+            // Use subquery results for ordering safely
+            orderByClause = 'ORDER BY (EXISTS(SELECT 1 FROM boosts b WHERE b.user_id = u.id AND b.end_time > NOW())) DESC, o.is_online DESC NULLS LAST, u.created_at DESC, u.id DESC';
+        }
+
+        const query = `
+            SELECT 
+                u.id, 
+                COALESCE(u.display_name, u.username) as name, 
+                u.avatar_url, 
+                u.gender, 
+                u.age, 
+                u.vip_level, 
+                u.job,
+                u.relationship,
+                u.zodiac,
+                u.interests,
+                u.role,
+                o.category, 
+                o.rating, 
+                o.is_online, 
+                COALESCE(o.bio, u.bio) as bio, 
+                o.photos,
+                CASE WHEN o.user_id IS NOT NULL THEN TRUE ELSE FALSE END as is_operator,
+                EXISTS(SELECT 1 FROM stories s WHERE s.operator_id = u.id AND s.expires_at > NOW()) as has_active_story,
+                EXISTS(SELECT 1 FROM boosts b WHERE b.user_id = u.id AND b.end_time > NOW()) as is_boosted
+            FROM users u
+            LEFT JOIN operators o ON u.id = o.user_id
+            WHERE u.gender = $1 
+              AND u.role NOT IN ('admin', 'super_admin')
+              AND u.id != $2
+              AND u.account_status != 'deleted'
+            ${orderByClause}
+            LIMIT $3 OFFSET $4
+        `;
+
+        const result = await db.query(query, [targetGender, userId, limitNum, offset]);
+
+        const rows = result.rows.map(row => {
+            return sanitizeUser(row, req);
+        });
+
+        res.json(rows);
+    } catch (err) {
+        console.error("❌ [DISCOVERY ERROR]:", err);
+        res.status(500).json({
+            error: "Discovery failed",
+            message: err.message,
+            detail: err.detail,
+            hint: err.hint,
+            code: err.code
+        });
+    }
+});
+
+// HEALTH CHECK
+app.get('/api/health', async (req, res) => {
+    try {
+        const dbCheck = await db.query('SELECT 1');
+        res.json({
+            status: 'ok',
+            db: 'connected',
+            timestamp: new Date()
+        });
+    } catch (err) {
+        console.error('[HEALTH] DB Connection Failed:', err.message);
+        res.status(500).json({
+            status: 'error',
+            db: 'disconnected',
+            error: err.message,
+            timestamp: new Date()
+        });
+    }
+});
+
 app.use('/api', socialRoutes);
+
 app.use('/api/auth', authRoutes);
 app.use('/api', authRoutes); // Proxy for /api/me /api/login etc
 app.use('/api', webhooksRoutes); // Public Webhooks
@@ -1618,513 +1863,12 @@ app.post('/api/purchase', authenticateToken, async (req, res) => {
     }
 });
 
-// --- AUTH REFACTOR: OTP & PASSWORDLESS ---
-
-const rateLimit = require('express-rate-limit');
-
-// Rate Limiting for Auth
-const authLimiter = rateLimit({
-    windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 10, // Limit each IP to 10 requests per windowMs
-    message: { error: 'Çok fazla istek gönderildi, lütfen sonra tekrar deneyin.' }
-});
-
-app.post('/api/auth/request-otp', authLimiter, async (req, res) => {
-    const { email, phone } = req.body;
-    const identifier = email || phone;
-
-    if (!identifier) return res.status(400).json({ error: 'Email veya Telefon gerekli.' });
-
-    // Generate 6-digit OTP
-    const otp = Math.floor(100000 + Math.random() * 900000).toString();
-    const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 mins
-
-    try {
-        // Ensure otps table exists
-        await db.query(`
-            CREATE TABLE IF NOT EXISTS otps (
-                id SERIAL PRIMARY KEY,
-                identifier VARCHAR(255) NOT NULL,
-                otp_code VARCHAR(10) NOT NULL,
-                expires_at TIMESTAMP NOT NULL,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        `);
-
-        // Clean old OTPs for this identifier
-        await db.query('DELETE FROM otps WHERE identifier = $1', [identifier]);
-
-        // Insert new OTP
-        await db.query(
-            'INSERT INTO otps (identifier, otp_code, expires_at) VALUES ($1, $2, $3)',
-            [identifier, otp, expiresAt]
-        );
-
-        console.log(`[OTP] Request for ${identifier}: ${otp}`);
-
-        // In production, send SMS/Email
-        // res.json({ success: true, message: 'OTP gönderildi.' });
-
-        // FOR DEV: Return OTP
-        res.json({ success: true, message: 'OTP gönderildi.', dev_otp: otp });
-
-    } catch (err) {
-        console.error("OTP Generate Error:", err.message);
-        res.status(500).json({ error: 'OTP oluşturulamadı.' });
-    }
-});
-
-app.post('/api/auth/verify-otp', authLimiter, async (req, res) => {
-    const { email, phone, otp, deviceId } = req.body;
-    const identifier = email || phone;
-
-    try {
-        // Check OTP in DB
-        const otpRes = await db.query(
-            'SELECT * FROM otps WHERE identifier = $1 AND otp_code = $2 AND expires_at > NOW()',
-            [identifier, otp]
-        );
-
-        if (otpRes.rows.length === 0) {
-            return res.status(400).json({ error: 'Geçersiz veya süresi dolmuş kod.' });
-        }
-
-        // OTP Correct, delete used
-        await db.query('DELETE FROM otps WHERE identifier = $1', [identifier]);
-
-        // Find or Create User
-        let result;
-        if (email) {
-            result = await db.query('SELECT * FROM users WHERE email = $1', [email]);
-        } else {
-            result = await db.query('SELECT * FROM users WHERE phone = $1', [phone]);
-        }
-
-        let user;
-        if (result.rows.length === 0) {
-            // Register New User (Check device limit)
-            if (deviceId) {
-                const limitCheck = await db.query('SELECT count(*) FROM users WHERE device_id = $1', [deviceId]);
-                if (parseInt(limitCheck.rows[0].count, 10) >= 2) {
-                    return res.status(403).json({ error: 'Bu cihazdan en fazla 2 hesap oluşturulabilir veya kullanılabilir.' });
-                }
-            }
-
-            const email = identifier;
-            const username = email ? email.split('@')[0] : `user_${Math.floor(1000 + Math.random() * 9000)}`;
-            const insertResult = await db.query(
-                "INSERT INTO users (username, email, role, balance, avatar_url, display_name, device_id) VALUES ($1, $2, 'user', 100, 'https://via.placeholder.com/150', $3, $4) RETURNING *",
-                [username, email || null, username, deviceId || null]
-            );
-            user = insertResult.rows[0];
-            await logActivity(io, user.id, 'register', 'Yeni kullanıcı OTP ile kayıt oldu.');
-            // Note: server.js logActivity definition: (userId, actionType, description)
-            // Original code had `logActivity(io, user.id, ...)` which looks wrong based on definition.
-            // I will use `logActivity(user.id, ...)` based on earlier usage in server.js line 1622.
-            // Actually, I verified utils/helpers.js AND IT REQUIRES IO as first param.
-            // So I am fixing all calls to include IO.
-            io.emit('new_user', sanitizeUser(user, req));
-        } else {
-            // Login Existing User
-            user = result.rows[0];
-            logActivity(io, user.id, 'login', 'Kullanıcı OTP ile giriş yaptı.');
-        }
-
-        // Check Account Status
-        if (user.account_status === 'deleted') {
-            return res.status(403).json({ error: 'Bu hesap silinmiş.' });
-        }
-        if (user.account_status !== 'active') {
-            return res.status(403).json({ error: 'Hesabınız askıya alınmış.' });
-        }
-
-        // Check device limit if switching to a new device for existing user
-        if (deviceId && user.device_id !== deviceId && result.rows.length > 0) {
-            const limitCheck = await db.query('SELECT count(*) FROM users WHERE device_id = $1 AND id != $2', [deviceId, user.id]);
-            if (parseInt(limitCheck.rows[0].count, 10) >= 2) {
-                return res.status(403).json({ error: 'Bu cihazdan en fazla 2 hesap oluşturulabilir veya kullanılabilir.' });
-            }
-            await db.query('UPDATE users SET device_id = $1 WHERE id = $2', [deviceId, user.id]);
-            user.device_id = deviceId;
-        }
-
-        // Generate Token
-        const token = jwt.sign(
-            { id: user.id, username: user.username, role: user.role, display_name: user.display_name, avatar_url: user.avatar_url },
-            SECRET_KEY,
-            { expiresIn: '30d' }
-        );
-
-        res.json({ user: sanitizeUser(user, req), token });
-
-    } catch (err) {
-        console.error("OTP Verify Error:", err.message);
-        res.status(500).json({ error: 'Giriş işlemi sırasında bir hata oluştu.' });
-    }
-});
-
-// TEMPORARY ADMIN ENDPOINT - Create user with email "1" and password "1"
-// TEMPORARY ADMIN ENDPOINT - DISABLED FOR SECURITY
-// app.post('/api/admin/create-simple-user', async (req, res) => {
-//     try {
-//         const email = '1';
-//         const password = '1';
-//         const hashedPassword = await bcrypt.hash(password, 10);
-//         const username = 'user_' + Date.now();
-//
-//         // Check if already exists
-//         const existing = await db.query('SELECT * FROM users WHERE email = $1', [email]);
-//         if (existing.rows.length > 0) {
-//             return res.json({
-//                 success: true,
-//                 message: 'User already exists',
-//                 user: { email, id: existing.rows[0].id }
-//             });
-//         }
-//
-//         const result = await db.query(
-//             `INSERT INTO users (username, email, password_hash, role, balance, display_name, avatar_url) 
-//              VALUES ($1, $2, $3, 'user', 100, $4, 'https://via.placeholder.com/150') 
-//              RETURNING *`,
-//             [username, email, hashedPassword, 'User 1']
-//         );
-//
-//         res.json({
-//             success: true,
-//             message: 'User created successfully',
-//             user: { email, id: result.rows[0].id }
-//         });
-//     } catch (error) {
-//         res.status(500).json({ error: error.message });
-//     }
-// });
-
-// ME (Token Verification)
-app.get('/api/me', authenticateToken, (req, res) => {
-    res.json({
-        id: req.user.id,
-        username: req.user.username,
-        email: req.user.email,
-        role: req.user.role,
-        avatar_url: req.user.avatar_url,
-        display_name: req.user.display_name
-    });
-});
-
-// GET OPERATORS
-app.get('/api/operators', async (req, res) => {
-    try {
-        const { gender, page = 1, limit = 10, tab = 'Önerilen' } = req.query;
-        const pageNum = Math.max(1, parseInt(page) || 1);
-        const limitNum = Math.max(1, parseInt(limit) || 10);
-        const offset = (pageNum - 1) * limitNum;
-
-        console.log(`[OPERATORS] Fetching. Gender: ${gender}, Tab: ${tab}, Page: ${pageNum}`);
-
-        let query = `
-            SELECT 
-                u.id, 
-                COALESCE(u.display_name, u.username) as name, 
-                u.avatar_url, u.gender, u.age, u.vip_level, u.job, u.relationship, u.zodiac, u.interests, u.role,
-                o.category, o.rating, o.is_online, 
-                COALESCE(o.bio, u.bio) as bio, o.photos,
-                EXISTS(SELECT 1 FROM stories s WHERE s.operator_id = u.id AND s.expires_at > NOW()) as has_active_story
-            FROM users u
-            JOIN operators o ON u.id = o.user_id
-            WHERE u.account_status != 'deleted'
-        `;
-
-        let params = [];
-        let paramCount = 1;
-
-        if (gender === 'erkek' || gender === 'kadin' || gender === 'male' || gender === 'female') {
-            const normalizedGender = (gender === 'male' || gender === 'erkek') ? 'erkek' : 'kadin';
-            query += ` AND u.gender = $${paramCount} `;
-            params.push(normalizedGender);
-            paramCount++;
-        }
-
-        let orderByClause = '';
-        if (tab === 'Yeni') {
-            orderByClause = 'ORDER BY u.created_at DESC, u.id DESC';
-        } else if (tab === 'Popüler') {
-            orderByClause = 'ORDER BY u.vip_level DESC, o.rating DESC NULLS LAST, u.created_at DESC, u.id DESC';
-        } else {
-            orderByClause = 'ORDER BY o.is_online DESC, u.created_at DESC, u.id DESC';
-        }
-
-        query += ` ${orderByClause} LIMIT $${paramCount} OFFSET $${paramCount + 1}`;
-        params.push(limitNum, offset);
-
-        const result = await db.query(query, params);
-
-        const rows = result.rows.map(row => sanitizeUser(row, req));
-        res.json(rows);
-    } catch (err) {
-        console.error("❌ [OPERATORS ERROR]:", err);
-        res.status(500).json({
-            error: "Operators fetch failed",
-            message: err.message,
-            code: err.code,
-            detail: err.detail
-        });
-    }
-});
-
-// GET SINGLE OPERATOR
-app.get('/api/operators/:id', async (req, res) => {
-    try {
-        const { id } = req.params;
-        const result = await db.query('SELECT * FROM operators WHERE user_id = $1', [id]);
-
-        if (result.rows.length === 0) {
-            // Not an operator, but return empty photos to avoid 404 in ProfileScreen
-            return res.json({ photos: [] });
-        }
-
-        res.json(result.rows[0]);
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
-});
-
-// HEALTH CHECK
-app.get('/api/health', async (req, res) => {
-    try {
-        const dbCheck = await db.query('SELECT 1');
-        res.json({
-            status: 'ok',
-            db: 'connected',
-            timestamp: new Date()
-        });
-    } catch (err) {
-        console.error('[HEALTH] DB Connection Failed:', err.message);
-        res.status(500).json({
-            status: 'error',
-            db: 'disconnected',
-            error: err.message,
-            timestamp: new Date()
-        });
-    }
-});
-
-// UNIFIED DISCOVERY (Operators + Users of opposite gender)
-app.get('/api/discovery', authenticateToken, async (req, res) => {
-    try {
-        const userGenderRaw = req.user.gender || 'erkek';
-        const userGender = (userGenderRaw === 'male' || userGenderRaw === 'erkek') ? 'erkek' : 'kadin';
-        const targetGender = userGender === 'kadin' ? 'erkek' : 'kadin';
-
-        const { page = 1, limit = 10, tab = 'Önerilen' } = req.query;
-        const pageNum = Math.max(1, parseInt(page) || 1);
-        const limitNum = Math.max(1, parseInt(limit) || 10);
-        const offset = (pageNum - 1) * limitNum;
-        const userId = req.user.id;
-
-        console.log(`[DISCOVERY] User ${userId} (${userGender}) -> ${targetGender}. Tab: ${tab}, Page: ${pageNum}`);
-
-        let orderByClause = '';
-        if (tab === 'Yeni') {
-            orderByClause = 'ORDER BY u.created_at DESC, u.id DESC';
-        } else if (tab === 'Popüler') {
-            orderByClause = 'ORDER BY u.vip_level DESC, o.rating DESC NULLS LAST, u.created_at DESC, u.id DESC';
-        } else {
-            // "Önerilen" or Default
-            // Use subquery results for ordering safely
-            orderByClause = 'ORDER BY (EXISTS(SELECT 1 FROM boosts b WHERE b.user_id = u.id AND b.end_time > NOW())) DESC, o.is_online DESC NULLS LAST, u.created_at DESC, u.id DESC';
-        }
-
-        const query = `
-            SELECT 
-                u.id, 
-                COALESCE(u.display_name, u.username) as name, 
-                u.avatar_url, 
-                u.gender, 
-                u.age, 
-                u.vip_level, 
-                u.job,
-                u.relationship,
-                u.zodiac,
-                u.interests,
-                u.role,
-                o.category, 
-                o.rating, 
-                o.is_online, 
-                COALESCE(o.bio, u.bio) as bio, 
-                o.photos,
-                CASE WHEN o.user_id IS NOT NULL THEN TRUE ELSE FALSE END as is_operator,
-                EXISTS(SELECT 1 FROM stories s WHERE s.operator_id = u.id AND s.expires_at > NOW()) as has_active_story,
-                EXISTS(SELECT 1 FROM boosts b WHERE b.user_id = u.id AND b.end_time > NOW()) as is_boosted
-            FROM users u
-            LEFT JOIN operators o ON u.id = o.user_id
-            WHERE u.gender = $1 
-              AND u.role NOT IN ('admin', 'super_admin')
-              AND u.id != $2
-              AND u.account_status != 'deleted'
-            ${orderByClause}
-            LIMIT $3 OFFSET $4
-        `;
-
-        const result = await db.query(query, [targetGender, userId, parseInt(limit), offset]);
-        const protocol = req.protocol;
-        const host = req.get('host');
-
-        const rows = result.rows.map(row => {
-            return sanitizeUser(row, req);
-        });
-
-        res.json(rows);
-    } catch (err) {
-        console.error("❌ [DISCOVERY ERROR]:", err);
-        res.status(500).json({
-            error: "Discovery failed",
-            message: err.message,
-            detail: err.detail,
-            hint: err.hint,
-            code: err.code
-        });
-    }
-});
-
-// CREATE OPERATOR (Admin Profile)
-app.post('/api/operators', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
-    const { name, avatar_url, category, bio, photos, gender, age, vip_level, job, relationship, zodiac, interests } = req.body;
-
-    try {
-        await db.query('BEGIN');
-
-        // Generate unique email and username to avoid collision
-        const ts = Date.now();
-        const uniqueEmail = `${name.toLowerCase().replace(/\s/g, '')}${ts}@falka.com`;
-        const uniqueUsername = `${name}_${ts}`;
-
-        // 1. Create a User entry for the operator
-        // FIX: Provide legacy password for non-null constraint
-        const userResult = await db.query(
-            "INSERT INTO users (username, email, password, password_hash, role, avatar_url, gender, display_name, age, vip_level, job, relationship, zodiac, interests) VALUES ($1, $2, $3, $3, 'operator', $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING id",
-            [uniqueUsername, uniqueEmail, 'hashed_password', avatar_url, gender || 'kadin', name, age || 18, vip_level || 0, req.body.job || null, req.body.relationship || null, req.body.zodiac || null, req.body.interests || null]
-        );
-
-        const userId = userResult.rows[0].id;
-
-        // 2. Create Operator entry
-        await db.query(
-            'INSERT INTO operators (user_id, category, bio, photos, is_online) VALUES ($1, $2, $3, $4, $5)',
-            [userId, category, bio, photos || [], true]
-        );
-
-        await db.query('COMMIT');
-        res.json({ success: true, userId });
-    } catch (err) {
-        await db.query('ROLLBACK');
-        console.error("Create Profile Error:", err.message);
-        res.status(500).json({ error: err.message });
-    }
-});
-
-// UPDATE OPERATOR
-app.put('/api/operators/:id', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
-    const { id } = req.params;
-    const { name, avatar_url, category, bio, photos, gender, age, vip_level, job, relationship, zodiac, interests } = req.body;
-
-    try {
-        await db.query('BEGIN');
-
-        // 1. Update User table
-        await db.query(
-            'UPDATE users SET display_name = $1, avatar_url = $2, gender = $3, age = $4, vip_level = $5, job = $6, relationship = $7, zodiac = $8, interests = $9 WHERE id = $10',
-            [name, avatar_url, gender, age || 18, vip_level || 0, req.body.job || null, req.body.relationship || null, req.body.zodiac || null, req.body.interests || null, id]
-        );
-
-        // 2. Update Operator table
-        await db.query(
-            'UPDATE operators SET category = $1, bio = $2, photos = $3 WHERE user_id = $4',
-            [category, bio, photos || [], id]
-        );
-
-        await db.query('COMMIT');
-        res.json({ success: true });
-    } catch (err) {
-        await db.query('ROLLBACK');
-        console.error("Update Profile Error:", err.message);
-        res.status(500).json({ error: err.message });
-    }
-});
-
-// DELETE OPERATOR
-app.delete('/api/operators/:id', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
-    const { id } = req.params;
-    try {
-        await db.query('BEGIN');
-
-        // Check if operator exists (use user_id as it is the PK for operators usually, or FK)
-        // The id passed here is likely the user_id (from profile.id in frontend)
-        const opResult = await db.query('SELECT * FROM users WHERE id = $1', [id]);
-        if (opResult.rows.length === 0) {
-            await db.query('ROLLBACK');
-            return res.status(404).json({ error: 'Kullanıcı bulunamadı.' });
-        }
-
-        // Instead of deleting, we set account_status to 'deleted'
-        await db.query("UPDATE users SET account_status = 'deleted', email = email || '_deleted_' || id, username = username || '_deleted_' || id WHERE id = $1", [id]);
-
-        // Log Activity
-        logActivity(io, req.user.id, 'admin', `Kullanıcı/Operatör silindi (Soft Delete): ID ${id}`);
-
-        await db.query('COMMIT');
-        res.json({ success: true, message: 'Operatör silindi (Soft Delete).' });
-    } catch (err) {
-        await db.query('ROLLBACK');
-        console.error("Delete Operator Error:", err.message);
-        res.status(500).json({ error: err.message });
-    }
-});
-
-// START CHAT (Find or Create)
-app.post('/api/chats', async (req, res) => {
-    const { userId, operatorId } = req.body;
-    try {
-        // Check existing
-        const existing = await db.query(
-            'SELECT * FROM chats WHERE user_id = $1 AND operator_id = $2',
-            [userId, operatorId]
-        );
-        if (existing.rows.length > 0) {
-            return res.json(existing.rows[0]);
-        }
-        // Create new
-        const newChat = await db.query(
-            'INSERT INTO chats (user_id, operator_id) VALUES ($1, $2) RETURNING *',
-            [userId, operatorId]
-        );
-        res.json(newChat.rows[0]);
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
-});
 
 // GET CHATS FOR USER
 app.get('/api/users/:userId/chats', async (req, res) => {
     const { userId } = req.params;
     console.log(`GET /api/users/${userId}/chats requested`);
     try {
-        const query = `
-            SELECT 
-                c.id, 
-                op.username as name, 
-                op.avatar_url, 
-                op.is_online,
-                (SELECT content FROM messages WHERE chat_id = c.id ORDER BY created_at DESC LIMIT 1) as last_message,
-                (SELECT COUNT(*) FROM messages WHERE chat_id = c.id AND sender_id != $1 AND is_read = false) as unread_count
-            FROM chats c
-            JOIN users u_op ON c.operator_id = u_op.id
-            JOIN operators op_details ON u_op.id = op_details.user_id 
-            JOIN users op ON c.operator_id = op.id 
-            WHERE c.user_id = $1
-            ORDER BY c.last_message_at DESC
-        `;
-        // Simplified query to just get operator details
-        // Simplified query to just get operator details
         const simpleQuery = `
             SELECT 
                 c.id,
@@ -2144,9 +1888,7 @@ app.get('/api/users/:userId/chats', async (req, res) => {
         `;
 
         const result = await db.query(simpleQuery, [userId]);
-
         const processedRows = result.rows.map(row => sanitizeUser(row, req));
-
         console.log(`GET /api/users/${userId}/chats - Found ${processedRows.length} chats`);
         res.json(processedRows);
     } catch (err) {
@@ -2155,22 +1897,15 @@ app.get('/api/users/:userId/chats', async (req, res) => {
     }
 });
 
-
 // CREATE OR GET CHAT
 app.post('/api/chats', async (req, res) => {
     const { userId, operatorId } = req.body;
     try {
-        // 1. Check if chat exists
         const existingChat = await db.query(
             'SELECT * FROM chats WHERE user_id = $1 AND operator_id = $2',
             [userId, operatorId]
         );
-
-        if (existingChat.rows.length > 0) {
-            return res.json(existingChat.rows[0]);
-        }
-
-        // 2. Create new chat
+        if (existingChat.rows.length > 0) return res.json(existingChat.rows[0]);
         const newChat = await db.query(
             'INSERT INTO chats (user_id, operator_id, last_message_at) VALUES ($1, $2, NOW()) RETURNING *',
             [userId, operatorId]

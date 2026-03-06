@@ -152,12 +152,13 @@ export default function ProfileScreen({ route, navigation }) {
     };
 
     const toggleEditInfo = async () => {
-        if (isEditingInfo) {
+        if (isEditingInfo || isEditingBio) {
             // Save to backend
             try {
-                const response = await axios.put(`${API_URL} /users/${user.id}/profile`, {
+                const response = await axios.put(`${API_URL}/users/${user.id}/profile`, {
                     name: info.name,
                     display_name: info.name,
+                    bio: tempBio,
                     age: parseInt(info.age),
                     job: info.job,
                     relationship: info.relationship,
@@ -175,6 +176,7 @@ export default function ProfileScreen({ route, navigation }) {
                         ...response.data
                     };
                     await AsyncStorage.setItem('user', JSON.stringify(updatedUser));
+                    // We don't necessarily need an alert every time if it's seamless, but let's keep it for now as per original code
                     setAlert({ visible: true, title: 'Başarılı', message: 'Profil bilgileriniz güncellendi.', type: 'success' });
                 }
             } catch (error) {
@@ -183,7 +185,6 @@ export default function ProfileScreen({ route, navigation }) {
             }
         }
         LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-        setIsEditingInfo(!isEditingInfo);
     };
 
     const openSelection = (item) => {
@@ -636,7 +637,7 @@ export default function ProfileScreen({ route, navigation }) {
                             <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Hakkımda</Text>
                             <TouchableOpacity onPress={() => {
                                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                                toggleEditInfo(); // Reusing bio edit logic
+                                toggleEditInfo();
                                 setIsEditingBio(!isEditingBio);
                             }}>
                                 <Ionicons name={isEditingBio ? "checkmark" : "create-outline"} size={20} color={theme.colors.primary} />
@@ -664,6 +665,7 @@ export default function ProfileScreen({ route, navigation }) {
                             <TouchableOpacity onPress={() => {
                                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                                 toggleEditInfo();
+                                setIsEditingInfo(!isEditingInfo);
                             }}>
                                 <Ionicons name={isEditingInfo ? "checkmark" : "create-outline"} size={20} color={theme.colors.primary} />
                             </TouchableOpacity>

@@ -9,7 +9,7 @@ const sanitizeUser = (user, req) => {
     } else {
         protocol = req?.protocol || 'http';
     }
-    const host = (req?.get ? req.get('host') : null) || 'localhost:3000';
+    const host = (req?.get ? (req.get('x-forwarded-host') || req.get('host')) : null) || 'localhost:3000';
 
     const newUser = { ...user };
 

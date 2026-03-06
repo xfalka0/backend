@@ -43,22 +43,60 @@ export default function ExploreScreen({ route, navigation }) {
         setOptionsVisible(true);
     };
 
-    const handleReport = () => {
+    const handleReport = async () => {
+        if (!selectedPostForOptions || !user) return;
         setOptionsVisible(false);
-        showAlert({
-            title: "Bildirildi 🚨",
-            message: "Bu gönderi incelenmek üzere bildirildi.",
-            type: "success"
-        });
+        try {
+            const token = await AsyncStorage.getItem('token');
+            await axios.post(`${API_URL}/report`, {
+                reportedId: selectedPostForOptions.operator_id || selectedPostForOptions.user_id,
+                reason: 'Explore Report',
+                details: `Post ID: ${selectedPostForOptions.id}`
+            }, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+
+            showAlert({
+                title: "Bildirildi 🚨",
+                message: "Bu gönderi incelenmek üzere bildirildi.",
+                type: "success"
+            });
+        } catch (error) {
+            console.error('Report error:', error);
+            showAlert({
+                title: "Hata",
+                message: "Bildirme işlemi sırasında bir hata oluştu.",
+                type: "error"
+            });
+        }
     };
 
-    const handleBlock = () => {
+    const handleBlock = async () => {
+        if (!selectedPostForOptions || !user) return;
         setOptionsVisible(false);
-        showAlert({
-            title: "Engellendi 🚫",
-            message: "Bu kullanıcı engellendi.",
-            type: "success"
-        });
+        try {
+            const token = await AsyncStorage.getItem('token');
+            await axios.post(`${API_URL}/block`, {
+                blockedId: selectedPostForOptions.operator_id || selectedPostForOptions.user_id
+            }, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+
+            showAlert({
+                title: "Engellendi 🚫",
+                message: "Bu kullanıcı engellendi.",
+                type: "success"
+            });
+            // Refresh feed to remove blocked user's content
+            fetchExploreData();
+        } catch (error) {
+            console.error('Block error:', error);
+            showAlert({
+                title: "Hata",
+                message: "Engelleme işlemi sırasında bir hata oluştu.",
+                type: "error"
+            });
+        }
     };
 
     useFocusEffect(

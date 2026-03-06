@@ -198,7 +198,7 @@ const PremiumCoinCard = ({ onCoinPress, onExplorePress }) => {
                 });
                 setActiveIndex(nextIndex);
             }
-        }, 8000); // Increased from 5000 to 8000 for a slower reading pace
+        }, 12000); // Increased from 8000 to 12000 for a much slower, more relaxed pace
 
         return () => clearInterval(intervalId);
     }, [activeIndex]);

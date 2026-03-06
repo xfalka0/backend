@@ -6,11 +6,11 @@ const path = require('path');
 // GET EXPLORE DATA (Stories & Posts)
 exports.getExplore = async (req, res) => {
     try {
-        // Fetch active stories
-        let stories = [];
         const currentUserId = req.query.user_id;
         const userIdType = req.app.get('user_id_type') || 'UUID';
 
+        // 1. Fetch active stories - Filtered by blocks
+        let stories = [];
         try {
             const storiesRes = await db.query(`
                 SELECT s.*, u.display_name as name, u.avatar_url as avatar, u.vip_level as level,
@@ -19,6 +19,11 @@ exports.getExplore = async (req, res) => {
                 FROM stories s
                 JOIN users u ON s.operator_id = u.id
                 WHERE s.expires_at > NOW()
+                AND ($1::TEXT IS NULL OR $1::TEXT = '' OR NOT EXISTS (
+                    SELECT 1 FROM blocks 
+                    WHERE (blocker_id = NULLIF($1, '')::${userIdType} AND blocked_id = u.id)
+                       OR (blocker_id = u.id AND blocked_id = NULLIF($1, '')::${userIdType})
+                ))
                 ORDER BY s.created_at DESC
             `, [currentUserId]);
             stories = storiesRes.rows.map(s => sanitizeUser(s, req));
@@ -26,9 +31,8 @@ exports.getExplore = async (req, res) => {
             console.error('[SOCIAL] Stories Fetch Error:', sErr.message);
         }
 
-        // Fetch latest posts with like counts and user like status
+        // 2. Fetch latest posts - Filtered by blocks
         let posts = [];
-
         try {
             const postsRes = await db.query(`
                 SELECT 
@@ -46,6 +50,11 @@ exports.getExplore = async (req, res) => {
                 FROM posts p
                 JOIN users u ON p.operator_id = u.id
                 LEFT JOIN operators op ON u.id = op.user_id
+                WHERE ($1::TEXT IS NULL OR $1::TEXT = '' OR NOT EXISTS (
+                    SELECT 1 FROM blocks 
+                    WHERE (blocker_id = NULLIF($1, '')::${userIdType} AND blocked_id = u.id)
+                       OR (blocker_id = u.id AND blocked_id = NULLIF($1, '')::${userIdType})
+                ))
                 ORDER BY p.created_at DESC
                 LIMIT 50
             `, [currentUserId]);

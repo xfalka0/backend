@@ -1,14 +1,14 @@
-import { Platform } from 'react-native';
+// Production vs Development environment detection
+const IS_PROD = !__DEV__;
 
-// Android Simulator uses 10.0.2.2 for localhost
+// Production Server
+export const PROD_URL = 'https://backend-kj17.onrender.com';
+
+// Local Development
+// Android Simulator uses 10.0.2.2
 // iOS Simulator uses localhost
-// Use your LAN IP (e.g., 192.168.1.x) for physical devices
-// Use your LAN IP (e.g., 192.168.1.x) for physical devices
-// Production Server
-// Production Server
-// export const API_URL = 'https://backend-kj17.onrender.com/api';
-// export const SOCKET_URL = 'https://backend-kj17.onrender.com';
+const DEV_URL = Platform.OS === 'android' ? 'http://10.0.2.2:3000' : 'http://localhost:3000';
 
-// Local Development (Android Emulator)
-export const API_URL = 'https://backend-kj17.onrender.com/api';
-export const SOCKET_URL = 'https://backend-kj17.onrender.com';
+export const BASE_URL = IS_PROD ? PROD_URL : DEV_URL;
+export const API_URL = `${BASE_URL}/api`;
+export const SOCKET_URL = BASE_URL;

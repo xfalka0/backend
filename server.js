@@ -14,7 +14,9 @@ const authRoutes = require('./routes/authRoutes');
 const favoritesRoutes = require('./routes/favorites');
 const viewsRoutes = require('./routes/views');
 const boostsRoutes = require('./routes/boosts');
+const webhooksRoutes = require('./routes/webhooks');
 const { sanitizeUser, logActivity } = require('./utils/helpers');
+const { sendPushNotification } = require('./utils/notificationUtils');
 
 const app = express();
 const multer = require('multer');
@@ -148,6 +150,11 @@ const initializeDatabase = async () => {
         if (!columnNames.includes('boy')) {
             console.log('[DB] Adding missing column: boy');
             await db.query('ALTER TABLE users ADD COLUMN boy VARCHAR(20)');
+        }
+
+        if (!columnNames.includes('push_token')) {
+            console.log('[DB] Adding missing column: push_token');
+            await db.query('ALTER TABLE users ADD COLUMN push_token VARCHAR(255)');
         }
 
         if (!columnNames.includes('kilo')) {
@@ -472,8 +479,9 @@ app.use('/admin', express.static(path.join(__dirname, 'public/admin')));
 app.use('/api', socialRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api', authRoutes); // Proxy for /api/me /api/login etc
-app.use('/api/favorites', favoritesRoutes);
-app.use('/api/views', viewsRoutes);
+app.use('/api', webhooksRoutes); // Public Webhooks
+app.use('/api', favoritesRoutes);
+app.use('/api', viewsRoutes);
 app.use('/api/boosts', boostsRoutes);
 
 // CLOUDINARY UPLOAD ENDPOINT
@@ -1414,12 +1422,14 @@ app.delete('/api/admin/users/:id', authenticateToken, authorizeRole('admin', 'su
 });
 
 // REPORT USER
-app.post('/api/report', async (req, res) => {
-    const { reporterId, reportedId, reason, details } = req.body;
+app.post('/api/report', authenticateToken, async (req, res) => {
+    const { reportedId, reason, details } = req.body;
+    const reporterId = req.user.id;
     try {
         await db.query('INSERT INTO reports (reporter_id, reported_id, reason, details) VALUES ($1, $2, $3, $4)',
             [reporterId, reportedId, reason, details]);
 
+        // Auto-flag reported users for review
         await db.query("UPDATE users SET account_status = 'under_review' WHERE id = $1", [reportedId]);
 
         res.json({ success: true, message: 'Kullanıcı raporlandı.' });
@@ -1428,9 +1438,22 @@ app.post('/api/report', async (req, res) => {
     }
 });
 
+// UPDATE PUSH TOKEN
+app.post('/api/users/push-token', authenticateToken, async (req, res) => {
+    const { pushToken } = req.body;
+    const userId = req.user.id;
+    try {
+        await db.query('UPDATE users SET push_token = $1 WHERE id = $2', [pushToken, userId]);
+        res.json({ success: true, message: 'Push token güncellendi.' });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // BLOCK USER
-app.post('/api/block', async (req, res) => {
-    const { blockerId, blockedId } = req.body;
+app.post('/api/block', authenticateToken, async (req, res) => {
+    const { blockedId } = req.body;
+    const blockerId = req.user.id;
     try {
         await db.query('INSERT INTO blocks (blocker_id, blocked_id) VALUES ($1, $2)', [blockerId, blockedId]);
         res.json({ success: true, message: 'Kullanıcı engellendi.' });
@@ -2855,6 +2878,28 @@ io.on('connection', (socket) => {
             console.log(`[SOCKET] Emitting admin_notification globally for chat ${roomName}`);
             io.emit('admin_notification', msgToEmit);
 
+            // --- 4. PUSH NOTIFICATION (Phase 4) ---
+            try {
+                // Determine recipient
+                const participantsRes = await db.query('SELECT user1_id, user2_id FROM chats WHERE id = $1', [chatId]);
+                if (participantsRes.rows.length > 0) {
+                    const { user1_id, user2_id } = participantsRes.rows[0];
+                    const recipientId = senderId.toString() === user1_id.toString() ? user2_id : user1_id;
+
+                    // Fetch sender name for the notification
+                    const senderRes = await db.query('SELECT display_name FROM users WHERE id = $1', [senderId]);
+                    const senderName = senderRes.rows[0]?.display_name || 'Bir kullanıcı';
+
+                    await sendPushNotification(recipientId, {
+                        title: `Yeni Mesaj: ${senderName}`,
+                        body: type === 'text' ? content : (type === 'gift' ? '🎁 Sana bir hediye gönderdi!' : '📷 Bir medya dosyası gönderdi'),
+                        data: { chatId: chatId.toString(), type: 'message' }
+                    });
+                }
+            } catch (pushErr) {
+                console.error('[SOCKET] Push trigger error:', pushErr.message);
+            }
+
         } catch (err) {
             if (client) {
                 await client.query('ROLLBACK');
@@ -3201,6 +3246,19 @@ app.get('*', (req, res) => {
         console.error('[ERROR] File not found:', filePath);
         res.status(404).send('Admin Panel Not Found (File Missing on Server)');
     }
+});
+
+// Basic Global Error Handler (Phase 2 Stability)
+app.use((err, req, res, next) => {
+    const errorLog = `[${new Date().toISOString()}] ${req.method} ${req.url} - ERROR: ${err.message}\n${err.stack}\n`;
+    console.error(errorLog);
+    // In actual production, this would send to Sentry:
+    // Sentry.captureException(err);
+
+    res.status(err.status || 500).json({
+        error: 'Bir iç sunucu hatası oluştu.',
+        message: process.env.NODE_ENV === 'development' ? err.message : undefined
+    });
 });
 
 const PORT = process.env.PORT || 3000;

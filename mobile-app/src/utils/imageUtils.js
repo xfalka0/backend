@@ -12,18 +12,29 @@ export const resolveImageUrl = (url) => {
 
     const trimmedUrl = url.trim();
 
-    // 1. Check if it's already an absolute URL (http/https)
+    // 1. If it's a localhost URL leaking from backend, strip it to get the relative part
+    if (trimmedUrl.includes('localhost:3000') || trimmedUrl.includes('127.0.0.1')) {
+        const parts = trimmedUrl.split(':3000');
+        const relativePart = parts.length > 1 ? parts[1] : trimmedUrl.split('127.0.0.1')[1];
+        if (relativePart) {
+            const baseUrl = API_URL.replace('/api', '');
+            const cleanRelativePath = relativePart.startsWith('/') ? relativePart : `/${relativePart}`;
+            return `${baseUrl}${cleanRelativePath}`;
+        }
+    }
+
+    // 2. Check if it's already an absolute URL (http/https)
+    // Cloudinary etc. will pass through here
     if (trimmedUrl.startsWith('http://') || trimmedUrl.startsWith('https://')) {
         return trimmedUrl;
     }
 
-    // 2. Handle Cloudinary or other external absolute URLs that might missing http but start with //
+    // 3. Handle Cloudinary or other external absolute URLs that might miss http but start with //
     if (trimmedUrl.startsWith('//')) {
         return `https:${trimmedUrl}`;
     }
 
-    // 3. Resolve relative URLs (e.g., /uploads/...)
-    // We derive the base URL from API_URL by stripping the /api suffix
+    // 4. Resolve relative URLs (e.g., /uploads/...)
     const baseUrl = API_URL.replace('/api', '');
     const cleanRelativePath = trimmedUrl.startsWith('/') ? trimmedUrl : `/${trimmedUrl}`;
 

@@ -74,8 +74,12 @@ exports.googleAuth = async (req, res) => {
 
         res.json({ user: sanitizeUser(user, req), token });
     } catch (error) {
-        console.error('[GOOGLE_AUTH_ERROR]:', error.message);
-        res.status(401).json({ error: 'Google doğrulaması başarısız.' });
+        console.error('------- [GOOGLE_AUTH_ERROR_DETAILS] -------');
+        console.error('Error Message:', error.message);
+        console.error('Provided Token:', idToken.substring(0, 20) + '...');
+        console.error('Backend Client ID:', GOOGLE_CLIENT_ID);
+        console.error('------------------------------------------');
+        res.status(401).json({ error: 'Google doğrulaması başarısız.', details: error.message });
     }
 };
 

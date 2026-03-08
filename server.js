@@ -316,6 +316,9 @@ const initializeDatabase = async () => {
         // Messages table enhancements
         await db.query('ALTER TABLE messages ADD COLUMN IF NOT EXISTS gift_id INT');
 
+        // Users table enhancements
+        await db.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS device_id VARCHAR(255)');
+
         // Create tables one by one to avoid one failure blocking all migrations
         const runMigration = async (name, sql) => {
             try {

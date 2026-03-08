@@ -149,7 +149,6 @@ export default function HomeScreen({ navigation, route }) {
     const [promotedProfiles, setPromotedProfiles] = useState([]);
     const [isBoosted, setIsBoosted] = useState(false);
     const [activeTab, setActiveTab] = useState('Önerilen');
-    const [isSwipeMode, setIsSwipeMode] = useState(false);
     const [searchText, setSearchText] = useState('');
     const [showSearch, setShowSearch] = useState(false);
     const [showFilterModal, setShowFilterModal] = useState(false);
@@ -614,16 +613,6 @@ export default function HomeScreen({ navigation, route }) {
                     </ScrollView>
                     <View style={{ flexDirection: 'row', gap: 8 }}>
                         <TouchableOpacity
-                            onPress={() => setIsSwipeMode(!isSwipeMode)}
-                            style={{
-                                width: 38, height: 38, borderRadius: 19,
-                                backgroundColor: isSwipeMode ? theme.colors.primary : theme.colors.glass,
-                                alignItems: 'center', justifyContent: 'center',
-                                borderWidth: 1, borderColor: isSwipeMode ? theme.colors.primary : theme.colors.glassBorder
-                            }}>
-                            <Ionicons name="albums-outline" size={18} color={isSwipeMode ? 'white' : theme.colors.text} />
-                        </TouchableOpacity>
-                        <TouchableOpacity
                             onPress={() => setShowSearch(!showSearch)}
                             style={{
                                 width: 38, height: 38, borderRadius: 19,
@@ -674,82 +663,65 @@ export default function HomeScreen({ navigation, route }) {
                 )}
             </View>
         </View>
-    ), [activeTab, promotedProfiles, showSearch, isSwipeMode, searchText, filterOptions, theme, user]);
+    ), [activeTab, promotedProfiles, showSearch, searchText, filterOptions, theme, user]);
 
     // Removed faulty getItemLayout which caused phantom scrolling space on Android due to dynamic item heights
 
     return (
         <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
             {themeMode === 'dark' && <PremiumBackground />}
-            {isSwipeMode ? (
-                <View style={{ flex: 1, marginTop: 20 }}>
-                    <SwipeDeck
-                        data={filteredOperators}
-                        onSwipeRight={async (item) => {
-                            try {
-                                await axios.post(`${API_URL}/favorites`, { userId: user.id, targetUserId: item.id });
-                                console.log(`Liked ${item.name}`);
-                            } catch (e) {
-                                console.error('Like err', e);
-                            }
-                        }}
-                        onSwipeLeft={(item) => console.log(`Passed ${item.name}`)}
-                    />
-                </View>
-            ) : (
-                <FlatList
-                    data={filteredOperators}
-                    keyExtractor={item => item.id.toString()}
-                    extraData={balance}
-                    renderItem={renderOperator}
-                    // getItemLayout removed to fix dynamic height calculating bug
-                    contentContainerStyle={styles.listContent}
-                    showsVerticalScrollIndicator={false}
-                    ListHeaderComponent={ListHeader}
-                    onEndReached={handleLoadMore}
-                    onEndReachedThreshold={0.5} // Trigger earlier for seamless scroll
-                    initialNumToRender={10}
+            <FlatList
+                data={filteredOperators}
+                keyExtractor={item => item.id.toString()}
+                extraData={balance}
+                renderItem={renderOperator}
+                // getItemLayout removed to fix dynamic height calculating bug
+                contentContainerStyle={styles.listContent}
+                showsVerticalScrollIndicator={false}
+                ListHeaderComponent={ListHeader}
+                onEndReached={handleLoadMore}
+                onEndReachedThreshold={0.5} // Trigger earlier for seamless scroll
+                initialNumToRender={10}
 
-                    maxToRenderPerBatch={10}
-                    windowSize={11}
-                    removeClippedSubviews={false}
-                    keyboardShouldPersistTaps="handled"
-                    bounces={false}
-                    overScrollMode="never"
-                    ListFooterComponent={
-                        <View style={{
-                            paddingTop: 10,
-                            paddingBottom: 40,
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            width: '100%'
-                        }}>
-                            {isMoreLoading && (
-                                <ActivityIndicator size="small" color={theme.colors.primary} style={{ marginVertical: 15 }} />
-                            )}
-                            {!hasMore && operators.length > 0 && (
-                                <Text style={{ color: theme.colors.textSecondary, fontSize: 13, marginTop: 15, opacity: 0.8 }}>
-                                    Şimdilik bu kadar...
-                                </Text>
-                            )}
+                maxToRenderPerBatch={10}
+                windowSize={11}
+                removeClippedSubviews={false}
+                keyboardShouldPersistTaps="handled"
+                bounces={false}
+                overScrollMode="never"
+                ListFooterComponent={
+                    <View style={{
+                        paddingTop: 10,
+                        paddingBottom: 40,
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        width: '100%'
+                    }}>
+                        {isMoreLoading && (
+                            <ActivityIndicator size="small" color={theme.colors.primary} style={{ marginVertical: 15 }} />
+                        )}
+                        {!hasMore && operators.length > 0 && (
+                            <Text style={{ color: theme.colors.textSecondary, fontSize: 13, marginTop: 15, opacity: 0.8 }}>
+                                Şimdilik bu kadar...
+                            </Text>
+                        )}
+                    </View>
+                }
+                ListEmptyComponent={
+                    loading ? (
+                        <View style={{ paddingTop: 10 }}>
+                            <SkeletonCard />
+                            <SkeletonCard />
+                            <SkeletonCard />
+                            <SkeletonCard />
                         </View>
-                    }
-                    ListEmptyComponent={
-                        loading ? (
-                            <View style={{ paddingTop: 10 }}>
-                                <SkeletonCard />
-                                <SkeletonCard />
-                                <SkeletonCard />
-                                <SkeletonCard />
-                            </View>
-                        ) : (
-                            <View style={styles.emptyContainer}>
-                                <Text style={[styles.emptyText, { color: theme.colors.textSecondary }]}>Sonuç bulunamadı.</Text>
-                            </View>
-                        )
-                    }
-                />
-            )}
+                    ) : (
+                        <View style={styles.emptyContainer}>
+                            <Text style={[styles.emptyText, { color: theme.colors.textSecondary }]}>Sonuç bulunamadı.</Text>
+                        </View>
+                    )
+                }
+            />
             {showMatchModal && <DestinyMatchModal visible={showMatchModal} onClose={() => setShowMatchModal(false)} operators={operators} navigation={navigation} user={user} />}
             <Modal visible={showFilterModal} transparent animationType="slide" onRequestClose={() => setShowFilterModal(false)}>
                 <View style={styles.modalOverlay}>

@@ -149,7 +149,7 @@ export default function ExploreScreen({ navigation, route }) {
             setLoading(true);
             const [exploreRes, operatorsRes] = await Promise.all([
                 axios.get(`${API_URL}/social/explore`, { params: { user_id: user?.id } }),
-                axios.get(`${API_URL}/operators`)
+                axios.get(`${API_URL}/operators?limit=100`)
             ]);
             setPosts(exploreRes.data.posts);
             setStories(exploreRes.data.stories);

@@ -47,10 +47,10 @@ const FallbackImage = ({ url, style, isAvatar = false, theme }) => {
     );
 };
 
-export default function ExploreScreen({ navigation }) {
+export default function ExploreScreen({ navigation, route }) {
     const { showAlert } = useAlert();
     const { theme, themeMode } = useTheme();
-    const [user, setUser] = useState(route.params?.user || null);
+    const [user, setUser] = useState(route?.params?.user || null);
     const [posts, setPosts] = useState([]);
     const [stories, setStories] = useState([]);
     const [loading, setLoading] = useState(true);

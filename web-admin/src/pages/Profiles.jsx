@@ -38,7 +38,8 @@ export default function ProfilesPage() {
         try {
             setLoading(true);
             const token = localStorage.getItem('token');
-            const res = await axios.get(`${API_URL}/operators`, {
+            // Request a large limit to see all profiles in the admin panel
+            const res = await axios.get(`${API_URL}/operators?limit=1000`, {
                 headers: { Authorization: `Bearer ${token}` }
             });
             setProfiles(res.data);

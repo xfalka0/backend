@@ -239,8 +239,8 @@ const initializeDatabase = async () => {
         // --- RECOVERY FIX: Ensure all matching operator entries exist and are active ---
         console.log('[RECOVERY] Checking for missing operator profiles...');
 
-        // 1. Fix NULL statuses
-        await db.query("UPDATE users SET account_status = 'active' WHERE account_status IS NULL AND role = 'operator'");
+        // 1. Force all users with role 'operator' to be active (to recover accidental soft-deletes/NULLs)
+        await db.query("UPDATE users SET account_status = 'active' WHERE role = 'operator' AND (account_status IS NULL OR account_status = 'deleted' OR account_status = 'under_review')");
 
         // 2. Fix missing operators table entries
         const missingOps = await db.query(`
@@ -599,7 +599,7 @@ app.get('/api/me', authenticateToken, (req, res) => {
 
 app.get('/api/operators', async (req, res) => {
     try {
-        const { gender, page = 1, limit = 10, tab = 'Önerilen' } = req.query;
+        const { gender, page = 1, limit = 100, tab = 'Önerilen' } = req.query;
         const pageNum = Math.max(1, parseInt(page) || 1);
         const limitNum = Math.max(1, parseInt(limit) || 10);
         const offset = (pageNum - 1) * limitNum;

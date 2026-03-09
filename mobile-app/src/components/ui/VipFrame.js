@@ -151,6 +151,7 @@ const VipFrame = memo(({ level = 0, avatar, size = 80, isStatic = false }) => {
 
         return (
             <Image
+                key={source.uri || (typeof avatar === 'string' ? avatar : JSON.stringify(avatar))}
                 source={source}
                 style={{
                     width: isInsideFrame ? '100%' : innerSizeValue,

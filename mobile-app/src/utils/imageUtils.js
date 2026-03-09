@@ -6,7 +6,16 @@ import { API_URL } from '../config';
  */
 const safeEncodeUrl = (u) => {
     if (!u) return u;
-    return u.replace(/ /g, '%20');
+    try {
+        // Only encode if it contains spaces or non-ASCII characters that might break Image component
+        if (/[^\x00-\x7F]| /.test(u)) {
+            // encodeURI preserves http://, while replace handles spaces correctly for some RN versions
+            return encodeURI(u).replace(/ /g, '%20');
+        }
+    } catch (e) {
+        return u.replace(/ /g, '%20');
+    }
+    return u;
 };
 
 /**

@@ -148,7 +148,7 @@ const OperatorItem = React.memo(({ item, navigation, user, theme, themeMode, bal
                             const photoUrl = resolveImageUrl(rawUrl);
                             if (!photoUrl) return null;
                             return (
-                                <View key={idx} style={styles.albumImageWrapper}>
+                                <View key={`${item.id}_album_${idx}`} style={styles.albumImageWrapper}>
                                     <FallbackImage url={photoUrl} style={[styles.albumImage, { backgroundColor: theme.colors.glass }]} theme={theme} />
                                 </View>
                             );

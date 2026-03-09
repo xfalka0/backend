@@ -1758,6 +1758,124 @@ app.put('/api/admin/users/:id/role', authenticateToken, authorizeRole('admin', '
     }
 });
 
+// --- OPERATOR MANAGEMENT (Admin Panel) ---
+
+// CREATE OPERATOR
+app.post('/api/operators', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
+    const { name, gender, bio, avatar_url, photos, age, category, job, relationship, zodiac, vip_level, interests } = req.body;
+
+    try {
+        await db.query('BEGIN');
+
+        // 1. Create a dummy user for this operator
+        const uniqueId = Date.now() + '-' + Math.round(Math.random() * 1e9);
+        const username = `op_${name ? name.toLowerCase().replace(/\s+/g, '_') : 'unnamed'}_${uniqueId}`;
+        const email = `${username}@fiva.admin`;
+        const dummyPassword = await bcrypt.hash('op_pass_123!', 10);
+
+        const userResult = await db.query(
+            `INSERT INTO users (
+                username, email, password, password_hash, role, 
+                display_name, name, gender, age, avatar_url, 
+                job, relationship, zodiac, interests, vip_level,
+                account_status
+            ) VALUES ($1, $2, $3, $3, $4, $5, $5, $6, $7, $8, $9, $10, $11, $12, $13, 'active') 
+            RETURNING id`,
+            [
+                username, email, dummyPassword, 'operator',
+                name, gender || 'kadin', parseInt(age) || 18, avatar_url,
+                job || null, relationship || null, zodiac || null,
+                interests || '[]', parseInt(vip_level) || 0
+            ]
+        );
+
+        const userId = userResult.rows[0].id;
+
+        // 2. Create the operator entry
+        const opResult = await db.query(
+            `INSERT INTO operators (user_id, category, bio, photos, is_online, rating) 
+             VALUES ($1, $2, $3, $4, true, 5.0) 
+             RETURNING *`,
+            [userId, category || 'Genel', bio || 'Merhaba!', photos || []]
+        );
+
+        await db.query('COMMIT');
+        console.log(`[ADMIN] Created operator ${name} (User: ${userId})`);
+        res.status(201).json({ ...opResult.rows[0], id: userId, name: name });
+    } catch (err) {
+        await db.query('ROLLBACK');
+        console.error('[ADMIN] Create Operator Error:', err.message);
+        res.status(500).json({ error: 'Operatör oluşturulamadı.', details: err.message });
+    }
+});
+
+// UPDATE OPERATOR
+app.put('/api/operators/:id', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
+    const { id } = req.params; // Expecting user_id
+    const { name, gender, bio, avatar_url, photos, age, category, job, relationship, zodiac, vip_level, interests } = req.body;
+
+    try {
+        await db.query('BEGIN');
+
+        // 1. Update User Record
+        const userUpdate = await db.query(
+            `UPDATE users SET 
+                display_name = COALESCE($1, display_name),
+                name = COALESCE($1, name),
+                gender = COALESCE($2, gender),
+                age = COALESCE($3, age),
+                avatar_url = COALESCE($4, avatar_url),
+                job = COALESCE($5, job),
+                relationship = COALESCE($6, relationship),
+                zodiac = COALESCE($7, zodiac),
+                interests = COALESCE($8, interests),
+                vip_level = COALESCE($9, vip_level)
+             WHERE id = $10 RETURNING id`,
+            [name, gender, isNaN(parseInt(age)) ? null : parseInt(age), avatar_url, job, relationship, zodiac, interests, isNaN(parseInt(vip_level)) ? null : parseInt(vip_level), id]
+        );
+
+        if (userUpdate.rows.length === 0) {
+            await db.query('ROLLBACK');
+            return res.status(404).json({ error: 'Operatör bulunamadı (User ID eşleşmedi).' });
+        }
+
+        // 2. Update Operator Record
+        await db.query(
+            `UPDATE operators SET 
+                category = COALESCE($1, category),
+                bio = COALESCE($2, bio),
+                photos = COALESCE($3, photos)
+             WHERE user_id = $4`,
+            [category, bio, photos, id]
+        );
+
+        await db.query('COMMIT');
+        console.log(`[ADMIN] Updated operator profile for ${id}`);
+        res.json({ success: true, message: 'Profil güncellendi.' });
+    } catch (err) {
+        await db.query('ROLLBACK');
+        console.error('[ADMIN] Update Operator Error:', err.message);
+        res.status(500).json({ error: 'Profil güncellenemedi.', details: err.message });
+    }
+});
+
+// DELETE OPERATOR (Soft Delete)
+app.delete('/api/operators/:id', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
+    const { id } = req.params; // Use user_id
+    try {
+        console.log(`[ADMIN] Deleting operator profile for ${id}`);
+        // Synchronize with existing soft delete logic (using uuid-friendly concatenation if needed, but existing code uses ||)
+        await db.query(
+            "UPDATE users SET account_status = 'deleted', email = email || '_deleted_op_' || id, username = username || '_deleted_op_' || id WHERE id = $1",
+            [id]
+        );
+        res.json({ success: true, message: 'Operatör silindi.' });
+    } catch (err) {
+        console.error('[ADMIN] Delete Operator Error:', err.message);
+        res.status(500).json({ error: 'Silme işlemi başarısız.', details: err.message });
+    }
+});
+
 // DELETE USER (Self or Admin)
 app.delete('/api/users/:id', authenticateToken, async (req, res) => {
     const { id } = req.params;

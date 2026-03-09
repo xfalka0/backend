@@ -22,6 +22,14 @@
           }
         },
         {
+          "client_id": "46669084263-8tuote6tmtneqojdva2v0fks3ekqb75i.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.fiva.app",
+            "certificate_hash": "39253785f89b4cf88aa9f177dc131409f221de34"
+          }
+        },
+        {
           "client_id": "46669084263-h2e8cfp3b4slrhtesu5sle81ckc9hd3q.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {

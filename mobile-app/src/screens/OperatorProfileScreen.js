@@ -19,6 +19,7 @@ import { useTheme } from '../contexts/ThemeContext';
 import VipFrame from '../components/ui/VipFrame';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import ImageViewing from 'react-native-image-viewing';
+import { resolveImageUrl } from '../utils/imageUtils';
 
 const { width } = Dimensions.get('window');
 const HEADER_HEIGHT = width * 1.2;
@@ -133,7 +134,7 @@ export default function OperatorProfileScreen({ route, navigation }) {
                 style={[styles.imageContainer, animatedImageStyle]}
             >
                 <Image
-                    source={{ uri: operator.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(operator.name)}&background=random&color=fff` }}
+                    source={{ uri: resolveImageUrl(operator.avatar_url || operator.avatar) }}
                     style={styles.mainImage}
                 />
                 <LinearGradient
@@ -211,7 +212,7 @@ export default function OperatorProfileScreen({ route, navigation }) {
                                 <View style={{ marginRight: 15 }}>
                                     <VipFrame
                                         level={operator.vip_level}
-                                        avatar={operator.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(operator.name)}&background=random&color=fff`}
+                                        avatar={resolveImageUrl(operator.avatar_url || operator.avatar)}
                                         size={60}
                                     />
                                 </View>
@@ -253,17 +254,17 @@ export default function OperatorProfileScreen({ route, navigation }) {
                                             </LinearGradient>
                                         )}
                                     </View>
-                                    <Text style={styles.category}>
+                                    <Text style={[styles.category, { marginBottom: 6 }]}>
                                         {operator.job || (operator.is_operator ? 'Öğrenci' : 'Kullanıcı')}
                                     </Text>
+                                    {operator.is_online && (
+                                        <View style={[styles.onlineBadge, { alignSelf: 'flex-start' }]}>
+                                            <View style={styles.onlineDot} />
+                                            <Text style={styles.onlineText}>Çevrimiçi</Text>
+                                        </View>
+                                    )}
                                 </View>
                             </View>
-                            {operator.is_online && (
-                                <View style={styles.onlineBadge}>
-                                    <View style={styles.onlineDot} />
-                                    <Text style={styles.onlineText}>Çevrimiçi</Text>
-                                </View>
-                            )}
                         </View>
 
                         <View>
@@ -272,12 +273,12 @@ export default function OperatorProfileScreen({ route, navigation }) {
                                 <View style={styles.section}>
                                     <Text style={styles.sectionTitle}>Fotoğraf Albümü</Text>
                                     <Animated.ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.albumScroll}>
-                                        {operator.photos.filter(p => p && p.startsWith('http')).map((photo, index) => (
+                                        {operator.photos && operator.photos.filter(p => p).map((photo, index) => (
                                             <Pressable key={index} onPress={() => {
                                                 setCurrentImageIndex(index);
                                                 setIsImageViewerVisible(true);
                                             }}>
-                                                <Image source={{ uri: photo }} style={styles.albumPhoto} />
+                                                <Image source={{ uri: resolveImageUrl(photo) }} style={styles.albumPhoto} />
                                             </Pressable>
                                         ))}
                                     </Animated.ScrollView>
@@ -397,7 +398,7 @@ export default function OperatorProfileScreen({ route, navigation }) {
             {/* Tam Ekran Fotoğraf Görüntüleyici */}
             {operator.photos && operator.photos.length > 0 && (
                 <ImageViewing
-                    images={operator.photos.map(p => ({ uri: p }))}
+                    images={operator.photos.map(p => ({ uri: resolveImageUrl(p) }))}
                     imageIndex={currentImageIndex}
                     visible={isImageViewerVisible}
                     onRequestClose={() => setIsImageViewerVisible(false)}

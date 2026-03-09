@@ -1,5 +1,6 @@
 import React, { useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, Dimensions } from 'react-native';
+import { resolveImageUrl } from '../../utils/imageUtils';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import GlassCard from '../ui/GlassCard';
@@ -62,7 +63,7 @@ const ProfileItem = React.memo(({ profile, index, onPress, theme, sharedPulse, s
                         />
                         <View style={[styles.avatarContainer, { backgroundColor: theme.colors.glass }]}>
                             <Image
-                                source={{ uri: profile.avatar_url }}
+                                source={{ uri: resolveImageUrl(profile.avatar_url || profile.avatar) }}
                                 style={styles.avatar}
                                 resizeMode="cover"
                             />

@@ -13,15 +13,41 @@ import LikeAnimation from '../components/animated/LikeAnimation';
 import StoryRing from '../components/animated/StoryRing';
 import VipFrame from '../components/ui/VipFrame';
 import { useTheme } from '../contexts/ThemeContext';
+import { resolveImageUrl } from '../utils/imageUtils';
 
 import { API_URL } from '../config';
 import axios from 'axios';
 import { useFocusEffect } from '@react-navigation/native';
 import { useAlert } from '../contexts/AlertContext';
 
-const { width } = Dimensions.get('window');
+const { height, width } = Dimensions.get('window');
 
-export default function ExploreScreen({ route, navigation }) {
+const FallbackImage = ({ url, style, isAvatar = false, theme }) => {
+    const [hasError, setHasError] = useState(false);
+
+    useEffect(() => {
+        setHasError(false);
+    }, [url]);
+
+    if (hasError || !url) {
+        return (
+            <View style={[style, { alignItems: 'center', justifyContent: 'center', backgroundColor: theme?.colors?.backgroundSecondary || 'rgba(15,23,42,0.5)' }]}>
+                <Ionicons name={isAvatar ? "person" : "image-outline"} size={isAvatar ? 20 : 40} color={theme?.colors?.textSecondary || 'rgba(255,255,255,0.3)'} />
+            </View>
+        );
+    }
+
+    return (
+        <Image
+            key={url}
+            source={{ uri: url }}
+            style={style}
+            onError={() => setHasError(true)}
+        />
+    );
+};
+
+export default function ExploreScreen({ navigation }) {
     const { showAlert } = useAlert();
     const { theme, themeMode } = useTheme();
     const [user, setUser] = useState(route.params?.user || null);
@@ -483,7 +509,7 @@ export default function ExploreScreen({ route, navigation }) {
             </View>
 
             <View style={styles.postImageContainer}>
-                <Image source={{ uri: item.image_url || item.image }} style={styles.postImage} />
+                <FallbackImage url={resolveImageUrl(item.image_url || item.image)} style={styles.postImage} theme={theme} />
                 <LikeAnimation
                     onLike={() => handleDoubleTapLike(item.id)}
                     showIcon={false}
@@ -574,7 +600,7 @@ export default function ExploreScreen({ route, navigation }) {
                             keyExtractor={item => item.id}
                             renderItem={({ item }) => (
                                 <View style={styles.commentItem}>
-                                    <Image source={{ uri: item.avatar }} style={styles.commentAvatar} />
+                                    <FallbackImage url={resolveImageUrl(item.avatar)} style={styles.commentAvatar} isAvatar={true} theme={theme} />
                                     <View style={{ flex: 1 }}>
                                         <Text style={[styles.commentUser, { color: theme.colors.text }]}>{item.userName}</Text>
                                         <Text style={[styles.commentText, { color: theme.colors.textSecondary }]}>{item.content}</Text>

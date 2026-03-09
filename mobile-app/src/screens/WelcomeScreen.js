@@ -272,7 +272,6 @@ export default function WelcomeScreen({ navigation }) {
                 <View style={[StyleSheet.absoluteFill, { zIndex: 99999, elevation: 10 }]}>
                     <Animated.View
                         entering={FadeIn.duration(400)}
-                        exiting={FadeOut.duration(400)}
                         style={styles.loadingOverlay}
                     >
                         <LinearGradient

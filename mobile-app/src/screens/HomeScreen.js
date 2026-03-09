@@ -45,7 +45,33 @@ const BANNER_SPACER = (width - BANNER_WIDTH) / 2;
 
 let lastProfileTap = 0;
 
+const FallbackImage = ({ url, style, theme }) => {
+    const [hasError, setHasError] = useState(false);
+
+    useEffect(() => {
+        setHasError(false);
+    }, [url]);
+
+    if (hasError || !url) {
+        return (
+            <View style={[style, { alignItems: 'center', justifyContent: 'center' }]}>
+                <Ionicons name="image-outline" size={24} color={theme?.colors?.textSecondary || 'rgba(255,255,255,0.3)'} />
+            </View>
+        );
+    }
+
+    return (
+        <Image
+            key={url}
+            source={{ uri: url }}
+            style={style}
+            onError={() => setHasError(true)}
+        />
+    );
+};
+
 const OperatorItem = React.memo(({ item, navigation, user, theme, themeMode, balance, onHiPress }) => (
+
     <View>
         <GlassCard style={styles.userCard} intensity={40}>
             <View style={styles.cardHeader}>
@@ -123,7 +149,7 @@ const OperatorItem = React.memo(({ item, navigation, user, theme, themeMode, bal
                             if (!photoUrl) return null;
                             return (
                                 <View key={idx} style={styles.albumImageWrapper}>
-                                    <Image source={{ uri: photoUrl }} style={[styles.albumImage, { backgroundColor: theme.colors.glass }]} />
+                                    <FallbackImage url={photoUrl} style={[styles.albumImage, { backgroundColor: theme.colors.glass }]} theme={theme} />
                                 </View>
                             );
                         })}

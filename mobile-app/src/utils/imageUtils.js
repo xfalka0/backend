@@ -1,6 +1,15 @@
 import { API_URL } from '../config';
 
 /**
+ * Safely encodes URL components, specifically spaces, to avoid breaking Image rendering
+ * while preserving valid URL structures like http:// and ://
+ */
+const safeEncodeUrl = (u) => {
+    if (!u) return u;
+    return u.replace(/ /g, '%20');
+};
+
+/**
  * Resolves a potentially relative image URL to an absolute one.
  * @param {string|null|undefined} url The image URL to resolve
  * @returns {string|null} The absolute URL or null
@@ -12,31 +21,36 @@ export const resolveImageUrl = (url) => {
 
     const trimmedUrl = url.trim();
 
-    // 1. If it's a localhost URL leaking from backend, strip it to get the relative part
-    if (trimmedUrl.includes('localhost:3000') || trimmedUrl.includes('127.0.0.1')) {
-        const parts = trimmedUrl.split(':3000');
-        const relativePart = parts.length > 1 ? parts[1] : trimmedUrl.split('127.0.0.1')[1];
-        if (relativePart) {
+    // 1. If it's a localhost/emulator URL leaking from backend, strip it to get the relative part
+    const isLocalUrl =
+        trimmedUrl.includes('localhost') ||
+        trimmedUrl.includes('127.0.0.1') ||
+        trimmedUrl.includes('10.0.2.2') ||
+        trimmedUrl.includes('192.168.');
+
+    if (isLocalUrl && (trimmedUrl.startsWith('http://') || trimmedUrl.startsWith('https://'))) {
+        const parts = trimmedUrl.split('/');
+        if (parts.length > 3) {
+            const relativePart = '/' + parts.slice(3).join('/');
             const baseUrl = API_URL.replace('/api', '');
-            const cleanRelativePath = relativePart.startsWith('/') ? relativePart : `/${relativePart}`;
-            return `${baseUrl}${cleanRelativePath}`;
+            return safeEncodeUrl(`${baseUrl}${relativePart}`);
         }
     }
 
     // 2. Check if it's already an absolute URL (http/https)
     // Cloudinary etc. will pass through here
     if (trimmedUrl.startsWith('http://') || trimmedUrl.startsWith('https://')) {
-        return trimmedUrl;
+        return safeEncodeUrl(trimmedUrl);
     }
 
     // 3. Handle Cloudinary or other external absolute URLs that might miss http but start with //
     if (trimmedUrl.startsWith('//')) {
-        return `https:${trimmedUrl}`;
+        return safeEncodeUrl(`https:${trimmedUrl}`);
     }
 
     // 4. Resolve relative URLs (e.g., /uploads/...)
     const baseUrl = API_URL.replace('/api', '');
     const cleanRelativePath = trimmedUrl.startsWith('/') ? trimmedUrl : `/${trimmedUrl}`;
 
-    return `${baseUrl}${cleanRelativePath}`;
+    return safeEncodeUrl(`${baseUrl}${cleanRelativePath}`);
 };

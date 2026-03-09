@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import axios from 'axios';
 import { API_URL } from '../config';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { resolveImageUrl } from '../utils/imageUtils';
 
 const { width, height } = Dimensions.get('window');
 
@@ -103,7 +104,7 @@ export default function StoryScreen({ route, navigation }) {
         <View style={styles.container}>
             {/* Story Image */}
             <Image
-                source={{ uri: story.image_url || story.avatar }}
+                source={{ uri: resolveImageUrl(story.image_url || story.avatar) }}
                 style={styles.storyImage}
             />
 
@@ -119,7 +120,7 @@ export default function StoryScreen({ route, navigation }) {
                 </View>
 
                 <View style={styles.userHeader}>
-                    <Image source={{ uri: story.avatar }} style={styles.avatar} />
+                    <Image source={{ uri: resolveImageUrl(story.avatar) }} style={styles.avatar} />
                     <Text style={styles.userName}>{story.name}</Text>
                     <Text style={styles.timeAgo}>3s</Text>
                     <TouchableOpacity style={styles.closeButton} onPress={() => navigation.goBack()}>

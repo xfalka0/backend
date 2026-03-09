@@ -21,6 +21,8 @@ import { GIFTS } from '../constants/gifts';
 import GlassCard from '../components/ui/GlassCard';
 import ModernAlert from '../components/ui/ModernAlert';
 
+import { resolveImageUrl } from '../utils/imageUtils';
+
 import { SHADOWS, COLORS } from '../theme';
 import ReportModal from '../components/ReportModal';
 import InsufficientCoinsModal from '../components/InsufficientCoinsModal';
@@ -618,7 +620,7 @@ export default function ChatScreen({ route, navigation }) {
             content = (
                 <TouchableOpacity activeOpacity={0.9} onPress={() => { /* View full screen logic optional */ }}>
                     <Image
-                        source={{ uri: item.content }}
+                        source={{ uri: resolveImageUrl(item.content) }}
                         style={{ width: 220, height: 220, borderRadius: 16, backgroundColor: '#cbd5e1' }}
                         resizeMode="cover"
                     />
@@ -638,7 +640,7 @@ export default function ChatScreen({ route, navigation }) {
                 isMine={isUser}
                 index={index}
                 isRead={item.is_read}
-                avatar={isUser ? user.avatar : avatar_url}
+                avatar={resolveImageUrl(isUser ? user.avatar : avatar_url)}
                 vipLevel={isUser ? user.vip_level : vip_level}
                 timestamp={item.created_at}
             >
@@ -827,7 +829,7 @@ export default function ChatScreen({ route, navigation }) {
             {/* GIFT ANIMATION OVERLAY */}
             <GiftOverlay
                 gift={activeGift}
-                receiver={{ avatar_url, display_name: name, username: name }}
+                receiver={{ avatar_url: resolveImageUrl(avatar_url), display_name: name, username: name }}
                 onFinish={() => setActiveGift(null)}
             />
         </View >

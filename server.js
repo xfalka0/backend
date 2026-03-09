@@ -236,9 +236,30 @@ const initializeDatabase = async () => {
             await db.query('ALTER TABLE users ADD COLUMN ban_expires_at TIMESTAMP');
         }
 
-        if (!columnNames.includes('account_status')) {
-            console.log('[DB] Adding missing column: account_status');
-            await db.query("ALTER TABLE users ADD COLUMN account_status VARCHAR(50) DEFAULT 'active'");
+        // --- RECOVERY FIX: Ensure all matching operator entries exist and are active ---
+        console.log('[RECOVERY] Checking for missing operator profiles...');
+
+        // 1. Fix NULL statuses
+        await db.query("UPDATE users SET account_status = 'active' WHERE account_status IS NULL AND role = 'operator'");
+
+        // 2. Fix missing operators table entries
+        const missingOps = await db.query(`
+            SELECT id FROM users 
+            WHERE role = 'operator' 
+            AND id NOT IN (SELECT user_id FROM operators)
+        `);
+
+        if (missingOps.rows.length > 0) {
+            console.log(`[RECOVERY] Found ${missingOps.rows.length} users with operator role missing from operators table. Repairing...`);
+            for (const user of missingOps.rows) {
+                await db.query(
+                    "INSERT INTO operators (user_id, category, bio, photos, is_online, rating) VALUES ($1, 'Genel', 'Merhaba!', '{}', false, 5.0)",
+                    [user.id]
+                );
+            }
+            console.log('[RECOVERY] Repair complete.');
+        } else {
+            console.log('[RECOVERY] No synchronization issues found.');
         }
 
         // Detect users.id type to ensure FK compatibility
@@ -595,7 +616,7 @@ app.get('/api/operators', async (req, res) => {
                 EXISTS(SELECT 1 FROM stories s WHERE s.operator_id = u.id AND s.expires_at > NOW()) as has_active_story
             FROM users u
             JOIN operators o ON u.id = o.user_id
-            WHERE u.account_status != 'deleted'
+            WHERE u.account_status = 'active'
         `;
 
         let params = [];
@@ -704,7 +725,7 @@ app.get('/api/discovery', authenticateToken, async (req, res) => {
             WHERE u.gender = $1 
               AND u.role NOT IN ('admin', 'super_admin')
               AND u.id != $2
-              AND u.account_status != 'deleted'
+              AND u.account_status = 'active'
             ${orderByClause}
             LIMIT $3 OFFSET $4
         `;
@@ -1718,6 +1739,18 @@ app.put('/api/admin/users/:id/role', authenticateToken, authorizeRole('admin', '
         );
 
         if (result.rows.length === 0) return res.status(404).json({ error: 'Kullanıcı bulunamadı.' });
+
+        // --- ROLE SYNC: If user promoted to operator, ensure entry in operators table exists ---
+        if (role === 'operator') {
+            const opCheck = await db.query('SELECT user_id FROM operators WHERE user_id = $1', [id]);
+            if (opCheck.rows.length === 0) {
+                console.log(`[SYNC] Creating missing operator entry for user ${id}`);
+                await db.query(
+                    "INSERT INTO operators (user_id, category, bio, photos, is_online, rating) VALUES ($1, 'Genel', 'Merhaba!', '{}', false, 5.0)",
+                    [id]
+                );
+            }
+        }
 
         res.json(result.rows[0]);
     } catch (err) {

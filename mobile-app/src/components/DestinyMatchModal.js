@@ -19,6 +19,7 @@ import Animated, {
     Extrapolation
 } from 'react-native-reanimated';
 import { useTheme } from '../contexts/ThemeContext';
+import { resolveImageUrl } from '../utils/imageUtils';
 
 const { width, height } = Dimensions.get('window');
 
@@ -184,7 +185,7 @@ const DestinyMatchModal = ({ visible, onClose, operators, navigation, user }) =>
                     <Animated.View style={[styles.avatarContainer, contentStyle]}>
                         <View style={styles.avatarBorder}>
                             <Image
-                                source={{ uri: displayProfile?.avatar_url || 'https://via.placeholder.com/200' }}
+                                source={{ uri: resolveImageUrl(displayProfile?.avatar_url || displayProfile?.avatar) || 'https://via.placeholder.com/200' }}
                                 style={styles.avatar}
                             />
                         </View>

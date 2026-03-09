@@ -15,9 +15,31 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import GlassCard from '../ui/GlassCard';
 import * as Haptics from 'expo-haptics';
+import { resolveImageUrl } from '../../utils/imageUtils';
 
 const { width, height } = Dimensions.get('window');
-const SWIPE_THRESHOLD = width * 0.25;
+
+const FallbackImage = ({ url, style, name, theme }) => {
+    const [hasError, setHasError] = useState(false);
+
+    useEffect(() => {
+        setHasError(false);
+    }, [url]);
+
+    if (hasError || !url) {
+        const fallbackUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(name || 'User')}&background=random&color=fff&size=512`;
+        return <Image key={url} source={{ uri: fallbackUrl }} style={style} />;
+    }
+
+    return (
+        <Image
+            key={url}
+            source={{ uri: encodeURI(url) }}
+            style={style}
+            onError={() => setHasError(true)}
+        />
+    );
+};
 
 export default function SwipeDeck({ data = [], onSwipeLeft, onSwipeRight, onCardPress }) {
     const [currentIndex, setCurrentIndex] = useState(0);
@@ -129,7 +151,7 @@ export default function SwipeDeck({ data = [], onSwipeLeft, onSwipeRight, onCard
 
         const cardContent = (
             <Animated.View style={[styles.card, animatedCardStyle]}>
-                <Image source={{ uri: item.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(item.name)}&background=random&color=fff` }} style={styles.image} />
+                <FallbackImage url={resolveImageUrl(item.avatar_url || item.avatar)} name={item.name} style={styles.image} theme={theme} />
                 <LinearGradient
                     colors={['transparent', 'rgba(0,0,0,0.8)']}
                     style={styles.gradient}

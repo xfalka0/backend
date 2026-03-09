@@ -26,6 +26,7 @@ import * as ImagePicker from 'expo-image-picker';
 import axios from 'axios';
 import { useTheme } from '../contexts/ThemeContext';
 import { API_URL } from '../config';
+import { resolveImageUrl } from '../utils/imageUtils';
 import PremiumBackground from '../components/animated/PremiumBackground';
 import VipFrame from '../components/ui/VipFrame';
 import ModernAlert from '../components/ui/ModernAlert';
@@ -713,7 +714,7 @@ export default function ProfileScreen({ route, navigation }) {
                             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.albumContent}>
                                 {album.map((uri, index) => (
                                     <View key={index} style={styles.albumItem}>
-                                        <Image source={{ uri }} style={styles.albumImg} />
+                                        <Image source={{ uri: resolveImageUrl(uri) }} style={styles.albumImg} />
                                     </View>
                                 ))}
                                 {album.length < 5 && (

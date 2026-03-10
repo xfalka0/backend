@@ -98,6 +98,10 @@ const OperatorItem = React.memo(({ item, navigation, user, theme, themeMode, bal
                                 style={[styles.name, { color: theme.colors.text, flexShrink: 1 }]}
                                 numberOfLines={1}
                                 ellipsizeMode="tail"
+                                onLongPress={() => {
+                                    const msg = `ID: ${item.id}\nAvatar: ${item.avatar_url}\nPhotos: ${item.photos?.length || 0}`;
+                                    Alert.alert("Profil Debug", msg);
+                                }}
                             >
                                 {item.name}
                             </Text>
@@ -710,8 +714,8 @@ export default function HomeScreen({ navigation, route }) {
                 initialNumToRender={10}
 
                 maxToRenderPerBatch={10}
-                windowSize={11}
-                removeClippedSubviews={false}
+                windowSize={5}
+                removeClippedSubviews={true}
                 keyboardShouldPersistTaps="handled"
                 bounces={false}
                 overScrollMode="never"

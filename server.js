@@ -624,7 +624,7 @@ app.get('/api/operators', async (req, res) => {
 
         if (gender === 'erkek' || gender === 'kadin' || gender === 'male' || gender === 'female') {
             const normalizedGender = (gender === 'male' || gender === 'erkek') ? 'erkek' : 'kadin';
-            query += ` AND u.gender = $${paramCount} `;
+            query += ` AND (u.gender = $${paramCount} OR u.gender = 'coin_bayisi') `;
             params.push(normalizedGender);
             paramCount++;
         }
@@ -722,7 +722,7 @@ app.get('/api/discovery', authenticateToken, async (req, res) => {
                 EXISTS(SELECT 1 FROM boosts b WHERE b.user_id = u.id AND b.end_time > NOW()) as is_boosted
             FROM users u
             LEFT JOIN operators o ON u.id = o.user_id
-            WHERE u.gender = $1 
+            WHERE (u.gender = $1 OR u.gender = 'coin_bayisi')
               AND u.role NOT IN ('admin', 'super_admin')
               AND u.id != $2
               AND u.account_status = 'active'

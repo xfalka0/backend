@@ -1,5 +1,6 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Dimensions, SafeAreaView, Linking, Clipboard } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Dimensions, SafeAreaView, Linking } from 'react-native';
+import * as Clipboard from 'expo-clipboard';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../contexts/ThemeContext';
@@ -63,7 +64,7 @@ const PurchaseInfoScreen = ({ navigation, route }) => {
                                 style={[styles.copyIdBtn, { backgroundColor: theme.colors.glass }]}
                                 onPress={() => {
                                     const userId = route.params?.user?.id || 'ID Bulunamadı';
-                                    Clipboard.setString(String(userId));
+                                    Clipboard.setStringAsync(String(userId));
                                     alert('Kullanıcı ID\'niz kopyalandı! Bayiye bu numarayı göndermeyi unutmayın.');
                                 }}
                             >

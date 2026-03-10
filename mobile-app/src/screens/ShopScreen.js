@@ -7,6 +7,7 @@ import { API_URL } from '../config';
 import { useTheme } from '../contexts/ThemeContext';
 import { PurchaseService } from '../services/purchaseService';
 import { useEffect, useState } from 'react';
+import { Motion } from '../components/motion/MotionSystem';
 
 const { width } = Dimensions.get('window');
 
@@ -63,7 +64,7 @@ export default function ShopScreen({ navigation, route }) {
             if (pack.isLocal && !pack.product.identifier.includes('_')) {
                 // Fallback for old integer IDs if revenuecat_id is missing (still Test Mode for legacy)
                 // But ideally we want real purchase. 
-                // If identifier is "coins_100", PurchaseService might work if configured in Store.
+                // If identifier is "coins_100_v1", PurchaseService might work if configured in Store.
             }
 
             // Always try real purchase (RevenueCat)
@@ -231,6 +232,28 @@ export default function ShopScreen({ navigation, route }) {
                             }, i))
                         )}
                     </View>
+
+                    {/* Dealer Promotion */}
+                    <Motion.SlideUp delay={500}>
+                        <TouchableOpacity
+                            onPress={() => navigation.navigate('CoinDealer', { user: { id: currentUserId } })}
+                            style={styles.dealerPromoContainer}
+                        >
+                            <LinearGradient
+                                colors={themeMode === 'dark' ? ['rgba(251, 191, 36, 0.15)', 'rgba(217, 119, 6, 0.05)'] : ['#FFFBEB', '#FEF3C7']}
+                                style={styles.dealerPromo}
+                            >
+                                <View style={styles.dealerPromoIcon}>
+                                    <Ionicons name="diamond" size={28} color="#FBBF24" />
+                                </View>
+                                <View style={styles.dealerPromoInfo}>
+                                    <Text style={[styles.dealerPromoTitle, { color: theme.colors.text }]}>Daha Uygun Fiyatlar?</Text>
+                                    <Text style={[styles.dealerPromoDesc, { color: theme.colors.textSecondary }]}>Resmi bayimizden indirimli coin alımı yapın.</Text>
+                                </View>
+                                <Ionicons name="chevron-forward" size={20} color={theme.colors.textSecondary} />
+                            </LinearGradient>
+                        </TouchableOpacity>
+                    </Motion.SlideUp>
                 </ScrollView>
             </SafeAreaView>
         </View>
@@ -389,5 +412,38 @@ const styles = StyleSheet.create({
     priceValue: {
         fontWeight: '800',
         fontSize: 14,
+    },
+    dealerPromoContainer: {
+        marginTop: 30,
+        marginBottom: 20,
+    },
+    dealerPromo: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        padding: 20,
+        borderRadius: 24,
+        borderWidth: 1,
+        borderColor: 'rgba(251, 191, 36, 0.3)',
+    },
+    dealerPromoIcon: {
+        width: 50,
+        height: 50,
+        borderRadius: 15,
+        backgroundColor: 'rgba(251, 191, 36, 0.1)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginRight: 15,
+    },
+    dealerPromoInfo: {
+        flex: 1,
+    },
+    dealerPromoTitle: {
+        fontSize: 16,
+        fontWeight: '800',
+        marginBottom: 2,
+    },
+    dealerPromoDesc: {
+        fontSize: 13,
+        opacity: 0.7,
     },
 });

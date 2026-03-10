@@ -288,6 +288,7 @@ export default function ProfilesPage() {
                                                 >
                                                     <option value="kadin">Kadın</option>
                                                     <option value="erkek">Erkek</option>
+                                                    <option value="coin_bayisi">Coin Bayisi</option>
                                                 </select>
                                             </div>
                                             <div className="relative">

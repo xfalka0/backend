@@ -607,8 +607,9 @@ export default function HomeScreen({ navigation, route }) {
     const ListHeader = React.useMemo(() => (
         <View>
             <HeroSection
-                onCoinPress={() => navigation.navigate('PurchaseInfo')}
+                onCoinPress={() => navigation.navigate('PurchaseInfo', { user })}
                 onExplorePress={() => setActiveTab('Önerilen')}
+                onResellerPress={() => navigation.navigate('PurchaseInfo', { user })}
                 onDestinyPress={() => setShowMatchModal(true)}
             />
             <PromotedProfiles

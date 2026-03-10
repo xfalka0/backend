@@ -6,7 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const { width } = Dimensions.get('window');
 
-const HeroSection = ({ onCoinPress, onExplorePress, onDestinyPress }) => {
+const HeroSection = ({ onCoinPress, onExplorePress, onResellerPress, onDestinyPress }) => {
     const insets = useSafeAreaInsets();
 
     return (
@@ -16,6 +16,7 @@ const HeroSection = ({ onCoinPress, onExplorePress, onDestinyPress }) => {
                 <PremiumCoinCard
                     onCoinPress={onCoinPress}
                     onExplorePress={onExplorePress}
+                    onResellerPress={onResellerPress}
                 />
                 <View style={styles.destinyContainer}>
                     <DestinyHero onPress={onDestinyPress} />

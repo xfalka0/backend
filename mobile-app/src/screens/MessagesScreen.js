@@ -232,7 +232,11 @@ export default function MessagesScreen({ navigation, route }) {
                     ListHeaderComponent={(
                         <>
                             <View style={{ height: insets.top + 10 }} />
-                            <PremiumCoinCard onPress={() => navigation.navigate('Shop')} />
+                            <PremiumCoinCard
+                                onCoinPress={() => navigation.navigate('Shop')}
+                                onExplorePress={() => navigation.navigate('Keşfet')}
+                                onResellerPress={() => navigation.navigate('PurchaseInfo', { user })}
+                            />
                             <View style={styles.headerContainer}>
                                 <Text style={[styles.title, { color: theme.colors.text }]}>Sohbetler</Text>
                                 <TouchableOpacity

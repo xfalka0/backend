@@ -688,19 +688,23 @@ export default function ChatScreen({ route, navigation }) {
             <StatusBar style="light" translucent backgroundColor="transparent" />
             <ChatBackground themeMode={themeMode} />
 
-            <FlatList
-                ref={flatListRef}
-                data={[...messages].reverse()} // Reverse messages for inverted list
-                inverted={true} // Start from bottom
-                keyExtractor={item => item.id.toString()}
-                renderItem={renderMessage}
-                contentContainerStyle={styles.messagesList}
-                scrollIndicatorInsets={{ right: 1 }} // Fix scrollbar on iOS
-            />
+            <KeyboardAvoidingView
+                behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+                keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
+                style={{ flex: 1 }}
+            >
+                <FlatList
+                    ref={flatListRef}
+                    data={[...messages].reverse()} // Reverse messages for inverted list
+                    inverted={true} // Start from bottom
+                    keyExtractor={item => item.id.toString()}
+                    renderItem={renderMessage}
+                    contentContainerStyle={styles.messagesList}
+                    scrollIndicatorInsets={{ right: 1 }} // Fix scrollbar on iOS
+                />
 
-            {isTyping && <TypingIndicator />}
+                {isTyping && <TypingIndicator />}
 
-            <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 70}>
                 <View style={styles.modernInputWrapper}>
                     <GlassCard intensity={40} tint="dark" style={styles.glassInputContainer}>
                         <View style={styles.inputRow}>

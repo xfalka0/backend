@@ -42,8 +42,57 @@ const slides = [
         image: require('../../../assets/heart_3d.png'),
         isCoin: false,
         isHeart: true
+    },
+    {
+        id: '3',
+        title: 'Resmi Coin Bayisi',
+        subtitle: 'Avantajlı paketler için hemen yazın',
+        buttonText: 'BAYİYE YAZ',
+        icon: 'logo-whatsapp',
+        colors: ['#065f46', '#059669', 'rgba(0, 0, 0, 0.8)'], // Emerald/Green gradient
+        buttonColors: ['#34D399', '#10B981', '#059669'], // Green button gradient
+        image: require('../../../assets/reseller_coins.png'),
+        isCoin: false,
+        isHeart: false,
+        isReseller: true
     }
 ];
+
+const FloatingEmber = ({ delay, startX }) => {
+    const translateY = useSharedValue(30);
+    const opacity = useSharedValue(0);
+    const scale = useSharedValue(0.3 + Math.random() * 0.6);
+
+    useEffect(() => {
+        const duration = 3000 + Math.random() * 1500;
+
+        opacity.value = withDelay(delay, withRepeat(
+            withSequence(
+                withTiming(0.9, { duration: duration * 0.3 }),
+                withTiming(0, { duration: duration * 0.7 })
+            ),
+            -1,
+            false
+        ));
+
+        translateY.value = withDelay(delay, withRepeat(
+            withTiming(-80 - Math.random() * 40, { duration: duration, easing: Easing.out(Easing.ease) }),
+            -1,
+            false
+        ));
+    }, []);
+
+    const style = useAnimatedStyle(() => ({
+        transform: [
+            { translateY: translateY.value },
+            { translateX: startX },
+            { scale: scale.value }
+        ],
+        opacity: opacity.value,
+    }));
+
+    return <Animated.View style={[styles.floatingEmber, style]} pointerEvents="none" />;
+};
 
 const FloatingHeart = ({ delay }) => {
     const translateY = useSharedValue(0);
@@ -105,7 +154,7 @@ const FloatingHeart = ({ delay }) => {
     );
 };
 
-const PremiumCoinCard = ({ onCoinPress, onExplorePress }) => {
+const PremiumCoinCard = ({ onCoinPress, onExplorePress, onResellerPress }) => {
     const shineX = useSharedValue(-200);
     const bannerShineX = useSharedValue(-width * 1.5);
     const cardScale = useSharedValue(1);
@@ -260,6 +309,8 @@ const PremiumCoinCard = ({ onCoinPress, onExplorePress }) => {
                 onCoinPress?.();
             } else if (item.isHeart) {
                 onExplorePress?.();
+            } else if (item.isReseller) {
+                onResellerPress?.();
             }
         };
 
@@ -345,9 +396,21 @@ const PremiumCoinCard = ({ onCoinPress, onExplorePress }) => {
 
                             <View style={styles.imageContainer}>
                                 {item.isHeart && [1, 2, 3, 4, 5].map(i => <FloatingHeart key={i} delay={i * 400} />)}
+                                {item.isReseller && (
+                                    <>
+                                        {/* Generate 8 embers spread across the image width (-50 to 50) */}
+                                        {[...Array(8)].map((_, i) => (
+                                            <FloatingEmber
+                                                key={`ember-${i}`}
+                                                delay={i * 400 + Math.random() * 300}
+                                                startX={(Math.random() - 0.5) * 110}
+                                            />
+                                        ))}
+                                    </>
+                                )}
                                 <Animated.Image
                                     source={item.image}
-                                    style={[styles.coinImage, item.isHeart ? heartAnimatedStyle : (item.isCoin ? coinAnimatedStyle : {})]}
+                                    style={[styles.coinImage, item.isHeart ? heartAnimatedStyle : (item.isCoin || item.isReseller ? coinAnimatedStyle : {})]}
                                     resizeMode="contain"
                                 />
                             </View>
@@ -608,6 +671,18 @@ const styles = StyleSheet.create({
         shadowRadius: 25,
         shadowOpacity: 1,
         elevation: 15,
+    },
+    floatingEmber: {
+        position: 'absolute',
+        bottom: '10%',
+        width: 6,
+        height: 6,
+        borderRadius: 3,
+        backgroundColor: '#FEF3C7', // Light yellow
+        shadowColor: '#FBBF24',
+        shadowOpacity: 1,
+        shadowRadius: 8,
+        elevation: 8,
     }
 });
 

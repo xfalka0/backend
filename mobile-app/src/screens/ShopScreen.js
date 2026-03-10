@@ -106,13 +106,13 @@ export default function ShopScreen({ navigation, route }) {
     };
 
     const coinPackages = [
-        { coins: 100, price: '39,99 ₺', icon: 'cube-outline', color: ['#60a5fa', '#3b82f6'] },
-        { coins: 200, price: '69,99 ₺', icon: 'flash', bestValue: true, color: ['#fbbf24', '#f59e0b'] },
-        { coins: 400, price: '129,99 ₺', icon: 'diamond-outline', color: ['#e879f9', '#d946ef'] },
-        { coins: 700, price: '249,99 ₺', icon: 'diamond', color: ['#8b5cf6', '#7c3aed'] },
-        { coins: 1200, price: '449,99 ₺', icon: 'rocket-outline', color: ['#2dd4bf', '#0d9488'] },
-        { coins: 2500, price: '949,99 ₺', icon: 'rocket', color: ['#fb7185', '#e11d48'] },
-        { coins: 5000, price: '1749,99 ₺', icon: 'trophy', color: ['#fcd34d', '#b45309'] },
+        { coins: 100, price: '49,99 ₺', icon: 'cube-outline', color: ['#60a5fa', '#3b82f6'] },
+        { coins: 200, price: '89,99 ₺', icon: 'flash', bestValue: true, color: ['#fbbf24', '#f59e0b'] },
+        { coins: 400, price: '159,99 ₺', icon: 'diamond-outline', color: ['#e879f9', '#d946ef'] },
+        { coins: 700, price: '299,99 ₺', icon: 'diamond', color: ['#8b5cf6', '#7c3aed'] },
+        { coins: 1200, price: '549,99 ₺', icon: 'rocket-outline', color: ['#2dd4bf', '#0d9488'] },
+        { coins: 2500, price: '1149,99 ₺', icon: 'rocket', color: ['#fb7185', '#e11d48'] },
+        { coins: 5000, price: '2099,99 ₺', icon: 'trophy', color: ['#fcd34d', '#b45309'] },
     ];
 
     const renderCoinCard = (pack, index) => {
@@ -214,12 +214,12 @@ export default function ShopScreen({ navigation, route }) {
                         ) : (
                             // Absolute Fallback if even API fails
                             [
-                                { coins: 100, price: '39,99 ₺', name: 'Başlangıç Paketi' },
-                                { coins: 250, price: '89,99 ₺', name: 'Gümüş Paket' },
-                                { coins: 500, price: '159,99 ₺', name: 'Altın Paket' },
-                                { coins: 1000, price: '299,99 ₺', name: 'VIP Paket' },
-                                { coins: 2500, price: '699,99 ₺', name: 'Platin Paket' },
-                                { coins: 5000, price: '1299,99 ₺', name: 'Efsane Paket' }
+                                { coins: 100, price: '49,99 ₺', name: 'Başlangıç Paketi' },
+                                { coins: 250, price: '109,99 ₺', name: 'Gümüş Paket' },
+                                { coins: 500, price: '199,99 ₺', name: 'Altın Paket' },
+                                { coins: 1000, price: '359,99 ₺', name: 'VIP Paket' },
+                                { coins: 2500, price: '849,99 ₺', name: 'Platin Paket' },
+                                { coins: 5000, price: '1599,99 ₺', name: 'Efsane Paket' }
                             ].map((p, i) => renderCoinCard({
                                 isLocal: true,
                                 product: {

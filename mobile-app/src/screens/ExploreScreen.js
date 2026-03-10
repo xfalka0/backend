@@ -147,8 +147,12 @@ export default function ExploreScreen({ navigation, route }) {
     const fetchExploreData = async () => {
         try {
             setLoading(true);
+            const token = await AsyncStorage.getItem('token');
             const [exploreRes, operatorsRes] = await Promise.all([
-                axios.get(`${API_URL}/social/explore`, { params: { user_id: user?.id } }),
+                axios.get(`${API_URL}/social/explore`, {
+                    params: { user_id: user?.id },
+                    headers: token ? { Authorization: `Bearer ${token}` } : {}
+                }),
                 axios.get(`${API_URL}/operators?limit=100`)
             ]);
             setPosts(exploreRes.data.posts);
@@ -180,7 +184,11 @@ export default function ExploreScreen({ navigation, route }) {
         }));
 
         try {
-            const res = await axios.post(`${API_URL}/social/post/${postId}/like`, { user_id: user.id });
+            const token = await AsyncStorage.getItem('token');
+            const res = await axios.post(`${API_URL}/social/post/${postId}/like`,
+                { user_id: user.id },
+                { headers: { Authorization: `Bearer ${token}` } }
+            );
             // Sync with actual result from server just in case
             setPosts(prev => prev.map(post => {
                 if (post.id === postId) {

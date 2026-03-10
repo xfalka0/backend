@@ -48,7 +48,6 @@ import SplashScreen from './src/screens/SplashScreen';
 import WelcomeScreen from './src/screens/WelcomeScreen';
 import OnboardingScreen from './src/screens/OnboardingScreen';
 import PurchaseInfoScreen from './src/screens/PurchaseInfoScreen';
-import CoinDealerScreen from './src/screens/CoinDealerScreen';
 
 import AnimatedTabBar from './src/components/animated/AnimatedTabBar';
 
@@ -131,7 +130,6 @@ function AppContent() {
                 <Stack.Screen name="Welcome" component={WelcomeScreen} />
                 <Stack.Screen name="Onboarding" component={OnboardingScreen} />
                 <Stack.Screen name="PurchaseInfo" component={PurchaseInfoScreen} />
-                <Stack.Screen name="CoinDealer" component={CoinDealerScreen} />
             </Stack.Navigator>
         </NavigationContainer>
     );

@@ -19,21 +19,18 @@ export default function ShopScreen({ navigation, route }) {
     const [balance, setBalance] = useState(user?.balance || 0);
     const [offerings, setOfferings] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [dealer, setDealer] = useState(null);
 
     useEffect(() => {
         const fetchOfferings = async () => {
             setLoading(true);
             try {
-                // 1. Try RevenueCat
+                // Fetch offerings
                 const availablePackages = await PurchaseService.getOfferings();
-
                 if (availablePackages && availablePackages.length > 0) {
                     setOfferings(availablePackages);
                 } else {
-                    // 2. Fallback to our Backend
-                    console.log('[Shop] No RevenueCat offerings found, falling back to backend API.');
                     const res = await axios.get(`${API_URL}/offerings`);
-                    // Transform DB packages to a compatible format for render
                     const transformed = res.data.map(pkg => ({
                         isLocal: true,
                         product: {
@@ -47,14 +44,30 @@ export default function ShopScreen({ navigation, route }) {
                     }));
                     setOfferings(transformed);
                 }
+
+                // Fetch Dealer Profile (gender: coin_bayisi)
+                const opRes = await axios.get(`${API_URL}/operators?limit=50`);
+                const coinDealer = opRes.data.find(op => op.gender === 'coin_bayisi');
+                if (coinDealer) {
+                    setDealer(coinDealer);
+                }
             } catch (err) {
-                console.error('[Shop] Error loading offerings:', err);
+                console.error('[Shop] Fetch error:', err);
             } finally {
                 setLoading(false);
             }
         };
         fetchOfferings();
     }, []);
+
+    const handleDealerPress = () => {
+        if (dealer) {
+            navigation.navigate('OperatorProfile', { operator: dealer, user: { id: currentUserId } });
+        } else {
+            // Fallback if dealer not found in list
+            navigation.navigate('CoinDealer', { user: { id: currentUserId } });
+        }
+    };
 
     const handlePurchase = async (pack) => {
         try {
@@ -236,7 +249,7 @@ export default function ShopScreen({ navigation, route }) {
                     {/* Dealer Promotion */}
                     <Motion.SlideUp delay={500}>
                         <TouchableOpacity
-                            onPress={() => navigation.navigate('CoinDealer', { user: { id: currentUserId } })}
+                            onPress={handleDealerPress}
                             style={styles.dealerPromoContainer}
                         >
                             <LinearGradient

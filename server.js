@@ -246,8 +246,8 @@ const initializeDatabase = async () => {
             await db.query('ALTER TABLE users ADD COLUMN last_login_at TIMESTAMP');
         }
 
-        // Initialize Packages
-        await initializePackages();
+        // Initialize Database (Tables, Seed data, Migrations)
+        await initializeDatabase();
 
         if (!columnNames.includes('ban_expires_at')) {
             console.log('[DB] Adding missing column: ban_expires_at');

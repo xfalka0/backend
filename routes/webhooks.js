@@ -57,7 +57,16 @@ async function handleSuccessfulPayment(userId, productId) {
         'coins_5000': 5000
     };
 
-    const coinAmount = productMapping[productId];
+    let coinAmount = productMapping[productId];
+
+    // Try to extract amount dynamically if exact match fails (e.g. coins_5000_v1)
+    if (!coinAmount && productId && productId.includes('coins_')) {
+        const match = productId.match(/coins_(\d+)/);
+        if (match) {
+            coinAmount = parseInt(match[1], 10);
+            console.log(`[WEBHOOK] Dynamically mapped ${productId} to ${coinAmount} coins.`);
+        }
+    }
 
     if (coinAmount) {
         console.log(`[WEBHOOK SUCCESS] Adding ${coinAmount} coins to user ${userId} for product ${productId}`);

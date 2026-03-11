@@ -7,7 +7,8 @@ const path = require('path');
 exports.getExplore = async (req, res) => {
     try {
         const currentUserId = req.query.user_id;
-        const userIdType = req.app.get('user_id_type') || 'UUID';
+        const userIdType = 'UUID'; // Always UUID - our DB uses UUID for user IDs
+
 
         // 1. Fetch active stories - Filtered by blocks
         let stories = [];

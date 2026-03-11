@@ -18,45 +18,6 @@ const CoinPackageCard = ({ pack, index, handlePurchase, theme, themeMode }) => {
     const coinAmount = product.title.split(' ')[0] || product.title;
     const isBestValue = product.identifier.includes('popular') || coinAmount === '1200';
 
-    const floatAnim = useRef(new Animated.Value(0)).current;
-    const pulseAnim = useRef(new Animated.Value(1)).current;
-
-    useEffect(() => {
-        // Floating animation for coins
-        Animated.loop(
-            Animated.sequence([
-                Animated.timing(floatAnim, {
-                    toValue: -8, // move up
-                    duration: 1200 + (index % 3) * 200, // slight offset per card
-                    useNativeDriver: true,
-                }),
-                Animated.timing(floatAnim, {
-                    toValue: 0,
-                    duration: 1200 + (index % 3) * 200,
-                    useNativeDriver: true,
-                })
-            ])
-        ).start();
-
-        // Pulsing animation for "best value" badge/button
-        if (isBestValue) {
-            Animated.loop(
-                Animated.sequence([
-                    Animated.timing(pulseAnim, {
-                        toValue: 1.05,
-                        duration: 800,
-                        useNativeDriver: true,
-                    }),
-                    Animated.timing(pulseAnim, {
-                        toValue: 1,
-                        duration: 800,
-                        useNativeDriver: true,
-                    })
-                ])
-            ).start();
-        }
-    }, [floatAnim, pulseAnim, index, isBestValue]);
-
     return (
         <Motion.SlideUp delay={index * 100}>
             <TouchableOpacity
@@ -70,18 +31,18 @@ const CoinPackageCard = ({ pack, index, handlePurchase, theme, themeMode }) => {
                 >
                     {isBestValue && (
                         <View style={styles.ribbonContainer}>
-                            <Animated.View style={{ transform: [{ scale: pulseAnim }] }}>
+                            <View>
                                 <LinearGradient colors={['#fbbf24', '#f59e0b']} style={styles.ribbon}>
                                     <Text style={styles.ribbonText}>POPÜLER</Text>
                                 </LinearGradient>
-                            </Animated.View>
+                            </View>
                         </View>
                     )}
 
                     <View style={styles.coinImageContainer}>
-                        <Animated.Image
+                        <Image
                             source={require('../../assets/gold_coin_3f.png')}
-                            style={[styles.coinImage, { transform: [{ translateY: floatAnim }] }]}
+                            style={styles.coinImage}
                             resizeMode="contain"
                         />
                     </View>
@@ -93,7 +54,7 @@ const CoinPackageCard = ({ pack, index, handlePurchase, theme, themeMode }) => {
                         Coin
                     </Text>
 
-                    <Animated.View style={[{ width: '100%', alignItems: 'center' }, isBestValue ? { transform: [{ scale: pulseAnim }] } : {}]}>
+                    <View style={{ width: '100%', alignItems: 'center' }}>
                         <LinearGradient
                             colors={isBestValue ? ['#fbbf24', '#f59e0b'] : ['#ec4899', '#e11d48']}
                             start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
@@ -101,7 +62,7 @@ const CoinPackageCard = ({ pack, index, handlePurchase, theme, themeMode }) => {
                         >
                             <Text style={styles.priceButtonText} numberOfLines={1} adjustsFontSizeToFit>{product.priceString}</Text>
                         </LinearGradient>
-                    </Animated.View>
+                    </View>
                 </LinearGradient>
             </TouchableOpacity>
         </Motion.SlideUp>
@@ -117,6 +78,57 @@ export default function ShopScreen({ navigation, route }) {
     const [loading, setLoading] = useState(true);
     const [dealer, setDealer] = useState(null);
     const [alertConfig, setAlertConfig] = useState({ visible: false, title: '', message: '', type: 'info' });
+
+    // Premium Animations
+    const shimmerAnim = useRef(new Animated.Value(-width)).current;
+    const floatAnim = useRef(new Animated.Value(0)).current;
+    const balanceScaleAnim = useRef(new Animated.Value(1)).current;
+
+    useEffect(() => {
+        // Discrete Shimmer (Super Elegant, Extra Slow Flow)
+        Animated.loop(
+            Animated.sequence([
+                Animated.timing(shimmerAnim, {
+                    toValue: width + 200,
+                    duration: 6000, // Drastically slowed down to 6 seconds
+                    useNativeDriver: true,
+                }),
+                Animated.delay(3000), // Adjusted delay
+            ])
+        ).start();
+
+        // Continuous Floating Icon
+        Animated.loop(
+            Animated.sequence([
+                Animated.timing(floatAnim, {
+                    toValue: -10,
+                    duration: 1500,
+                    useNativeDriver: true,
+                }),
+                Animated.timing(floatAnim, {
+                    toValue: 0,
+                    duration: 1500,
+                    useNativeDriver: true,
+                })
+            ])
+        ).start();
+    }, [shimmerAnim, floatAnim]);
+
+    // Pulse balance when it changes
+    useEffect(() => {
+        Animated.sequence([
+            Animated.timing(balanceScaleAnim, {
+                toValue: 1.2,
+                duration: 200,
+                useNativeDriver: true,
+            }),
+            Animated.spring(balanceScaleAnim, {
+                toValue: 1,
+                friction: 4,
+                useNativeDriver: true,
+            })
+        ]).start();
+    }, [balance]);
 
     useEffect(() => {
         const fetchOfferings = async () => {
@@ -188,19 +200,27 @@ export default function ShopScreen({ navigation, route }) {
                 // Try to get real transaction ID if available
                 transactionId = result.customerInfo?.originalAppUserId || transactionId;
             } else if (result.pending) {
-                // Payment is pending (e.g., slow test payment or bank transfer)
                 setAlertConfig({
                     visible: true,
-                    title: 'Ödeme Beklemede',
-                    message: result.error || 'Ödemeniz inceleniyor, onaylandığında bakiyeniz eklenecektir.',
+                    title: 'Ödeme İşleniyor',
+                    message: 'Ödemeniz şu an beklemede. Onaylandığında bakiyeniz otomatik olarak güncellenecektir. Lütfen bekleyiniz.',
                     type: 'info'
                 });
                 return;
             } else if (!result.cancelled) {
+                // Map technical errors to user-friendly Turkish
+                let errorMessage = 'Satın alma işlemi şu an gerçekleştirilemiyor. Lütfen daha sonra tekrar deneyiniz.';
+
+                if (result.error?.includes('not allowed')) {
+                    errorMessage = 'Cihazınız veya hesabınız satın alma işlemine izin vermiyor. Lütfen kısıtlamaları kontrol edin.';
+                } else if (result.error?.includes('network')) {
+                    errorMessage = 'Bağlantı hatası oluştu. Lütfen internetinizi kontrol edip tekrar deneyin.';
+                }
+
                 setAlertConfig({
                     visible: true,
-                    title: 'Hata',
-                    message: 'Satın alma işlemi başarısız: ' + result.error,
+                    title: 'İşlem Başarısız',
+                    message: errorMessage,
                     type: 'error'
                 });
                 return;
@@ -290,25 +310,46 @@ export default function ShopScreen({ navigation, route }) {
                 </View>
 
                 <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
-                    {/* Balanced Display */}
+                    {/* Modern Animated Balance Card */}
                     <LinearGradient
                         colors={['#8b5cf6', '#d946ef']}
                         start={{ x: 0, y: 0 }}
                         end={{ x: 1, y: 1 }}
                         style={styles.balanceCard}
                     >
+                        {/* Shimmer Effect Layer */}
+                        <Animated.View style={[
+                            styles.shimmerLayer,
+                            { transform: [{ translateX: shimmerAnim }, { rotate: '25deg' }] }
+                        ]}>
+                            <LinearGradient
+                                colors={['transparent', 'rgba(255,255,255,0.45)', 'transparent']}
+                                start={{ x: 0, y: 0 }}
+                                end={{ x: 1, y: 0 }}
+                                style={StyleSheet.absoluteFill}
+                            />
+                        </Animated.View>
+
                         <View style={styles.balanceInfo}>
                             <Text style={styles.balanceLabel}>Mevcut Bakiyen</Text>
-                            <Text style={[styles.balanceValue, { color: 'white' }]}>{balance}</Text>
+                            <Animated.Text style={[
+                                styles.balanceValue,
+                                { color: 'white', transform: [{ scale: balanceScaleAnim }] }
+                            ]}>
+                                {balance}
+                            </Animated.Text>
                         </View>
-                        <View style={styles.balanceIconWrapper}>
+
+                        <Animated.View style={[
+                            styles.balanceIconWrapper,
+                            { transform: [{ translateY: floatAnim }] }
+                        ]}>
                             <Image
                                 source={require('../../assets/gold_coin_3f.png')}
-                                style={{ width: 55, height: 55 }}
+                                style={{ width: 65, height: 65 }}
                                 resizeMode="contain"
                             />
-                        </View>
-                        <View style={styles.balanceGlow} />
+                        </Animated.View>
                     </LinearGradient>
 
                     {/* Dealer Promotion */}
@@ -447,25 +488,20 @@ const styles = StyleSheet.create({
         fontSize: 36,
         fontWeight: '900',
     },
+    shimmerLayer: {
+        position: 'absolute',
+        top: -150,
+        left: -150, // Start well behind the left edge
+        height: 500,
+        width: 140, // Increased width
+        zIndex: 1,
+    },
     balanceIconWrapper: {
-        width: 60,
-        height: 60,
-        borderRadius: 30,
-        backgroundColor: 'rgba(255,255,255,0.1)',
+        width: 70,
+        height: 70,
         alignItems: 'center',
         justifyContent: 'center',
         zIndex: 2,
-    },
-    balanceGlow: {
-        position: 'absolute',
-        top: -50,
-        right: -50,
-        width: 150,
-        height: 150,
-        borderRadius: 75,
-        backgroundColor: 'white',
-        opacity: 0.1,
-        zIndex: 1,
     },
     sectionTitle: {
         fontSize: 22,

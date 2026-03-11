@@ -436,15 +436,18 @@ initializeDatabase();
 app.get('/api/health-check', async (req, res) => {
     try {
         const dbCheck = await db.query('SELECT NOW()');
-        const tables = await db.query("SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'");
+        const tablesToInspect = ['users', 'posts', 'stories', 'operators', 'boosts', 'favorites', 'profile_views', 'transactions', 'payments'];
+        const schemaInfo = {};
 
-        const schemaDetails = {};
-        const tablesToInspect = ['users', 'posts', 'stories', 'operators', 'boosts', 'favorites', 'profile_views'];
-
-        for (const tableName of tablesToInspect) {
-            const cols = await db.query("SELECT column_name, data_type FROM information_schema.columns WHERE table_name = $1", [tableName]);
-            schemaDetails[tableName] = cols.rows;
+        for (const table of tablesToInspect) {
+            const columns = await db.query(
+                "SELECT column_name, data_type FROM information_schema.columns WHERE table_name = $1 AND table_schema = 'public'",
+                [table]
+            );
+            schemaInfo[table] = columns.rows;
         }
+
+        const tables = await db.query("SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'");
 
         res.json({
             status: 'online',
@@ -2119,8 +2122,12 @@ app.post('/api/purchase', authenticateToken, async (req, res) => {
         });
     } catch (err) {
         await db.query('ROLLBACK');
-        console.error('CRITICAL PURCHASE ERROR:', err.message);
-        res.status(500).json({ error: 'Satın alım işlenirken bir hata oluştu.' });
+        console.error('CRITICAL PURCHASE ERROR:', err);
+        res.status(500).json({
+            error: 'Satın alım işlenirken bir hata oluştu.',
+            details: err.message,
+            stack: process.env.NODE_ENV === 'development' ? err.stack : undefined
+        });
     }
 });
 

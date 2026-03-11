@@ -135,7 +135,7 @@ export default function MessagesScreen({ navigation, route }) {
                             <VipFrame
                                 level={item.gender === 'coin_bayisi' ? 'dealer' : (item.vip_level || 0)}
                                 avatar={item.avatar_url}
-                                size={56}
+                                size={48} // Reduced from 56
                                 isStatic={true}
                             />
                             {item.is_online && (
@@ -319,9 +319,9 @@ const styles = StyleSheet.create({
     chatItem: {
         flexDirection: 'row',
         alignItems: 'center',
-        paddingVertical: 18,
+        paddingVertical: 14, // Reduced from 18
         paddingHorizontal: 16,
-        borderRadius: 24,
+        borderRadius: 20, // Reduced from 24
         backgroundColor: 'transparent',
         overflow: 'hidden',
         // Premium Shadow
@@ -383,7 +383,7 @@ const styles = StyleSheet.create({
         justifyContent: 'flex-start',
     },
     name: {
-        fontSize: 17,
+        fontSize: 15, // Reduced from 17
         fontWeight: 'bold',
         marginRight: 4,
     },
@@ -410,10 +410,10 @@ const styles = StyleSheet.create({
         marginLeft: 2,
     },
     lastMsg: {
-        fontSize: 14,
+        fontSize: 12, // Reduced from 14
     },
     time: {
-        fontSize: 12,
+        fontSize: 10, // Reduced from 12
         marginBottom: 6, // Space between time and badge
         fontWeight: '600',
     },

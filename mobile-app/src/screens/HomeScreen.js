@@ -199,6 +199,10 @@ export default function HomeScreen({ navigation, route }) {
         };
     });
 
+    // Track which operators have already sent a fake message in this session
+    const sentFakeOperators = useRef(new Set());
+    const fakeMsgTriggered = useRef(false);
+
     const FAKE_MESSAGES = [
         "selam tanisalim mi",
         "merhaba buralarda yenisin sanrm",
@@ -216,14 +220,21 @@ export default function HomeScreen({ navigation, route }) {
         let hideMsgTimer;
 
         const triggerFakeMessage = () => {
-            // Only if there are female operators loaded and user is not admin
-            const femaleOps = operators.filter(op => op.gender === 'kadin' || op.gender === 'female' || (op.gender && op.gender.toLowerCase() === 'kadin'));
+            if (fakeMsgTriggered.current) return;
 
-            if (femaleOps.length > 0) {
-                const randomOp = femaleOps[Math.floor(Math.random() * femaleOps.length)];
+            // Filter for female operators who haven't sent a message yet
+            const availableOps = operators.filter(op => {
+                const isFemale = op.gender === 'kadin' || op.gender === 'female' || (op.gender && op.gender.toLowerCase() === 'kadin');
+                return isFemale && !sentFakeOperators.current.has(op.id);
+            });
+
+            if (availableOps.length > 0) {
+                const randomOp = availableOps[Math.floor(Math.random() * availableOps.length)];
                 const randomMsg = FAKE_MESSAGES[Math.floor(Math.random() * FAKE_MESSAGES.length)];
 
                 setFakeMessage({ operator: randomOp, text: randomMsg });
+                sentFakeOperators.current.add(randomOp.id);
+                fakeMsgTriggered.current = true;
 
                 // Persist to backend so it stays in chat history
                 axios.post(`${API_URL}/messages/internal-fake`, {
@@ -238,20 +249,25 @@ export default function HomeScreen({ navigation, route }) {
                 // Hide after 5 seconds
                 hideMsgTimer = setTimeout(() => {
                     fakeMessageAnimY.value = withTiming(-150, { duration: 500 });
-                    setTimeout(() => setFakeMessage(null), 500);
+                    setTimeout(() => {
+                        setFakeMessage(null);
+                        fakeMsgTriggered.current = false; // Allow another message later if desired, or keep true to only allow 1 per mount
+                    }, 500);
                 }, 5000);
             }
         };
 
-        // Trigger between 4 and 8 seconds after mounting component
-        const delay = Math.floor(Math.random() * 4000) + 4000;
-        fakeMsgTimer = setTimeout(triggerFakeMessage, delay);
+        // Trigger between 8 and 15 seconds for a more natural feel (increased from 4-8)
+        if (operators.length > 0 && !fakeMsgTriggered.current) {
+            const delay = Math.floor(Math.random() * 7000) + 8000;
+            fakeMsgTimer = setTimeout(triggerFakeMessage, delay);
+        }
 
         return () => {
             clearTimeout(fakeMsgTimer);
             clearTimeout(hideMsgTimer);
         };
-    }, [operators]); // Re-run if operators change initially (so we have data)
+    }, [operators.length > 0]); // Re-run once we have operators
 
     useFocusEffect(
         React.useCallback(() => {

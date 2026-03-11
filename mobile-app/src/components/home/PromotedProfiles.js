@@ -204,7 +204,7 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'space-between',
-        marginBottom: 12,
+        marginBottom: 8, // Reduced from 12
         paddingHorizontal: 4,
     },
     titleRow: {
@@ -226,7 +226,7 @@ const styles = StyleSheet.create({
     },
     premiumCardContainer: {
         borderRadius: 24,
-        paddingVertical: 18,
+        paddingVertical: 14, // Reduced from 18
         overflow: 'hidden',
         borderWidth: 1.5,
         borderColor: 'rgba(217, 119, 6, 0.4)', // Sharp Gold Border
@@ -254,11 +254,11 @@ const styles = StyleSheet.create({
     },
     profileItem: {
         alignItems: 'center',
-        width: 70,
+        width: 60, // Reduced from 70
     },
     avatarWrapper: {
         position: 'relative',
-        marginBottom: 8,
+        marginBottom: 5, // Reduced from 8
     },
     glowBorder: {
         position: 'absolute',
@@ -269,9 +269,9 @@ const styles = StyleSheet.create({
         borderRadius: 31,
     },
     avatarContainer: {
-        width: 60,
-        height: 60,
-        borderRadius: 29,
+        width: 50, // Reduced from 60
+        height: 50, // Reduced from 60
+        borderRadius: 25, // Adjusted from 29
         padding: 1,
         overflow: 'hidden',
         borderWidth: 1.5,
@@ -280,7 +280,7 @@ const styles = StyleSheet.create({
     avatar: {
         width: '100%',
         height: '100%',
-        borderRadius: 29,
+        borderRadius: 25, // Adjusted from 29
     },
     onlineBadge: {
         position: 'absolute',
@@ -322,7 +322,7 @@ const styles = StyleSheet.create({
         zIndex: 10,
     },
     profileName: {
-        fontSize: 11,
+        fontSize: 10, // Reduced from 11
         fontWeight: '700',
         textAlign: 'center',
         letterSpacing: 0.2,

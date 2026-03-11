@@ -96,7 +96,7 @@ const MessageBubble = ({ children, isMine, index, isRead, avatar, vipLevel = 0, 
                     <VipFrame
                         level={vipLevel}
                         avatar={avatar}
-                        size={45}
+                        size={35} // Reduced from 45
                         isStatic={true}
                     />
                 </View>
@@ -154,7 +154,7 @@ const MessageBubble = ({ children, isMine, index, isRead, avatar, vipLevel = 0, 
                     <VipFrame
                         level={vipLevel}
                         avatar={avatar}
-                        size={45}
+                        size={35} // Reduced from 45
                         isStatic={true}
                     />
                 </View>
@@ -167,7 +167,7 @@ const styles = StyleSheet.create({
     container: {
         flexDirection: 'row',
         alignItems: 'flex-end',
-        marginVertical: 4,
+        marginVertical: 2, // Reduced from 4
         paddingHorizontal: 4,
     },
     containerMine: {
@@ -180,9 +180,9 @@ const styles = StyleSheet.create({
         maxWidth: '80%',
     },
     bubble: {
-        paddingHorizontal: 14,
-        paddingVertical: 10,
-        borderRadius: 20,
+        paddingHorizontal: 12, // Reduced from 14
+        paddingVertical: 7, // Reduced from 10
+        borderRadius: 18, // Reduced from 20
         overflow: 'hidden',
     },
     avatarWrapper: {
@@ -229,7 +229,7 @@ const styles = StyleSheet.create({
         marginBottom: -2,
     },
     timeText: {
-        fontSize: 11,
+        fontSize: 9, // Reduced from 11
         fontWeight: '600',
     },
     timeMine: {

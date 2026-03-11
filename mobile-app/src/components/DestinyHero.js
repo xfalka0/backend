@@ -151,9 +151,9 @@ const styles = StyleSheet.create({
     container: {
         width: width * 0.9,
         maxWidth: 400,
-        height: 170, // Reduced from 220
+        height: 135, // Reduced from 170
         alignSelf: 'center',
-        marginVertical: 7, // Reduced from 20
+        marginVertical: 5, // Reduced from 7
         justifyContent: 'center',
         alignItems: 'center',
     },
@@ -181,7 +181,7 @@ const styles = StyleSheet.create({
         shadowOffset: { width: 0, height: 10 },
         shadowOpacity: 0.5,
         shadowRadius: 20,
-        padding: 20,
+        padding: 15, // Reduced from 20
         alignItems: 'center',
         justifyContent: 'center',
     },
@@ -208,7 +208,7 @@ const styles = StyleSheet.create({
         flex: 1,
     },
     centerIconContainer: {
-        marginBottom: 12,
+        marginBottom: 8, // Reduced from 12
         shadowColor: '#ec4899',
         shadowOffset: { width: 0, height: 0 },
         shadowOpacity: 0.8,
@@ -216,9 +216,9 @@ const styles = StyleSheet.create({
         elevation: 12,
     },
     iconGradient: {
-        width: 60,
-        height: 60,
-        borderRadius: 30,
+        width: 50, // Reduced from 60
+        height: 50, // Reduced from 60
+        borderRadius: 25,
         alignItems: 'center',
         justifyContent: 'center',
         borderWidth: 2,
@@ -226,26 +226,26 @@ const styles = StyleSheet.create({
     },
     mainText: {
         color: 'white',
-        fontSize: 20, // Reduced from 24
+        fontSize: 18, // Reduced from 20
         fontWeight: '900',
         textAlign: 'center',
-        marginBottom: 10, // Reduced from 14
-        lineHeight: 26, // Reduced from 30
+        marginBottom: 8, // Reduced from 10
+        lineHeight: 22, // Reduced from 26
         letterSpacing: -0.5,
     },
     bottomBadge: {
         flexDirection: 'row',
         alignItems: 'center',
         backgroundColor: 'rgba(255, 255, 255, 0.15)',
-        paddingHorizontal: 16,
-        paddingVertical: 8,
+        paddingHorizontal: 12, // Reduced from 16
+        paddingVertical: 6, // Reduced from 8
         borderRadius: 20,
         borderWidth: 1,
         borderColor: 'rgba(255, 255, 255, 0.2)',
     },
     bottomText: {
         color: 'white',
-        fontSize: 11, // Reduced from 13
+        fontSize: 10, // Reduced from 11
         fontWeight: '800',
     }
 });

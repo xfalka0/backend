@@ -469,14 +469,14 @@ const styles = StyleSheet.create({
     },
     cardWrapper: {
         width: width * 0.95,
-        height: 140,
+        height: 118, // Reduced from 140
         alignSelf: 'center',
         zIndex: 1,
     },
     ambientGlow: {
         position: 'absolute',
         width: width * 0.95 + 10,
-        height: 150,
+        height: 125, // Reduced from 150
         backgroundColor: 'rgba(255, 170, 0, 0.15)',
         borderRadius: 30,
         alignSelf: 'center',
@@ -562,7 +562,7 @@ const styles = StyleSheet.create({
         flex: 1,
         flexDirection: 'row',
         paddingHorizontal: 16,
-        paddingVertical: 14,
+        paddingVertical: 10, // Reduced from 14
         alignItems: 'center',
     },
     textContainer: {
@@ -596,9 +596,9 @@ const styles = StyleSheet.create({
     },
     primaryText: {
         color: 'white',
-        fontSize: 20,
+        fontSize: 18, // Reduced from 20
         fontWeight: '700',
-        lineHeight: 22,
+        lineHeight: 20,
     },
     coinHighlight: {
         fontWeight: '900',
@@ -606,7 +606,7 @@ const styles = StyleSheet.create({
     },
     secondaryText: {
         color: 'white',
-        fontSize: 16,
+        fontSize: 14, // Reduced from 16
         fontWeight: '800',
         marginTop: -2,
         letterSpacing: -0.5,
@@ -618,8 +618,8 @@ const styles = StyleSheet.create({
         marginTop: 4,
     },
     button: {
-        paddingHorizontal: 22,
-        paddingVertical: 10,
+        paddingHorizontal: 18, // Reduced from 22
+        paddingVertical: 8, // Reduced from 10
         borderRadius: 30,
         flexDirection: 'row',
         alignItems: 'center',
@@ -636,7 +636,7 @@ const styles = StyleSheet.create({
     buttonText: {
         color: 'white',
         fontWeight: '900',
-        fontSize: 13,
+        fontSize: 11, // Reduced from 13
         letterSpacing: 1,
         zIndex: 10,
         textTransform: 'uppercase',
@@ -646,13 +646,13 @@ const styles = StyleSheet.create({
     },
     imageContainer: {
         flex: 1,
-        height: 120,
+        height: 100, // Reduced from 120
         justifyContent: 'center',
         alignItems: 'center',
     },
     coinImage: {
-        width: 100,
-        height: 100,
+        width: 85, // Reduced from 100
+        height: 85, // Reduced from 100
         zIndex: 5,
     },
     heartImageLarge: {

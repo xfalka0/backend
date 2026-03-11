@@ -88,21 +88,31 @@ const initializeDatabase = async () => {
         `);
 
         // Check and update columns for existing tables
-        const cols = await db.query("SELECT column_name FROM information_schema.columns WHERE table_name = 'coin_packages'");
-        const existingCols = cols.rows.map(c => c.column_name);
+        const getColumns = async (table) => {
+            const res = await db.query("SELECT column_name FROM information_schema.columns WHERE table_name = $1", [table]);
+            return res.rows.map(c => c.column_name);
+        };
 
-        if (!existingCols.includes('revenuecat_id')) {
-            console.log('[DB] Adding revenuecat_id to coin_packages...');
-            await db.query('ALTER TABLE coin_packages ADD COLUMN revenuecat_id VARCHAR(255)');
+        // --- Coin Packages Migrations ---
+        const pkgCols = await getColumns('coin_packages');
+        if (!pkgCols.includes('revenuecat_id')) await db.query('ALTER TABLE coin_packages ADD COLUMN revenuecat_id VARCHAR(255)');
+        if (!pkgCols.includes('is_popular')) await db.query('ALTER TABLE coin_packages ADD COLUMN is_popular BOOLEAN DEFAULT FALSE');
+        if (!pkgCols.includes('description')) await db.query('ALTER TABLE coin_packages ADD COLUMN description TEXT');
+
+        // --- Transactions Migrations (Fix for "type" column error) ---
+        const txnCols = await getColumns('transactions');
+        if (!txnCols.includes('type')) {
+            console.log('[DB] Adding missing column: type to transactions');
+            await db.query('ALTER TABLE transactions ADD COLUMN type VARCHAR(50) NOT NULL DEFAULT \'unknown\'');
+            await db.query('ALTER TABLE transactions ALTER COLUMN type DROP DEFAULT');
         }
-        if (!existingCols.includes('is_popular')) {
-            console.log('[DB] Adding is_popular to coin_packages...');
-            await db.query('ALTER TABLE coin_packages ADD COLUMN is_popular BOOLEAN DEFAULT FALSE');
-        }
-        if (!existingCols.includes('description')) {
-            console.log('[DB] Adding description to coin_packages...');
-            await db.query('ALTER TABLE coin_packages ADD COLUMN description TEXT');
-        }
+        if (!txnCols.includes('user_id')) await db.query('ALTER TABLE transactions ADD COLUMN user_id UUID REFERENCES users(id)');
+        if (!txnCols.includes('amount')) await db.query('ALTER TABLE transactions ADD COLUMN amount INTEGER DEFAULT 0');
+
+        // --- Payments Migrations ---
+        const payCols = await getColumns('payments');
+        if (!payCols.includes('transaction_id')) await db.query('ALTER TABLE payments ADD COLUMN transaction_id VARCHAR(255) UNIQUE');
+        if (!payCols.includes('status')) await db.query('ALTER TABLE payments ADD COLUMN status VARCHAR(50) DEFAULT \'completed\'');
 
         // Seed packages if none exist
         const result = await db.query('SELECT COUNT(*) FROM coin_packages');

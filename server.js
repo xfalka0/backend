@@ -3143,95 +3143,114 @@ app.get('/api/admin/force-fix-schema-v2', authenticateToken, authorizeRole('admi
     }
 });
 
-// SOCIAL SCHEMA REPAIR: Fix for 500 Errors
+// SOCIAL SCHEMA REPAIR: Safe ALTER-based fix (never drops tables, never deletes data)
 app.get('/api/admin/force-fix-social-schema', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
     const logs = [];
     const log = (msg) => { console.log(msg); logs.push(msg); };
 
     try {
-        log("⚠️ [SOCIAL REPAIR] Starting Granular Social Schema Repair...");
+        log("🔧 [SOCIAL REPAIR] Starting SAFE schema repair (no data loss)...");
 
         // 1. Extensions
         try {
             await db.query('CREATE EXTENSION IF NOT EXISTS pgcrypto');
-            log("✅ [1] pgcrypto extension checked/added.");
-        } catch (e) { log(`❌ [1] pgcrypto failed: ${e.message}`); }
+            log("✅ [1] pgcrypto extension ready.");
+        } catch (e) { log(`⚠️ [1] pgcrypto: ${e.message}`); }
 
-        // 2. Clear corrupted tables
+        // 2. Detect users.id type
+        let userIdType = 'INTEGER';
         try {
-            log("ℹ️ [2] Dropping social tables (Stories)...");
-            await db.query('DROP TABLE IF EXISTS stories CASCADE');
-            log("✅ [2] Stories dropped.");
-
-            log("ℹ️ [2] Dropping social tables (Posts)...");
-            await db.query('DROP TABLE IF EXISTS posts CASCADE');
-            log("✅ [2] Posts dropped.");
-        } catch (e) { log(`❌ [2] Drop failed: ${e.message}`); }
-
-        // 3. DETECT USERS ID TYPE (Again, just to be ABSOLUTELY sure)
-        let userIdType = 'UUID';
-        try {
-            const userTypeCheck = await db.query(`
-                SELECT data_type 
-                FROM information_schema.columns 
-                WHERE table_name = 'users' AND column_name = 'id'
-            `);
+            const userTypeCheck = await db.query(`SELECT data_type FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'id'`);
             if (userTypeCheck.rows.length > 0) {
                 userIdType = userTypeCheck.rows[0].data_type.toUpperCase() === 'INTEGER' ? 'INTEGER' : 'UUID';
-                log(`ℹ️ [3] Detected users.id type: ${userIdType}`);
+                log(`✅ [2] users.id type detected: ${userIdType}`);
             }
-        } catch (e) { log(`❌ [3] Type detection failed: ${e.message}`); }
+        } catch (e) { log(`❌ [2] Type detection failed: ${e.message}`); }
 
-        // 4. Create Posts
+        // Helper: fix a column type using ALTER (safe, no data loss)
+        const safeAlterType = async (table, column, targetType, step) => {
+            try {
+                const check = await db.query(`SELECT data_type FROM information_schema.columns WHERE table_name = $1 AND column_name = $2`, [table, column]);
+                if (check.rows.length === 0) {
+                    log(`⏭️ [${step}] ${table}.${column} column not found (table may not exist yet)`);
+                    return false;
+                }
+                const currentType = check.rows[0].data_type.toUpperCase();
+                if (currentType === targetType || (targetType === 'INTEGER' && currentType === 'INT4') || (targetType === 'UUID' && currentType === 'UUID')) {
+                    log(`✅ [${step}] ${table}.${column} already correct type (${currentType})`);
+                    return true;
+                }
+                // Drop FK constraint first if exists
+                const fkCheck = await db.query(`SELECT tc.constraint_name FROM information_schema.table_constraints tc JOIN information_schema.key_column_usage kcu ON tc.constraint_name = kcu.constraint_name WHERE tc.table_name = $1 AND tc.constraint_type = 'FOREIGN KEY' AND kcu.column_name = $2`, [table, column]);
+                for (const fk of fkCheck.rows) {
+                    await db.query(`ALTER TABLE ${table} DROP CONSTRAINT IF EXISTS "${fk.constraint_name}"`);
+                    log(`  ↳ Dropped FK: ${fk.constraint_name}`);
+                }
+                // Alter type
+                if (targetType === 'INTEGER') {
+                    await db.query(`ALTER TABLE ${table} ALTER COLUMN ${column} TYPE INTEGER USING ${column}::text::integer`);
+                } else {
+                    await db.query(`ALTER TABLE ${table} ALTER COLUMN ${column} TYPE UUID USING ${column}::text::uuid`);
+                }
+                log(`✅ [${step}] ${table}.${column} altered from ${currentType} to ${targetType}`);
+                return true;
+            } catch (e) {
+                log(`❌ [${step}] Failed to alter ${table}.${column}: ${e.message}`);
+                return false;
+            }
+        };
+
+        // 3. Fix posts table
+        await safeAlterType('posts', 'operator_id', userIdType, 3);
+
+        // 4. Fix stories table
+        await safeAlterType('stories', 'operator_id', userIdType, 4);
+
+        // 5. Fix post_likes table
+        await safeAlterType('post_likes', 'user_id', userIdType, 5);
+
+        // 6. Fix post_comments table
+        await safeAlterType('post_comments', 'user_id', userIdType, 6);
+
+        // 7. Fix story_likes table
+        await safeAlterType('story_likes', 'user_id', userIdType, 7);
+
+        // 8. Ensure tables exist (CREATE IF NOT EXISTS - safe, won't touch existing data)
         try {
-            log("ℹ️ [4] Creating Posts table...");
-            await db.query(`CREATE TABLE posts (
-                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-                operator_id ${userIdType} REFERENCES users(id) ON DELETE CASCADE,
-                image_url TEXT NOT NULL,
-                content TEXT,
-                created_at TIMESTAMP DEFAULT NOW()
-            )`);
-            log("✅ [4] Posts table created successfully.");
-        } catch (e) { log(`❌ [4] Posts creation failed: ${e.message}`); }
+            await db.query(`CREATE TABLE IF NOT EXISTS posts (id SERIAL PRIMARY KEY, operator_id ${userIdType} REFERENCES users(id) ON DELETE CASCADE, image_url TEXT NOT NULL, content TEXT, created_at TIMESTAMP DEFAULT NOW())`);
+            log("✅ [8] posts table ensured");
+        } catch (e) { log(`⚠️ [8] posts ensure: ${e.message}`); }
 
-        // 5. Create Stories
         try {
-            log("ℹ️ [5] Creating Stories table...");
-            await db.query(`CREATE TABLE stories (
-                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-                operator_id ${userIdType} REFERENCES users(id) ON DELETE CASCADE,
-                image_url TEXT NOT NULL,
-                created_at TIMESTAMP DEFAULT NOW(),
-                expires_at TIMESTAMP DEFAULT (NOW() + INTERVAL '24 hours')
-            )`);
-            log("✅ [5] Stories table created successfully.");
-        } catch (e) { log(`❌ [5] Stories creation failed: ${e.message}`); }
+            await db.query(`CREATE TABLE IF NOT EXISTS stories (id SERIAL PRIMARY KEY, operator_id ${userIdType} REFERENCES users(id) ON DELETE CASCADE, image_url TEXT NOT NULL, expires_at TIMESTAMP DEFAULT (NOW() + INTERVAL '24 hours'), created_at TIMESTAMP DEFAULT NOW())`);
+            log("✅ [8] stories table ensured");
+        } catch (e) { log(`⚠️ [8] stories ensure: ${e.message}`); }
 
-        // 6. Create post_likes
         try {
-            log("ℹ️ [6] Creating post_likes table...");
-            await db.query(`CREATE TABLE post_likes (
-                post_id UUID REFERENCES posts(id) ON DELETE CASCADE,
-                user_id ${userIdType} REFERENCES users(id) ON DELETE CASCADE,
-                created_at TIMESTAMP DEFAULT NOW(),
-                PRIMARY KEY (post_id, user_id)
-            )`);
-            log("✅ [6] post_likes table created successfully.");
-        } catch (e) { log(`❌ [6] post_likes creation failed: ${e.message}`); }
+            await db.query(`CREATE TABLE IF NOT EXISTS post_likes (id SERIAL PRIMARY KEY, post_id INTEGER REFERENCES posts(id) ON DELETE CASCADE, user_id ${userIdType} REFERENCES users(id) ON DELETE CASCADE, created_at TIMESTAMP DEFAULT NOW(), UNIQUE(post_id, user_id))`);
+            log("✅ [8] post_likes table ensured");
+        } catch (e) { log(`⚠️ [8] post_likes ensure: ${e.message}`); }
 
-        res.json({
-            status: 'complete',
-            message: 'Social schema repair attempt finished.',
-            logs: logs,
-            final_id_type_used: userIdType
-        });
+        try {
+            await db.query(`CREATE TABLE IF NOT EXISTS post_comments (id SERIAL PRIMARY KEY, post_id INTEGER REFERENCES posts(id) ON DELETE CASCADE, user_id ${userIdType} REFERENCES users(id) ON DELETE CASCADE, content TEXT NOT NULL, created_at TIMESTAMP DEFAULT NOW())`);
+            log("✅ [8] post_comments table ensured");
+        } catch (e) { log(`⚠️ [8] post_comments ensure: ${e.message}`); }
+
+        try {
+            await db.query(`CREATE TABLE IF NOT EXISTS story_likes (id SERIAL PRIMARY KEY, story_id INTEGER REFERENCES stories(id) ON DELETE CASCADE, user_id ${userIdType} REFERENCES users(id) ON DELETE CASCADE, created_at TIMESTAMP DEFAULT NOW(), UNIQUE(story_id, user_id))`);
+            log("✅ [8] story_likes table ensured");
+        } catch (e) { log(`⚠️ [8] story_likes ensure: ${e.message}`); }
+
+        log("🎉 [DONE] Safe schema repair complete. No data was deleted.");
+        res.json({ status: 'complete', userIdType, logs });
 
     } catch (err) {
-        log(`❌ [CRITICAL] Social Repair failed: ${err.message}`);
-        res.json({ status: 'error', error: err.message, logs: logs });
+        log(`❌ [CRITICAL] Repair failed: ${err.message}`);
+        res.status(500).json({ status: 'error', error: err.message, logs });
     }
 });
+
+
 
 // Global Error Handler for Multer/Other
 app.use((err, req, res, next) => {

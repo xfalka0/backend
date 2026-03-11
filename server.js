@@ -809,37 +809,6 @@ app.get('/api/health', async (req, res) => {
 
 app.use('/api', socialRoutes);
 
-// TEMPORARY FIX ENDPOINT - Remove after running once
-app.get('/api/fix-social-tables', async (req, res) => {
-    const logs = [];
-    const log = (msg) => { console.log(msg); logs.push(msg); };
-    try {
-        // Detect users.id type
-        const typeCheck = await db.query(`SELECT data_type FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'id'`);
-        const userIdType = typeCheck.rows[0]?.data_type?.toUpperCase() === 'INTEGER' ? 'INTEGER' : 'UUID';
-        log(`users.id type: ${userIdType}`);
-
-        await db.query('DROP TABLE IF EXISTS post_likes, post_comments, story_likes, posts, stories CASCADE');
-        log('Dropped old tables');
-
-        await db.query(`CREATE TABLE posts (id SERIAL PRIMARY KEY, operator_id ${userIdType} REFERENCES users(id) ON DELETE CASCADE, image_url TEXT NOT NULL, content TEXT, created_at TIMESTAMP DEFAULT NOW())`);
-        log('Created posts');
-        await db.query(`CREATE TABLE stories (id SERIAL PRIMARY KEY, operator_id ${userIdType} REFERENCES users(id) ON DELETE CASCADE, image_url TEXT NOT NULL, expires_at TIMESTAMP DEFAULT (NOW() + INTERVAL '24 hours'), created_at TIMESTAMP DEFAULT NOW())`);
-        log('Created stories');
-        await db.query(`CREATE TABLE post_likes (id SERIAL PRIMARY KEY, post_id INTEGER REFERENCES posts(id) ON DELETE CASCADE, user_id ${userIdType} REFERENCES users(id) ON DELETE CASCADE, created_at TIMESTAMP DEFAULT NOW(), UNIQUE(post_id, user_id))`);
-        log('Created post_likes');
-        await db.query(`CREATE TABLE post_comments (id SERIAL PRIMARY KEY, post_id INTEGER REFERENCES posts(id) ON DELETE CASCADE, user_id ${userIdType} REFERENCES users(id) ON DELETE CASCADE, content TEXT NOT NULL, created_at TIMESTAMP DEFAULT NOW())`);
-        log('Created post_comments');
-        await db.query(`CREATE TABLE story_likes (id SERIAL PRIMARY KEY, story_id INTEGER REFERENCES stories(id) ON DELETE CASCADE, user_id ${userIdType} REFERENCES users(id) ON DELETE CASCADE, created_at TIMESTAMP DEFAULT NOW(), UNIQUE(story_id, user_id))`);
-        log('Created story_likes');
-
-        res.json({ success: true, userIdType, logs });
-    } catch (err) {
-        log(`ERROR: ${err.message}`);
-        res.status(500).json({ success: false, error: err.message, logs });
-    }
-});
-
 app.use('/api/auth', authRoutes);
 
 app.use('/api', authRoutes); // Proxy for /api/me /api/login etc

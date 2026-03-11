@@ -82,6 +82,16 @@ const VIP_FRAME_CONFIGS = {
         frameScale: 1.7,
         avatarOffset: { top: 0, left: 3 },
         frameOffset: { top: 0, left: 0 },
+    },
+    'dealer': {
+        colors: ['#00e5ff', '#00b8d4'],
+        asset: require('../../assets/vip_frames/coin_dealer_frame.png'),
+        glow: 'rgba(0, 229, 255, 0.8)',
+        innerScale: 0.81, // Smaller to ensure it fits the hole completely
+        frameScale: 1.9,
+        avatarOffset: { top: 0, left: 0 }, // Negative offset to pull UP and LEFT
+        frameOffset: { top: -7, left: 0 },
+        hasPulse: true
     }
 };
 
@@ -186,6 +196,8 @@ const VipFrame = memo(({ level = 0, avatar, size = 80, isStatic = false }) => {
         position: 'absolute',
         width: frameSize,
         height: frameSize,
+        top: (size - frameSize) / 2,
+        left: (size - frameSize) / 2,
         alignItems: 'center',
         justifyContent: 'center',
     };
@@ -240,6 +252,7 @@ const VipFrame = memo(({ level = 0, avatar, size = 80, isStatic = false }) => {
                         width: frameSize,
                         height: frameSize,
                         zIndex: 4,
+                        marginTop: frameOffset.top,
                         marginLeft: frameOffset.left,
                     }}
                     resizeMode="contain"

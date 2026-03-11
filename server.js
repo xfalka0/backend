@@ -2075,8 +2075,11 @@ app.post('/api/purchase', authenticateToken, async (req, res) => {
         let currentBalance = parseInt(userRes.rows[0].balance || 0);
 
         // 3. Calculate new values
-        const newTotal = currentTotal + price;
-        const newBalance = currentBalance + coins;
+        const pkgCoins = Number(coins);
+        const newTotal = Number(currentTotal) + Number(price);
+        const newBalance = Number(currentBalance) + pkgCoins;
+
+        console.log(`[PURCHASE] User ${userId}: Old Bal: ${currentBalance}, Adding: ${pkgCoins}, New Bal: ${newBalance}`);
 
         // 4. Determine VIP Level
         let newVipLevel = 0;
@@ -2104,7 +2107,7 @@ app.post('/api/purchase', authenticateToken, async (req, res) => {
         await db.query('COMMIT');
 
         // Emit balance update
-        io.to(userId).emit('balance_update', { userId, newBalance });
+        io.emit('balance_update', { userId: userId, newBalance: newBalance });
 
         res.json({
             success: true,
@@ -2116,6 +2119,55 @@ app.post('/api/purchase', authenticateToken, async (req, res) => {
     } catch (err) {
         await db.query('ROLLBACK');
         console.error("Purchase Error:", err.message);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// INTERNAL ENDPOINT FOR FAKE MESSAGES (To persist them in chat history)
+app.post('/api/messages/internal-fake', async (req, res) => {
+    const { userId, operatorId, content } = req.body;
+    if (!userId || !operatorId || !content) return res.status(400).json({ error: 'Missing parameters' });
+
+    try {
+        let chatId;
+        // 1. Check if chat exists
+        const chatCheck = await db.query(
+            'SELECT id FROM chats WHERE user_id = $1 AND operator_id = $2',
+            [userId, operatorId]
+        );
+
+        if (chatCheck.rows.length === 0) {
+            // Create chat
+            const newChat = await db.query(
+                'INSERT INTO chats (user_id, operator_id, last_message_at) VALUES ($1, $2, NOW()) RETURNING id',
+                [userId, operatorId]
+            );
+            chatId = newChat.rows[0].id;
+        } else {
+            chatId = chatCheck.rows[0].id;
+        }
+
+        // 2. Insert message
+        const result = await db.query(
+            'INSERT INTO messages (chat_id, sender_id, content, content_type) VALUES ($1, $2, $3, $4) RETURNING *',
+            [chatId, operatorId, content, 'text']
+        );
+
+        // 3. Update chat last message preview
+        await db.query(
+            'UPDATE chats SET last_message_at = NOW(), last_message = $2 WHERE id = $1',
+            [chatId, content]
+        );
+
+        // 4. Emit to user if online (using io.to(userId))
+        io.emit('new_message', {
+            ...result.rows[0],
+            chat_id: chatId.toString()
+        });
+
+        res.json({ success: true, message: result.rows[0], chatId });
+    } catch (err) {
+        console.error('[FAKE MSG] Error:', err.message);
         res.status(500).json({ error: err.message });
     }
 });
@@ -2137,6 +2189,7 @@ app.get('/api/users/:userId/chats', async (req, res) => {
                 COALESCE(u.avatar_url, 'https://via.placeholder.com/150') as avatar_url,
                 u.vip_level,
                 u.is_verified,
+                u.gender,
                 true as is_online 
             FROM chats c
             LEFT JOIN users u ON c.operator_id = u.id

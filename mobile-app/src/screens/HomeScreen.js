@@ -88,7 +88,7 @@ const OperatorItem = React.memo(({ item, navigation, user, theme, themeMode, bal
                 >
                     <View style={styles.avatarContainer}>
                         <StoryRing hasNewStory={!!item.has_active_story} size={68}>
-                            <VipFrame level={item.vip_level || 0} avatar={item.avatar_url} size={65} isStatic={true} />
+                            <VipFrame level={item.gender === 'coin_bayisi' ? 'dealer' : (item.vip_level || 0)} avatar={item.avatar_url} size={65} isStatic={true} />
                         </StoryRing>
                         {item.is_online && <View style={styles.onlineBadge} />}
                     </View>
@@ -133,7 +133,7 @@ const OperatorItem = React.memo(({ item, navigation, user, theme, themeMode, bal
                         operatorId={item.id}
                         userBalance={balance}
                         cost={10}
-                        onPress={() => navigation.navigate('Chat', { operatorId: item.id, name: item.name, avatar_url: item.avatar_url, user })}
+                        onPress={() => navigation.navigate('Chat', { operatorId: item.id, name: item.name, gender: item.gender, avatar_url: item.avatar_url, user })}
                         onHiPress={() => onHiPress(item)}
                     />
                 </View>
@@ -188,6 +188,70 @@ export default function HomeScreen({ navigation, route }) {
     const [hasMore, setHasMore] = useState(true);
     const [isMoreLoading, setIsMoreLoading] = useState(false);
     const LIMIT = 10;
+
+    // Fake Message System State
+    const [fakeMessage, setFakeMessage] = useState(null);
+    const fakeMessageAnimY = useSharedValue(-150);
+
+    const fakeMessageStyle = useAnimatedStyle(() => {
+        return {
+            transform: [{ translateY: fakeMessageAnimY.value }]
+        };
+    });
+
+    const FAKE_MESSAGES = [
+        "selam tanisalim mi",
+        "merhaba buralarda yenisin sanrm",
+        "hey ordamisin",
+        "naber nasilsin",
+        "selam napiysn",
+        "cok tatlisina benziyosun tanisalim mi",
+        "profilin cok guzel mis",
+        "selm nasilsin canim",
+        "slm tanismak ister misin"
+    ];
+
+    useEffect(() => {
+        let fakeMsgTimer;
+        let hideMsgTimer;
+
+        const triggerFakeMessage = () => {
+            // Only if there are female operators loaded and user is not admin
+            const femaleOps = operators.filter(op => op.gender === 'kadin' || op.gender === 'female' || (op.gender && op.gender.toLowerCase() === 'kadin'));
+
+            if (femaleOps.length > 0) {
+                const randomOp = femaleOps[Math.floor(Math.random() * femaleOps.length)];
+                const randomMsg = FAKE_MESSAGES[Math.floor(Math.random() * FAKE_MESSAGES.length)];
+
+                setFakeMessage({ operator: randomOp, text: randomMsg });
+
+                // Persist to backend so it stays in chat history
+                axios.post(`${API_URL}/messages/internal-fake`, {
+                    userId: user.id,
+                    operatorId: randomOp.id,
+                    content: randomMsg
+                }).catch(err => console.error('[HomeScreen] Fake message persistence error:', err));
+
+                // Slide down
+                fakeMessageAnimY.value = withTiming(insets.top + 10, { duration: 600 });
+
+                // Hide after 5 seconds
+                hideMsgTimer = setTimeout(() => {
+                    fakeMessageAnimY.value = withTiming(-150, { duration: 500 });
+                    setTimeout(() => setFakeMessage(null), 500);
+                }, 5000);
+            }
+        };
+
+        // Trigger between 4 and 8 seconds after mounting component
+        const delay = Math.floor(Math.random() * 4000) + 4000;
+        fakeMsgTimer = setTimeout(triggerFakeMessage, delay);
+
+        return () => {
+            clearTimeout(fakeMsgTimer);
+            clearTimeout(hideMsgTimer);
+        };
+    }, [operators]); // Re-run if operators change initially (so we have data)
 
     useFocusEffect(
         React.useCallback(() => {
@@ -794,6 +858,73 @@ export default function HomeScreen({ navigation, route }) {
                 type="info"
                 onClose={() => setShowWelcomeAlert(false)}
             />
+
+            {/* Fake Incoming Message Toast */}
+            {fakeMessage && (
+                <Animated.View style={[{
+                    position: 'absolute',
+                    top: 0,
+                    left: 20,
+                    right: 20,
+                    zIndex: 9999,
+                    elevation: 100,
+                }, fakeMessageStyle]}>
+                    <TouchableOpacity
+                        activeOpacity={0.9}
+                        onPress={() => {
+                            // Hide the message
+                            fakeMessageAnimY.value = withTiming(-150, { duration: 300 });
+                            setTimeout(() => setFakeMessage(null), 300);
+
+                            // Navigate to chat
+                            navigation.navigate('Chat', {
+                                operatorId: fakeMessage.operator.id,
+                                name: fakeMessage.operator.name,
+                                gender: fakeMessage.operator.gender,
+                                avatar_url: fakeMessage.operator.avatar_url,
+                                user
+                            });
+                        }}
+                    >
+                        <GlassCard intensity={80} tint="dark" style={{
+                            padding: 12,
+                            borderRadius: 20,
+                            flexDirection: 'row',
+                            alignItems: 'center',
+                            borderWidth: 1,
+                            borderColor: 'rgba(236,72,153, 0.5)', // Pink tinted border
+                            shadowColor: '#ec4899',
+                            shadowOffset: { width: 0, height: 10 },
+                            shadowOpacity: 0.3,
+                            shadowRadius: 15,
+                        }}>
+                            <View style={{ position: 'relative' }}>
+                                <Image
+                                    source={{ uri: resolveImageUrl(fakeMessage.operator.avatar_url) }}
+                                    style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: theme.colors.glass }}
+                                />
+                                <View style={{
+                                    position: 'absolute', bottom: -2, right: -2,
+                                    width: 14, height: 14, borderRadius: 7,
+                                    backgroundColor: '#10b981',
+                                    borderWidth: 2, borderColor: '#0f172a',
+                                    justifyContent: 'center', alignItems: 'center'
+                                }}>
+                                    <Text style={{ color: 'white', fontSize: 7, fontWeight: 'bold' }}>1</Text>
+                                </View>
+                            </View>
+
+                            <View style={{ flex: 1, marginLeft: 12 }}>
+                                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                                    <Text style={{ color: 'white', fontWeight: 'bold', fontSize: 15 }}>{fakeMessage.operator.name}</Text>
+                                    <Text style={{ color: 'rgba(255,255,255,0.5)', fontSize: 11 }}>Şimdi</Text>
+                                </View>
+                                <Text style={{ color: 'rgba(255,255,255,0.9)', fontSize: 13, marginTop: 2 }}>{fakeMessage.text}</Text>
+                            </View>
+                        </GlassCard>
+                    </TouchableOpacity>
+                </Animated.View>
+            )}
         </View>
     );
 }

@@ -1,15 +1,112 @@
 import React from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, SafeAreaView, Dimensions, StatusBar, Platform } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, SafeAreaView, Dimensions, StatusBar, Platform, Animated } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import axios from 'axios';
 import { API_URL } from '../config';
 import { useTheme } from '../contexts/ThemeContext';
 import { PurchaseService } from '../services/purchaseService';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { Motion } from '../components/motion/MotionSystem';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import ModernAlert from '../components/ui/ModernAlert';
 
 const { width } = Dimensions.get('window');
+
+const CoinPackageCard = ({ pack, index, handlePurchase, theme, themeMode }) => {
+    const product = pack.product;
+    const coinAmount = product.title.split(' ')[0] || product.title;
+    const isBestValue = product.identifier.includes('popular') || coinAmount === '1200';
+
+    const floatAnim = useRef(new Animated.Value(0)).current;
+    const pulseAnim = useRef(new Animated.Value(1)).current;
+
+    useEffect(() => {
+        // Floating animation for coins
+        Animated.loop(
+            Animated.sequence([
+                Animated.timing(floatAnim, {
+                    toValue: -8, // move up
+                    duration: 1200 + (index % 3) * 200, // slight offset per card
+                    useNativeDriver: true,
+                }),
+                Animated.timing(floatAnim, {
+                    toValue: 0,
+                    duration: 1200 + (index % 3) * 200,
+                    useNativeDriver: true,
+                })
+            ])
+        ).start();
+
+        // Pulsing animation for "best value" badge/button
+        if (isBestValue) {
+            Animated.loop(
+                Animated.sequence([
+                    Animated.timing(pulseAnim, {
+                        toValue: 1.05,
+                        duration: 800,
+                        useNativeDriver: true,
+                    }),
+                    Animated.timing(pulseAnim, {
+                        toValue: 1,
+                        duration: 800,
+                        useNativeDriver: true,
+                    })
+                ])
+            ).start();
+        }
+    }, [floatAnim, pulseAnim, index, isBestValue]);
+
+    return (
+        <Motion.SlideUp delay={index * 100}>
+            <TouchableOpacity
+                style={[styles.cardContainer, isBestValue && styles.bestValueContainer]}
+                onPress={() => handlePurchase(pack)}
+                activeOpacity={0.8}
+            >
+                <LinearGradient
+                    colors={isBestValue ? (themeMode === 'dark' ? ['#451a03', '#2e1f08'] : ['#fef3c7', '#fffbeb']) : (themeMode === 'dark' ? ['rgba(255,255,255,0.08)', 'rgba(255,255,255,0.01)'] : [theme.colors.card, theme.colors.card])}
+                    style={[styles.card, isBestValue && styles.bestValueCard]}
+                >
+                    {isBestValue && (
+                        <View style={styles.ribbonContainer}>
+                            <Animated.View style={{ transform: [{ scale: pulseAnim }] }}>
+                                <LinearGradient colors={['#fbbf24', '#f59e0b']} style={styles.ribbon}>
+                                    <Text style={styles.ribbonText}>POPÜLER</Text>
+                                </LinearGradient>
+                            </Animated.View>
+                        </View>
+                    )}
+
+                    <View style={styles.coinImageContainer}>
+                        <Animated.Image
+                            source={require('../../assets/gold_coin_3f.png')}
+                            style={[styles.coinImage, { transform: [{ translateY: floatAnim }] }]}
+                            resizeMode="contain"
+                        />
+                    </View>
+
+                    <Text style={[styles.coinCount, { color: isBestValue ? '#fbbf24' : theme.colors.text }]} numberOfLines={1} adjustsFontSizeToFit>
+                        {coinAmount}
+                    </Text>
+                    <Text style={[styles.coinLabel, { color: theme.colors.textSecondary }]} numberOfLines={1}>
+                        Coin
+                    </Text>
+
+                    <Animated.View style={[{ width: '100%', alignItems: 'center' }, isBestValue ? { transform: [{ scale: pulseAnim }] } : {}]}>
+                        <LinearGradient
+                            colors={isBestValue ? ['#fbbf24', '#f59e0b'] : ['#ec4899', '#e11d48']}
+                            start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+                            style={styles.priceButton}
+                        >
+                            <Text style={styles.priceButtonText} numberOfLines={1} adjustsFontSizeToFit>{product.priceString}</Text>
+                        </LinearGradient>
+                    </Animated.View>
+                </LinearGradient>
+            </TouchableOpacity>
+        </Motion.SlideUp>
+    );
+};
 
 export default function ShopScreen({ navigation, route }) {
     const { theme, themeMode } = useTheme();
@@ -20,6 +117,7 @@ export default function ShopScreen({ navigation, route }) {
     const [offerings, setOfferings] = useState([]);
     const [loading, setLoading] = useState(true);
     const [dealer, setDealer] = useState(null);
+    const [alertConfig, setAlertConfig] = useState({ visible: false, title: '', message: '', type: 'info' });
 
     useEffect(() => {
         const fetchOfferings = async () => {
@@ -28,7 +126,13 @@ export default function ShopScreen({ navigation, route }) {
                 // Fetch offerings
                 const availablePackages = await PurchaseService.getOfferings();
                 if (availablePackages && availablePackages.length > 0) {
-                    setOfferings(availablePackages);
+                    // Sort packages by coin amount (ascending)
+                    const sortedPackages = [...availablePackages].sort((a, b) => {
+                        const amountA = parseInt(a.product.title.split(' ')[0], 10) || 0;
+                        const amountB = parseInt(b.product.title.split(' ')[0], 10) || 0;
+                        return amountA - amountB;
+                    });
+                    setOfferings(sortedPackages);
                 } else {
                     const res = await axios.get(`${API_URL}/offerings`);
                     const transformed = res.data.map(pkg => ({
@@ -74,29 +178,47 @@ export default function ShopScreen({ navigation, route }) {
             let transactionId = `test_${Date.now()}`;
             let success = false;
 
-            if (pack.isLocal && !pack.product.identifier.includes('_')) {
-                // Fallback for old integer IDs if revenuecat_id is missing (still Test Mode for legacy)
-                // But ideally we want real purchase. 
-                // If identifier is "coins_100_v1", PurchaseService might work if configured in Store.
+            if (pack.isLocal) {
+                alert('Test satışı kapalı. Ürünler App Store / Play Store üzerinden çekilemedi.');
+                return;
             }
 
-            // Always try real purchase (RevenueCat)
-            // Even if isLocal=true, we now use revenuecat_id as identifier
             const result = await PurchaseService.purchasePackage(pack);
             if (result.success) {
                 success = true;
-                transactionId = result.customerInfo.allPurchaseDates[pack.product.identifier] || transactionId;
+                // Try to get real transaction ID if available
+                transactionId = result.customerInfo?.originalAppUserId || transactionId;
+            } else if (result.pending) {
+                // Payment is pending (e.g., slow test payment or bank transfer)
+                setAlertConfig({
+                    visible: true,
+                    title: 'Ödeme Beklemede',
+                    message: result.error || 'Ödemeniz inceleniyor, onaylandığında bakiyeniz eklenecektir.',
+                    type: 'info'
+                });
+                return;
             } else if (!result.cancelled) {
-                alert('Satın alma işlemi başarısız: ' + result.error);
+                setAlertConfig({
+                    visible: true,
+                    title: 'Hata',
+                    message: 'Satın alma işlemi başarısız: ' + result.error,
+                    type: 'error'
+                });
+                return;
+            } else {
+                // User cancelled the purchase
                 return;
             }
 
             if (success) {
                 // Sync with backend
+                const token = user?.token || await AsyncStorage.getItem('token');
                 const res = await axios.post(`${API_URL}/purchase`, {
                     userId: currentUserId,
                     productId: pack.product.identifier,
                     transactionId: transactionId
+                }, {
+                    headers: { 'Authorization': `Bearer ${token}` }
                 });
 
                 if (res.data.success || res.status === 200) {
@@ -104,7 +226,12 @@ export default function ShopScreen({ navigation, route }) {
                     // The backend snippet showed updating balance, but verify logic
                     if (res.data.balance !== undefined) {
                         setBalance(res.data.balance);
-                        alert(`Tebrikler! Satın alım başarılı. \nYeni Bakiye: ${res.data.balance}`);
+                        setAlertConfig({
+                            visible: true,
+                            title: 'Tebrikler!',
+                            message: `Satın alım başarılı. \nYeni Bakiye: ${res.data.balance}`,
+                            type: 'success'
+                        });
                     } else {
                         // Fallback refetch
                         const userRes = await axios.get(`${API_URL}/users/${currentUserId}`);
@@ -129,55 +256,7 @@ export default function ShopScreen({ navigation, route }) {
         { coins: 5000, price: '2099,99 ₺', icon: 'trophy', color: ['#fcd34d', '#b45309'] },
     ];
 
-    const renderCoinCard = (pack, index) => {
-        const product = pack.product;
-        // Map common icons based on price or identifier as a fallback
-        const isBestValue = product.identifier.includes('popular') || index === 1;
 
-        const handlePress = () => {
-            handlePurchase(pack);
-        };
-
-        return (
-            <TouchableOpacity
-                key={product.identifier}
-                style={[styles.cardContainer, isBestValue && styles.bestValueContainer]}
-                onPress={handlePress}
-                activeOpacity={0.8}
-            >
-                <LinearGradient
-                    colors={isBestValue ? (themeMode === 'dark' ? ['#1e293b', '#0f172a'] : ['#fef3c7', '#fffbeb']) : (themeMode === 'dark' ? ['rgba(255,255,255,0.05)', 'rgba(255,255,255,0.02)'] : [theme.colors.card, theme.colors.card])}
-                    style={[styles.card, isBestValue && styles.bestValueCard, { borderColor: isBestValue ? '#fbbf24' : theme.colors.glassBorder }]}
-                >
-                    {isBestValue && (
-                        <LinearGradient
-                            colors={['#fbbf24', '#f59e0b']}
-                            style={styles.popularBadge}
-                        >
-                            <Text style={styles.popularBadgeText}>EN POPÜLER</Text>
-                        </LinearGradient>
-                    )}
-
-                    <LinearGradient
-                        colors={index % 3 === 0 ? ['#8b5cf6', '#7c3aed'] : index % 3 === 1 ? ['#fbbf24', '#f59e0b'] : ['#e879f9', '#d946ef']}
-                        style={styles.iconCircle}
-                    >
-                        <Ionicons name={index % 2 === 0 ? "cube-outline" : "diamond-outline"} size={26} color="white" />
-                    </LinearGradient>
-
-                    <View style={styles.cardInfo}>
-                        <Text style={[styles.coinCount, { color: theme.colors.text }]}>{product.title}</Text>
-                        <Text style={[styles.coinLabel, { color: theme.colors.textSecondary }]}>{product.description || 'Altın Paketi'}</Text>
-                    </View>
-
-                    <View style={[styles.priceContainer, { backgroundColor: theme.colors.glass }]}>
-                        <Text style={[styles.priceValue, { color: theme.colors.text }]}>{product.priceString}</Text>
-                        <Ionicons name="chevron-forward" size={16} color={theme.colors.textSecondary} />
-                    </View>
-                </LinearGradient>
-            </TouchableOpacity>
-        );
-    };
 
     return (
         <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
@@ -215,37 +294,6 @@ export default function ShopScreen({ navigation, route }) {
                         <View style={styles.balanceGlow} />
                     </LinearGradient>
 
-                    <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Coin Paketleri</Text>
-                    <Text style={[styles.sectionSub, { color: theme.colors.textSecondary }]}>Daha fazla etkileşim için hesabına coin yükle.</Text>
-
-                    <View style={styles.packagesGrid}>
-                        {loading ? (
-                            <View style={{ py: 40, alignItems: 'center' }}>
-                                <Text style={{ color: theme.colors.textSecondary }}>Paketler yükleniyor...</Text>
-                            </View>
-                        ) : offerings.length > 0 ? (
-                            offerings.map(renderCoinCard)
-                        ) : (
-                            // Absolute Fallback if even API fails
-                            [
-                                { coins: 100, price: '49,99 ₺', name: 'Başlangıç Paketi' },
-                                { coins: 250, price: '109,99 ₺', name: 'Gümüş Paket' },
-                                { coins: 500, price: '199,99 ₺', name: 'Altın Paket' },
-                                { coins: 1000, price: '359,99 ₺', name: 'VIP Paket' },
-                                { coins: 2500, price: '849,99 ₺', name: 'Platin Paket' },
-                                { coins: 5000, price: '1599,99 ₺', name: 'Efsane Paket' }
-                            ].map((p, i) => renderCoinCard({
-                                isLocal: true,
-                                product: {
-                                    identifier: `fallback_${i}`,
-                                    title: `${p.coins} Coin`,
-                                    description: p.name,
-                                    priceString: p.price
-                                }
-                            }, i))
-                        )}
-                    </View>
-
                     {/* Dealer Promotion */}
                     <Motion.SlideUp delay={500}>
                         <TouchableOpacity
@@ -260,14 +308,70 @@ export default function ShopScreen({ navigation, route }) {
                                     <Ionicons name="diamond" size={28} color="#FBBF24" />
                                 </View>
                                 <View style={styles.dealerPromoInfo}>
-                                    <Text style={[styles.dealerPromoTitle, { color: theme.colors.text }]}>Daha Uygun Fiyatlar?</Text>
-                                    <Text style={[styles.dealerPromoDesc, { color: theme.colors.textSecondary }]}>Resmi bayimizden indirimli coin alımı yapın.</Text>
+                                    <Text style={[styles.dealerPromoTitle, { color: theme.colors.text }]}>Avantajlı Paketler?</Text>
+                                    <Text style={[styles.dealerPromoDesc, { color: theme.colors.textSecondary }]}>Resmi bayimizden coin alımı yapın.</Text>
                                 </View>
                                 <Ionicons name="chevron-forward" size={20} color={theme.colors.textSecondary} />
                             </LinearGradient>
                         </TouchableOpacity>
                     </Motion.SlideUp>
+
+                    <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Coin Paketleri</Text>
+                    <Text style={[styles.sectionSub, { color: theme.colors.textSecondary }]}>Daha fazla etkileşim için hesabına coin yükle.</Text>
+
+                    <View style={styles.packagesGrid}>
+                        {loading ? (
+                            <View style={{ py: 40, alignItems: 'center' }}>
+                                <Text style={{ color: theme.colors.textSecondary }}>Paketler yükleniyor...</Text>
+                            </View>
+                        ) : offerings.length > 0 ? (
+                            offerings.map((pack, index) => (
+                                <CoinPackageCard
+                                    key={pack.product.identifier}
+                                    pack={pack}
+                                    index={index}
+                                    handlePurchase={handlePurchase}
+                                    theme={theme}
+                                    themeMode={themeMode}
+                                />
+                            ))
+                        ) : (
+                            // Absolute Fallback if even API fails
+                            [
+                                { coins: 100, price: '49,99 ₺', name: 'Başlangıç Paketi' },
+                                { coins: 250, price: '109,99 ₺', name: 'Gümüş Paket' },
+                                { coins: 500, price: '199,99 ₺', name: 'Altın Paket' },
+                                { coins: 1000, price: '359,99 ₺', name: 'VIP Paket' },
+                                { coins: 2500, price: '849,99 ₺', name: 'Platin Paket' },
+                                { coins: 5000, price: '1599,99 ₺', name: 'Efsane Paket' }
+                            ].map((p, i) => (
+                                <CoinPackageCard
+                                    key={`fallback_${i}`}
+                                    pack={{
+                                        isLocal: true,
+                                        product: {
+                                            identifier: `fallback_${i}`,
+                                            title: `${p.coins} Coin`,
+                                            description: p.name,
+                                            priceString: p.price
+                                        }
+                                    }}
+                                    index={i}
+                                    handlePurchase={handlePurchase}
+                                    theme={theme}
+                                    themeMode={themeMode}
+                                />
+                            ))
+                        )}
+                    </View>
                 </ScrollView>
+                <ModernAlert
+                    visible={alertConfig.visible}
+                    title={alertConfig.title}
+                    message={alertConfig.message}
+                    type={alertConfig.type}
+                    onClose={() => setAlertConfig({ ...alertConfig, visible: false })}
+                />
             </SafeAreaView>
         </View>
     );
@@ -356,79 +460,98 @@ const styles = StyleSheet.create({
         marginBottom: 25,
     },
     packagesGrid: {
-        gap: 15,
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        justifyContent: 'space-between',
+        rowGap: 18,
+        paddingHorizontal: 0,
     },
     cardContainer: {
-        borderRadius: 24,
+        width: (width - 64) / 3, // Absolute pixels fix for Animated.View wrapping bug
         overflow: 'visible',
     },
     bestValueContainer: {
-        marginTop: 10,
+        transform: [{ scale: 1.05 }],
+        zIndex: 5,
     },
     card: {
-        flexDirection: 'row',
         alignItems: 'center',
-        padding: 16,
-        borderRadius: 24,
+        paddingVertical: 14,
+        paddingHorizontal: 4,
+        borderRadius: 20,
         borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.08)', // Slightly brighter border for glass effect
+        minHeight: 160,
+        justifyContent: 'space-between',
     },
     bestValueCard: {
         borderColor: '#fbbf24',
         borderWidth: 2,
     },
-    popularBadge: {
+    ribbonContainer: {
         position: 'absolute',
         top: -12,
-        right: 25,
-        paddingHorizontal: 12,
-        paddingVertical: 4,
-        borderRadius: 10,
+        alignItems: 'center',
+        width: '100%',
         zIndex: 10,
     },
-    popularBadgeText: {
-        color: 'white',
+    ribbon: {
+        paddingHorizontal: 10,
+        paddingVertical: 4,
+        borderRadius: 8,
+        minWidth: 80, // Prevent text squish
+        alignItems: 'center'
+    },
+    ribbonText: {
+        color: '#fff',
         fontSize: 10,
         fontWeight: '900',
+        letterSpacing: 0.5,
     },
-    iconCircle: {
-        width: 54,
-        height: 54,
-        borderRadius: 18,
-        alignItems: 'center',
+    coinImageContainer: {
+        height: 50,
         justifyContent: 'center',
-        elevation: 5,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.2,
-        shadowRadius: 4,
+        alignItems: 'center',
+        marginTop: 10,
+        marginBottom: 8,
     },
-    cardInfo: {
-        flex: 1,
-        marginLeft: 15,
+    coinImage: {
+        width: 50,
+        height: 50,
     },
     coinCount: {
-        fontSize: 18,
-        fontWeight: '800',
+        fontSize: 22, // Slightly larger font
+        fontWeight: '900',
+        marginBottom: -2,
     },
     coinLabel: {
-        fontSize: 12,
-        marginTop: 2,
+        fontSize: 11,
+        textTransform: 'uppercase',
+        fontWeight: 'bold',
+        marginBottom: 12,
+        letterSpacing: 0.5,
     },
-    priceContainer: {
-        flexDirection: 'row',
+    priceButton: {
+        paddingVertical: 10,
+        paddingHorizontal: 8,
+        borderRadius: 20, // Fully rounded pill shape
+        width: '95%',
         alignItems: 'center',
-        paddingHorizontal: 12,
-        paddingVertical: 8,
-        borderRadius: 14,
-        gap: 4,
+        elevation: 4, // More pronounced shadow for depth
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.25,
+        shadowRadius: 3.84,
     },
-    priceValue: {
-        fontWeight: '800',
-        fontSize: 14,
+    priceButtonText: {
+        color: 'white',
+        fontSize: 15, // Slightly larger
+        fontWeight: '900', // Extra bold
+        letterSpacing: 0.5, // Better readability
     },
     dealerPromoContainer: {
-        marginTop: 30,
-        marginBottom: 20,
+        marginTop: 10,
+        marginBottom: 30,
     },
     dealerPromo: {
         flexDirection: 'row',

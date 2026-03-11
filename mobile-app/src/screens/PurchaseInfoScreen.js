@@ -31,58 +31,11 @@ const PurchaseInfoScreen = ({ navigation, route }) => {
                                 <Ionicons name="cart" size={48} color="white" />
                             </LinearGradient>
                             <Text style={[styles.title, { color: theme.colors.text }]}>Lüks Deneyime Başlayın</Text>
-                            <Text style={[styles.subtitle, { color: theme.colors.textSecondary }]}>Hesabınıza coin yüklemek veya premium özellikleri aktif etmek için hazırladığımız seçenekleri inceleyin.</Text>
+                            <Text style={[styles.subtitle, { color: theme.colors.textSecondary }]}>Hesabınızda premium özellikleri aktif etmek için hazırladığımız seçenekleri inceleyin.</Text>
                         </View>
                     </Motion.Scale>
                     <Motion.SlideUp delay={200}>
-                        <GlassCard style={styles.infoCard} intensity={30}>
-                            <View style={styles.cardHeader}>
-                                <Ionicons name="chatbubble-ellipses" size={24} color="#FBBF24" />
-                                <Text style={[styles.cardTitle, { color: theme.colors.text }]}>Canlı Destek</Text>
-                            </View>
-                            <Text style={[styles.cardText, { color: theme.colors.textSecondary }]}>En hızlı yöntem olan Whatsapp canlı destek hattımız üzerinden anında coin yüklemesi yapabilir ve sorularınıza cevap bulabilirsiniz.</Text>
-                            <TouchableOpacity
-                                style={[styles.actionButton, { backgroundColor: '#FBBF24' }]}
-                                onPress={() => Linking.openURL('https://wa.me/905414738700')}
-                            >
-                                <Text style={styles.actionButtonText}>Whatsapp ile iletişime geç</Text>
-                            </TouchableOpacity>
-                        </GlassCard>
-                    </Motion.SlideUp>
 
-                    <Motion.SlideUp delay={250}>
-                        <GlassCard style={[styles.infoCard, { borderColor: theme.colors.primary }]} intensity={40}>
-                            <View style={styles.cardHeader}>
-                                <Ionicons name="diamond" size={24} color={theme.colors.primary} />
-                                <Text style={[styles.cardTitle, { color: theme.colors.text }]}>Resmi Coin Bayisi</Text>
-                            </View>
-                            <Text style={[styles.cardText, { color: theme.colors.textSecondary }]}>
-                                Avantajlı ve indirimli paketler için resmi coin bayimiz ile iletişime geçerek anında yükleme yapabilirsiniz.
-                            </Text>
-
-                            <TouchableOpacity
-                                style={[styles.copyIdBtn, { backgroundColor: theme.colors.glass }]}
-                                onPress={() => {
-                                    const userId = route.params?.user?.id || 'ID Bulunamadı';
-                                    Clipboard.setStringAsync(String(userId));
-                                    alert('Kullanıcı ID\'niz kopyalandı! Bayiye bu numarayı göndermeyi unutmayın.');
-                                }}
-                            >
-                                <Text style={[styles.copyIdText, { color: theme.colors.text }]}>
-                                    ID: {route.params?.user?.id ? String(route.params.user.id).substring(0, 8) + '...' : 'Belirlenmedi'} (Kopyala)
-                                </Text>
-                                <Ionicons name="copy-outline" size={16} color={theme.colors.text} />
-                            </TouchableOpacity>
-
-                            <TouchableOpacity
-                                style={[styles.actionButton, { backgroundColor: theme.colors.primary, marginTop: 15 }]}
-                                onPress={() => Linking.openURL('https://wa.me/905414738700')}
-                            >
-                                <Text style={[styles.actionButtonText, { color: 'white' }]}>Bayi ile İletişime Geç</Text>
-                            </TouchableOpacity>
-                        </GlassCard>
-                    </Motion.SlideUp>
-                    <Motion.SlideUp delay={300}>
                         <GlassCard style={styles.infoCard} intensity={30}>
                             <View style={styles.cardHeader}>
                                 <Ionicons name="mail" size={24} color="#FBBF24" />

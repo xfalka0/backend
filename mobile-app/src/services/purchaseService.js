@@ -27,8 +27,16 @@ export const PurchaseService = {
     getOfferings: async () => {
         try {
             const offerings = await Purchases.getOfferings();
+
+            // Log for debugging
+            console.log('[Purchases] All Offerings:', Object.keys(offerings.all));
+
             if (offerings.current !== null) {
                 return offerings.current.availablePackages;
+            } else if (offerings.all && Object.keys(offerings.all).length > 0) {
+                // Fallback to the first available offering if "Current" is not set in dashboard
+                const firstOfferingKey = Object.keys(offerings.all)[0];
+                return offerings.all[firstOfferingKey].availablePackages;
             }
             return [];
         } catch (e) {
@@ -41,14 +49,17 @@ export const PurchaseService = {
         try {
             const { customerInfo, productIdentifier } = await Purchases.purchasePackage(pack);
 
-            // Check if entitlement 'pro' (or whatever you named it) is active
-            if (customerInfo.entitlements.active['pro'] !== undefined) {
-                return { success: true, customerInfo };
-            }
-
-            return { success: false, error: 'Entitlement not active' };
+            // For consumable coin packages, the fact that we reached here means the store accepted the payment.
+            // We return success so the app can sync with our backend.
+            return { success: true, customerInfo };
         } catch (e) {
             if (!e.userCancelled) {
+                console.log('[Purchases] Purchase Error Info:', e);
+                // Check for pending payment error (code 24 in RevenueCat/Google Play)
+                if (e.code === Purchases.PURCHASES_ERROR_CODE.PAYMENT_PENDING_ERROR ||
+                    e.message?.toLowerCase().includes('pending')) {
+                    return { success: false, pending: true, error: 'Ödemeniz şu an işleniyor. Onaylandığında bakiyeniz eklenecektir.' };
+                }
                 console.error('[Purchases] Purchase Error:', e);
             }
             return { success: false, error: e.message, cancelled: e.userCancelled };

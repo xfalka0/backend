@@ -211,7 +211,7 @@ export default function OperatorProfileScreen({ route, navigation }) {
                             <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                                 <View style={{ marginRight: 15 }}>
                                     <VipFrame
-                                        level={operator.vip_level}
+                                        level={operator.gender === 'coin_bayisi' ? 'dealer' : operator.vip_level}
                                         avatar={resolveImageUrl(operator.avatar_url || operator.avatar)}
                                         size={60}
                                     />
@@ -350,6 +350,7 @@ export default function OperatorProfileScreen({ route, navigation }) {
                                     avatar_url: operator.avatar_url,
                                     is_online: operator.is_online,
                                     vip_level: operator.vip_level,
+                                    gender: operator.gender,
                                     user
                                 });
                             }}
@@ -377,6 +378,7 @@ export default function OperatorProfileScreen({ route, navigation }) {
                                     avatar_url: operator.avatar_url,
                                     is_online: operator.is_online,
                                     vip_level: operator.vip_level,
+                                    gender: operator.gender,
                                     user
                                 });
                             }}

@@ -114,6 +114,7 @@ export default function MessagesScreen({ navigation, route }) {
                             operatorId: item.operator_id,
                             chatId: item.id,
                             name: item.name,
+                            gender: item.gender,
                             avatar_url: item.avatar_url,
                             user
                         });
@@ -132,7 +133,7 @@ export default function MessagesScreen({ navigation, route }) {
                     >
                         <View style={styles.avatarContainer}>
                             <VipFrame
-                                level={item.vip_level || 0}
+                                level={item.gender === 'coin_bayisi' ? 'dealer' : (item.vip_level || 0)}
                                 avatar={item.avatar_url}
                                 size={56}
                                 isStatic={true}

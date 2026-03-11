@@ -302,7 +302,7 @@ export default function ExploreScreen({ navigation, route }) {
                         <StoryRing hasNewStory={hasStory} size={68}>
                             <View style={styles.storyAvatarWrapper}>
                                 <VipFrame
-                                    level={user?.vip_level || 0}
+                                    level={(user?.gender === 'coin_bayisi') ? 'dealer' : (user?.vip_level || 0)}
                                     avatar={user?.avatar_url || user?.avatar}
                                     size={64}
                                     isStatic={true}
@@ -329,7 +329,7 @@ export default function ExploreScreen({ navigation, route }) {
             >
                 <StoryRing hasNewStory={true} size={68}>
                     <VipFrame
-                        level={item.level || 0}
+                        level={(item.gender === 'coin_bayisi') ? 'dealer' : (item.level || 0)}
                         avatar={item.avatar}
                         size={64}
                         isStatic={true}
@@ -356,7 +356,7 @@ export default function ExploreScreen({ navigation, route }) {
 
         return shuffled.slice(0, 5).map(op => ({
             ...op,
-            level: op.vip_level || 1,
+            level: op.gender === 'coin_bayisi' ? 'dealer' : (op.vip_level || 1),
             avatar: op.avatar_url,
             category: op.category || 'Popüler'
         }));
@@ -442,7 +442,7 @@ export default function ExploreScreen({ navigation, route }) {
                         }
                     }}>
                         <VipFrame
-                            level={item.level || 0}
+                            level={(item.gender === 'coin_bayisi') ? 'dealer' : (item.level || 0)}
                             avatar={item.avatar}
                             size={65}
                             isStatic={true}

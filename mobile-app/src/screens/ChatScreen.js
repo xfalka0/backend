@@ -32,7 +32,7 @@ import GiftOverlay from '../components/animated/GiftOverlay';
 export default function ChatScreen({ route, navigation }) {
     const { showAlert } = useAlert();
     const { theme, themeMode } = useTheme();
-    const { operatorId, chatId: existingChatId, name, job, user: routeUser = {}, avatar_url, is_online, vip_level = 0 } = route.params;
+    const { operatorId, chatId: existingChatId, name, job, user: routeUser = {}, avatar_url, is_online, vip_level = 0, gender } = route.params;
 
     // User Handling
     const TEST_USER_ID = 'c917f7d6-cc44-4b04-8917-1dbbed0b1e9b';
@@ -135,7 +135,7 @@ export default function ChatScreen({ route, navigation }) {
                         style={{ marginRight: 15 }}
                     >
                         <VipFrame
-                            level={vip_level}
+                            level={gender === 'coin_bayisi' ? 'dealer' : vip_level}
                             avatar={avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(name || 'User')}&background=random&color=fff`}
                             size={40}
                             isStatic={true}

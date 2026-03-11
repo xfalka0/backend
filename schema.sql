@@ -13,7 +13,7 @@ CREATE TABLE IF NOT EXISTS users (
     is_vip BOOLEAN DEFAULT FALSE,
     vip_xp INT DEFAULT 0,
     avatar_url TEXT,
-    gender VARCHAR(10) DEFAULT 'kadin',
+    gender VARCHAR(30) DEFAULT 'kadin',
     last_login_at TIMESTAMP,
     ban_expires_at TIMESTAMP,
     account_status VARCHAR(50) DEFAULT 'active',

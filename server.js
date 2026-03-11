@@ -2030,7 +2030,8 @@ app.post('/api/purchase', authenticateToken, async (req, res) => {
     // For now, I will NOT force authenticateToken middleware yet if it risks breaking flow, 
     // but I WILL validate the input.
 
-    const { userId, productId, transactionId } = req.body;
+    const { productId, transactionId } = req.body;
+    const userId = req.user.id; // Use authenticated ID
 
     if (!userId || !productId) {
         return res.status(400).json({ error: 'Eksik parametreler.' });
@@ -2041,85 +2042,85 @@ app.post('/api/purchase', authenticateToken, async (req, res) => {
 
         // 1. Validate Package and Get Price/Coins from DB
         let price = 0;
-        let coins = 0;
+        let coinsToAdd = 0;
         let packageName = '';
 
-        // Check if DB package (Integer ID)
-        if (!isNaN(productId)) {
-            const pkgRes = await db.query('SELECT * FROM coin_packages WHERE id = $1', [productId]);
-            if (pkgRes.rows.length === 0) {
-                await db.query('ROLLBACK');
-                return res.status(404).json({ error: 'Paket bulunamadı.' });
-            }
-            price = parseFloat(pkgRes.rows[0].price);
-            coins = pkgRes.rows[0].coins;
-            packageName = pkgRes.rows[0].name;
-        } else {
-            // RevenueCat ID (String)
-            const pkgRes = await db.query('SELECT * FROM coin_packages WHERE revenuecat_id = $1', [productId]);
-            if (pkgRes.rows.length === 0) {
-                await db.query('ROLLBACK');
-                return res.status(404).json({ error: 'Paket bulunamadı (Store ID eşleşmedi).' });
-            }
-            price = parseFloat(pkgRes.rows[0].price);
-            coins = pkgRes.rows[0].coins;
-            packageName = pkgRes.rows[0].name;
+        const pkgRes = await db.query(
+            'SELECT * FROM coin_packages WHERE id = $1 OR revenuecat_id = $2',
+            [isNaN(productId) ? -1 : parseInt(productId), productId]
+        );
+
+        if (pkgRes.rows.length === 0) {
+            await db.query('ROLLBACK');
+            return res.status(404).json({ error: 'Paket bulunamadı.' });
         }
 
-        // 2. Get current user data
-        // Lock for update
-        const userRes = await db.query('SELECT * FROM users WHERE id = $1 FOR UPDATE', [userId]);
-        if (userRes.rows.length === 0) throw new Error('User not found');
+        price = parseFloat(pkgRes.rows[0].price);
+        coinsToAdd = parseInt(pkgRes.rows[0].coins);
+        packageName = pkgRes.rows[0].name;
+        const packageId = pkgRes.rows[0].id;
 
-        let currentTotal = parseFloat(userRes.rows[0].total_spent || 0);
-        let currentBalance = parseInt(userRes.rows[0].balance || 0);
-
-        // 3. Calculate new values
-        const pkgCoins = Number(coins);
-        const newTotal = Number(currentTotal) + Number(price);
-        const newBalance = Number(currentBalance) + pkgCoins;
-
-        console.log(`[PURCHASE] User ${userId}: Old Bal: ${currentBalance}, Adding: ${pkgCoins}, New Bal: ${newBalance}`);
-
-        // 4. Determine VIP Level
-        let newVipLevel = 0;
-        if (newTotal >= 5000) newVipLevel = 5;
-        else if (newTotal >= 3500) newVipLevel = 4;
-        else if (newTotal >= 2000) newVipLevel = 3;
-        else if (newTotal >= 1000) newVipLevel = 2;
-        else if (newTotal >= 500) newVipLevel = 1;
-
-        // 5. Update User Data
-        await db.query(
-            'UPDATE users SET total_spent = $1, vip_level = $2, balance = $3 WHERE id = $4',
-            [newTotal, newVipLevel, newBalance, userId]
+        // 2. Perform Atomic Update (SET balance = balance + $1)
+        // This avoids race conditions where the balance is overwritten by an old cached value.
+        const updateRes = await db.query(
+            `UPDATE users 
+             SET total_spent = total_spent + $1, 
+                 balance = balance + $2
+             WHERE id = $3 
+             RETURNING balance, total_spent`,
+            [price, coinsToAdd, userId]
         );
 
-        // 6. Record Payment
+        if (updateRes.rows.length === 0) {
+            await db.query('ROLLBACK');
+            return res.status(404).json({ error: 'Kullanıcı güncellenemedi.' });
+        }
+
+        const newBalance = updateRes.rows[0].balance;
+        const newTotalSpent = parseFloat(updateRes.rows[0].total_spent);
+
+        // 3. Determine and Update VIP Level based on total spent
+        let newVipLevel = 0;
+        if (newTotalSpent >= 5000) newVipLevel = 5;
+        else if (newTotalSpent >= 3500) newVipLevel = 4;
+        else if (newTotalSpent >= 2000) newVipLevel = 3;
+        else if (newTotalSpent >= 1000) newVipLevel = 2;
+        else if (newTotalSpent >= 500) newVipLevel = 1;
+
+        await db.query('UPDATE users SET vip_level = $1 WHERE id = $2', [newVipLevel, userId]);
+
+        console.log(`[PURCHASE SUCCESS] User ${userId}: Added ${coinsToAdd} coins. New Balance: ${newBalance}. Total Spent: ${newTotalSpent}. VIP: ${newVipLevel}`);
+
+        // 4. Record Payment
         await db.query(
             'INSERT INTO payments (user_id, package_id, transaction_id, amount, status) VALUES ($1, $2, $3, $4, $5)',
-            [userId, productId && !isNaN(productId) ? productId : null, transactionId || null, price, 'completed']
+            [userId, packageId, transactionId || `manual_${Date.now()}`, price, 'completed']
         );
 
-        // Log Purchase Activity
-        logActivity(io, userId, 'purchase', `${price} TL tutarında ${packageName} satın aldı.`);
+        // 5. Record Transaction
+        await db.query(
+            'INSERT INTO transactions (user_id, amount, type, description) VALUES ($1, $2, $3, $4)',
+            [userId, coinsToAdd, 'purchase', `${packageName} satın alındı`]
+        );
 
         await db.query('COMMIT');
 
-        // Emit balance update
-        io.emit('balance_update', { userId: userId, newBalance: newBalance });
+        // Emit real-time update
+        const io = req.app.get('io');
+        if (io) {
+            io.emit('balance_update', { userId, newBalance });
+        }
 
         res.json({
             success: true,
             balance: newBalance,
             vip_level: newVipLevel,
-            total_spent: newTotal
+            coins_added: coinsToAdd
         });
-
     } catch (err) {
         await db.query('ROLLBACK');
-        console.error("Purchase Error:", err.message);
-        res.status(500).json({ error: err.message });
+        console.error('CRITICAL PURCHASE ERROR:', err.message);
+        res.status(500).json({ error: 'Satın alım işlenirken bir hata oluştu.' });
     }
 });
 

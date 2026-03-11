@@ -46,18 +46,28 @@ router.post('/revenuecat', async (req, res) => {
 });
 
 async function handleSuccessfulPayment(userId, productId) {
-    // Example logic: Map products to coins or VIP levels
-    // You can expand this based on your actual product IDs
-    console.log(`[PAYMENT] Processing product ${productId} for user ${userId}`);
+    // Mapping RevenueCat product IDs to coin amounts
+    const productMapping = {
+        'coins_100': 100,
+        'coins_200': 200,
+        'coins_400': 400,
+        'coins_700': 700,
+        'coins_1200': 1200,
+        'coins_2500': 2500,
+        'coins_5000': 5000
+    };
 
-    if (productId.includes('coin_50')) {
-        await db.query('UPDATE users SET coins = coins + 50 WHERE id = $1', [userId]);
-    } else if (productId.includes('coin_150')) {
-        await db.query('UPDATE users SET coins = coins + 150 WHERE id = $1', [userId]);
+    const coinAmount = productMapping[productId];
+
+    if (coinAmount) {
+        console.log(`[WEBHOOK SUCCESS] Adding ${coinAmount} coins to user ${userId} for product ${productId}`);
+        // Use atomic relative update to 'balance' column
+        await db.query('UPDATE users SET balance = balance + $1 WHERE id = $2', [coinAmount, userId]);
     } else if (productId.includes('vip_level_1')) {
         await db.query('UPDATE users SET vip_level = 1 WHERE id = $1', [userId]);
+    } else {
+        console.warn(`[WEBHOOK] Unhandled product ID mapping: ${productId}`);
     }
-    // Add more mappings as needed
 }
 
 module.exports = router;

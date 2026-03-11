@@ -111,8 +111,7 @@ const CoinPackageCard = ({ pack, index, handlePurchase, theme, themeMode }) => {
 export default function ShopScreen({ navigation, route }) {
     const { theme, themeMode } = useTheme();
     const { user, initialTab } = route.params || {};
-    const TEST_USER_ID = 'c917f7d6-cc44-4b04-8917-1dbbed0b1e9b';
-    const currentUserId = user?.id || TEST_USER_ID;
+    const currentUserId = user?.id; // Removed hardcoded TEST_USER_ID fallback
     const [balance, setBalance] = useState(user?.balance || 0);
     const [offerings, setOfferings] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -222,9 +221,22 @@ export default function ShopScreen({ navigation, route }) {
                 });
 
                 if (res.data.success || res.status === 200) {
-                    // Backend returns updated user fields usually, or we refetch
-                    // The backend snippet showed updating balance, but verify logic
-                    if (res.data.balance !== undefined) {
+                    // Refetch the full user profile to ensure balance, VIP levels, and XP are all synced
+                    const token = user?.token || await AsyncStorage.getItem('token');
+                    const userRes = await axios.get(`${API_URL}/me`, {
+                        headers: { 'Authorization': `Bearer ${token}` }
+                    });
+
+                    if (userRes.data) {
+                        setBalance(userRes.data.balance || 0);
+                        setAlertConfig({
+                            visible: true,
+                            title: 'Tebrikler!',
+                            message: `Satın alım başarılı. \nYeni Bakiye: ${userRes.data.balance}`,
+                            type: 'success'
+                        });
+                    } else {
+                        // Success but couldn't refetch, use the partial data from purchase response
                         setBalance(res.data.balance);
                         setAlertConfig({
                             visible: true,
@@ -232,11 +244,6 @@ export default function ShopScreen({ navigation, route }) {
                             message: `Satın alım başarılı. \nYeni Bakiye: ${res.data.balance}`,
                             type: 'success'
                         });
-                    } else {
-                        // Fallback refetch
-                        const userRes = await axios.get(`${API_URL}/users/${currentUserId}`);
-                        setBalance(userRes.data.balance);
-                        alert('Satın alım başarılı! Bakiyeniz güncellendi.');
                     }
                 }
             }

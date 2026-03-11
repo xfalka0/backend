@@ -2151,6 +2151,7 @@ app.post('/api/purchase', authenticateToken, async (req, res) => {
         res.json({
             success: true,
             balance: newBalance,
+            hearts: newBalance, // Sync hearts (used by some UI components)
             vip_level: newVipLevel,
             coins_added: coinsToAdd
         });
@@ -2179,14 +2180,16 @@ app.post('/api/messages/internal-fake', async (req, res) => {
         );
 
         if (chatCheck.rows.length === 0) {
-            // Create chat
+            // 2. First time! Create chat
             const newChat = await db.query(
                 'INSERT INTO chats (user_id, operator_id, last_message_at) VALUES ($1, $2, NOW()) RETURNING id',
                 [userId, operatorId]
             );
             chatId = newChat.rows[0].id;
         } else {
-            chatId = chatCheck.rows[0].id;
+            // Persistent Limit: If chat already exists, we never send a "fake" message again.
+            // This ensures only the first ever automated message arrives.
+            return res.json({ success: true, message: 'Already connected, skipping fake message.' });
         }
 
         // 2. Insert message

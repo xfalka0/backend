@@ -874,7 +874,7 @@ const styles = StyleSheet.create({
         paddingVertical: 14,
     },
     messageText: {
-        fontSize: 15,
+        fontSize: 13,
         lineHeight: 22,
     },
     inputRow: {

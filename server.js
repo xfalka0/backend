@@ -41,10 +41,12 @@ cloudinary.config({
     api_secret: process.env.CLOUDINARY_API_SECRET
 });
 
-// Initialize Default Coin Packages
-const initializePackages = async () => {
+// --- DATABASE AUTO-MIGRATION & INITIALIZATION ---
+const initializeDatabase = async () => {
     try {
-        // Ensure table exists
+        console.log('[DB] VERIFYING SCHEMA AND INITIALIZING...');
+
+        // 1. Coin Packages Table
         await db.query(`
             CREATE TABLE IF NOT EXISTS coin_packages (
                 id SERIAL PRIMARY KEY,
@@ -60,7 +62,32 @@ const initializePackages = async () => {
             )
         `);
 
-        // Check and update columns
+        // 2. Payments Table
+        await db.query(`
+            CREATE TABLE IF NOT EXISTS payments (
+                id SERIAL PRIMARY KEY,
+                user_id UUID REFERENCES users(id),
+                package_id INTEGER REFERENCES coin_packages(id),
+                transaction_id VARCHAR(255) UNIQUE,
+                amount DECIMAL(10, 2) NOT NULL,
+                status VARCHAR(50) DEFAULT 'completed',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        `);
+
+        // 3. Transactions Table
+        await db.query(`
+            CREATE TABLE IF NOT EXISTS transactions (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                user_id UUID REFERENCES users(id),
+                amount INTEGER NOT NULL,
+                type VARCHAR(50) NOT NULL,
+                description TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        `);
+
+        // Check and update columns for existing tables
         const cols = await db.query("SELECT column_name FROM information_schema.columns WHERE table_name = 'coin_packages'");
         const existingCols = cols.rows.map(c => c.column_name);
 
@@ -77,10 +104,10 @@ const initializePackages = async () => {
             await db.query('ALTER TABLE coin_packages ADD COLUMN description TEXT');
         }
 
-        // Check if packages exist
+        // Seed packages if none exist
         const result = await db.query('SELECT COUNT(*) FROM coin_packages');
         if (parseInt(result.rows[0].count) === 0) {
-            console.log('Seeding default coin packages...');
+            console.log('[DB] Seeding default coin packages...');
             const packages = [
                 { name: 'Başlangıç Paketi', price: 39.99, coins: 100, rc_id: 'coins_100' },
                 { name: 'Gümüş Paket', price: 69.99, coins: 200, rc_id: 'coins_200' },
@@ -97,17 +124,8 @@ const initializePackages = async () => {
                     [pkg.name, pkg.price, pkg.coins, pkg.rc_id]
                 );
             }
-            console.log('Default coin packages seeded.');
+            console.log('[DB] Default coin packages seeded.');
         }
-    } catch (err) {
-        console.error('Error initializing packages:', err.message);
-    }
-};
-
-// --- DATABASE AUTO-MIGRATION ---
-const initializeDatabase = async () => {
-    try {
-        console.log('[DB] VERIFYING SCHEMA...');
 
         // Check for users table columns
         const columns = await db.query("SELECT column_name FROM information_schema.columns WHERE table_name = 'users'");
@@ -2064,11 +2082,11 @@ app.post('/api/purchase', authenticateToken, async (req, res) => {
         const packageId = pkgRes.rows[0].id;
 
         // 2. Perform Atomic Update (SET balance = balance + $1)
-        // This avoids race conditions where the balance is overwritten by an old cached value.
+        // Uses COALESCE to safely handle NULL values in balance or total_spent
         const updateRes = await db.query(
             `UPDATE users 
-             SET total_spent = total_spent + $1, 
-                 balance = balance + $2
+             SET total_spent = COALESCE(total_spent, 0) + $1, 
+                 balance = COALESCE(balance, 0) + $2
              WHERE id = $3 
              RETURNING balance, total_spent`,
             [price, coinsToAdd, userId]

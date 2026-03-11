@@ -99,20 +99,26 @@ const initializeDatabase = async () => {
         if (!pkgCols.includes('is_popular')) await db.query('ALTER TABLE coin_packages ADD COLUMN is_popular BOOLEAN DEFAULT FALSE');
         if (!pkgCols.includes('description')) await db.query('ALTER TABLE coin_packages ADD COLUMN description TEXT');
 
-        // --- Transactions Migrations (Fix for "type" column error) ---
+        // --- Transactions Migrations ---
         const txnCols = await getColumns('transactions');
         if (!txnCols.includes('type')) {
             console.log('[DB] Adding missing column: type to transactions');
             await db.query('ALTER TABLE transactions ADD COLUMN type VARCHAR(50) NOT NULL DEFAULT \'unknown\'');
             await db.query('ALTER TABLE transactions ALTER COLUMN type DROP DEFAULT');
         }
+        if (!txnCols.includes('description')) await db.query('ALTER TABLE transactions ADD COLUMN description TEXT');
         if (!txnCols.includes('user_id')) await db.query('ALTER TABLE transactions ADD COLUMN user_id UUID REFERENCES users(id)');
         if (!txnCols.includes('amount')) await db.query('ALTER TABLE transactions ADD COLUMN amount INTEGER DEFAULT 0');
+        if (!txnCols.includes('created_at')) await db.query('ALTER TABLE transactions ADD COLUMN created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP');
 
         // --- Payments Migrations ---
         const payCols = await getColumns('payments');
+        if (!payCols.includes('user_id')) await db.query('ALTER TABLE payments ADD COLUMN user_id UUID REFERENCES users(id)');
+        if (!payCols.includes('package_id')) await db.query('ALTER TABLE payments ADD COLUMN package_id INTEGER REFERENCES coin_packages(id)');
         if (!payCols.includes('transaction_id')) await db.query('ALTER TABLE payments ADD COLUMN transaction_id VARCHAR(255) UNIQUE');
+        if (!payCols.includes('amount')) await db.query('ALTER TABLE payments ADD COLUMN amount DECIMAL(10, 2) NOT NULL DEFAULT 0');
         if (!payCols.includes('status')) await db.query('ALTER TABLE payments ADD COLUMN status VARCHAR(50) DEFAULT \'completed\'');
+        if (!payCols.includes('created_at')) await db.query('ALTER TABLE payments ADD COLUMN created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP');
 
         // Seed packages if none exist
         const result = await db.query('SELECT COUNT(*) FROM coin_packages');

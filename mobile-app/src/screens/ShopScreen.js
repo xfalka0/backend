@@ -221,30 +221,39 @@ export default function ShopScreen({ navigation, route }) {
                 });
 
                 if (res.data.success || res.status === 200) {
-                    // Refetch the full user profile to ensure balance, VIP levels, and XP are all synced
+                    // Refetch the live balance from the dedicated endpoint
                     const token = user?.token || await AsyncStorage.getItem('token');
-                    const userRes = await axios.get(`${API_URL}/me`, {
-                        headers: { 'Authorization': `Bearer ${token}` }
-                    });
+                    let liveBalance = res.data.balance; // Default from purchase response
 
-                    if (userRes.data) {
-                        setBalance(userRes.data.balance || 0);
-                        setAlertConfig({
-                            visible: true,
-                            title: 'Tebrikler!',
-                            message: `Satın alım başarılı. \nYeni Bakiye: ${userRes.data.balance}`,
-                            type: 'success'
+                    try {
+                        const balRes = await axios.get(`${API_URL}/users/balance`, {
+                            headers: { 'Authorization': `Bearer ${token}` }
                         });
-                    } else {
-                        // Success but couldn't refetch, use the partial data from purchase response
-                        setBalance(res.data.balance);
-                        setAlertConfig({
-                            visible: true,
-                            title: 'Tebrikler!',
-                            message: `Satın alım başarılı. \nYeni Bakiye: ${res.data.balance}`,
-                            type: 'success'
-                        });
+                        if (balRes.data && balRes.data.balance !== undefined) {
+                            liveBalance = balRes.data.balance;
+                        }
+                    } catch (syncError) {
+                        console.error('Balance sync error, using fallback:', syncError);
                     }
+
+                    // Force update UI and storage
+                    setBalance(liveBalance || 0);
+
+                    // Update stored user object as well
+                    const storedUser = await AsyncStorage.getItem('user');
+                    if (storedUser) {
+                        const parsed = JSON.parse(storedUser);
+                        parsed.balance = liveBalance;
+                        parsed.hearts = liveBalance;
+                        await AsyncStorage.setItem('user', JSON.stringify(parsed));
+                    }
+
+                    setAlertConfig({
+                        visible: true,
+                        title: 'Tebrikler!',
+                        message: `Satın alım başarılı. \nYeni Bakiye: ${liveBalance}`,
+                        type: 'success'
+                    });
                 }
             }
         } catch (error) {

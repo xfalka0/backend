@@ -249,7 +249,8 @@ export default function ShopScreen({ navigation, route }) {
             }
         } catch (error) {
             console.error('Purchase Error:', error);
-            alert('Beklenmedik bir hata oluştu: ' + (error.response?.data?.error || error.message));
+            const details = error.response?.data?.details || error.response?.data?.error || error.message;
+            alert('Beklenmedik bir hata oluştu: ' + details);
         }
     };
 

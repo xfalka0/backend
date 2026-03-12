@@ -6,8 +6,8 @@ import {
 } from 'lucide-react';
 
 const API_URL = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
-    ? `/api`
-    : '/api';
+    ? ''
+    : '';
 
 export default function SocialPage() {
     const [operators, setOperators] = useState([]);
@@ -76,7 +76,7 @@ export default function SocialPage() {
         try {
             setUploading(true);
             const token = localStorage.getItem('token');
-            const res = await axios.post(`${API_URL}/upload`, uploadData, {
+            const res = await axios.post(`${API_URL}/api/upload`, uploadData, {
                 headers: {
                     'Content-Type': 'multipart/form-data',
                     Authorization: `Bearer ${token}`

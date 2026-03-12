@@ -60,7 +60,7 @@ export default function ProfilesPage() {
         try {
             setUploading(true);
             const token = localStorage.getItem('token');
-            const res = await axios.post(`${API_URL}/upload`, formData, {
+            const res = await axios.post(`${API_URL}/api/upload`, formData, {
                 headers: {
                     'Content-Type': 'multipart/form-data',
                     Authorization: `Bearer ${token}`
@@ -94,7 +94,7 @@ export default function ProfilesPage() {
             const uploadPromises = files.map(file => {
                 const fData = new FormData();
                 fData.append('file', file);
-                return axios.post(`${API_URL}/upload`, fData, {
+                return axios.post(`${API_URL}/api/upload`, fData, {
                     headers: {
                         'Content-Type': 'multipart/form-data',
                         Authorization: `Bearer ${token}`

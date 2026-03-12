@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { TrendingUp, DollarSign, Users, ShoppingBag, ArrowUp, ArrowDown, Calendar } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
-const API_URL = import.meta.env.VITE_API_URL || 'https://backend-kj17.onrender.com/api';
+const API_URL = '';
 
 export default function Analytics() {
     const { token } = useAuth();

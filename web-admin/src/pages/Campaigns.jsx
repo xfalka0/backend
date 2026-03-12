@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Tag, Plus, Trash2, ToggleLeft, ToggleRight, Calendar, Percent, Coins, CheckCircle, AlertCircle } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
-const API_URL = import.meta.env.VITE_API_URL || 'https://backend-kj17.onrender.com/api';
+const API_URL = '';
 
 const defaultForm = {
     title: '', description: '', bonus_percent: 50,

@@ -4,7 +4,7 @@ import { LineChart, Line, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
 import axios from 'axios';
 import io from 'socket.io-client';
 
-const API_URL = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+const API_URL = '';
 const SOCKET_URL = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
     ? 'http://localhost:5000'
     : window.location.origin;
@@ -46,7 +46,7 @@ export default function Dashboard() {
 
         const socket = io(SOCKET_URL, {
             auth: { token: localStorage.getItem('token') },
-            transports: ['websocket']
+            transports: ['websocket', 'polling']
         });
 
         socket.on('new_activity', (newActivity) => {
@@ -57,10 +57,10 @@ export default function Dashboard() {
     }, []);
 
     const statItems = [
-        { title: 'Toplam Gelir', value: `₺${stats.revenue}`, icon: <DollarSign />, color: 'text-emerald-400', bg: 'bg-emerald-500/10' },
-        { title: 'Kullanıcı Sayısı', value: stats.activeUsers, icon: <Users />, color: 'text-blue-400', bg: 'bg-blue-500/10' },
-        { title: 'Mesaj Trafiği', value: stats.messages, icon: <MessageCircle />, color: 'text-purple-400', bg: 'bg-purple-500/10' },
-        { title: 'Online Operatör', value: stats.onlineOperators, icon: <Heart />, color: 'text-rose-400', bg: 'bg-rose-500/10' },
+        { title: 'Toplam Gelir', value: `₺${stats?.revenue || 0}`, icon: <DollarSign />, color: 'text-emerald-400', bg: 'bg-emerald-500/10' },
+        { title: 'Kullanıcı Sayısı', value: stats?.activeUsers || 0, icon: <Users />, color: 'text-blue-400', bg: 'bg-blue-500/10' },
+        { title: 'Mesaj Trafiği', value: stats?.messages || 0, icon: <MessageCircle />, color: 'text-purple-400', bg: 'bg-purple-500/10' },
+        { title: 'Online Operatör', value: stats?.onlineOperators || 0, icon: <Heart />, color: 'text-rose-400', bg: 'bg-rose-500/10' },
     ];
 
     if (loading) return <div className="p-20 flex justify-center"><Loader2 className="animate-spin text-purple-500" size={40} /></div>;
@@ -106,7 +106,7 @@ export default function Dashboard() {
                     </div>
                     <div className="h-[280px] w-full">
                         <ResponsiveContainer width="100%" height="100%">
-                            <AreaChart data={stats.charts.revenue}>
+                            <AreaChart data={stats?.charts?.revenue || []}>
                                 <defs>
                                     <linearGradient id="colorRev" x1="0" y1="0" x2="0" y2="1">
                                         <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.4} />
@@ -134,7 +134,7 @@ export default function Dashboard() {
                     </div>
                     <div className="h-[280px] w-full">
                         <ResponsiveContainer width="100%" height="100%">
-                            <BarChart data={stats.charts.registrations}>
+                            <BarChart data={stats?.charts?.registrations || []}>
                                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(255,255,255,0.03)" />
                                 <XAxis dataKey="label" stroke="#475569" fontSize={11} tickLine={false} axisLine={false} dy={10} />
                                 <YAxis stroke="#475569" fontSize={11} tickLine={false} axisLine={false} />

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { BarChart2, Users, TrendingUp, TrendingDown, UserCheck, UserX, Calendar, Activity } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
-const API_URL = import.meta.env.VITE_API_URL || 'https://backend-kj17.onrender.com/api';
+const API_URL = '';
 
 export default function Retention() {
     const { token } = useAuth();

@@ -15,9 +15,7 @@ export default function QuickRepliesPage() {
         content: ''
     });
 
-    const API_URL = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
-        ? 'https://backend-kj17.onrender.com'
-        : '';
+    const API_URL = '';
 
     useEffect(() => {
         fetchReplies();

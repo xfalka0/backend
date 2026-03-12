@@ -22,47 +22,92 @@ export default function Login() {
     };
 
     return (
-        <div className="min-h-screen flex items-center justify-center bg-gray-900 text-white">
-            <div className="bg-gray-800 p-8 rounded-lg shadow-lg w-full max-w-md">
-                <h2 className="text-2xl font-bold mb-6 text-center text-pink-500">Yönetim Paneli Giriş</h2>
-
-                {error && (
-                    <div className="bg-red-500/20 text-red-500 p-3 rounded mb-4 text-sm">
-                        {error}
-                    </div>
-                )}
-
-                <form onSubmit={handleSubmit} className="space-y-4">
-                    <div>
-                        <label className="block text-sm text-gray-400 mb-1">E-posta</label>
-                        <input
-                            type="text" // Using text to allow username login if backed supports it, but backend expects email field name.
-                            value={email}
-                            onChange={(e) => setEmail(e.target.value)}
-                            className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-white focus:outline-none focus:border-pink-500"
-                            placeholder="admin@example.com"
-                            required
-                        />
-                    </div>
-                    <div>
-                        <label className="block text-sm text-gray-400 mb-1">Şifre</label>
-                        <input
-                            type="password"
-                            value={password}
-                            onChange={(e) => setPassword(e.target.value)}
-                            className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-white focus:outline-none focus:border-pink-500"
-                            placeholder="••••••"
-                            required
-                        />
-                    </div>
-                    <button
-                        type="submit"
-                        className="w-full bg-pink-600 hover:bg-pink-700 text-white font-bold py-2 px-4 rounded transition"
-                    >
-                        Giriş Yap
-                    </button>
-                </form>
+        <div className="min-h-screen flex items-center justify-center bg-slate-950 text-white relative overflow-hidden">
+            {/* Background Particles (Subset of Splash) */}
+            <div className="absolute inset-0 overflow-hidden pointer-events-none opacity-30">
+                {[...Array(15)].map((_, i) => (
+                    <div
+                        key={i}
+                        className="absolute bg-white rounded-full animate-pulse"
+                        style={{
+                            width: (Math.random() * 2 + 1) + 'px',
+                            height: (Math.random() * 2 + 1) + 'px',
+                            left: Math.random() * 100 + '%',
+                            top: Math.random() * 100 + '%',
+                            animationDuration: (Math.random() * 5 + 3) + 's'
+                        }}
+                    />
+                ))}
             </div>
+
+            {/* Glowing background light */}
+            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-pink-600/5 blur-[120px] rounded-full" />
+
+            <div className="relative z-10 w-full max-w-md px-6 animate-in fade-in zoom-in duration-1000">
+                <div className="text-center mb-10">
+                    <h1 className="text-4xl font-black italic tracking-tighter text-transparent bg-clip-text bg-gradient-to-br from-white to-slate-500 mb-2">
+                        FalkaSoftware
+                    </h1>
+                    <div className="h-[2px] w-12 bg-pink-600 mx-auto rounded-full mb-4" />
+                    <p className="text-[10px] uppercase tracking-[0.3em] font-black text-slate-500">
+                        Admin Infrastructure
+                    </p>
+                </div>
+
+                <div className="bg-slate-900/40 backdrop-blur-2xl p-8 rounded-[40px] border border-white/5 shadow-2xl">
+                    <h2 className="text-xl font-bold mb-8 text-center text-white/90">Yönetim Merkeze Bağlan</h2>
+
+                    {error && (
+                        <div className="bg-rose-500/10 border border-rose-500/20 text-rose-400 p-4 rounded-2xl mb-6 text-sm font-medium text-center animate-shake">
+                            {error}
+                        </div>
+                    )}
+
+                    <form onSubmit={handleSubmit} className="space-y-5">
+                        <div className="space-y-1">
+                            <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">E-posta</label>
+                            <input
+                                type="text"
+                                value={email}
+                                onChange={(e) => setEmail(e.target.value)}
+                                className="w-full bg-slate-950/50 border border-white/5 rounded-[20px] px-5 py-4 text-white placeholder:text-slate-700 focus:outline-none focus:border-pink-600/50 transition-all font-medium"
+                                placeholder="E-posta adresiniz"
+                                required
+                            />
+                        </div>
+                        <div className="space-y-1">
+                            <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Şifre</label>
+                            <input
+                                type="password"
+                                value={password}
+                                onChange={(e) => setPassword(e.target.value)}
+                                className="w-full bg-slate-950/50 border border-white/5 rounded-[20px] px-5 py-4 text-white placeholder:text-slate-700 focus:outline-none focus:border-pink-600/50 transition-all font-medium"
+                                placeholder="••••••••"
+                                required
+                            />
+                        </div>
+                        <button
+                            type="submit"
+                            className="w-full mt-4 bg-gradient-to-br from-pink-600 to-pink-700 hover:from-pink-500 hover:to-pink-600 text-white font-black text-xs uppercase tracking-[0.2em] py-5 rounded-[20px] shadow-[0_10px_30px_rgba(219,39,119,0.3)] hover:shadow-pink-600/40 transition-all active:scale-[0.98]"
+                        >
+                            Giriş Yap
+                        </button>
+                    </form>
+                </div>
+                
+                <p className="mt-8 text-center text-[10px] font-black text-slate-700 uppercase tracking-widest">
+                    &copy; 2024 FALKA SOFTWARE • SECURITY ENFORCED
+                </p>
+            </div>
+
+            <style dangerouslySetInnerHTML={{ __html: `
+                @keyframes shake {
+                    0%, 100% { transform: translateX(0); }
+                    25% { transform: translateX(-5px); }
+                    75% { transform: translateX(5px); }
+                }
+                .animate-shake { animation: shake 0.4s cubic-bezier(.36,.07,.19,.97) both; }
+            `}} />
         </div>
     );
 }

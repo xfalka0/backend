@@ -24,6 +24,7 @@ import RetentionPage from './pages/Retention';
 import FakeSchedulerPage from './pages/FakeScheduler';
 import AdminManagement from './pages/AdminManagement';
 import MaintenancePage from './pages/Maintenance';
+import SplashIntro from './components/SplashIntro';
 
 // Placeholder Pages
 const Placeholder = ({ title }) => (
@@ -70,6 +71,12 @@ const Layout = () => (
 );
 
 function App() {
+    const [showSplash, setShowSplash] = React.useState(true);
+
+    if (showSplash) {
+        return <SplashIntro onComplete={() => setShowSplash(false)} />;
+    }
+
     return (
         <AuthProvider>
             <BrowserRouter basename="/">

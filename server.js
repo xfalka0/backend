@@ -373,6 +373,7 @@ const initializeDatabase = async () => {
 
         // Users table enhancements
         await db.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS device_id VARCHAR(255)');
+        await db.query('ALTER TABLE payments ADD COLUMN IF NOT EXISTS coin_amount INTEGER');
 
         // Create tables one by one to avoid one failure blocking all migrations
         const runMigration = async (name, sql) => {
@@ -453,7 +454,42 @@ const initializeDatabase = async () => {
             package_id INTEGER REFERENCES coin_packages(id),
             transaction_id VARCHAR(255),
             amount DECIMAL(10, 2) NOT NULL,
+            coin_amount INTEGER,
             status VARCHAR(50) DEFAULT 'completed',
+            created_at TIMESTAMP DEFAULT NOW()
+        )`);
+
+        await runMigration('AdminNotificationsTable', `CREATE TABLE IF NOT EXISTS admin_notifications (
+            id SERIAL PRIMARY KEY,
+            title TEXT NOT NULL,
+            body TEXT NOT NULL,
+            target_group VARCHAR(50),
+            sent_count INTEGER DEFAULT 0,
+            sent_at TIMESTAMP DEFAULT NOW()
+        )`);
+
+        await runMigration('CampaignsTable', `CREATE TABLE IF NOT EXISTS campaigns (
+            id SERIAL PRIMARY KEY,
+            title VARCHAR(255) NOT NULL,
+            description TEXT,
+            bonus_percent INTEGER DEFAULT 0,
+            start_date TIMESTAMP NOT NULL,
+            end_date TIMESTAMP NOT NULL,
+            target VARCHAR(50) DEFAULT 'all',
+            is_active BOOLEAN DEFAULT true,
+            created_at TIMESTAMP DEFAULT NOW()
+        )`);
+
+        await runMigration('MessageSchedulesTable', `CREATE TABLE IF NOT EXISTS message_schedules (
+            id SERIAL PRIMARY KEY,
+            operator_id ${userIdType} REFERENCES users(id) ON DELETE CASCADE,
+            target VARCHAR(50) DEFAULT 'random',
+            target_user_id ${userIdType} REFERENCES users(id) ON DELETE CASCADE,
+            message_template TEXT NOT NULL,
+            send_at_hour INTEGER NOT NULL,
+            send_at_minute INTEGER NOT NULL,
+            days_of_week INTEGER[] DEFAULT ARRAY[0,1,2,3,4,5,6],
+            is_active BOOLEAN DEFAULT true,
             created_at TIMESTAMP DEFAULT NOW()
         )`);
 
@@ -3200,46 +3236,12 @@ app.get('/api/admin/force-fix-social-schema', authenticateToken, authorizeRole('
             }
         };
 
-        // 3. Fix posts table
-        await safeAlterType('posts', 'operator_id', userIdType, 3);
-
-        // 4. Fix stories table
-        await safeAlterType('stories', 'operator_id', userIdType, 4);
-
-        // 5. Fix post_likes table
-        await safeAlterType('post_likes', 'user_id', userIdType, 5);
-
-        // 6. Fix post_comments table
-        await safeAlterType('post_comments', 'user_id', userIdType, 6);
-
-        // 7. Fix story_likes table
-        await safeAlterType('story_likes', 'user_id', userIdType, 7);
-
-        // 8. Ensure tables exist (CREATE IF NOT EXISTS - safe, won't touch existing data)
-        try {
-            await db.query(`CREATE TABLE IF NOT EXISTS posts (id SERIAL PRIMARY KEY, operator_id ${userIdType} REFERENCES users(id) ON DELETE CASCADE, image_url TEXT NOT NULL, content TEXT, created_at TIMESTAMP DEFAULT NOW())`);
-            log("✅ [8] posts table ensured");
-        } catch (e) { log(`⚠️ [8] posts ensure: ${e.message}`); }
-
-        try {
-            await db.query(`CREATE TABLE IF NOT EXISTS stories (id SERIAL PRIMARY KEY, operator_id ${userIdType} REFERENCES users(id) ON DELETE CASCADE, image_url TEXT NOT NULL, expires_at TIMESTAMP DEFAULT (NOW() + INTERVAL '24 hours'), created_at TIMESTAMP DEFAULT NOW())`);
-            log("✅ [8] stories table ensured");
-        } catch (e) { log(`⚠️ [8] stories ensure: ${e.message}`); }
-
-        try {
-            await db.query(`CREATE TABLE IF NOT EXISTS post_likes (id SERIAL PRIMARY KEY, post_id INTEGER REFERENCES posts(id) ON DELETE CASCADE, user_id ${userIdType} REFERENCES users(id) ON DELETE CASCADE, created_at TIMESTAMP DEFAULT NOW(), UNIQUE(post_id, user_id))`);
-            log("✅ [8] post_likes table ensured");
-        } catch (e) { log(`⚠️ [8] post_likes ensure: ${e.message}`); }
-
-        try {
-            await db.query(`CREATE TABLE IF NOT EXISTS post_comments (id SERIAL PRIMARY KEY, post_id INTEGER REFERENCES posts(id) ON DELETE CASCADE, user_id ${userIdType} REFERENCES users(id) ON DELETE CASCADE, content TEXT NOT NULL, created_at TIMESTAMP DEFAULT NOW())`);
-            log("✅ [8] post_comments table ensured");
-        } catch (e) { log(`⚠️ [8] post_comments ensure: ${e.message}`); }
-
-        try {
-            await db.query(`CREATE TABLE IF NOT EXISTS story_likes (id SERIAL PRIMARY KEY, story_id INTEGER REFERENCES stories(id) ON DELETE CASCADE, user_id ${userIdType} REFERENCES users(id) ON DELETE CASCADE, created_at TIMESTAMP DEFAULT NOW(), UNIQUE(story_id, user_id))`);
-            log("✅ [8] story_likes table ensured");
-        } catch (e) { log(`⚠️ [8] story_likes ensure: ${e.message}`); }
+        // ... fix steps ...
+        await safeAlterType('posts', 'operator_id', userIdType, '3A');
+        await safeAlterType('stories', 'operator_id', userIdType, '3B');
+        await safeAlterType('post_likes', 'user_id', userIdType, '3C');
+        await safeAlterType('post_comments', 'user_id', userIdType, '3D');
+        await safeAlterType('story_likes', 'user_id', userIdType, '3E');
 
         log("🎉 [DONE] Safe schema repair complete. No data was deleted.");
         res.json({ status: 'complete', userIdType, logs });
@@ -3249,6 +3251,264 @@ app.get('/api/admin/force-fix-social-schema', authenticateToken, authorizeRole('
         res.status(500).json({ status: 'error', error: err.message, logs });
     }
 });
+
+// --- NEW ADMIN FEATURES: ANALYTICS, NOTIFICATIONS, CAMPAIGNS, SCHEDULER ---
+
+// 1. Analytics Summary
+app.get('/api/admin/analytics/summary', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
+    try {
+        const days = parseInt(req.query.days) || 7;
+        const result = await db.query(`
+            SELECT 
+                COALESCE(SUM(amount), 0) as total_revenue,
+                COUNT(*) as total_purchases,
+                COUNT(DISTINCT user_id) as unique_buyers,
+                COALESCE(AVG(amount), 0) as avg_order
+            FROM payments 
+            WHERE status = 'completed' AND created_at > NOW() - interval '${days} days'
+        `);
+        res.json(result.rows[0]);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// 2. Top Buyers
+app.get('/api/admin/analytics/top-buyers', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
+    try {
+        const days = parseInt(req.query.days) || 30;
+        const result = await db.query(`
+            SELECT 
+                p.user_id,
+                u.username,
+                u.display_name,
+                SUM(p.amount) as total_spent,
+                COUNT(*) as purchase_count,
+                SUM(COALESCE(p.coin_amount, 0)) as total_coins
+            FROM payments p
+            JOIN users u ON p.user_id = u.id
+            WHERE p.status = 'completed' AND p.created_at > NOW() - interval '${days} days'
+            GROUP BY p.user_id, u.username, u.display_name
+            ORDER BY total_spent DESC
+            LIMIT 20
+        `);
+        res.json(result.rows);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// 3. Retention & Stats
+app.get('/api/admin/analytics/retention', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
+    try {
+        const totalUsers = await db.query('SELECT COUNT(*) FROM users');
+        const activeUsers = await db.query("SELECT COUNT(*) FROM users WHERE last_login > NOW() - interval '30 days'");
+        const dau = await db.query("SELECT COUNT(*) FROM users WHERE last_login > NOW() - interval '1 day'");
+        const wau = await db.query("SELECT COUNT(*) FROM users WHERE last_login > NOW() - interval '7 days'");
+        
+        const signups = await db.query(`
+            SELECT DATE_TRUNC('day', created_at) as date, COUNT(*) as count 
+            FROM users 
+            WHERE created_at > NOW() - interval '14 days'
+            GROUP BY date ORDER BY date DESC
+        `);
+
+        const atRisk = await db.query(`
+            SELECT id, username, display_name, balance, last_login
+            FROM users 
+            WHERE last_login BETWEEN NOW() - interval '30 days' AND NOW() - interval '7 days'
+            AND role = 'user'
+            ORDER BY last_login DESC LIMIT 20
+        `);
+
+        res.json({
+            total_users: parseInt(totalUsers.rows[0].count),
+            active_users: parseInt(activeUsers.rows[0].count),
+            dau: parseInt(dau.rows[0].count),
+            wau: parseInt(wau.rows[0].count),
+            daily_signups: signups.rows,
+            at_risk_users: atRisk.rows,
+            retention_rate: Math.round((parseInt(wau.rows[0].count) / Math.max(1, parseInt(activeUsers.rows[0].count))) * 100)
+        });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// 4. Notifications History
+app.get('/api/admin/notifications/history', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
+    try {
+        const result = await db.query('SELECT * FROM admin_notifications ORDER BY sent_at DESC LIMIT 50');
+        res.json(result.rows);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// 5. Send Notification (Bulk)
+app.post('/api/admin/notifications/send', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
+    const { title, body, target } = req.body;
+    try {
+        let userQuery = 'SELECT id FROM users WHERE role = \'user\'';
+        if (target === 'kadin') userQuery += " AND gender = 'female'";
+        else if (target === 'erkek') userQuery += " AND gender = 'male'";
+        else if (target === 'inactive') userQuery += " AND last_login < NOW() - interval '7 days'";
+
+        const usersRes = await db.query(userQuery);
+        const userIds = usersRes.rows.map(r => r.id);
+
+        if (userIds.length > 0) {
+            await db.query('INSERT INTO admin_notifications (title, body, target_group, sent_count) VALUES ($1, $2, $3, $4)', 
+                [title, body, target, userIds.length]);
+            
+            // Send individually (normally you'd use a bulk service)
+            for (const uid of userIds) {
+                sendPushNotification(uid, { title, body, data: { type: 'admin_broadcast' } }).catch(() => {});
+            }
+        }
+        
+        res.json({ message: 'Bildirimler gönderildi.', sent_count: userIds.length });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// 6. Campaigns
+app.get('/api/admin/campaigns', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
+    try {
+        const result = await db.query('SELECT * FROM campaigns ORDER BY created_at DESC');
+        res.json(result.rows);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.post('/api/admin/campaigns', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
+    const { title, description, bonus_percent, start_date, end_date, target, is_active } = req.body;
+    try {
+        const result = await db.query(
+            'INSERT INTO campaigns (title, description, bonus_percent, start_date, end_date, target, is_active) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *',
+            [title, description, bonus_percent, start_date, end_date, target, is_active]
+        );
+        res.json(result.rows[0]);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.patch('/api/admin/campaigns/:id/toggle', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
+    try {
+        await db.query('UPDATE campaigns SET is_active = $1 WHERE id = $2', [req.body.is_active, req.params.id]);
+        res.json({ success: true });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.delete('/api/admin/campaigns/:id', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
+    try {
+        await db.query('DELETE FROM campaigns WHERE id = $1', [req.params.id]);
+        res.json({ success: true });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// 7. Message Schedules
+app.get('/api/admin/message-schedules', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
+    try {
+        const result = await db.query('SELECT * FROM message_schedules ORDER BY created_at DESC');
+        res.json(result.rows);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.post('/api/admin/message-schedules', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
+    try {
+        const { operator_id, target, message_template, send_at_hour, send_at_minute, days_of_week } = req.body;
+        const result = await db.query(
+            'INSERT INTO message_schedules (operator_id, target, message_template, send_at_hour, send_at_minute, days_of_week) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *',
+            [operator_id, target, message_template, send_at_hour, send_at_minute, days_of_week]
+        );
+        res.json(result.rows[0]);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.patch('/api/admin/message-schedules/:id/toggle', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
+    try {
+        await db.query('UPDATE message_schedules SET is_active = $1 WHERE id = $2', [req.body.is_active, req.params.id]);
+        res.json({ success: true });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.delete('/api/admin/message-schedules/:id', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
+    try {
+        await db.query('DELETE FROM message_schedules WHERE id = $1', [req.params.id]);
+        res.json({ success: true });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// --- MESSAGE SCHEDULER ENGINE ---
+async function runMessageScheduler() {
+    const now = new Date();
+    const hour = now.getHours();
+    const minute = Math.floor(now.getMinutes() / 5) * 5; // Check every 5 mins
+    const day = now.getDay();
+
+    try {
+        const activeSchedules = await db.query(`
+            SELECT * FROM message_schedules 
+            WHERE is_active = true 
+            AND send_at_hour = $1 
+            AND send_at_minute = $2
+            AND $3 = ANY(days_of_week)
+        `, [hour, minute, day]);
+
+        for (const sch of activeSchedules.rows) {
+            console.log(`[SCHEDULER] Running schedule ${sch.id}...`);
+            let userQuery = "SELECT id FROM users WHERE role = 'user' AND id NOT IN (SELECT id FROM users WHERE role != 'user')";
+            if (sch.target === 'inactive') userQuery += " AND last_login < NOW() - interval '3 days'";
+            else if (sch.target === 'new') userQuery += " AND created_at > NOW() - interval '7 days'";
+            
+            const users = await db.query(userQuery + " ORDER BY RANDOM() LIMIT 20");
+            
+            for (const u of users.rows) {
+                // Check if already has a chat
+                let chatRes = await db.query(
+                    'SELECT id FROM chats WHERE (user1_id = $1 AND user2_id = $2) OR (user1_id = $2 AND user2_id = $1)',
+                    [sch.operator_id, u.id]
+                );
+                let chatId;
+                if (chatRes.rows.length === 0) {
+                    const newChat = await db.query(
+                        'INSERT INTO chats (user1_id, user2_id) VALUES ($1, $2) RETURNING id',
+                        [sch.operator_id, u.id]
+                    );
+                    chatId = newChat.rows[0].id;
+                } else {
+                    chatId = chatRes.rows[0].id;
+                }
+
+                // Send message
+                await db.query(
+                    'INSERT INTO messages (chat_id, sender_id, content, type) VALUES ($1, $2, $3, $4)',
+                    [chatId, sch.operator_id, sch.message_template, 'text']
+                );
+                
+                // Trigger push
+                sendPushNotification(u.id, {
+                    title: 'Yeni Mesaj!',
+                    body: sch.message_template,
+                    data: { chatId: chatId.toString(), type: 'message' }
+                }).catch(() => {});
+            }
+        }
+    } catch (e) {
+        console.error('[SCHEDULER] Error:', e.message);
+    }
+}
+
+// Start Scheduler (runs every 5 minutes)
+setInterval(runMessageScheduler, 5 * 60 * 1000);
 
 
 

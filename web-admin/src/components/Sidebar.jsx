@@ -15,7 +15,12 @@ import {
     ShieldCheck,
     LogOut,
     Shield,
-    Database
+    Database,
+    BarChart2,
+    BellRing,
+    Tag,
+    Clock,
+    Activity
 } from 'lucide-react';
 
 export default function Sidebar() {
@@ -46,6 +51,11 @@ export default function Sidebar() {
             { path: '/maintenance', icon: <Database size={20} />, label: 'Sistem Bakımı', roles: ['admin', 'super_admin'] },
             { path: '/moderation', icon: <ShieldCheck size={20} />, label: 'Fotoğraf Onayı', roles: ['admin', 'super_admin'] },
             { path: '/social', icon: <Video size={20} />, label: 'Keşfet Yönetimi', roles: ['admin', 'super_admin'] },
+            { path: '/analytics', icon: <BarChart2 size={20} />, label: 'Analiz / Gelir', roles: ['admin', 'super_admin'] },
+            { path: '/notifications', icon: <BellRing size={20} />, label: 'Bildirimler', roles: ['admin', 'super_admin'] },
+            { path: '/campaigns', icon: <Tag size={20} />, label: 'Kampanyalar', roles: ['admin', 'super_admin'] },
+            { path: '/retention', icon: <Activity size={20} />, label: 'Kullanıcı Takibi', roles: ['admin', 'super_admin'] },
+            { path: '/fake-scheduler', icon: <Clock size={20} />, label: 'Otomatik Mesaj', roles: ['admin', 'super_admin'] },
             { path: '/settings', icon: <Settings size={20} />, label: 'Ayarlar', roles: ['admin', 'super_admin'] },
         ];
 

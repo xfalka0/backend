@@ -16,9 +16,12 @@ import ChatsPage from './pages/Chats';
 import Moderation from './components/Moderation';
 import ReportsPage from './pages/Reports';
 import QuickRepliesPage from './pages/QuickReplies';
-import MaintenancePage from './pages/Maintenance';
-import AdminManagement from './pages/AdminManagement'; // New page for managing admins/mods
 import SocialPage from './pages/Social';
+import AnalyticsPage from './pages/Analytics';
+import NotificationsPage from './pages/Notifications';
+import CampaignsPage from './pages/Campaigns';
+import RetentionPage from './pages/Retention';
+import FakeSchedulerPage from './pages/FakeScheduler';
 
 // Placeholder Pages
 const Placeholder = ({ title }) => (
@@ -106,6 +109,11 @@ function App() {
                                 <Route path="/payments" element={<PaymentsPage />} />
                                 <Route path="/gifts" element={<GiftsPage />} />
                                 <Route path="/vip" element={<VipPage />} />
+                                <Route path="/analytics" element={<AnalyticsPage />} />
+                                <Route path="/notifications" element={<NotificationsPage />} />
+                                <Route path="/campaigns" element={<CampaignsPage />} />
+                                <Route path="/retention" element={<RetentionPage />} />
+                                <Route path="/fake-scheduler" element={<FakeSchedulerPage />} />
                                 <Route path="/settings" element={<Placeholder title="Ayarlar" />} />
                             </Route>
 

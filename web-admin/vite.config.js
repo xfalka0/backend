@@ -13,7 +13,7 @@ export default defineConfig({
         }
     },
     build: {
-        outDir: 'dist',
+        outDir: '../public/admin',
         emptyOutDir: true,
         minify: 'esbuild',
         sourcemap: false,

@@ -24,17 +24,19 @@ export default function Login() {
     return (
         <div className="min-h-screen flex items-center justify-center bg-slate-950 text-white relative overflow-hidden">
             {/* Background Particles (Subset of Splash) */}
-            <div className="absolute inset-0 overflow-hidden pointer-events-none opacity-30">
-                {[...Array(15)].map((_, i) => (
+            <div className="absolute inset-0 overflow-hidden pointer-events-none opacity-40">
+                {[...Array(20)].map((_, i) => (
                     <div
                         key={i}
-                        className="absolute bg-white rounded-full animate-pulse"
+                        className="absolute rounded-full animate-pulse flicker-fast"
                         style={{
-                            width: (Math.random() * 2 + 1) + 'px',
-                            height: (Math.random() * 2 + 1) + 'px',
+                            width: (Math.random() * 3 + 1) + 'px',
+                            height: (Math.random() * 3 + 1) + 'px',
                             left: Math.random() * 100 + '%',
                             top: Math.random() * 100 + '%',
-                            animationDuration: (Math.random() * 5 + 3) + 's'
+                            background: ['#ff4d00', '#ff9900', '#ffcc00'][Math.floor(Math.random() * 3)],
+                            boxShadow: `0 0 8px ${['#ff4d00', '#ff9900', '#ffcc00'][Math.floor(Math.random() * 3)]}`,
+                            animationDuration: (Math.random() * 3 + 2) + 's'
                         }}
                     />
                 ))}
@@ -45,12 +47,12 @@ export default function Login() {
 
             <div className="relative z-10 w-full max-w-md px-6 animate-in fade-in zoom-in duration-1000">
                 <div className="text-center mb-10">
-                    <h1 className="text-4xl font-black italic tracking-tighter text-transparent bg-clip-text bg-gradient-to-br from-white to-slate-500 mb-2">
-                        FalkaSoftware
+                    <h1 className="text-4xl font-serif font-bold tracking-tight text-transparent bg-clip-text bg-gradient-to-br from-white to-slate-400 mb-2">
+                        Falka Software
                     </h1>
                     <div className="h-[2px] w-12 bg-pink-600 mx-auto rounded-full mb-4" />
                     <p className="text-[10px] uppercase tracking-[0.3em] font-black text-slate-500">
-                        Admin Infrastructure
+                        Falka, at the heart of the future.
                     </p>
                 </div>
 
@@ -106,6 +108,11 @@ export default function Login() {
                     25% { transform: translateX(-5px); }
                     75% { transform: translateX(5px); }
                 }
+                @keyframes flicker-fast {
+                    0%, 100% { opacity: 1; }
+                    50% { opacity: 0.4; }
+                }
+                .flicker-fast { animation: flicker-fast 0.15s infinite; }
                 .animate-shake { animation: shake 0.4s cubic-bezier(.36,.07,.19,.97) both; }
             `}} />
         </div>

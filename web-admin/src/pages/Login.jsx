@@ -25,18 +25,19 @@ export default function Login() {
         <div className="min-h-screen flex items-center justify-center bg-slate-950 text-white relative overflow-hidden">
             {/* Background Particles (Subset of Splash) */}
             <div className="absolute inset-0 overflow-hidden pointer-events-none opacity-40">
-                {[...Array(20)].map((_, i) => (
+                {[...Array(25)].map((_, i) => (
                     <div
                         key={i}
-                        className="absolute rounded-full animate-pulse flicker-fast"
+                        className="absolute rounded-full animate-spark-slow flicker-fast"
                         style={{
                             width: (Math.random() * 3 + 1) + 'px',
                             height: (Math.random() * 3 + 1) + 'px',
                             left: Math.random() * 100 + '%',
-                            top: Math.random() * 100 + '%',
+                            top: (Math.random() * 100 + 50) + '%',
                             background: ['#ff4d00', '#ff9900', '#ffcc00'][Math.floor(Math.random() * 3)],
                             boxShadow: `0 0 8px ${['#ff4d00', '#ff9900', '#ffcc00'][Math.floor(Math.random() * 3)]}`,
-                            animationDuration: (Math.random() * 3 + 2) + 's'
+                            animationDelay: (Math.random() * 5) + 's',
+                            animationDuration: (Math.random() * 10 + 10) + 's'
                         }}
                     />
                 ))}
@@ -47,7 +48,7 @@ export default function Login() {
 
             <div className="relative z-10 w-full max-w-md px-6 animate-in fade-in zoom-in duration-1000">
                 <div className="text-center mb-10">
-                    <h1 className="text-4xl font-serif font-bold tracking-tight text-transparent bg-clip-text bg-gradient-to-br from-white to-slate-400 mb-2">
+                    <h1 className="text-4xl font-sans font-black tracking-[0.2em] text-transparent bg-clip-text bg-gradient-to-br from-white to-slate-400 mb-2">
                         Falka Software
                     </h1>
                     <div className="h-[2px] w-12 bg-pink-600 mx-auto rounded-full mb-4" />
@@ -98,21 +99,27 @@ export default function Login() {
                 </div>
                 
                 <p className="mt-8 text-center text-[10px] font-black text-slate-700 uppercase tracking-widest">
-                    &copy; 2024 FALKA SOFTWARE • SECURITY ENFORCED
+                    &copy; 2026 FALKA SOFTWARE • SECURITY ENFORCED
                 </p>
             </div>
 
             <style dangerouslySetInnerHTML={{ __html: `
+                @keyframes spark-slow {
+                    0% { transform: translateY(0) translateX(0); opacity: 0; }
+                    20% { opacity: 1; }
+                    100% { transform: translateY(-120vh) translateX(30px); opacity: 0; }
+                }
                 @keyframes shake {
                     0%, 100% { transform: translateX(0); }
                     25% { transform: translateX(-5px); }
                     75% { transform: translateX(5px); }
                 }
                 @keyframes flicker-fast {
-                    0%, 100% { opacity: 1; }
-                    50% { opacity: 0.4; }
+                    0%, 100% { opacity: 1; filter: brightness(1); }
+                    50% { opacity: 0.6; filter: brightness(1.5); }
                 }
-                .flicker-fast { animation: flicker-fast 0.15s infinite; }
+                .animate-spark-slow { animation: spark-slow linear infinite; }
+                .flicker-fast { animation: flicker-fast 0.1s infinite; }
                 .animate-shake { animation: shake 0.4s cubic-bezier(.36,.07,.19,.97) both; }
             `}} />
         </div>

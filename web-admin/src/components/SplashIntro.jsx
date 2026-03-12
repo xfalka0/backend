@@ -23,11 +23,11 @@ const SplashIntro = ({ onComplete }) => {
                             width: (Math.random() * 4 + 1) + 'px',
                             height: (Math.random() * 4 + 1) + 'px',
                             left: Math.random() * 100 + '%',
-                            top: (Math.random() * 100 + 100) + '%',
+                            top: (Math.random() * 100 + 40) + '%',
                             background: `radial-gradient(circle, ${['#ff4d00', '#ff9900', '#ffcc00'][Math.floor(Math.random() * 3)]}, transparent)`,
                             boxShadow: `0 0 10px ${['#ff4d00', '#ff9900', '#ffcc00'][Math.floor(Math.random() * 3)]}`,
-                            animationDelay: Math.random() * 10 + 's',
-                            animationDuration: (Math.random() * 8 + 4) + 's'
+                            animationDelay: (Math.random() * -10) + 's',
+                            animationDuration: (Math.random() * 6 + 4) + 's'
                         }}
                     />
                 ))}
@@ -37,7 +37,7 @@ const SplashIntro = ({ onComplete }) => {
             <div className="absolute w-[500px] h-[500px] bg-pink-600/10 blur-[120px] rounded-full animate-pulse" />
 
             <div className="relative z-10 text-center animate-zoom-in">
-                <h1 className="text-6xl md:text-8xl font-serif font-bold tracking-tight text-transparent bg-clip-text bg-gradient-to-br from-white via-slate-200 to-slate-500 drop-shadow-[0_20px_50px_rgba(0,0,0,0.5)]">
+                <h1 className="text-6xl md:text-8xl font-sans font-black tracking-[0.1em] text-transparent bg-clip-text bg-gradient-to-br from-white via-slate-200 to-slate-500 drop-shadow-[0_20px_50px_rgba(0,0,0,0.5)]">
                     Falka Software
                 </h1>
                 <div className="mt-6 flex justify-center gap-2">

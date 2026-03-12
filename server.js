@@ -3663,7 +3663,7 @@ app.get('*', (req, res) => {
     if (req.path.startsWith('/api')) {
         return res.status(404).json({ error: 'API route not found' });
     }
-    const filePath = path.join(__dirname, 'web-admin', 'dist', 'index.html');
+    const filePath = path.join(__dirname, 'public', 'admin', 'index.html');
     console.log('[DEBUG] Serving static file:', filePath);
     if (require('fs').existsSync(filePath)) {
         res.sendFile(filePath);

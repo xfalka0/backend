@@ -22,6 +22,8 @@ import NotificationsPage from './pages/Notifications';
 import CampaignsPage from './pages/Campaigns';
 import RetentionPage from './pages/Retention';
 import FakeSchedulerPage from './pages/FakeScheduler';
+import AdminManagement from './pages/AdminManagement';
+import MaintenancePage from './pages/Maintenance';
 
 // Placeholder Pages
 const Placeholder = ({ title }) => (

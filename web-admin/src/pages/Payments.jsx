@@ -3,7 +3,7 @@ import { CreditCard, TrendingUp, DollarSign, Calendar, Search, Download, CheckCi
 import axios from 'axios';
 
 const API_URL = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
-    ? 'https://backend-kj17.onrender.com'
+    ? ''
     : '';
 
 export default function PaymentsPage() {

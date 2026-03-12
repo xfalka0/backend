@@ -5,6 +5,9 @@ import io from 'socket.io-client';
 import { useAuth } from '../context/AuthContext';
 
 const API_URL = '';
+const SOCKET_URL = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+    ? 'http://localhost:5000'
+    : window.location.origin;
 
 const Chats = () => {
     const { token, user } = useAuth(); // Get token and user from Context
@@ -61,7 +64,7 @@ const Chats = () => {
 
         console.log('[SOCKET] Connecting to:', API_URL);
 
-        socketRef.current = io(API_URL, {
+        socketRef.current = io(SOCKET_URL, {
             transports: ['websocket', 'polling'],
             reconnection: true,
             auth: {

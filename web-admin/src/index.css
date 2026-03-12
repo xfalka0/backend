@@ -4,47 +4,64 @@
 
 @layer base {
     body {
-        @apply bg-slate-950 antialiased;
+        @apply bg-[#020617] antialiased text-slate-200 overflow-x-hidden;
+        background-attachment: fixed;
     }
 }
 
 @layer components {
-    .card {
-        @apply relative bg-slate-900/50 backdrop-blur-xl border border-white/10 rounded-[20px] p-6 hover:border-purple-500/30 transition-all duration-300;
+    .premium-card {
+        @apply relative bg-slate-900/40 backdrop-blur-2xl border border-white/5 rounded-[32px] p-6 
+               hover:border-blue-500/20 hover:bg-slate-900/60 transition-all duration-500 
+               shadow-[0_20px_50px_rgba(0,0,0,0.3)];
+    }
+
+    .premium-glass {
+        @apply bg-slate-950/40 backdrop-blur-3xl border border-white/5;
     }
 }
 
-/* Custom Scrollbar */
-.custom-scrollbar::-webkit-scrollbar {
-    width: 4px;
+/* Custom Scrollbar - Indigo Theme */
+::-webkit-scrollbar {
+    width: 5px;
 }
 
-.custom-scrollbar::-webkit-scrollbar-track {
-    background: rgba(255, 255, 255, 0.02);
+::-webkit-scrollbar-track {
+    background: transparent;
 }
 
-.custom-scrollbar::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.1);
+::-webkit-scrollbar-thumb {
+    background: rgba(59, 130, 246, 0.2);
     border-radius: 10px;
 }
 
-.custom-scrollbar::-webkit-scrollbar-thumb:hover {
-    background: rgba(168, 85, 247, 0.5);
+::-webkit-scrollbar-thumb:hover {
+    background: rgba(59, 130, 246, 0.4);
 }
 
 /* Animations */
-@keyframes slideInFromBottom {
-    from {
-        opacity: 0;
-        transform: translateY(10px);
-    }
-
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
+@keyframes fade-in-up {
+    0% { opacity: 0; transform: translateY(20px); }
+    100% { opacity: 1; transform: translateY(0); }
 }
 
-.animate-in {
-    animation: slideInFromBottom 0.5s ease-out forwards;
+@keyframes aurora-pulse {
+    0% { transform: scale(1) translate(0, 0); opacity: 0.1; }
+    50% { transform: scale(1.2) translate(10%, 10%); opacity: 0.2; }
+    100% { transform: scale(1) translate(0, 0); opacity: 0.1; }
 }
+
+.animate-fade-up {
+    animation: fade-in-up 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-aurora {
+    animation: aurora-pulse 15s ease-in-out infinite;
+}
+
+/* Staggered entry classes for lists */
+.stagger-1 { animation-delay: 0.1s; }
+.stagger-2 { animation-delay: 0.2s; }
+.stagger-3 { animation-delay: 0.3s; }
+.stagger-4 { animation-delay: 0.4s; }
+.stagger-5 { animation-delay: 0.5s; }

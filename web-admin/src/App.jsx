@@ -56,15 +56,21 @@ const ProtectedRoute = ({ allowedRoles }) => {
 };
 
 const Layout = () => (
-    <div className="bg-slate-950 min-h-screen text-white flex">
+    <div className="bg-[#020617] min-h-screen text-white flex relative overflow-hidden">
+        {/* Global Background Aurora Effect */}
+        <div className="fixed inset-0 pointer-events-none">
+            <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] bg-blue-600/10 blur-[150px] rounded-full animate-aurora" />
+            <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] bg-indigo-600/10 blur-[150px] rounded-full animate-aurora" style={{ animationDelay: '-5s' }} />
+        </div>
+
         <Sidebar />
-        <main className="flex-1 ml-64 min-h-screen flex flex-col">
+        <main className="flex-1 ml-64 min-h-screen flex flex-col relative z-10">
             <Navbar />
-            <div className="flex-1">
+            <div className="flex-1 overflow-x-hidden">
                 <Outlet />
             </div>
-            <footer className="p-8 text-center text-[10px] font-black uppercase tracking-widest text-slate-800 border-t border-white/5">
-                &copy; 2024 Falka Software Admin Dashboard • Tüm Hakları Saklıdır
+            <footer className="p-10 text-center text-[11px] font-black uppercase tracking-[0.3em] text-slate-800 border-t border-white/5">
+                &copy; 2024 Falka Software Admin Dashboard • Premium Management Console
             </footer>
         </main>
     </div>

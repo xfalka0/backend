@@ -262,8 +262,6 @@ const initializeDatabase = async () => {
             await db.query('ALTER TABLE users ADD COLUMN last_login_at TIMESTAMP');
         }
 
-        // Initialize Database (Tables, Seed data, Migrations)
-        await initializeDatabase();
 
         if (!columnNames.includes('ban_expires_at')) {
             console.log('[DB] Adding missing column: ban_expires_at');
@@ -500,7 +498,6 @@ const initializeDatabase = async () => {
         app.set('db_status', 'error: ' + err.message);
     }
 };
-initializeDatabase();
 
 // --- DIAGNOSTIC ENDPOINT ---
 app.get('/api/health-check', async (req, res) => {
@@ -3651,7 +3648,9 @@ app.get('/api/offerings', async (req, res) => {
 // SELF PINGER TO PREVENT RENDER SLEEP (Every 14 minutes)
 const startPinger = () => {
     const PING_INTERVAL = 14 * 60 * 1000; // 14 mins
-    const URL = 'https://backend-kj17.onrender.com/api/keep-alive';
+    const URL = process.env.NODE_ENV === 'production' 
+        ? 'https://backend-kj17.onrender.com/api/keep-alive'
+        : `http://localhost:${process.env.PORT || 5000}/api/keep-alive`;
 
     // Initial delay to let server settle
     setTimeout(() => {
@@ -3694,13 +3693,12 @@ app.use((err, req, res, next) => {
     });
 });
 
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 5000;
 server.listen(PORT, '0.0.0.0', async () => {
     console.log(`🚀 [BACKEND] Server listening on port ${PORT}`);
 
     // Initialize Database Schema and Packages
     await initializeDatabase();
-    await initializePackages();
 
     startPinger();
 });

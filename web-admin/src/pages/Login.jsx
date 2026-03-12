@@ -46,8 +46,8 @@ export default function Login() {
             />
 
             {/* Background Particles (Subset of Splash) */}
-            <div className="absolute inset-0 overflow-hidden pointer-events-none opacity-40">
-                {[...Array(30)].map((_, i) => (
+            <div className="absolute inset-0 overflow-hidden pointer-events-none opacity-60 z-10">
+                {[...Array(40)].map((_, i) => (
                     <div
                         key={i}
                         className="absolute rounded-full spark-particle"
@@ -56,10 +56,10 @@ export default function Login() {
                             height: (Math.random() * 3 + 1) + 'px',
                             left: Math.random() * 100 + '%',
                             top: (Math.random() * 100 + 10) + '%',
-                            background: ['#ff4d00', '#ff9900', '#ffcc00'][Math.floor(Math.random() * 3)],
-                            boxShadow: `0 0 10px ${['#ff4d00', '#ff9900', '#ffcc00'][Math.floor(Math.random() * 3)]}`,
+                            background: ['#3b82f6', '#6366f1', '#ffffff'][Math.floor(Math.random() * 3)],
+                            boxShadow: `0 0 15px ${['#3b82f6', '#6366f1', '#ffffff'][Math.floor(Math.random() * 3)]}`,
                             animationDelay: (Math.random() * -20) + 's',
-                            animationDuration: (Math.random() * 8 + 7) + 's'
+                            animationDuration: (Math.random() * 10 + 5) + 's'
                         }}
                     />
                 ))}
@@ -79,7 +79,7 @@ export default function Login() {
                     </p>
                 </div>
 
-                <div className="bg-slate-900/40 backdrop-blur-2xl p-8 rounded-[40px] border border-white/5 shadow-2xl">
+                <div className="premium-card p-10 border-blue-500/10 shadow-2xl">
                     <h2 className="text-xl font-bold mb-8 text-center text-white/90">Yönetim Merkezine Bağlan</h2>
 
                     {error && (

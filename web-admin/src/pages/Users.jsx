@@ -4,8 +4,12 @@ import axios from 'axios';
 import io from 'socket.io-client';
 
 const API_URL = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
-    ? 'https://backend-kj17.onrender.com'
+    ? ''
     : '';
+
+const SOCKET_URL = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+    ? 'http://localhost:5000'
+    : window.location.origin;
 
 export default function UsersPage() {
     const [users, setUsers] = useState([]);
@@ -32,7 +36,7 @@ export default function UsersPage() {
 
         // Real-time listener
         const token = localStorage.getItem('token');
-        const socket = io(API_URL, {
+        const socket = io(SOCKET_URL, {
             transports: ['websocket'],
             auth: { token }
         });
@@ -123,24 +127,23 @@ export default function UsersPage() {
     return (
         <div className="p-8 space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
             {/* DEBUG INFO OVERLAY */}
-            <div className="fixed bottom-4 right-4 z-[9999] group">
-                <div className="bg-slate-900/90 backdrop-blur-md border border-white/10 p-3 rounded-2xl shadow-2xl transition-all group-hover:bg-slate-800">
-                    <div className="flex items-center gap-2 mb-2">
-                        <div className="w-2 h-2 rounded-full bg-purple-500 animate-pulse"></div>
-                        <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Sistem Bilgisi</span>
+            <div className="fixed bottom-6 right-6 z-[9999] group">
+                <div className="premium-glass border-white/5 p-4 shadow-2xl transition-all group-hover:bg-slate-950/80">
+                    <div className="flex items-center gap-2 mb-3">
+                        <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse shadow-[0_0_8px_rgba(59,130,246,0.8)]"></div>
+                        <span className="text-[10px] font-black uppercase tracking-[0.2em] text-blue-400/80">Sistem Bilgisi</span>
                     </div>
-                    <div className="space-y-1">
-                        <div className="flex justify-between gap-4">
+                    <div className="space-y-1.5">
+                        <div className="flex justify-between gap-6">
                             <span className="text-[10px] font-bold text-slate-500">Backend:</span>
-                            <span className="text-[10px] font-mono text-purple-400">{API_URL || 'window.origin'}</span>
+                            <span className="text-[10px] font-mono text-blue-400">{API_URL || 'window.origin'}</span>
                         </div>
-                        <div className="flex justify-between gap-4">
+                        <div className="flex justify-between gap-6">
                             <span className="text-[10px] font-bold text-slate-500">Frontend:</span>
-                            <span className="text-[10px] font-mono text-blue-400">{window.location.host}</span>
+                            <span className="text-[10px] font-mono text-indigo-400">{window.location.host}</span>
                         </div>
-                        <div className="flex justify-between gap-4">
-                            <span className="text-[10px] font-bold text-slate-500">Ortam:</span>
-                            <span className="text-[10px] font-black text-white uppercase italic">
+                        <div className="flex justify-between gap-6 pt-1 border-t border-white/5">
+                            <span className="text-[10px] font-black text-white uppercase italic tracking-tighter">
                                 {API_URL.includes('localhost') ? 'Lokal Geliştirme' : 'Canlı Sunucu (Render)'}
                             </span>
                         </div>
@@ -169,22 +172,21 @@ export default function UsersPage() {
 
                 <div className="flex items-center gap-3">
                     <div className="relative group">
-                        <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 group-focus-within:text-purple-400 transition-colors" size={18} />
+                        <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-600 group-focus-within:text-blue-400 transition-colors" size={18} />
                         <input
                             type="text"
                             placeholder="Kullanıcı ara..."
                             value={search}
                             onChange={(e) => setSearch(e.target.value)}
-                            className="bg-slate-900/50 border border-white/5 rounded-xl py-2.5 pl-12 pr-4 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500/50 transition-all placeholder:text-slate-600 w-64 text-white"
+                            className="bg-white/5 border border-white/5 rounded-2xl py-3 pl-12 pr-4 text-sm focus:outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500/40 transition-all placeholder:text-slate-700 w-72 text-white font-medium"
                         />
                     </div>
                 </div>
             </div>
 
             {/* TABLE */}
-            <div className="relative group">
-                <div className="absolute -inset-0.5 bg-gradient-to-r from-purple-500/10 to-blue-500/10 rounded-[32px] blur opacity-50"></div>
-                <div className="relative bg-slate-900/50 backdrop-blur-2xl border border-white/5 rounded-[30px] overflow-hidden min-h-[400px]">
+            <div className="premium-card !p-0 overflow-hidden min-h-[500px]">
+                <div className="relative overflow-x-auto">
                     <table className="w-full text-left">
                         <thead>
                             <tr className="border-b border-white/5 text-[10px] font-black uppercase tracking-widest text-slate-500">
@@ -236,10 +238,10 @@ export default function UsersPage() {
                                                     {user.is_vip && <div className="absolute -top-1 -right-1 p-1 bg-amber-500 rounded-full border-2 border-slate-900"><Crown size={8} className="text-white" /></div>}
                                                 </div>
                                                 <div>
-                                                    <p className="text-sm font-bold text-white group-hover/row:text-purple-400 transition-colors uppercase tracking-tight">{user.username}</p>
+                                                    <p className="text-sm font-black text-white group-hover/row:text-blue-400 transition-colors uppercase tracking-tight">{user.username}</p>
                                                     <div className="flex flex-col">
-                                                        {user.email && <p className="text-[10px] text-slate-500 font-medium">{user.email}</p>}
-                                                        {user.phone && <p className="text-[10px] text-slate-400 font-bold">{user.phone}</p>}
+                                                        {user.email && <p className="text-[10px] text-slate-500 font-bold tracking-tight">{user.email}</p>}
+                                                        {user.phone && <p className="text-[10px] text-blue-500/60 font-black tracking-widest">{user.phone}</p>}
                                                     </div>
                                                 </div>
                                             </div>

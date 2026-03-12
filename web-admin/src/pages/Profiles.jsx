@@ -3,8 +3,8 @@ import axios from 'axios';
 import { Plus, Search, Filter, Camera, Trash2, Edit3, CheckCircle, XCircle, Briefcase, GraduationCap, Heart, Hash, Loader2, Crown } from 'lucide-react';
 
 const API_URL = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
-    ? 'https://backend-kj17.onrender.com/api'
-    : '/api';
+    ? ''
+    : '';
 
 export default function ProfilesPage() {
     const [profiles, setProfiles] = useState([]);
@@ -224,21 +224,19 @@ export default function ProfilesPage() {
                         }
                         setShowAddForm(!showAddForm);
                     }}
-                    className={`px-6 py-3 rounded-2xl flex items-center gap-2 font-bold transition-all shadow-xl ${showAddForm ? 'bg-slate-800 text-white' : 'bg-gradient-to-r from-purple-600 to-pink-600 text-white shadow-purple-900/20'
+                    className={`px-7 py-3.5 rounded-[22px] flex items-center gap-2.5 font-black text-[11px] uppercase tracking-widest transition-all shadow-2xl ${showAddForm ? 'bg-slate-800 text-white' : 'bg-gradient-to-br from-blue-600 to-indigo-700 text-white shadow-blue-900/20 hover:scale-105 active:scale-95'
                         }`}
                 >
-                    {showAddForm ? <XCircle size={18} /> : <Plus size={18} />}
+                    {showAddForm ? <XCircle size={16} /> : <Plus size={16} />}
                     <span>{showAddForm ? 'İptal Et' : 'Yeni Profil Oluştur'}</span>
                 </button>
             </div>
 
             {showAddForm && (
-                <div className="relative group animate-in slide-in-from-top-4 duration-300">
-                    <div className="absolute -inset-0.5 bg-gradient-to-r from-purple-500/20 via-pink-500/20 to-rose-500/20 rounded-[32px] blur"></div>
-                    <div className="relative bg-slate-900/80 backdrop-blur-3xl border border-white/10 rounded-[30px] p-8">
-                        <h3 className="text-xl font-black text-white mb-8 flex items-center gap-3">
-                            <Plus className="text-purple-400" /> Profil Verilerini Girin
-                        </h3>
+                <div className="premium-glass p-10 border-blue-500/10 shadow-2xl animate-in slide-in-from-top-6 duration-700">
+                    <h3 className="text-xl font-black text-white mb-10 flex items-center gap-3">
+                        <Plus className="text-blue-400" /> Profil Verilerini Girin
+                    </h3>
 
                         <form onSubmit={handleSubmit}>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
@@ -326,7 +324,7 @@ export default function ProfilesPage() {
                                                 <Briefcase className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-600" size={16} />
                                                 <input
                                                     type="text"
-                                                    className="w-full bg-white/5 border border-white/10 rounded-xl pl-12 pr-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 transition-all"
+                                                    className="w-full bg-white/5 border border-white/10 rounded-xl pl-12 pr-4 py-3 text-sm focus:outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500/50 transition-all font-bold"
                                                     placeholder="Örn: Avukat"
                                                     value={formData.job}
                                                     onChange={(e) => setFormData({ ...formData, job: e.target.value })}
@@ -498,13 +496,12 @@ export default function ProfilesPage() {
                                 <button
                                     type="submit"
                                     disabled={uploading}
-                                    className="px-10 py-4 bg-gradient-to-r from-purple-600 via-pink-600 to-rose-600 text-white font-black text-sm uppercase tracking-widest rounded-2xl shadow-2xl shadow-purple-900/40 hover:scale-[1.02] active:scale-95 transition-all disabled:opacity-50"
+                                    className="px-12 py-4 bg-gradient-to-br from-blue-500 via-indigo-600 to-blue-700 text-white font-black text-[12px] uppercase tracking-[0.2em] rounded-[22px] shadow-2xl shadow-blue-900/40 hover:scale-[1.03] active:scale-95 transition-all disabled:opacity-50"
                                 >
                                     {uploading ? 'Yükleniyor...' : editingId ? 'Değişiklikleri Kaydet' : 'Profili Yayınla'}
                                 </button>
                             </div>
                         </form>
-                    </div>
                 </div>
             )}
 
@@ -515,10 +512,9 @@ export default function ProfilesPage() {
                 </div>
             ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                    {profiles.map((profile) => (
+                    {Array.isArray(profiles) && profiles.map((profile) => (
                         <div key={profile.id} className="group relative">
-                            <div className="absolute -inset-0.5 bg-gradient-to-br from-indigo-500/20 to-purple-500/20 rounded-[32px] blur opacity-0 group-hover:opacity-100 transition-opacity"></div>
-                            <div className="relative bg-slate-900/50 backdrop-blur-xl border border-white/5 rounded-[30px] overflow-hidden group-hover:border-white/10 transition-all border-b-4 border-b-purple-500/20">
+                            <div className="premium-card !p-0 overflow-hidden group-hover:border-blue-500/30 transition-all border-b-4 border-b-blue-500/10 animate-fade-up">
                                 <div className="relative aspect-[3/4] overflow-hidden">
                                     <img src={profile.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(profile.name)}&background=random&color=fff`} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" alt="" />
                                     <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-transparent to-transparent opacity-80" />

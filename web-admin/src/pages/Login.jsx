@@ -22,10 +22,10 @@ export default function Login() {
     };
 
     return (
-        <div className="min-h-screen flex items-center justify-center bg-slate-950 text-white relative overflow-hidden">
+        <div className="min-h-screen flex items-center justify-center bg-slate-950 text-white relative overflow-hidden animate-bg-pulse">
             {/* Background Particles (Subset of Splash) */}
             <div className="absolute inset-0 overflow-hidden pointer-events-none opacity-40">
-                {[...Array(25)].map((_, i) => (
+                {[...Array(30)].map((_, i) => (
                     <div
                         key={i}
                         className="absolute rounded-full animate-spark-slow flicker-fast"
@@ -33,11 +33,11 @@ export default function Login() {
                             width: (Math.random() * 3 + 1) + 'px',
                             height: (Math.random() * 3 + 1) + 'px',
                             left: Math.random() * 100 + '%',
-                            top: (Math.random() * 100 + 50) + '%',
+                            top: (Math.random() * 100 + 20) + '%',
                             background: ['#ff4d00', '#ff9900', '#ffcc00'][Math.floor(Math.random() * 3)],
-                            boxShadow: `0 0 8px ${['#ff4d00', '#ff9900', '#ffcc00'][Math.floor(Math.random() * 3)]}`,
-                            animationDelay: (Math.random() * 5) + 's',
-                            animationDuration: (Math.random() * 10 + 10) + 's'
+                            boxShadow: `0 0 10px ${['#ff4d00', '#ff9900', '#ffcc00'][Math.floor(Math.random() * 3)]}`,
+                            animationDelay: (Math.random() * -20) + 's',
+                            animationDuration: (Math.random() * 8 + 7) + 's'
                         }}
                     />
                 ))}
@@ -48,7 +48,7 @@ export default function Login() {
 
             <div className="relative z-10 w-full max-w-md px-6 animate-in fade-in zoom-in duration-1000">
                 <div className="text-center mb-10">
-                    <h1 className="text-4xl font-sans font-black tracking-[0.2em] text-transparent bg-clip-text bg-gradient-to-br from-white to-slate-400 mb-2">
+                    <h1 className="text-4xl font-sans font-black tracking-[0.2em] text-transparent bg-clip-text bg-gradient-to-r from-white via-slate-500 to-white bg-[length:200%_auto] animate-gradient-text mb-2">
                         Falka Software
                     </h1>
                     <div className="h-[2px] w-12 bg-pink-600 mx-auto rounded-full mb-4" />
@@ -58,7 +58,7 @@ export default function Login() {
                 </div>
 
                 <div className="bg-slate-900/40 backdrop-blur-2xl p-8 rounded-[40px] border border-white/5 shadow-2xl">
-                    <h2 className="text-xl font-bold mb-8 text-center text-white/90">Yönetim Merkeze Bağlan</h2>
+                    <h2 className="text-xl font-bold mb-8 text-center text-white/90">Yönetim Merkezine Bağlan</h2>
 
                     {error && (
                         <div className="bg-rose-500/10 border border-rose-500/20 text-rose-400 p-4 rounded-2xl mb-6 text-sm font-medium text-center animate-shake">
@@ -99,15 +99,25 @@ export default function Login() {
                 </div>
                 
                 <p className="mt-8 text-center text-[10px] font-black text-slate-700 uppercase tracking-widest">
-                    &copy; 2026 FALKA SOFTWARE • SECURITY ENFORCED
+                    &copy; 2024 FALKA SOFTWARE • SECURITY ENFORCED
                 </p>
             </div>
 
             <style dangerouslySetInnerHTML={{ __html: `
+                @keyframes bg-pulse {
+                    0% { background-color: #020617; } /* slate-950 */
+                    50% { background-color: #0f172a; } /* slate-900 with a hint of blue/purple */
+                    100% { background-color: #020617; }
+                }
                 @keyframes spark-slow {
                     0% { transform: translateY(0) translateX(0); opacity: 0; }
                     20% { opacity: 1; }
                     100% { transform: translateY(-120vh) translateX(30px); opacity: 0; }
+                }
+                @keyframes gradient-text {
+                    0% { background-position: 0% center; }
+                    50% { background-position: 100% center; }
+                    100% { background-position: 0% center; }
                 }
                 @keyframes shake {
                     0%, 100% { transform: translateX(0); }
@@ -118,7 +128,9 @@ export default function Login() {
                     0%, 100% { opacity: 1; filter: brightness(1); }
                     50% { opacity: 0.6; filter: brightness(1.5); }
                 }
+                .animate-bg-pulse { animation: bg-pulse 10s ease-in-out infinite; }
                 .animate-spark-slow { animation: spark-slow linear infinite; }
+                .animate-gradient-text { animation: gradient-text 5s ease infinite; }
                 .flicker-fast { animation: flicker-fast 0.1s infinite; }
                 .animate-shake { animation: shake 0.4s cubic-bezier(.36,.07,.19,.97) both; }
             `}} />

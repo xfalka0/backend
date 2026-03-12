@@ -53,7 +53,7 @@ export default function FakeScheduler() {
 
     const fetchOperators = async () => {
         try {
-            const res = await fetch(`${API_URL}/operators`, { headers: { Authorization: `Bearer ${token}` } });
+            const res = await fetch(`${API_URL}/api/operators`, { headers: { Authorization: `Bearer ${token}` } });
             if (res.ok) setOperators(await res.json());
         } catch (e) { }
     };

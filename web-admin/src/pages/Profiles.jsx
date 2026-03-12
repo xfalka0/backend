@@ -39,7 +39,7 @@ export default function ProfilesPage() {
             setLoading(true);
             const token = localStorage.getItem('token');
             // Request a large limit to see all profiles in the admin panel
-            const res = await axios.get(`${API_URL}/operators?limit=1000`, {
+            const res = await axios.get(`${API_URL}/api/operators?limit=1000`, {
                 headers: { Authorization: `Bearer ${token}` }
             });
             setProfiles(res.data);
@@ -158,10 +158,10 @@ export default function ProfilesPage() {
             const headers = { Authorization: `Bearer ${token}` };
 
             if (editingId) {
-                await axios.put(`${API_URL}/operators/${editingId}`, dataToSend, { headers });
+                await axios.put(`${API_URL}/api/operators/${editingId}`, dataToSend, { headers });
                 alert('Profil başarıyla güncellendi!');
             } else {
-                await axios.post(`${API_URL}/operators`, dataToSend, { headers });
+                await axios.post(`${API_URL}/api/operators`, dataToSend, { headers });
                 alert('Profil başarıyla oluşturuldu!');
             }
 
@@ -197,7 +197,7 @@ export default function ProfilesPage() {
 
         try {
             const token = localStorage.getItem('token');
-            await axios.delete(`${API_URL}/operators/${id}`, {
+            await axios.delete(`${API_URL}/api/operators/${id}`, {
                 headers: { Authorization: `Bearer ${token}` }
             });
             alert('Profil silindi.');

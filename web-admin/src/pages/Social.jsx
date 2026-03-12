@@ -44,7 +44,7 @@ export default function SocialPage() {
             const headers = { Authorization: `Bearer ${token}` };
 
             const [opsRes, socialRes] = await Promise.all([
-                axios.get(`${API_URL}/operators`, { headers }),
+                axios.get(`${API_URL}/api/operators`, { headers }),
                 axios.get(`${API_URL}/social/explore`)
             ]);
 

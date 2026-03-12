@@ -597,6 +597,16 @@ app.set('io', io);
 app.use(cors());
 app.use(express.json());
 app.use('/uploads', express.static(uploadsDir));
+app.get('*', (req, res, next) => {
+    // If it's an asset request that reached here, it means it's missing.
+    // Don't serve index.html for these, let it 404 naturally or return 404.
+    if (req.path.match(/\.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|otf)$/)) {
+        return res.status(404).end();
+    }
+    next();
+});
+
+app.use(express.static(path.join(__dirname, 'public/admin')));
 app.use('/admin', express.static(path.join(__dirname, 'public/admin')));
 // --- PRIMARY API ROUTES (Order matters to avoid shadowing) ---
 // --- PRIMARY API ROUTES (Order matters to avoid shadowing) ---
@@ -3664,11 +3674,9 @@ app.get('*', (req, res) => {
         return res.status(404).json({ error: 'API route not found' });
     }
     const filePath = path.join(__dirname, 'public', 'admin', 'index.html');
-    console.log('[DEBUG] Serving static file:', filePath);
     if (require('fs').existsSync(filePath)) {
         res.sendFile(filePath);
     } else {
-        console.error('[ERROR] File not found:', filePath);
         res.status(404).send('Admin Panel Not Found (File Missing on Server)');
     }
 });

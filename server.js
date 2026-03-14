@@ -491,6 +491,22 @@ const initializeDatabase = async () => {
             created_at TIMESTAMP DEFAULT NOW()
         )`);
 
+        await runMigration('QuickRepliesTable', `CREATE TABLE IF NOT EXISTS quick_replies (
+            id SERIAL PRIMARY KEY,
+            title TEXT NOT NULL,
+            content TEXT NOT NULL,
+            created_at TIMESTAMP DEFAULT NOW()
+        )`);
+
+        await runMigration('ReportsTable', `CREATE TABLE IF NOT EXISTS reports (
+            id SERIAL PRIMARY KEY,
+            reporter_id ${userIdType} REFERENCES users(id) ON DELETE SET NULL,
+            reported_id ${userIdType} REFERENCES users(id) ON DELETE SET NULL,
+            reason TEXT,
+            status VARCHAR(50) DEFAULT 'pending',
+            created_at TIMESTAMP DEFAULT NOW()
+        )`);
+
         console.log('[DB] SCHEMA VERIFICATION COMPLETE');
         if (!app.get('db_status')) app.set('db_status', 'ready');
     } catch (err) {

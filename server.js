@@ -3684,16 +3684,18 @@ const startPinger = () => {
 
 // --- PRIVACY POLICY ROUTES ---
 app.get('/privacy.html', (req, res) => {
-    const privacyPath = path.join(__dirname, 'public', 'admin', 'privacy.html');
-    if (fs.existsSync(privacyPath)) {
-        res.sendFile(privacyPath);
+    const rootPrivacyPath = path.join(__dirname, 'privacy.html');
+    const adminPrivacyPath = path.join(__dirname, 'public', 'admin', 'privacy.html');
+    const distPrivacyPath = path.join(__dirname, 'web-admin', 'dist', 'privacy.html');
+
+    if (fs.existsSync(rootPrivacyPath)) {
+        res.sendFile(rootPrivacyPath);
+    } else if (fs.existsSync(adminPrivacyPath)) {
+        res.sendFile(adminPrivacyPath);
+    } else if (fs.existsSync(distPrivacyPath)) {
+        res.sendFile(distPrivacyPath);
     } else {
-        const distPrivacyPath = path.join(__dirname, 'web-admin', 'dist', 'privacy.html');
-        if (fs.existsSync(distPrivacyPath)) {
-            res.sendFile(distPrivacyPath);
-        } else {
-            res.status(404).send('Privacy Policy Not Found');
-        }
+        res.status(404).send('Privacy Policy Not Found (System checked root, admin, and dist)');
     }
 });
 

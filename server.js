@@ -3682,6 +3682,25 @@ const startPinger = () => {
 };
 
 
+// --- PRIVACY POLICY ROUTES ---
+app.get('/privacy.html', (req, res) => {
+    const privacyPath = path.join(__dirname, 'public', 'admin', 'privacy.html');
+    if (fs.existsSync(privacyPath)) {
+        res.sendFile(privacyPath);
+    } else {
+        const distPrivacyPath = path.join(__dirname, 'web-admin', 'dist', 'privacy.html');
+        if (fs.existsSync(distPrivacyPath)) {
+            res.sendFile(distPrivacyPath);
+        } else {
+            res.status(404).send('Privacy Policy Not Found');
+        }
+    }
+});
+
+app.get('/privacy', (req, res) => {
+    res.redirect('/privacy.html');
+});
+
 // Handle React routing, return all requests to React app
 app.get('*', (req, res) => {
     // Exclude API routes from being handled by React

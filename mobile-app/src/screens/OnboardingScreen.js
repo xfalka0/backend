@@ -110,7 +110,7 @@ export default function OnboardingScreen({ navigation, route }) {
             let photoUrl = '';
             if (photo) {
                 const formData = new FormData();
-                formData.append('photo', {
+                formData.append('file', {
                     uri: photo,
                     name: 'photo.jpg',
                     type: 'image/jpeg',

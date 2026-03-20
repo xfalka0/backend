@@ -116,13 +116,13 @@ android {
     buildToolsVersion rootProject.ext.buildToolsVersion
     compileSdk rootProject.ext.compileSdkVersion
 
-    namespace 'com.fiva.app'
+    namespace 'com.fivachat.app'
     defaultConfig {
-        applicationId 'com.fiva.app'
+        applicationId 'com.fivachat.app'
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 5
-        versionName "1.0.2"
+        versionCode 1
+        versionName "1.0.0"
     }
     signingConfigs {
         debug {

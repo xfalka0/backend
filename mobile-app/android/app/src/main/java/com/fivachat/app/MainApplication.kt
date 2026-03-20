@@ -1,4 +1,4 @@
-package com.fiva.app
+package com.fivachat.app
 
 import android.app.Application
 import android.content.res.Configuration

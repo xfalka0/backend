@@ -1,4 +1,4 @@
-package com.fiva.app
+package com.fivachat.app
 
 import android.os.Build
 import android.os.Bundle

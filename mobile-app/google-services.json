@@ -75,6 +75,22 @@
       },
       "oauth_client": [
         {
+          "client_id": "46669084263-lp536qqejk2uihonq0vo9du7piv2ml3l.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.fivachat.app",
+            "certificate_hash": "39253785f89b4cf88aa9f177dc131409f221de34"
+          }
+        },
+        {
+          "client_id": "46669084263-oa93deitqgekq237u6qma39ol47h3jiu.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.fivachat.app",
+            "certificate_hash": "976b94aab64157ce938a2b160431aed5332b7e8c"
+          }
+        },
+        {
           "client_id": "46669084263-drv76chuoahgvfitcdmctvvqm3cbudl7.apps.googleusercontent.com",
           "client_type": 3
         }

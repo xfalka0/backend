@@ -15,6 +15,7 @@ router.post('/', async (req, res) => {
 
         // To prevent spamming, we could check if a view already happened in the last X minutes.
         // For simplicity, we just insert every time they view it, or we could upsert. Let's just insert.
+        console.log(`[VIEWS] Tracking view: ${viewerId} -> ${viewedUserId}`);
         await pool.query(
             'INSERT INTO profile_views (viewer_id, viewed_user_id) VALUES ($1, $2)',
             [viewerId, viewedUserId]
@@ -22,8 +23,13 @@ router.post('/', async (req, res) => {
 
         res.status(201).json({ message: 'Profile view tracked' });
     } catch (err) {
-        console.error('Track View Error:', err);
-        res.status(500).json({ error: 'Server error' });
+        console.error('------- [TRACK_VIEW_ERROR_DETAILS] -------');
+        console.error('Error Message:', err.message);
+        console.error('Viewer ID:', viewerId);
+        console.error('Viewed User ID:', viewedUserId);
+        console.error('Full Error:', err);
+        console.error('------------------------------------------');
+        res.status(500).json({ error: 'Server error', details: err.message });
     }
 });
 

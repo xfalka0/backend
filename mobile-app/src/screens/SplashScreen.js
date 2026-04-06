@@ -126,13 +126,12 @@ export default function SplashScreen({ navigation }) {
 
     return (
         <View style={styles.container} pointerEvents="none">
-            <StatusBar barStyle="dark-content" />
+            <StatusBar barStyle="light-content" />
 
             {/* Layer 1: Base Gradient (Static) - WHITE/PASTEL */}
             <View style={StyleSheet.absoluteFill} pointerEvents="none">
                 <LinearGradient
-                    // Bembeyazdan çok açık lila/pembe tonlarına
-                    colors={['#ffffff', '#fdf4ff', '#fae8ff']}
+                    colors={['#1a0533', '#2d0a5e', '#4c1d95']}
                     start={{ x: 0, y: 0 }}
                     end={{ x: 1, y: 1 }}
                     style={styles.background}
@@ -142,8 +141,7 @@ export default function SplashScreen({ navigation }) {
             {/* Layer 2: Overlay Gradient (Animated Opacity) - SLIGHTLY DIFFERENT WHITE/PASTEL */}
             <Animated.View style={[StyleSheet.absoluteFill, animatedGradientStyle]} pointerEvents="none">
                 <LinearGradient
-                    // Bembeyazdan çok açık mavi/indigo tonlarına
-                    colors={['#ffffff', '#f5f3ff', '#ede9fe']}
+                    colors={['#2d0a5e', '#6d28d9', '#4c1d95']}
                     start={{ x: 0.2, y: 0 }}
                     end={{ x: 0.8, y: 1 }}
                     style={styles.background}
@@ -163,7 +161,7 @@ export default function SplashScreen({ navigation }) {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#ffffff',
+        backgroundColor: '#1a0533',
         alignItems: 'center',
         justifyContent: 'center',
     },
@@ -181,7 +179,7 @@ const styles = StyleSheet.create({
         fontFamily: 'Outfit_800ExtraBold',
         letterSpacing: 2,
         // Arkaplan beyaz olduğu için yazı artık Koyu Mor/Lacivert olmalı
-        color: '#2e1065',
+        color: '#ffffff',
         // Text Shadow/Glow tamamen kaldırıldı
     }
 });

@@ -2,14 +2,14 @@
   "expo": {
     "name": "Fiva",
     "slug": "fiva",
-    "version": "1.0.0",
+    "version": "1.0.34",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "splash": {
-      "image": "./assets/splash.png",
+      "image": "./assets/icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#1a0533"
     },
     "assetBundlePatterns": [
       "**/*"
@@ -21,10 +21,11 @@
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
+        "backgroundColor": "#8b5cf6"
       },
       "package": "com.fivachat.app",
-      "googleServicesFile": "./google-services.json"
+      "googleServicesFile": "./google-services.json",
+      "versionCode": 34
     },
     "web": {
       "favicon": "./assets/favicon.png"

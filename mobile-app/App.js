@@ -49,6 +49,7 @@ import WelcomeScreen from './src/screens/WelcomeScreen';
 import OnboardingScreen from './src/screens/OnboardingScreen';
 import PurchaseInfoScreen from './src/screens/PurchaseInfoScreen';
 
+
 import AnimatedTabBar from './src/components/animated/AnimatedTabBar';
 
 const Stack = createNativeStackNavigator();

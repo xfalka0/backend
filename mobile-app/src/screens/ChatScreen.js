@@ -765,7 +765,9 @@ export default function ChatScreen({ route, navigation }) {
                                 </Animated.View>
                             </TouchableOpacity>
 
+
                             <TouchableOpacity style={styles.modernActionBtn} onPress={recording ? stopRecording : startRecording}>
+
                                 <BlurView intensity={20} tint={recording ? "default" : "light"} style={[styles.btnBlur, recording && { backgroundColor: 'rgba(239, 68, 68, 0.2)' }]}>
                                     <Ionicons name={recording ? "stop" : "mic"} size={22} color={recording ? "#ef4444" : "rgba(255,255,255,0.8)"} />
                                 </BlurView>

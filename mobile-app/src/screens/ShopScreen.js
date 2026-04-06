@@ -190,7 +190,12 @@ export default function ShopScreen({ navigation, route }) {
             let success = false;
 
             if (pack.isLocal) {
-                alert('Test satışı kapalı. Ürünler App Store / Play Store üzerinden çekilemedi.');
+                setAlertConfig({
+                    visible: true,
+                    title: 'Mağaza Hazırlanıyor',
+                    message: 'Coin paketleri şu an yükleniyor. Lütfen birkaç dakika sonra tekrar deneyin.',
+                    type: 'info'
+                });
                 return;
             }
 

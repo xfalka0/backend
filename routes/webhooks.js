@@ -69,9 +69,8 @@ async function handleSuccessfulPayment(userId, productId) {
     }
 
     if (coinAmount) {
-        console.log(`[WEBHOOK SUCCESS] Adding ${coinAmount} coins to user ${userId} for product ${productId}`);
-        // Use atomic relative update to 'balance' column
-        await db.query('UPDATE users SET balance = balance + $1 WHERE id = $2', [coinAmount, userId]);
+        console.log(`[WEBHOOK SUCCESS] Ignored coin addition for product ${productId}. Handled by /api/purchase endpoint.`);
+        // await db.query('UPDATE users SET balance = balance + $1 WHERE id = $2', [coinAmount, userId]);
     } else if (productId.includes('vip_level_1')) {
         await db.query('UPDATE users SET vip_level = 1 WHERE id = $1', [userId]);
     } else {

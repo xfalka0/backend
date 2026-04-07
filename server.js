@@ -1763,7 +1763,10 @@ app.post('/api/admin/users/:id/balance', authenticateToken, authorizeRole('admin
 
     try {
         const result = await db.query(
-            'UPDATE users SET balance = balance + $1 WHERE id = $2 RETURNING balance',
+            `UPDATE users 
+             SET balance = balance + $1,
+                 total_spent = total_spent + (CASE WHEN $1 > 0 THEN $1 ELSE 0 END)
+             WHERE id = $2 RETURNING balance`,
             [amount, id]
         );
 
@@ -2769,19 +2772,23 @@ app.post('/api/admin/maintenance/cleanup', authenticateToken, authorizeRole('adm
 
 // --- OPERATOR PAYOUT & PERFORMANCE API (Admin) ---
 
-// Get all operators with their earnings and stats
-app.get('/api/admin/operators/earnings', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
+// GET ALL PERSONNEL (Staff) for assignment and earnings
+app.get('/api/admin/operators/earnings', authenticateToken, authorizeRole('admin', 'super_admin', 'operator', 'moderator'), async (req, res) => {
     try {
         const query = `
             SELECT 
-                u.id, u.username, u.display_name, u.avatar_url,
-                o.pending_balance, o.lifetime_earnings, o.commission_rate, o.last_payout_at,
-                (SELECT SUM(coins_earned) FROM operator_stats WHERE operator_id = u.id AND date = CURRENT_DATE) as earned_today,
-                (SELECT SUM(messages_sent) FROM operator_stats WHERE operator_id = u.id) as total_messages
+                u.id, u.username, u.display_name, u.avatar_url, u.role,
+                COALESCE(o.pending_balance, 0) as pending_balance, 
+                COALESCE(o.lifetime_earnings, 0) as lifetime_earnings, 
+                COALESCE(o.commission_rate, 0.25) as commission_rate, 
+                o.last_payout_at,
+                o.last_active_at, -- NEW
+                (SELECT COALESCE(SUM(coins_earned), 0) FROM operator_stats WHERE operator_id = u.id AND date = CURRENT_DATE) as earned_today,
+                (SELECT COALESCE(SUM(messages_sent), 0) FROM operator_stats WHERE operator_id = u.id) as total_messages
             FROM users u
-            JOIN operators o ON u.id = o.user_id
-            WHERE u.role = 'operator' AND u.account_status = 'active'
-            ORDER BY o.pending_balance DESC
+            LEFT JOIN operators o ON u.id = o.user_id
+            WHERE u.role IN ('operator', 'moderator', 'admin', 'super_admin') AND u.account_status = 'active'
+            ORDER BY o.pending_balance DESC NULLS LAST
         `;
         const result = await db.query(query);
         res.json(result.rows);

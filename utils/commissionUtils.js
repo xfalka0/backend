@@ -24,16 +24,29 @@ async function recordOperatorCommission(client, chatId, senderId, cost, type) {
         const managerRes = await client.query('SELECT managed_by FROM users WHERE id = $1', [operatorId]);
         const actualPayeeId = (managerRes.rows.length > 0 && managerRes.rows[0].managed_by) 
             ? managerRes.rows[0].managed_by 
-            : operatorId; // Fallback to avatar if no manager (single operator mode)
+            : operatorId; // Fallback to avatar if no manager
 
-        // 2. Get PAYEE'S commission rate (or use a default)
-        const opRes = await client.query('SELECT commission_rate FROM operators WHERE user_id = $1', [actualPayeeId]);
-        const rate = opRes.rows.length > 0 ? (opRes.rows[0].commission_rate || 0.3) : 0.3;
+        // 1.6 Activity Tracking (Saniye saniyesine takip)
+        await client.query('UPDATE operators SET last_active_at = NOW() WHERE user_id = $1', [actualPayeeId]);
+
+        // 2. Bonus Protection Check
+        // If user total_spent is 0, they are using welcome bonus. We pay a lower % (e.g. 5%)
+        const userCheck = await client.query('SELECT total_spent FROM users WHERE id = $1', [senderId]);
+        const userLifetimeSpent = userCheck.rows.length > 0 ? parseFloat(userCheck.rows[0].total_spent || 0) : 0;
+        
+        let commissionType = 'REAL';
+        let rate = 0.25; // Default 25% for paid users (%30'dan %25'e düşürüldü)
+        
+        if (userLifetimeSpent <= 0) {
+            rate = 0.05; // 5% for bonus/new users
+            commissionType = 'BONUS';
+            console.log(`[PAYOUT] User ${senderId} uses BONUS coins. Applying 5% rate.`);
+        }
+
         const earned = Math.floor(cost * rate);
+        if (earned <= 0 && cost > 0 && commissionType === 'REAL') return;
 
-        if (earned <= 0 && cost > 0) return;
-
-        console.log(`[PAYOUT] Payee ${actualPayeeId} (Manager of ${operatorId}) earned ${earned} coins from user ${senderId}`);
+        console.log(`[PAYOUT] Payee ${actualPayeeId} earned ${earned} (Type: ${commissionType}, Spent: ${cost})`);
 
         // 3. Update PAYEE balance
         await client.query(

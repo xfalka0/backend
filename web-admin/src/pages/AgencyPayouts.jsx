@@ -172,7 +172,7 @@ const AgencyPayouts = () => {
                                 <th className="px-8 py-5 text-[10px] font-black text-slate-500 uppercase tracking-widest text-center">Zimmetli</th>
                                 <th className="px-8 py-5 text-[10px] font-black text-slate-500 uppercase tracking-widest">Bekleyen</th>
                                 <th className="px-8 py-5 text-[10px] font-black text-slate-500 uppercase tracking-widest">Toplam Kazanç</th>
-                                <th className="px-8 py-5 text-[10px] font-black text-slate-500 uppercase tracking-widest">Son Ödeme</th>
+                                <th className="px-8 py-5 text-[10px] font-black text-slate-500 uppercase tracking-widest">Son Aktivite</th>
                                 <th className="px-8 py-5 text-[10px] font-black text-slate-500 uppercase tracking-widest text-right">İşlem</th>
                             </tr>
                         </thead>
@@ -234,11 +234,14 @@ const AgencyPayouts = () => {
                                     </td>
                                     <td className="px-8 py-6">
                                         <div className="flex items-center gap-2 text-slate-400">
-                                            <Clock size={12} className="text-slate-600" />
-                                            <span className="text-[11px] font-bold">
-                                                {op.last_payout_at ? new Date(op.last_payout_at).toLocaleDateString('tr-TR') : 'Hiç ödeme yok'}
+                                            <Clock size={12} className={op.last_active_at && (new Date() - new Date(op.last_active_at) < 5 * 60000) ? "text-emerald-500" : "text-slate-600"} />
+                                            <span className={`text-[11px] font-bold ${op.last_active_at && (new Date() - new Date(op.last_active_at) < 5 * 60000) ? "text-emerald-400" : "text-slate-400"}`}>
+                                                {op.last_active_at ? new Date(op.last_active_at).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' }) : 'Pasif'}
                                             </span>
                                         </div>
+                                        <p className="text-[9px] font-bold text-slate-600 mt-1 uppercase tracking-tight">
+                                           {op.last_active_at ? new Date(op.last_active_at).toLocaleDateString('tr-TR') : '-'}
+                                        </p>
                                     </td>
                                     <td className="px-8 py-6 text-right">
                                         <button 

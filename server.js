@@ -1976,6 +1976,22 @@ app.delete('/api/operators/:id', authenticateToken, authorizeRole('admin', 'supe
     }
 });
 
+// ASSIGN PROFILE TO PERSONNEL (Zimmetleme)
+app.post('/api/admin/operators/:id/assign', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
+    const { id } = req.params; // Profile ID (female profile)
+    const { personnelId } = req.body; // Human ID (Hamza's staff)
+
+    try {
+        // null makes the profile unassigned (back to common pool if implemented, but here we require assignment)
+        await db.query('UPDATE users SET managed_by = $1 WHERE id = $2', [personnelId || null, id]);
+        
+        console.log(`[ADMIN] Assigned profile ${id} to personnel ${personnelId}`);
+        res.json({ success: true, message: 'Profil başarıyla personelde zimmetlendi.' });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // DELETE USER (Self or Admin)
 app.delete('/api/users/:id', authenticateToken, async (req, res) => {
     const { id } = req.params;
@@ -2347,11 +2363,13 @@ app.post('/api/chats', async (req, res) => {
     }
 });
 
-// GET CHATS FOR ADMIN
-app.get('/api/chats/admin', async (req, res) => {
+// GET CHATS FOR ADMIN / OPERATORS (PERSONNEL)
+app.get('/api/chats/admin', authenticateToken, authorizeRole('admin', 'super_admin', 'operator', 'moderator'), async (req, res) => {
     try {
-        console.log('GET /api/chats/admin - Fetching chats...');
-        const query = `
+        console.log(`[ADMIN] Fetching chats for ${req.user.role}: ${req.user.id}`);
+        
+        // Base query - Get all chats joined with profile managers
+        let query = `
             SELECT 
                 c.*, 
                 COALESCE(u.display_name, u.username, 'Bilinmeyen Kullanıcı') as user_name, 
@@ -2362,15 +2380,30 @@ app.get('/api/chats/admin', async (req, res) => {
                 u.job,
                 COALESCE(op.display_name, op.username, 'Bilinmeyen Operatör') as operator_name, 
                 op.avatar_url as operator_avatar,
+                op.managed_by as managed_by_id, -- Who manages this profile
                 (SELECT content FROM messages WHERE chat_id = c.id ORDER BY created_at DESC LIMIT 1) as last_message,
                 (SELECT COUNT(*)::int FROM messages WHERE chat_id = c.id AND sender_id = c.user_id AND is_read = false) as unread_count
             FROM chats c
             LEFT JOIN users u ON c.user_id = u.id
             LEFT JOIN users op ON c.operator_id = op.id
-            WHERE EXISTS (SELECT 1 FROM messages m WHERE m.chat_id = c.id)
-            ORDER BY c.last_message_at DESC
         `;
-        const result = await db.query(query);
+
+        const params = [];
+
+        // --- FILTERING LOGIC (Zimmetleme) ---
+        // If not admin/super_admin, only show chats for profiles managed by this user
+        if (req.user.role !== 'admin' && req.user.role !== 'super_admin') {
+            query += ` WHERE op.managed_by = $1 `;
+            params.push(req.user.id);
+            console.log(`[ADMIN] Restricting view to profiles managed by user ${req.user.id}`);
+        } else {
+            // Admin sees all chats that have messages
+            query += ` WHERE EXISTS (SELECT 1 FROM messages m WHERE m.chat_id = c.id) `;
+        }
+
+        query += ` ORDER BY c.last_message_at DESC `;
+        
+        const result = await db.query(query, params);
         console.log(`GET /api/chats/admin - Found ${result.rows.length} chats.`);
 
         const sanitizedRows = result.rows.map(row => {
@@ -3111,10 +3144,35 @@ io.on('connection', (socket) => {
                 await recordOperatorCommission(client, chatId, senderId, cost, type || 'text');
             }
 
-            // --- 2. SAVE MESSAGE ---
+            // --- 2. SENDER MAPPING (Zimmetleme) ---
+            let finalSenderId = senderId;
+            
+            // If the sender is personnel (operator/moderator role), we check which profile they are messaging as
+            if (isOperator || socket.user.role === 'moderator') {
+                const chatRes = await client.query('SELECT operator_id FROM chats WHERE id = $1', [chatId]);
+                if (chatRes.rows.length > 0) {
+                    const avatarId = chatRes.rows[0].operator_id;
+                    
+                    // Verify if this personnel manages this avatar (Zimmet Check)
+                    const manageCheck = await client.query('SELECT managed_by FROM users WHERE id = $1', [avatarId]);
+                    if (manageCheck.rows.length > 0) {
+                       const managerId = manageCheck.rows[0].managed_by;
+                       
+                       // If assigned to someone else (and not admin), block.
+                       if (managerId && managerId.toString() !== senderId.toString() && socket.user.role !== 'admin' && socket.user.role !== 'super_admin') {
+                           throw new Error('BU_PROFIL_SIZE_ZIMMETLI_DEGIL');
+                       }
+
+                       // The personnel messages AS the avatar
+                       finalSenderId = avatarId;
+                    }
+                }
+            }
+
+            // --- 3. SAVE MESSAGE ---
             const res = await client.query(
                 'INSERT INTO messages (chat_id, sender_id, content, content_type, gift_id) VALUES ($1, $2, $3, $4, $5) RETURNING *',
-                [chatId, senderId, content, type || 'text', giftId || null]
+                [chatId, finalSenderId, content, type || 'text', giftId || null]
             );
             const savedMsg = res.rows[0];
 

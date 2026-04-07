@@ -119,29 +119,29 @@ const AgencyPayouts = () => {
             </div>
 
             {/* Stats Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <StatCard 
-                    title="Toplam Bekleyen Borç" 
-                    value={stats.total_pending || 0} 
-                    icon={Wallet} 
-                    color="blue"
-                    subValue={`Yaklaşık ${((stats.total_pending || 0) * 0.1).toFixed(2)} TL`}
-                />
-                <StatCard 
-                    title="Toplam Ödenen" 
-                    value={stats.total_paid || 0} 
-                    icon={CheckCircle2} 
-                    color="emerald"
-                    subValue="Bugüne kadar yapılan ödemeler"
-                />
-                <StatCard 
-                    title="Ajans Toplam Ciro" 
-                    value={stats.total_lifetime || 0} 
-                    icon={TrendingUp} 
-                    color="indigo"
-                    subValue="Sistemdeki toplam operatör kazancı"
-                />
-            </div>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <StatCard 
+                title="Toplam Bekleyen Borç" 
+                value={stats.total_pending || 0} 
+                icon={Wallet} 
+                color="blue"
+                subValue={`Yaklaşık ${((stats.total_pending || 0) * 0.5).toLocaleString('tr-TR')} TL`}
+            />
+            <StatCard 
+                title="Toplam Ödenen" 
+                value={stats.total_paid || 0} 
+                icon={CheckCircle2} 
+                color="emerald"
+                subValue={`${((stats.total_paid || 0) * 0.5).toLocaleString('tr-TR')} TL ödeme yapıldı`}
+            />
+            <StatCard 
+                title="Ajans Toplam Ciro" 
+                value={stats.total_lifetime || 0} 
+                icon={TrendingUp} 
+                color="indigo"
+                subValue={`Brüt: ${((stats.total_lifetime || 0) * 0.5).toLocaleString('tr-TR')} TL`}
+            />
+        </div>
 
             {/* Operator List Table */}
             <div className="bg-slate-900/50 backdrop-blur-3xl border border-white/5 rounded-[40px] overflow-hidden">
@@ -223,7 +223,7 @@ const AgencyPayouts = () => {
                                             <span className="text-[10px] text-slate-600 ml-1">COIN</span>
                                         </p>
                                         <p className="text-[10px] font-bold text-slate-500 mt-1 uppercase tracking-tight">
-                                            ≈ {(op.pending_balance * 0.1).toFixed(2)} TRY
+                                            ≈ {(op.pending_balance * 0.5).toLocaleString('tr-TR')} TRY
                                         </p>
                                     </td>
                                     <td className="px-8 py-6">

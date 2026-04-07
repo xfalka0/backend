@@ -20,7 +20,8 @@ import {
     BellRing,
     Tag,
     Clock,
-    Activity
+    Activity,
+    Wallet
 } from 'lucide-react';
 
 export default function Sidebar() {

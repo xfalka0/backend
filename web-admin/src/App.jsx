@@ -24,6 +24,7 @@ import RetentionPage from './pages/Retention';
 import FakeSchedulerPage from './pages/FakeScheduler';
 import AdminManagement from './pages/AdminManagement';
 import MaintenancePage from './pages/Maintenance';
+import AgencyPayoutsPage from './pages/AgencyPayouts';
 import SplashIntro from './components/SplashIntro';
 
 // Placeholder Pages
@@ -104,6 +105,7 @@ function App() {
                                 <Route path="/admin-users" element={<AdminManagement />} />
                                 <Route path="/admins" element={<AdminManagement />} />
                                 <Route path="/operators" element={<AdminManagement />} />
+                                <Route path="/agency-payouts" element={<AgencyPayoutsPage />} />
                                 <Route path="/moderation" element={<Moderation />} />
                                 <Route path="/maintenance" element={<MaintenancePage />} />
                             </Route>

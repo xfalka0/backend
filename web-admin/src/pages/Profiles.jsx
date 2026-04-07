@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
-import { Plus, Search, Filter, Camera, Trash2, Edit3, CheckCircle, XCircle, Briefcase, GraduationCap, Heart, Hash, Loader2, Crown } from 'lucide-react';
+import { Plus, Search, Filter, Camera, Trash2, Edit3, CheckCircle, XCircle, Briefcase, GraduationCap, Heart, Hash, Loader2, Crown, Users2, UserPlus } from 'lucide-react';
 
 const API_URL = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
     ? ''
@@ -12,6 +12,9 @@ export default function ProfilesPage() {
     const [uploading, setUploading] = useState(false);
     const [showAddForm, setShowAddForm] = useState(false);
     const [editingId, setEditingId] = useState(null);
+    const [personnel, setPersonnel] = useState([]);
+    const [showAssignModal, setShowAssignModal] = useState(false);
+    const [selectedProfile, setSelectedProfile] = useState(null);
     const fileInputRef = useRef(null);
     const albumInputRef = useRef(null);
 
@@ -32,7 +35,20 @@ export default function ProfilesPage() {
 
     useEffect(() => {
         fetchProfiles();
+        fetchPersonnel();
     }, []);
+
+    const fetchPersonnel = async () => {
+        try {
+            const token = localStorage.getItem('token');
+            const res = await axios.get(`${API_URL}/api/admin/operators/earnings`, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            setPersonnel(res.data);
+        } catch (err) {
+            console.error("Fetch Personnel Error:", err);
+        }
+    };
 
     const fetchProfiles = async () => {
         try {
@@ -205,6 +221,23 @@ export default function ProfilesPage() {
         } catch (err) {
             console.error("Delete Error:", err);
             alert('Silme işlemi başarısız: ' + (err.response?.data?.error || err.message));
+        }
+    };
+
+    const handleAssign = async (personnelId) => {
+        if (!selectedProfile) return;
+        try {
+            const token = localStorage.getItem('token');
+            // Using the endpoint I added to server.js: /api/admin/operators/:id/assign
+            await axios.post(`${API_URL}/api/admin/operators/${selectedProfile.id}/assign`, {
+                personnelId: personnelId
+            }, { headers: { Authorization: `Bearer ${token}` } });
+            
+            setShowAssignModal(false);
+            fetchProfiles(); // Refresh to see managed_by if needed
+            alert('Profil başarıyla zimmetlendi.');
+        } catch (err) {
+            alert('Hata: ' + (err.response?.data?.error || err.message));
         }
     };
 
@@ -538,8 +571,17 @@ export default function ProfilesPage() {
                                 </div>
 
                                 <div className="p-4 flex items-center justify-between">
-                                    <div className="flex gap-1.5">
-                                        <button className="p-2.5 bg-white/5 hover:bg-emerald-500/10 text-slate-400 hover:text-emerald-500 rounded-xl border border-white/5 transition-all"><CheckCircle size={18} /></button>
+                                    <div className="flex gap-1.5 text-white">
+                                        <button 
+                                            title="Zimmetle"
+                                            onClick={() => {
+                                                setSelectedProfile(profile);
+                                                setShowAssignModal(true);
+                                            }}
+                                            className="p-2.5 bg-white/5 hover:bg-blue-600/10 text-slate-400 hover:text-blue-500 rounded-xl border border-white/5 transition-all outline-none"
+                                        >
+                                            <Users2 size={18} />
+                                        </button>
                                         <button
                                             onClick={() => handleEdit(profile)}
                                             className="p-2.5 bg-white/5 hover:bg-amber-500/10 text-slate-400 hover:text-amber-500 rounded-xl border border-white/5 transition-all"
@@ -572,6 +614,59 @@ export default function ProfilesPage() {
                         </div>
                     </button>
                 </div >
+            )}
+
+            {/* Assignment Modal */}
+            {showAssignModal && selectedProfile && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+                    <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-md" onClick={() => setShowAssignModal(false)} />
+                    <div className="bg-[#0f172a] border border-white/10 w-full max-w-sm rounded-[40px] shadow-2xl relative z-10 overflow-hidden animate-in zoom-in-95 duration-300">
+                        <div className="p-8 border-b border-white/5">
+                            <h3 className="text-xl font-black text-white tracking-tighter">Profil Zimmetleme</h3>
+                            <p className="text-slate-500 text-[11px] font-black uppercase tracking-widest mt-1">Avatar: {selectedProfile.name}</p>
+                        </div>
+                        <div className="p-8 space-y-4">
+                            <p className="text-xs text-slate-400 font-medium">Bu profili yönetmesi için bir personel seçin. Sadece bu personel bu profil üzerinden mesajlara cevap verebilecektir.</p>
+                            
+                            <div className="space-y-2 max-h-60 overflow-y-auto custom-scrollbar pr-2">
+                                {personnel.length === 0 ? (
+                                    <p className="text-[10px] text-slate-600 text-center py-4">Sistemde atanabilir personel bulunamadı.</p>
+                                ) : personnel.map(p => (
+                                    <button 
+                                        key={p.id}
+                                        onClick={() => handleAssign(p.id)}
+                                        className="w-full flex items-center gap-3 p-3 bg-white/5 hover:bg-white/10 rounded-[18px] border border-white/5 hover:border-blue-500/20 transition-all text-left group"
+                                    >
+                                        <div className="w-8 h-8 rounded-lg bg-blue-600/20 text-blue-400 flex items-center justify-center">
+                                            <Users2 size={16} />
+                                        </div>
+                                        <div>
+                                            <p className="text-xs font-black text-white group-hover:text-blue-400 transition-colors uppercase tracking-tight">{p.display_name || p.username}</p>
+                                            <p className="text-[9px] font-bold text-slate-600 truncate">{p.username}</p>
+                                        </div>
+                                        <ArrowUpRight size={14} className="ml-auto text-slate-600 group-hover:text-blue-400 opacity-0 group-hover:opacity-100 transition-all" />
+                                    </button>
+                                ))}
+                                
+                                <button 
+                                    onClick={() => handleAssign(null)}
+                                    className="w-full mt-4 p-3 bg-rose-500/10 hover:bg-rose-500/20 rounded-[18px] border border-rose-500/10 text-rose-400 text-[10px] font-black uppercase transition-all"
+                                >
+                                    Zimmeti Kaldır (Genel Havuz)
+                                </button>
+                            </div>
+                            
+                            <div className="pt-4">
+                                <button
+                                    onClick={() => setShowAssignModal(false)}
+                                    className="w-full py-3.5 rounded-2xl bg-white/5 text-slate-500 text-[11px] font-black uppercase tracking-widest hover:bg-white/10"
+                                >
+                                    İptal
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             )}
         </div >
     );

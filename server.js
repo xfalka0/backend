@@ -8,6 +8,7 @@ require('dotenv').config();
 const bcrypt = require('bcrypt');
 const { authenticateToken, authorizeRole, SECRET_KEY } = require('./middleware/auth');
 const { getVipLevel, getVipProgress } = require('./utils/vipUtils');
+const { recordOperatorCommission } = require('./utils/commissionUtils');
 const jwt = require('jsonwebtoken');
 const socialRoutes = require('./routes/socialRoutes');
 const authRoutes = require('./routes/authRoutes');
@@ -591,10 +592,10 @@ const upload = multer({
     limits: { fileSize: 10 * 1024 * 1024 }, // 10MB limit
     fileFilter: (req, file, cb) => {
         const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'video/mp4', 'video/webm', 'video/quicktime'];
-        if (allowedTypes.includes(file.mimetype)) {
+        if (allowedTypes.includes(file.mimetype) || file.mimetype.startsWith('audio/')) {
             cb(null, true);
         } else {
-            cb(new Error('Desteklenmeyen dosya türü. Sadece resim ve video yüklenebilir.'));
+            cb(new Error('Desteklenmeyen dosya türü. Sadece resim, video ve ses yüklenebilir.'));
         }
     }
 });
@@ -990,6 +991,7 @@ app.post('/api/upload', (req, res, next) => {
             folder: 'dating_app_uploads',
             use_filename: true,
             unique_filename: false,
+            resource_type: 'auto',
         });
 
         console.log('[UPLOAD] Cloudinary Success:', result.secure_url);
@@ -2732,6 +2734,84 @@ app.post('/api/admin/maintenance/cleanup', authenticateToken, authorizeRole('adm
     }
 });
 
+// --- OPERATOR PAYOUT & PERFORMANCE API (Admin) ---
+
+// Get all operators with their earnings and stats
+app.get('/api/admin/operators/earnings', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
+    try {
+        const query = `
+            SELECT 
+                u.id, u.username, u.display_name, u.avatar_url,
+                o.pending_balance, o.lifetime_earnings, o.commission_rate, o.last_payout_at,
+                (SELECT SUM(coins_earned) FROM operator_stats WHERE operator_id = u.id AND date = CURRENT_DATE) as earned_today,
+                (SELECT SUM(messages_sent) FROM operator_stats WHERE operator_id = u.id) as total_messages
+            FROM users u
+            JOIN operators o ON u.id = o.user_id
+            WHERE u.role = 'operator' AND u.account_status = 'active'
+            ORDER BY o.pending_balance DESC
+        `;
+        const result = await db.query(query);
+        res.json(result.rows);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Process a payout for an operator
+app.post('/api/admin/operators/:id/payout', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
+    const { id } = req.params;
+    const { amount, method } = req.body; // amount in coins/currency to settle
+
+    try {
+        await db.query('BEGIN');
+
+        // 1. Get current pending balance
+        const opRes = await db.query('SELECT pending_balance FROM operators WHERE user_id = $1 FOR UPDATE', [id]);
+        if (opRes.rows.length === 0) throw new Error('Operatör bulunamadı.');
+
+        const pending = opRes.rows[0].pending_balance;
+        const payoutAmount = amount || pending; // If no amount specified, settle all
+
+        if (payoutAmount <= 0) throw new Error('Ödenecek tutar 0 olamaz.');
+        if (payoutAmount > pending) throw new Error('Ödenmek istenen tutar bekleyen bakiyeden büyük olamaz.');
+
+        // 2. Record the payout in payouts table
+        await db.query(
+            'INSERT INTO payouts (operator_id, amount, status, payment_method, processed_at) VALUES ($1, $2, $3, $4, NOW())',
+            [id, payoutAmount, 'processed', method || 'Manual']
+        );
+
+        // 3. Update operator's pending balance
+        await db.query(
+            'UPDATE operators SET pending_balance = pending_balance - $1, last_payout_at = NOW() WHERE user_id = $2',
+            [payoutAmount, id]
+        );
+
+        await db.query('COMMIT');
+        res.json({ success: true, message: 'Ödeme başarıyla işlendi ve bakiye düşüldü.' });
+
+    } catch (err) {
+        await db.query('ROLLBACK');
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Get global payout stats
+app.get('/api/admin/payouts/summary', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
+    try {
+        const stats = await db.query(`
+            SELECT 
+                SUM(pending_balance) as total_pending,
+                SUM(lifetime_earnings) as total_lifetime,
+                (SELECT SUM(amount) FROM payouts WHERE status = 'processed') as total_paid
+            FROM operators
+        `);
+        res.json(stats.rows[0]);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // --- VIP PROGRESSION SYSTEM ---
 
 // VIP XP PURCHASE ENDPOINT
@@ -3026,6 +3106,9 @@ io.on('connection', (socket) => {
                 // Deduct Coins
                 await client.query('UPDATE users SET balance = balance - $2 WHERE id = $1', [senderId, cost]);
                 userBalance = currentBalance - cost;
+
+                // Record Operator Commission (Hakedis)
+                await recordOperatorCommission(client, chatId, senderId, cost, type || 'text');
             }
 
             // --- 2. SAVE MESSAGE ---

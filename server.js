@@ -2437,8 +2437,8 @@ app.get('/api/chats/admin', authenticateToken, authorizeRole('admin', 'super_adm
             const operatorPart = sanitizeUser({ avatar_url: row.operator_avatar, display_name: row.operator_name }, req);
             return {
                 ...row,
-                user_avatar: userPart.avatar_url,
-                operator_avatar: operatorPart.avatar_url
+                user_avatar: userPart ? userPart.avatar_url : row.user_avatar,
+                operator_avatar: operatorPart ? operatorPart.avatar_url : row.operator_avatar
             };
         });
 

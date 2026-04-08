@@ -2451,63 +2451,54 @@ app.get('/api/chats/admin', authenticateToken, authorizeRole('admin', 'super_adm
 
 app.get('/api/debug/admin-chats', async (req, res) => {
     try {
-        console.log("[DEBUG] Comprehensive force migration starting...");
+        console.log("[DEBUG] Personnel query test starting...");
         
         const runMigration = async (sql) => {
             try { await db.query(sql); } catch (e) { console.warn(`[DEBUG] Migration partial fail: ${e.message}`); }
         };
 
-        // 1. Core Users & Chats columns
+        // 1. Ensure columns exist (Relaxed)
         await runMigration('ALTER TABLE users ADD COLUMN IF NOT EXISTS managed_by TEXT'); 
-        await runMigration('ALTER TABLE chats ADD COLUMN IF NOT EXISTS last_message TEXT');
-        await runMigration('ALTER TABLE chats ADD COLUMN IF NOT EXISTS unread_count INT DEFAULT 0');
-        
-        // 2. Operators table columns
         await runMigration('ALTER TABLE operators ADD COLUMN IF NOT EXISTS last_active_at TIMESTAMP');
         await runMigration('ALTER TABLE operators ADD COLUMN IF NOT EXISTS pending_balance INT DEFAULT 0');
         await runMigration('ALTER TABLE operators ADD COLUMN IF NOT EXISTS lifetime_earnings INT DEFAULT 0');
         await runMigration('ALTER TABLE operators ADD COLUMN IF NOT EXISTS last_payout_at TIMESTAMP');
         await runMigration('ALTER TABLE operators ADD COLUMN IF NOT EXISTS commission_rate DECIMAL(5,2) DEFAULT 0.25');
 
-        // 3. Operator Stats table creation
-        await runMigration(`
-            CREATE TABLE IF NOT EXISTS operator_stats (
-                id SERIAL PRIMARY KEY,
-                operator_id UUID REFERENCES users(id),
-                date DATE DEFAULT CURRENT_DATE,
-                messages_sent INTEGER DEFAULT 0,
-                coins_earned INTEGER DEFAULT 0,
-                UNIQUE(operator_id, date)
-            )
-        `);
-        
-        console.log("[DEBUG] All migration steps executed.");
-
-        // Test Chat Query
-        const chatResult = await db.query(`
-            SELECT c.id FROM chats c 
-            WHERE EXISTS (SELECT 1 FROM messages m WHERE m.chat_id = c.id) 
-            LIMIT 1
-        `);
-
-        // Test Personnel Query
-        const personnelResult = await db.query(`
-            SELECT u.id FROM users u
-            LEFT JOIN operators o ON u.id = o.user_id
+        // 2. Test the EXACT query that fails in Admin
+        const personnelQuery = `
+            SELECT 
+                u.id, u.username, u.display_name, u.avatar_url, u.role,
+                COALESCE(o.pending_balance, 0) as pending_balance, 
+                COALESCE(o.lifetime_earnings, 0) as lifetime_earnings, 
+                COALESCE(o.commission_rate, 0.25) as commission_rate, 
+                o.last_payout_at,
+                o.last_active_at,
+                (SELECT COALESCE(SUM(coins_earned), 0) FROM operator_stats WHERE operator_id::text = u.id::text AND date = CURRENT_DATE) as earned_today,
+                (SELECT COALESCE(SUM(messages_sent), 0) FROM operator_stats WHERE operator_id::text = u.id::text) as total_messages
+            FROM users u
+            LEFT JOIN operators o ON u.id::text = o.user_id::text
             WHERE u.role IN ('operator', 'moderator', 'admin', 'super_admin') 
             AND u.account_status = 'active'
-            LIMIT 1
-        `);
+            ORDER BY o.pending_balance DESC NULLS LAST
+        `;
+
+        const result = await db.query(personnelQuery);
 
         res.json({ 
             success: true, 
-            message: "TÜM SİSTEM KONTROL EDİLDİ VE EKSİKLER EKLENDİ!", 
-            chat_count: chatResult.rows.length,
-            personnel_found: personnelResult.rows.length > 0 ? "YES" : "NO"
+            message: "PERSONEL SORRGUSU BAŞARIYLA ÇALIŞTI!", 
+            count: result.rows.length,
+            rows: result.rows.slice(0, 3)
         });
     } catch (err) {
         console.error("[DEBUG] Global Error:", err.message);
-        res.status(500).json({ success: false, error: err.message, stack: err.stack });
+        res.status(500).json({ 
+            success: false, 
+            error: err.message, 
+            hint: "Muhtemelen operator_stats tablosu eksik veya id tipleri uyuşmuyor.",
+            stack: err.stack 
+        });
     }
 });
 

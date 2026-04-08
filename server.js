@@ -2882,11 +2882,11 @@ app.get('/api/admin/operators/earnings', authenticateToken, authorizeRole('admin
                 COALESCE(o.lifetime_earnings, 0) as lifetime_earnings, 
                 COALESCE(o.commission_rate, 0.25) as commission_rate, 
                 o.last_payout_at,
-                o.last_active_at, -- NEW
-                (SELECT COALESCE(SUM(coins_earned), 0) FROM operator_stats WHERE operator_id = u.id AND date = CURRENT_DATE) as earned_today,
-                (SELECT COALESCE(SUM(messages_sent), 0) FROM operator_stats WHERE operator_id = u.id) as total_messages
+                o.last_active_at,
+                (SELECT COALESCE(SUM(coins_earned), 0) FROM operator_stats WHERE operator_id::text = u.id::text AND date = CURRENT_DATE) as earned_today,
+                (SELECT COALESCE(SUM(messages_sent), 0) FROM operator_stats WHERE operator_id::text = u.id::text) as total_messages
             FROM users u
-            LEFT JOIN operators o ON u.id = o.user_id
+            LEFT JOIN operators o ON u.id::text = o.user_id::text
             WHERE u.role IN ('operator', 'moderator', 'admin', 'super_admin') AND u.account_status = 'active'
             ORDER BY o.pending_balance DESC NULLS LAST
         `;

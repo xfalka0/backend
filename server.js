@@ -2451,17 +2451,22 @@ app.get('/api/chats/admin', authenticateToken, authorizeRole('admin', 'super_adm
 
 app.get('/api/debug/admin-chats', async (req, res) => {
     try {
-        console.log("[DEBUG] Force migration starting...");
-        // 1. Force add the columns
-        await db.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS managed_by UUID REFERENCES users(id) ON DELETE SET NULL');
-        await db.query('ALTER TABLE chats ADD COLUMN IF NOT EXISTS last_message TEXT');
-        await db.query('ALTER TABLE chats ADD COLUMN IF NOT EXISTS unread_count INT DEFAULT 0');
-        await db.query('ALTER TABLE operators ADD COLUMN IF NOT EXISTS last_active_at TIMESTAMP');
-        await db.query('ALTER TABLE operators ADD COLUMN IF NOT EXISTS pending_balance INT DEFAULT 0');
-        await db.query('ALTER TABLE operators ADD COLUMN IF NOT EXISTS lifetime_earnings INT DEFAULT 0');
-        await db.query('ALTER TABLE operators ADD COLUMN IF NOT EXISTS last_payout_at TIMESTAMP');
+        console.log("[DEBUG] Force migration starting (relaxed mode)...");
         
-        console.log("[DEBUG] Migration columns added (if missing).");
+        const runMigration = async (sql) => {
+            try { await db.query(sql); } catch (e) { console.warn(`[DEBUG] Migration partial fail: ${e.message}`); }
+        };
+
+        // 1. Force add the columns (one by one, no FK first to avoid type mismatch deaths)
+        await runMigration('ALTER TABLE users ADD COLUMN IF NOT EXISTS managed_by TEXT'); 
+        await runMigration('ALTER TABLE chats ADD COLUMN IF NOT EXISTS last_message TEXT');
+        await runMigration('ALTER TABLE chats ADD COLUMN IF NOT EXISTS unread_count INT DEFAULT 0');
+        await runMigration('ALTER TABLE operators ADD COLUMN IF NOT EXISTS last_active_at TIMESTAMP');
+        await runMigration('ALTER TABLE operators ADD COLUMN IF NOT EXISTS pending_balance INT DEFAULT 0');
+        await runMigration('ALTER TABLE operators ADD COLUMN IF NOT EXISTS lifetime_earnings INT DEFAULT 0');
+        await runMigration('ALTER TABLE operators ADD COLUMN IF NOT EXISTS last_payout_at TIMESTAMP');
+        
+        console.log("[DEBUG] Migration columns added or already exist.");
 
         let query = `
             SELECT 

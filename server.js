@@ -2451,48 +2451,62 @@ app.get('/api/chats/admin', authenticateToken, authorizeRole('admin', 'super_adm
 
 app.get('/api/debug/admin-chats', async (req, res) => {
     try {
-        console.log("[DEBUG] Force migration starting (relaxed mode)...");
+        console.log("[DEBUG] Comprehensive force migration starting...");
         
         const runMigration = async (sql) => {
             try { await db.query(sql); } catch (e) { console.warn(`[DEBUG] Migration partial fail: ${e.message}`); }
         };
 
-        // 1. Force add the columns (one by one, no FK first to avoid type mismatch deaths)
+        // 1. Core Users & Chats columns
         await runMigration('ALTER TABLE users ADD COLUMN IF NOT EXISTS managed_by TEXT'); 
         await runMigration('ALTER TABLE chats ADD COLUMN IF NOT EXISTS last_message TEXT');
         await runMigration('ALTER TABLE chats ADD COLUMN IF NOT EXISTS unread_count INT DEFAULT 0');
+        
+        // 2. Operators table columns
         await runMigration('ALTER TABLE operators ADD COLUMN IF NOT EXISTS last_active_at TIMESTAMP');
         await runMigration('ALTER TABLE operators ADD COLUMN IF NOT EXISTS pending_balance INT DEFAULT 0');
         await runMigration('ALTER TABLE operators ADD COLUMN IF NOT EXISTS lifetime_earnings INT DEFAULT 0');
         await runMigration('ALTER TABLE operators ADD COLUMN IF NOT EXISTS last_payout_at TIMESTAMP');
-        
-        console.log("[DEBUG] Migration columns added or already exist.");
+        await runMigration('ALTER TABLE operators ADD COLUMN IF NOT EXISTS commission_rate DECIMAL(5,2) DEFAULT 0.25');
 
-        let query = `
-            SELECT 
-                c.*, 
-                u.username as user_name,
-                u.avatar_url as user_avatar,
-                op.username as operator_name,
-                op.avatar_url as operator_avatar,
-                op.managed_by as managed_by_id,
-                (SELECT content FROM messages WHERE chat_id = c.id ORDER BY created_at DESC LIMIT 1) as last_message,
-                (SELECT COUNT(*)::int FROM messages WHERE chat_id = c.id AND sender_id = c.user_id AND is_read = false) as unread_count
-            FROM chats c
-            LEFT JOIN users u ON c.user_id = u.id
-            LEFT JOIN users op ON c.operator_id = op.id
-            WHERE EXISTS (SELECT 1 FROM messages m WHERE m.chat_id = c.id)
-            ORDER BY c.last_message_at DESC
-        `;
-        const result = await db.query(query);
+        // 3. Operator Stats table creation
+        await runMigration(`
+            CREATE TABLE IF NOT EXISTS operator_stats (
+                id SERIAL PRIMARY KEY,
+                operator_id UUID REFERENCES users(id),
+                date DATE DEFAULT CURRENT_DATE,
+                messages_sent INTEGER DEFAULT 0,
+                coins_earned INTEGER DEFAULT 0,
+                UNIQUE(operator_id, date)
+            )
+        `);
+        
+        console.log("[DEBUG] All migration steps executed.");
+
+        // Test Chat Query
+        const chatResult = await db.query(`
+            SELECT c.id FROM chats c 
+            WHERE EXISTS (SELECT 1 FROM messages m WHERE m.chat_id = c.id) 
+            LIMIT 1
+        `);
+
+        // Test Personnel Query
+        const personnelResult = await db.query(`
+            SELECT u.id FROM users u
+            LEFT JOIN operators o ON u.id = o.user_id
+            WHERE u.role IN ('operator', 'moderator', 'admin', 'super_admin') 
+            AND u.account_status = 'active'
+            LIMIT 1
+        `);
+
         res.json({ 
             success: true, 
-            message: "KOLONLAR KONTROL EDİLDİ VE EKSİKLER EKLENDİ!", 
-            count: result.rows.length, 
-            rows: result.rows.slice(0, 5) 
+            message: "TÜM SİSTEM KONTROL EDİLDİ VE EKSİKLER EKLENDİ!", 
+            chat_count: chatResult.rows.length,
+            personnel_found: personnelResult.rows.length > 0 ? "YES" : "NO"
         });
     } catch (err) {
-        console.error("[DEBUG] Error:", err.message);
+        console.error("[DEBUG] Global Error:", err.message);
         res.status(500).json({ success: false, error: err.message, stack: err.stack });
     }
 });

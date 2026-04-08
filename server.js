@@ -2451,6 +2451,18 @@ app.get('/api/chats/admin', authenticateToken, authorizeRole('admin', 'super_adm
 
 app.get('/api/debug/admin-chats', async (req, res) => {
     try {
+        console.log("[DEBUG] Force migration starting...");
+        // 1. Force add the columns
+        await db.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS managed_by UUID REFERENCES users(id) ON DELETE SET NULL');
+        await db.query('ALTER TABLE chats ADD COLUMN IF NOT EXISTS last_message TEXT');
+        await db.query('ALTER TABLE chats ADD COLUMN IF NOT EXISTS unread_count INT DEFAULT 0');
+        await db.query('ALTER TABLE operators ADD COLUMN IF NOT EXISTS last_active_at TIMESTAMP');
+        await db.query('ALTER TABLE operators ADD COLUMN IF NOT EXISTS pending_balance INT DEFAULT 0');
+        await db.query('ALTER TABLE operators ADD COLUMN IF NOT EXISTS lifetime_earnings INT DEFAULT 0');
+        await db.query('ALTER TABLE operators ADD COLUMN IF NOT EXISTS last_payout_at TIMESTAMP');
+        
+        console.log("[DEBUG] Migration columns added (if missing).");
+
         let query = `
             SELECT 
                 c.*, 
@@ -2468,8 +2480,14 @@ app.get('/api/debug/admin-chats', async (req, res) => {
             ORDER BY c.last_message_at DESC
         `;
         const result = await db.query(query);
-        res.json({ success: true, count: result.rows.length, rows: result.rows.slice(0, 5) });
+        res.json({ 
+            success: true, 
+            message: "KOLONLAR KONTROL EDİLDİ VE EKSİKLER EKLENDİ!", 
+            count: result.rows.length, 
+            rows: result.rows.slice(0, 5) 
+        });
     } catch (err) {
+        console.error("[DEBUG] Error:", err.message);
         res.status(500).json({ success: false, error: err.message, stack: err.stack });
     }
 });

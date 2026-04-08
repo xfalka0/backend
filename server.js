@@ -272,13 +272,18 @@ const initializeDatabase = async () => {
         // --- RECOVERY FIX: Ensure all matching operator entries exist and are active ---
         console.log('[RECOVERY] Checking for missing operator profiles...');
 
-        // 1. Force all users with role 'operator' to be active (to recover accidental soft-deletes/NULLs)
-        await db.query("UPDATE users SET account_status = 'active' WHERE role = 'operator' AND (account_status IS NULL OR account_status = 'deleted' OR account_status = 'under_review')");
+        // 1. Force all staff roles to be active (to recover accidental soft-deletes/NULLs)
+        await db.query(`
+            UPDATE users 
+            SET account_status = 'active' 
+            WHERE role IN ('operator', 'moderator', 'admin', 'super_admin') 
+            AND (account_status IS NULL OR account_status = 'deleted' OR account_status = 'under_review')
+        `);
 
         // 2. Fix missing operators table entries
         const missingOps = await db.query(`
             SELECT id FROM users 
-            WHERE role = 'operator' 
+            WHERE role IN ('operator', 'moderator', 'admin', 'super_admin')
             AND id NOT IN (SELECT user_id FROM operators)
         `);
 
@@ -370,11 +375,17 @@ const initializeDatabase = async () => {
         // Messages table enhancements
         await db.query('ALTER TABLE messages ADD COLUMN IF NOT EXISTS gift_id INT');
 
-        // Users table enhancements
+        // Users & Chats table enhancements
         await db.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS device_id VARCHAR(255)');
         await db.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS managed_by UUID REFERENCES users(id) ON DELETE SET NULL');
         await db.query('ALTER TABLE chats ADD COLUMN IF NOT EXISTS last_message TEXT');
         await db.query('ALTER TABLE payments ADD COLUMN IF NOT EXISTS coin_amount INTEGER');
+
+        // Operators table enhancements
+        await db.query('ALTER TABLE operators ADD COLUMN IF NOT EXISTS last_active_at TIMESTAMP');
+        await db.query('ALTER TABLE operators ADD COLUMN IF NOT EXISTS pending_balance INT DEFAULT 0');
+        await db.query('ALTER TABLE operators ADD COLUMN IF NOT EXISTS lifetime_earnings INT DEFAULT 0');
+        await db.query('ALTER TABLE operators ADD COLUMN IF NOT EXISTS last_payout_at TIMESTAMP');
 
         // Create tables one by one to avoid one failure blocking all migrations
         const runMigration = async (name, sql) => {

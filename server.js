@@ -2449,6 +2449,31 @@ app.get('/api/chats/admin', authenticateToken, authorizeRole('admin', 'super_adm
     }
 });
 
+app.get('/api/debug/admin-chats', async (req, res) => {
+    try {
+        let query = `
+            SELECT 
+                c.*, 
+                u.username as user_name,
+                u.avatar_url as user_avatar,
+                op.username as operator_name,
+                op.avatar_url as operator_avatar,
+                op.managed_by as managed_by_id,
+                (SELECT content FROM messages WHERE chat_id = c.id ORDER BY created_at DESC LIMIT 1) as last_message,
+                (SELECT COUNT(*)::int FROM messages WHERE chat_id = c.id AND sender_id = c.user_id AND is_read = false) as unread_count
+            FROM chats c
+            LEFT JOIN users u ON c.user_id = u.id
+            LEFT JOIN users op ON c.operator_id = op.id
+            WHERE EXISTS (SELECT 1 FROM messages m WHERE m.chat_id = c.id)
+            ORDER BY c.last_message_at DESC
+        `;
+        const result = await db.query(query);
+        res.json({ success: true, count: result.rows.length, rows: result.rows.slice(0, 5) });
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message, stack: err.stack });
+    }
+});
+
 // GET PUBLIC COIN PACKAGES
 app.get('/api/public/packages', async (req, res) => {
     try {

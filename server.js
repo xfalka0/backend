@@ -3806,6 +3806,31 @@ app.get('/api/offerings', async (req, res) => {
     }
 });
 
+// --- REPORTING SYSTEM (Required for Google Play Compliance) ---
+app.post('/api/reports', authenticateToken, async (req, res) => {
+    const { reportedUserId, reason, details } = req.body;
+    const reporterId = req.user.id;
+
+    if (!reportedUserId || !reason) {
+        return res.status(400).json({ error: 'Eksik bilgi (reportedUserId veya reason).' });
+    }
+
+    try {
+        await db.query(
+            'INSERT INTO reports (reporter_id, reported_id, reason, status) VALUES ($1, $2, $3, $4)',
+            [reporterId, reportedUserId, `${reason}: ${details || ''}`, 'pending']
+        );
+        
+        // Log activity
+        await logActivity(app.get('io'), reporterId, 'report', `User reported ${reportedUserId} for ${reason}`);
+        
+        res.json({ success: true, message: 'Şikayetiniz alındı ve moderasyon ekibine iletildi.' });
+    } catch (err) {
+        console.error('Report Error:', err);
+        res.status(500).json({ error: 'Şikayet iletilirken bir hata oluştu.' });
+    }
+});
+
 // --- END MISSING ROUTES ---
 
 

@@ -28,15 +28,15 @@ export default function LegalScreen({ route, navigation }) {
         },
         {
             id: 3,
-            title: 'Kullanıcı Hakları',
-            icon: 'shield-checkmark-outline',
-            content: 'İstediğiniz zaman verilerinizin silinmesini talep edebilir veya hesabınızı kapatabilirsiniz.'
+            title: 'Çocuk Güvenliği (CSAE)',
+            icon: 'heart-outline',
+            content: 'FalkaSoft, çocukların cinsel istismarına (CSAE) karşı sıfır tolerans politikası izler. Uygulama içindeki şikayet butonlarını kullanarak ihlalleri 7/24 bildirebilirsiniz.'
         },
         {
             id: 4,
-            title: 'Çerez Kullanımı',
-            icon: 'settings-outline',
-            content: 'Uygulama performansını artırmak ve oturumunuzu açık tutmak için teknik çerezler kullanıyoruz.'
+            title: 'Kullanıcı Hakları',
+            icon: 'shield-checkmark-outline',
+            content: 'İstediğiniz zaman verilerinizin silinmesini talep edebilir veya hesabınızı kapatabilirsiniz.'
         }
     ] : [
         {
@@ -47,21 +47,21 @@ export default function LegalScreen({ route, navigation }) {
         },
         {
             id: 2,
+            title: 'Çocuk Güvenliği (CSAE)',
+            icon: 'alert-circle-outline',
+            content: 'Çocukların istismarını içeren her türlü içerik ve davranış yasaktır. FalkaSoft bu tür ihlalleri kolluk kuvvetlerine ve NCMEC’e rapor eder.'
+        },
+        {
+            id: 3,
             title: 'Hesap Güvenliği',
             icon: 'lock-closed-outline',
             content: 'Hesap bilgilerinizin güvenliğinden siz sorumlusunuz. Şüpheli bir durum fark ederseniz lütfen bize bildirin.'
         },
         {
-            id: 3,
+            id: 4,
             title: 'Telif Hakları',
             icon: 'copy-outline',
             content: 'Uygulama içerisindeki tasarımlar ve içerikler Fiva ekibine aittir, izinsiz kopyalanamaz.'
-        },
-        {
-            id: 4,
-            title: 'İptal ve İade',
-            icon: 'card-outline',
-            content: 'Dijital aboneliklerle ilgili iptal ve iade süreçleri uygulama mağazası (Google Play) politikalarına göredir.'
         }
     ];
 

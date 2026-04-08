@@ -7,8 +7,9 @@ import axios from 'axios';
 import { API_URL } from '../config';
 
 const REASONS = [
-    { id: 'inappropriate', label: 'Uygunsuz görsel' },
-    { id: 'harassment', label: 'Taciz / Zorbalık' },
+    { id: 'csae', label: 'Çocuk Güvenliği İhlali (CSAE)' },
+    { id: 'inappropriate', label: 'Uygunsuz görsel / Müstehcenlik' },
+    { id: 'harassment', label: 'Taciz / Zorbalık / Hakaret' },
     { id: 'spam', label: 'Spam / Dolandırıcılık' },
     { id: 'other', label: 'Diğer' },
 ];
@@ -27,9 +28,8 @@ export default function ReportModal({ visible, onClose, reporterId, reportedId, 
 
         setLoading(true);
         try {
-            await axios.post(`${API_URL}/report`, {
-                reporterId,
-                reportedId,
+            await axios.post(`${API_URL}/reports`, {
+                reportedUserId: reportedId,
                 reason: selectedReason,
                 details
             });

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, Image, StyleSheet, TouchableOpacity, Dimensions, Pressable, Platform, InteractionManager } from 'react-native';
+import { View, Text, Image, StyleSheet, TouchableOpacity, Dimensions, Pressable, Platform, InteractionManager, Alert } from 'react-native';
 import axios from 'axios';
 import { API_URL } from '../config';
 import * as Haptics from 'expo-haptics';
@@ -32,6 +32,21 @@ export default function OperatorProfileScreen({ route, navigation }) {
     const [isFavorited, setIsFavorited] = useState(false);
     const [isImageViewerVisible, setIsImageViewerVisible] = useState(false);
     const [currentImageIndex, setCurrentImageIndex] = useState(0);
+
+    const submitReport = async (reason) => {
+        try {
+            const targetId = operator.id || operator.user_id;
+            await axios.post(`${API_URL}/reports`, {
+                reportedUserId: targetId,
+                reason: reason,
+                details: `Reported via OperatorProfileScreen header.`
+            });
+            Alert.alert('Teşekkürler', 'Şikayetiniz incelenmek üzere moderasyon ekibine iletildi. Güvenli bir topluluk oluşturmamıza yardım ettiğiniz için teşekkür ederiz.');
+        } catch (e) {
+            console.error('Report submit err', e);
+            Alert.alert('Hata', 'Şikayet iletilemedi. Lütfen daha sonra tekrar deneyin.');
+        }
+    };
 
     useEffect(() => {
         // Track Profile View
@@ -161,18 +176,42 @@ export default function OperatorProfileScreen({ route, navigation }) {
                     </View>
                 </TouchableOpacity>
 
-                <TouchableOpacity
-                    onPress={handleFavorite}
-                    style={styles.headerIconButton}
-                >
-                    <View style={[styles.iconBlur, { backgroundColor: 'rgba(0,0,0,0.5)' }]}>
-                        <Ionicons
-                            name={isFavorited ? "heart" : "heart-outline"}
-                            size={24}
-                            color={isFavorited ? "#ef4444" : "white"}
-                        />
-                    </View>
-                </TouchableOpacity>
+                <View style={{ flexDirection: 'row', gap: 10 }}>
+                    <TouchableOpacity
+                        onPress={() => {
+                            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+                            Alert.alert(
+                                'Kullanıcıyı Bildir',
+                                'Bu kullanıcıyı hangi nedenle şikayet etmek istiyorsunuz?',
+                                [
+                                    { text: 'Taciz / Rahatsız Edici Davranış', onPress: () => submitReport('Harassment') },
+                                    { text: 'Uygunsuz İçerik / Müstehcenlik', onPress: () => submitReport('Inappropriate Content') },
+                                    { text: 'Çocuk Güvenliği İhlali (CSAE)', onPress: () => submitReport('CSAE') },
+                                    { text: 'Sahte Profil / Dolandırıcılık', onPress: () => submitReport('Scam') },
+                                    { text: 'Vazgeç', style: 'cancel' }
+                                ]
+                            );
+                        }}
+                        style={styles.headerIconButton}
+                    >
+                        <View style={[styles.iconBlur, { backgroundColor: 'rgba(0,0,0,0.5)' }]}>
+                            <Ionicons name="flag-outline" size={20} color="white" />
+                        </View>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                        onPress={handleFavorite}
+                        style={styles.headerIconButton}
+                    >
+                        <View style={[styles.iconBlur, { backgroundColor: 'rgba(0,0,0,0.5)' }]}>
+                            <Ionicons
+                                name={isFavorited ? "heart" : "heart-outline"}
+                                size={24}
+                                color={isFavorited ? "#ef4444" : "white"}
+                            />
+                        </View>
+                    </TouchableOpacity>
+                </View>
             </View>
 
             <Animated.ScrollView

@@ -104,7 +104,7 @@ const AgencyPayouts = () => {
                         <span className="text-[10px] font-black uppercase tracking-[0.2em]">Finansal Yönetim</span>
                     </div>
                     <h1 className="text-4xl font-black text-white tracking-tighter">
-                        Ajans & <span className="text-blue-500">Hakediş</span>
+                        Personel <span className="text-blue-500">Yönetimi</span>
                     </h1>
                     <p className="text-slate-500 text-sm font-medium mt-1">Personel performansını ve ödeme dengesini yönetin.</p>
                 </div>

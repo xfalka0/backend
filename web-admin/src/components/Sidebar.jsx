@@ -45,7 +45,7 @@ export default function Sidebar() {
             { path: '/operators', icon: <Shield size={20} />, label: 'Yetkililer', roles: ['admin', 'super_admin'] },
             { path: '/chats', icon: <MessageSquare size={20} />, label: 'Sohbetler', roles: ['admin', 'super_admin', 'moderator'] },
             { path: '/payments', icon: <CreditCard size={20} />, label: 'Ödemeler', roles: ['admin', 'super_admin'] },
-            { path: '/agency-payouts', icon: <Wallet size={20} />, label: 'Ajans / Hakediş', roles: ['admin', 'super_admin'] },
+            { path: '/agency-payouts', icon: <Wallet size={20} />, label: 'Personel Yönetimi', roles: ['admin', 'super_admin'] },
             { path: '/gifts', icon: <Gift size={20} />, label: 'Hediyeler', roles: ['admin', 'super_admin'] },
             { path: '/vip', icon: <Crown size={20} />, label: 'Coin Fiyatları', roles: ['admin', 'super_admin'] },
             { path: '/reports', icon: <ShieldCheck size={20} />, label: 'Destek / Raporlar', roles: ['admin', 'super_admin', 'moderator'] },

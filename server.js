@@ -2451,19 +2451,48 @@ app.get('/api/chats/admin', authenticateToken, authorizeRole('admin', 'super_adm
 
 app.get('/api/debug/admin-chats', async (req, res) => {
     try {
-        console.log("[DEBUG] Personnel query test starting...");
+        console.log("[DEBUG] Force table creation starting...");
         
         const runMigration = async (sql) => {
             try { await db.query(sql); } catch (e) { console.warn(`[DEBUG] Migration partial fail: ${e.message}`); }
         };
 
-        // 1. Ensure columns exist (Relaxed)
+        // 1. Detect ID Type
+        const idTypeResult = await db.query("SELECT data_type FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'id' LIMIT 1");
+        const idType = idTypeResult.rows[0]?.data_type === 'uuid' ? 'UUID' : 'TEXT';
+        console.log(`[DEBUG] Detected ID Type: ${idType}`);
+
+        // 2. Force Create Tables
+        await runMigration(`
+            CREATE TABLE IF NOT EXISTS operators (
+                id SERIAL PRIMARY KEY,
+                user_id ${idType} UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+                commission_rate DECIMAL(5,2) DEFAULT 0.25,
+                pending_balance INTEGER DEFAULT 0,
+                lifetime_earnings INTEGER DEFAULT 0,
+                last_active_at TIMESTAMP,
+                last_payout_at TIMESTAMP,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        `);
+
+        await runMigration(`
+            CREATE TABLE IF NOT EXISTS operator_stats (
+                id SERIAL PRIMARY KEY,
+                operator_id ${idType} REFERENCES users(id) ON DELETE CASCADE,
+                date DATE DEFAULT CURRENT_DATE,
+                messages_sent INTEGER DEFAULT 0,
+                coins_earned INTEGER DEFAULT 0,
+                UNIQUE(operator_id, date)
+            )
+        `);
+
+        // 3. Columns
         await runMigration('ALTER TABLE users ADD COLUMN IF NOT EXISTS managed_by TEXT'); 
-        await runMigration('ALTER TABLE operators ADD COLUMN IF NOT EXISTS last_active_at TIMESTAMP');
-        await runMigration('ALTER TABLE operators ADD COLUMN IF NOT EXISTS pending_balance INT DEFAULT 0');
-        await runMigration('ALTER TABLE operators ADD COLUMN IF NOT EXISTS lifetime_earnings INT DEFAULT 0');
-        await runMigration('ALTER TABLE operators ADD COLUMN IF NOT EXISTS last_payout_at TIMESTAMP');
-        await runMigration('ALTER TABLE operators ADD COLUMN IF NOT EXISTS commission_rate DECIMAL(5,2) DEFAULT 0.25');
+        await runMigration('ALTER TABLE chats ADD COLUMN IF NOT EXISTS last_message TEXT');
+        await runMigration('ALTER TABLE chats ADD COLUMN IF NOT EXISTS unread_count INT DEFAULT 0');
+
+        console.log("[DEBUG] Tables created.");
 
         // 2. Test the EXACT query that fails in Admin
         const personnelQuery = `

@@ -372,6 +372,8 @@ const initializeDatabase = async () => {
 
         // Users table enhancements
         await db.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS device_id VARCHAR(255)');
+        await db.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS managed_by UUID REFERENCES users(id) ON DELETE SET NULL');
+        await db.query('ALTER TABLE chats ADD COLUMN IF NOT EXISTS last_message TEXT');
         await db.query('ALTER TABLE payments ADD COLUMN IF NOT EXISTS coin_amount INTEGER');
 
         // Create tables one by one to avoid one failure blocking all migrations

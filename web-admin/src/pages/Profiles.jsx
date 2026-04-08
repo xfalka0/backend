@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
-import { Plus, Search, Filter, Camera, Trash2, Edit3, CheckCircle, XCircle, Briefcase, GraduationCap, Heart, Hash, Loader2, Crown, Users2, UserPlus } from 'lucide-react';
+import { Plus, Search, Filter, Camera, Trash2, Edit3, CheckCircle, XCircle, Briefcase, GraduationCap, Heart, Hash, Loader2, Crown, Users2, UserPlus, ArrowUpRight } from 'lucide-react';
 
 const API_URL = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
     ? ''

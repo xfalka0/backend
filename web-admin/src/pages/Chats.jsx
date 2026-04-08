@@ -171,7 +171,9 @@ const Chats = () => {
 
     const fetchChats = async () => {
         try {
-            const res = await axios.get(`${API_URL}/api/chats/admin`);
+            const res = await axios.get(`${API_URL}/api/chats/admin`, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
             setChats(res.data);
         } catch (err) {
             console.error('Error fetching chats:', err);
@@ -195,7 +197,9 @@ const Chats = () => {
             const limit = 50;
             const offset = isLoadMore ? messages.length : 0;
 
-            const res = await axios.get(`${API_URL}/api/messages/${chat.id}?limit=${limit}&offset=${offset}`);
+            const res = await axios.get(`${API_URL}/api/messages/${chat.id}?limit=${limit}&offset=${offset}`, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
 
             if (isLoadMore) {
                 setMessages(prev => [...res.data, ...prev]);
@@ -203,6 +207,8 @@ const Chats = () => {
                 setMessages(res.data);
                 await axios.put(`${API_URL}/api/chats/${chat.id}/read`, {
                     userId: chat.operator_id
+                }, {
+                    headers: { Authorization: `Bearer ${token}` }
                 });
                 setChats(prev => prev.map(c => c.id === chat.id ? { ...c, unread_count: 0 } : c));
             }
@@ -261,7 +267,10 @@ const Chats = () => {
 
         try {
             const res = await axios.post(`${API_URL}/api/upload`, formData, {
-                headers: { 'Content-Type': 'multipart/form-data' }
+                headers: { 
+                    'Content-Type': 'multipart/form-data',
+                    Authorization: `Bearer ${token}`
+                }
             });
 
             const imageUrl = res.data.url;

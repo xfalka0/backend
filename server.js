@@ -1278,7 +1278,16 @@ app.get('/api/debug/users-list', async (req, res) => {
 const helmet = require('helmet');
 
 // Security Middleware
-app.use(helmet());
+app.use(helmet({
+    contentSecurityPolicy: {
+        directives: {
+            ...helmet.contentSecurityPolicy.getDefaultDirectives(),
+            "img-src": ["'self'", "data:", "https://via.placeholder.com", "https://res.cloudinary.com", "https://images.unsplash.com", "https://*.unsplash.com"],
+            "connect-src": ["'self'", "https://admin.falkasoft.com", "wss://admin.falkasoft.com", "http://localhost:5000", "ws://localhost:5000", "http://127.0.0.1:5000", "ws://127.0.0.1:5000"],
+            "script-src": ["'self'", "'unsafe-inline'", "'unsafe-eval'"], // Vite and some inline scripts need this in dev/some setups
+        },
+    },
+}));
 
 // ... (existing middleware)
 

@@ -1709,8 +1709,8 @@ app.delete('/api/admin/staff/:id', authenticateToken, authorizeRole('admin', 'su
     if (req.user.id === parseInt(id)) return res.status(400).json({ error: 'Kendinizi silemezsiniz.' });
 
     try {
-        await db.query("UPDATE users SET account_status = 'deleted', email = email || '_deleted_' || id, username = username || '_deleted_' || id WHERE id = $1", [id]);
-        res.json({ success: true, message: 'Personel silindi (Soft Delete).' });
+        await db.query("DELETE FROM users WHERE id = $1", [id]);
+        res.json({ success: true, message: 'Personel tamamen silindi.' });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
@@ -1820,7 +1820,40 @@ app.get('/api/admin/activities', authenticateToken, authorizeRole('admin', 'supe
     }
 });
 
-// CREATE NEW ADMIN/MODERATOR (Manager/Admin Only)
+// GET PERSONAL STATS (For Operators)
+app.get('/api/admin/my-stats', authenticateToken, async (req, res) => {
+    try {
+        const userId = req.user.id;
+        
+        // 1. Get today's stats from operator_stats
+        const todayStats = await db.query(
+            "SELECT COALESCE(SUM(messages_sent), 0) as messages, COALESCE(SUM(coins_earned), 0) as coins FROM operator_stats WHERE operator_id::text = $1 AND date = CURRENT_DATE",
+            [userId.toString()]
+        );
+
+        // 2. Get overall balance and lifetime from operators table
+        const operatorInfo = await db.query(
+            "SELECT pending_balance, lifetime_earnings FROM operators WHERE user_id::text = $1",
+            [userId.toString()]
+        );
+
+        // 3. Get monthly summary (Last 7 days for chart)
+        const weeklyStats = await db.query(`
+            SELECT date as label, messages_sent as value 
+            FROM operator_stats 
+            WHERE operator_id::text = $1 
+            ORDER BY date DESC LIMIT 7
+        `, [userId.toString()]);
+
+        res.json({
+            today: todayStats.rows[0],
+            info: operatorInfo.rows[0] || { pending_balance: 0, lifetime_earnings: 0 },
+            chart: weeklyStats.rows.reverse()
+        });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
 app.post('/api/admin/users', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
     const { username, email, password, role } = req.body;
 
@@ -1988,13 +2021,9 @@ app.put('/api/operators/:id', authenticateToken, authorizeRole('admin', 'super_a
 app.delete('/api/operators/:id', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
     const { id } = req.params; // Use user_id
     try {
-        console.log(`[ADMIN] Deleting operator profile for ${id}`);
-        // Synchronize with existing soft delete logic (using uuid-friendly concatenation if needed, but existing code uses ||)
-        await db.query(
-            "UPDATE users SET account_status = 'deleted', email = email || '_deleted_op_' || id, username = username || '_deleted_op_' || id WHERE id = $1",
-            [id]
-        );
-        res.json({ success: true, message: 'Operatör silindi.' });
+        console.log(`[ADMIN] Hard deleting operator profile for ${id}`);
+        await db.query("DELETE FROM users WHERE id = $1", [id]);
+        res.json({ success: true, message: 'Operatör tamamen silindi.' });
     } catch (err) {
         console.error('[ADMIN] Delete Operator Error:', err.message);
         res.status(500).json({ error: 'Silme işlemi başarısız.', details: err.message });
@@ -2036,9 +2065,10 @@ app.delete('/api/users/:id', authenticateToken, async (req, res) => {
 
         console.log(`[SOFT_DELETE] Marking user ${id} as deleted`);
 
-        // Instead of deleting, we set account_status to 'deleted'
+        console.log(`[HARD_DELETE] Removing user ${id} from database`);
+
         const result = await db.query(
-            "UPDATE users SET account_status = 'deleted', email = email || '_deleted_' || id, username = username || '_deleted_' || id WHERE id = $1 RETURNING id",
+            "DELETE FROM users WHERE id = $1 RETURNING id",
             [id]
         );
 
@@ -2111,8 +2141,8 @@ app.delete('/api/admin/users/:id', authenticateToken, authorizeRole('admin', 'su
     }
 
     try {
-        await db.query("UPDATE users SET account_status = 'deleted', email = email || '_deleted_' || id, username = username || '_deleted_' || id WHERE id = $1", [id]);
-        res.json({ success: true, message: 'Kullanıcı silindi (Soft Delete).' });
+        await db.query("DELETE FROM users WHERE id = $1", [id]);
+        res.json({ success: true, message: 'Kullanıcı tamamen silindi.' });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }

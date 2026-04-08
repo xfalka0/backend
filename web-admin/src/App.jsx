@@ -111,7 +111,7 @@ function App() {
                             </Route>
 
                             {/* Moderator & Admin Routes */}
-                            <Route element={<ProtectedRoute allowedRoles={['admin', 'super_admin', 'moderator']} />}>
+                            <Route element={<ProtectedRoute allowedRoles={['admin', 'super_admin', 'moderator', 'operator']} />}>
                                 <Route path="/formatted-chats" element={<ChatsPage />} />
                                 <Route path="/chats" element={<ChatsPage />} />
                                 <Route path="/reports" element={<ReportsPage />} />

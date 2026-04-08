@@ -26,8 +26,8 @@ export default function AdminManagement() {
             });
             const data = await res.json();
             if (Array.isArray(data)) {
-                // Show ONLY Admins and Moderators (Hide Operators)
-                setUsers(data.filter(u => u.role !== 'operator'));
+                // Show Admins, Moderators, and Operators
+                setUsers(data.filter(u => ['admin', 'moderator', 'operator'].includes(u.role)));
             }
         } catch (err) {
             console.error("Fetch admins error:", err);
@@ -112,9 +112,10 @@ export default function AdminManagement() {
                                 <td className="p-4">
                                     <span className={`px-2 py-1 rounded text-xs font-bold uppercase ${user.role === 'admin' ? 'bg-purple-500/20 text-purple-400' :
                                         user.role === 'moderator' ? 'bg-blue-500/20 text-blue-400' :
-                                            'bg-gray-500/20 text-gray-400'
+                                            user.role === 'operator' ? 'bg-orange-500/20 text-orange-400' :
+                                                'bg-gray-500/20 text-gray-400'
                                         }`}>
-                                        {user.role}
+                                        {user.role === 'operator' ? 'Personel' : user.role}
                                     </span>
                                 </td>
                                 <td className="p-4 text-right">
@@ -182,6 +183,7 @@ export default function AdminManagement() {
                                     value={newData.role}
                                     onChange={e => setNewData({ ...newData, role: e.target.value })}
                                 >
+                                    <option value="operator">Personel (Operatör)</option>
                                     <option value="moderator">Moderatör</option>
                                     <option value="admin">Yönetici</option>
                                 </select>

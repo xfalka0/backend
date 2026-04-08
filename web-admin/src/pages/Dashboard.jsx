@@ -1,15 +1,19 @@
 import React, { useState, useEffect } from 'react';
-import { DollarSign, Users, MessageCircle, Heart, Loader2, Activity, UserPlus, LogIn, ShoppingCart, TrendingUp, ShieldCheck, Mail } from 'lucide-react';
+import { DollarSign, Users, MessageCircle, Heart, Loader2, Activity, UserPlus, LogIn, ShoppingCart, TrendingUp, ShieldCheck, Mail, Target, Award } from 'lucide-react';
 import { LineChart, Line, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
 import axios from 'axios';
 import io from 'socket.io-client';
+import { useAuth } from '../context/AuthContext';
 
-const API_URL = '';
+const API_URL = import.meta.env.VITE_API_URL || '';
 const SOCKET_URL = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
     ? 'http://localhost:5000'
     : window.location.origin;
 
 export default function Dashboard() {
+    const { user } = useAuth();
+    const isOperator = user?.role === 'operator';
+
     const [stats, setStats] = useState({
         revenue: 0,
         activeUsers: 0,
@@ -20,6 +24,14 @@ export default function Dashboard() {
             registrations: []
         }
     });
+    
+    // Personnel specific stats
+    const [personalStats, setPersonalStats] = useState({
+        today: { messages: 0, coins: 0 },
+        info: { pending_balance: 0, lifetime_earnings: 0 },
+        chart: []
+    });
+
     const [activities, setActivities] = useState([]);
     const [loading, setLoading] = useState(true);
 
@@ -29,13 +41,21 @@ export default function Dashboard() {
                 const token = localStorage.getItem('token');
                 const headers = { Authorization: `Bearer ${token}` };
 
-                const [statsRes, actsRes] = await Promise.all([
-                    axios.get(`${API_URL}/api/admin/stats`, { headers }),
-                    axios.get(`${API_URL}/api/admin/activities`, { headers })
-                ]);
-
-                setStats(statsRes.data);
-                setActivities(actsRes.data);
+                if (isOperator) {
+                    const [statsRes, actsRes] = await Promise.all([
+                        axios.get(`${API_URL}/api/admin/my-stats`, { headers }),
+                        axios.get(`${API_URL}/api/admin/activities`, { headers })
+                    ]);
+                    setPersonalStats(statsRes.data);
+                    setActivities(actsRes.data);
+                } else {
+                    const [statsRes, actsRes] = await Promise.all([
+                        axios.get(`${API_URL}/api/admin/stats`, { headers }),
+                        axios.get(`${API_URL}/api/admin/activities`, { headers })
+                    ]);
+                    setStats(statsRes.data);
+                    setActivities(actsRes.data);
+                }
             } catch (err) {
                 console.error("Dashboard Data Error:", err);
             } finally {
@@ -54,14 +74,23 @@ export default function Dashboard() {
         });
 
         return () => socket.disconnect();
-    }, []);
+    }, [isOperator]);
 
-    const statItems = [
+    const adminStatItems = [
         { title: 'Toplam Gelir', value: `₺${stats?.revenue || 0}`, icon: <DollarSign />, color: 'text-emerald-400', bg: 'bg-emerald-500/10' },
         { title: 'Kullanıcı Sayısı', value: stats?.activeUsers || 0, icon: <Users />, color: 'text-blue-400', bg: 'bg-blue-500/10' },
         { title: 'Mesaj Trafiği', value: stats?.messages || 0, icon: <MessageCircle />, color: 'text-purple-400', bg: 'bg-purple-500/10' },
         { title: 'Online Operatör', value: stats?.onlineOperators || 0, icon: <Heart />, color: 'text-rose-400', bg: 'bg-rose-500/10' },
     ];
+
+    const operatorStatItems = [
+        { title: 'Bugünkü Mesajlarım', value: personalStats.today.messages || 0, icon: <MessageCircle />, color: 'text-blue-400', bg: 'bg-blue-500/10' },
+        { title: 'Bugünkü Kazancım', value: `${personalStats.today.coins || 0} Coin`, icon: <Award />, color: 'text-emerald-400', bg: 'bg-emerald-500/10' },
+        { title: 'Genel Bakiyem', value: `${personalStats.info.pending_balance || 0} Coin`, icon: <DollarSign />, color: 'text-orange-400', bg: 'bg-orange-500/10' },
+        { title: 'Toplam Kazanç', value: `${personalStats.info.lifetime_earnings || 0} Coin`, icon: <Target />, color: 'text-purple-400', bg: 'bg-purple-500/10' },
+    ];
+
+    const displayStats = isOperator ? operatorStatItems : adminStatItems;
 
     if (loading) return <div className="p-20 flex justify-center"><Loader2 className="animate-spin text-purple-500" size={40} /></div>;
 
@@ -69,8 +98,10 @@ export default function Dashboard() {
         <div className="p-10 space-y-10 animate-fade-up">
             <div className="flex justify-between items-end">
                 <div className="space-y-1">
-                    <h2 className="text-4xl font-black text-white tracking-tight">Genel Bakış</h2>
-                    <p className="text-slate-500 font-bold text-sm tracking-wide">Platform performansını ve büyüme verilerini izleyin.</p>
+                    <h2 className="text-4xl font-black text-white tracking-tight">{isOperator ? 'Hoş Geldin, Personel' : 'Genel Bakış'}</h2>
+                    <p className="text-slate-500 font-bold text-sm tracking-wide">
+                        {isOperator ? 'Bugünkü performansını ve kazançlarını buradan takip edebilirsin.' : 'Platform performansını ve büyüme verilerini izleyin.'}
+                    </p>
                 </div>
                 <div className="px-5 py-2.5 bg-blue-500/5 rounded-2xl border border-blue-500/10 flex items-center gap-2.5 shadow-lg shadow-blue-500/5">
                     <div className="w-2.5 h-2.5 rounded-full bg-blue-500 animate-pulse shadow-[0_0_8px_rgba(59,130,246,0.8)]" />
@@ -80,7 +111,7 @@ export default function Dashboard() {
 
             {/* Stats Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
-                {statItems.map((stat, i) => (
+                {displayStats.map((stat, i) => (
                     <div key={i} className="premium-card group">
                         <div className={`absolute -top-10 -right-10 w-32 h-32 blur-[100px] opacity-0 group-hover:opacity-20 transition-opacity duration-1000 ${stat.bg}`} />
                         <div className="flex items-center gap-5 relative z-10">
@@ -101,12 +132,12 @@ export default function Dashboard() {
                 <div className="premium-card p-8">
                     <div className="flex items-center justify-between mb-10">
                         <h3 className="text-xl font-black text-white uppercase tracking-tighter italic flex items-center gap-3">
-                            <TrendingUp className="text-blue-500" size={24} /> Gelir Grafiği (7 Gün)
+                            <TrendingUp className="text-blue-500" size={24} /> {isOperator ? 'Haftalık Performans (Mesajlar)' : 'Gelir Grafiği (7 Gün)'}
                         </h3>
                     </div>
                     <div className="h-[280px] w-full">
                         <ResponsiveContainer width="100%" height="100%">
-                            <AreaChart data={stats?.charts?.revenue || []}>
+                            <AreaChart data={isOperator ? personalStats.chart : (stats?.charts?.revenue || [])}>
                                 <defs>
                                     <linearGradient id="colorRev" x1="0" y1="0" x2="0" y2="1">
                                         <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.4} />
@@ -126,27 +157,29 @@ export default function Dashboard() {
                     </div>
                 </div>
 
-                <div className="premium-card p-8">
-                    <div className="flex items-center justify-between mb-10">
-                        <h3 className="text-xl font-black text-white uppercase tracking-tighter italic flex items-center gap-3">
-                            <UserPlus className="text-indigo-500" size={24} /> Kayıt Grafiği (7 Gün)
-                        </h3>
+                {!isOperator && (
+                    <div className="premium-card p-8">
+                        <div className="flex items-center justify-between mb-10">
+                            <h3 className="text-xl font-black text-white uppercase tracking-tighter italic flex items-center gap-3">
+                                <UserPlus className="text-indigo-500" size={24} /> Kayıt Grafiği (7 Gün)
+                            </h3>
+                        </div>
+                        <div className="h-[280px] w-full">
+                            <ResponsiveContainer width="100%" height="100%">
+                                <BarChart data={stats?.charts?.registrations || []}>
+                                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(255,255,255,0.03)" />
+                                    <XAxis dataKey="label" stroke="#475569" fontSize={11} tickLine={false} axisLine={false} dy={10} />
+                                    <YAxis stroke="#475569" fontSize={11} tickLine={false} axisLine={false} />
+                                    <Tooltip
+                                        contentStyle={{ backgroundColor: '#020617', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '20px', padding: '15px' }}
+                                        itemStyle={{ color: '#6366f1', fontWeight: '900' }}
+                                    />
+                                    <Bar dataKey="value" fill="#6366f1" radius={[8, 8, 0, 0]} barSize={40} />
+                                </BarChart>
+                            </ResponsiveContainer>
+                        </div>
                     </div>
-                    <div className="h-[280px] w-full">
-                        <ResponsiveContainer width="100%" height="100%">
-                            <BarChart data={stats?.charts?.registrations || []}>
-                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(255,255,255,0.03)" />
-                                <XAxis dataKey="label" stroke="#475569" fontSize={11} tickLine={false} axisLine={false} dy={10} />
-                                <YAxis stroke="#475569" fontSize={11} tickLine={false} axisLine={false} />
-                                <Tooltip
-                                    contentStyle={{ backgroundColor: '#020617', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '20px', padding: '15px' }}
-                                    itemStyle={{ color: '#6366f1', fontWeight: '900' }}
-                                />
-                                <Bar dataKey="value" fill="#6366f1" radius={[8, 8, 0, 0]} barSize={40} />
-                            </BarChart>
-                        </ResponsiveContainer>
-                    </div>
-                </div>
+                )}
             </div>
 
             {/* Bottom Section */}
@@ -154,7 +187,7 @@ export default function Dashboard() {
                 {/* Activities */}
                 <div className="lg:col-span-2 premium-card">
                     <h3 className="text-xl font-black text-white mb-8 flex items-center gap-3">
-                        <Activity size={24} className="text-blue-500" /> Son Aktiviteler
+                        <Activity size={24} className="text-blue-500" /> {isOperator ? 'Son İşlemlerim' : 'Son Aktiviteler'}
                     </h3>
                     <div className="space-y-4 max-h-[450px] overflow-y-auto pr-3 custom-scrollbar">
                         {activities.map((act, idx) => (
@@ -182,17 +215,19 @@ export default function Dashboard() {
                         <button className="w-full p-5 bg-white/5 hover:bg-blue-600/10 rounded-[28px] flex items-center gap-5 transition-all group border border-white/5">
                             <div className="p-4 bg-blue-500/10 text-blue-400 group-hover:bg-blue-500 group-hover:text-white rounded-2xl transition-all shadow-lg"><Mail size={22} /></div>
                             <div className="text-left">
-                                <p className="text-[15px] font-black text-white">Toplu Bildirim</p>
-                                <p className="text-[11px] text-slate-500 font-bold">Tüm kullanıcılara push ilet</p>
+                                <p className="text-[15px] font-black text-white">{isOperator ? 'Duyurular' : 'Toplu Bildirim'}</p>
+                                <p className="text-[11px] text-slate-500 font-bold">{isOperator ? 'Yöneticiden gelen mesajlar' : 'Tüm kullanıcılara push ilet'}</p>
                             </div>
                         </button>
-                        <button className="w-full p-5 bg-white/5 hover:bg-indigo-600/10 rounded-[28px] flex items-center gap-5 transition-all group border border-white/5">
-                            <div className="p-4 bg-indigo-500/10 text-indigo-400 group-hover:bg-indigo-500 group-hover:text-white rounded-2xl transition-all shadow-lg"><ShieldCheck size={22} /></div>
-                            <div className="text-left">
-                                <p className="text-[15px] font-black text-white">Moderatör Ekle</p>
-                                <p className="text-[11px] text-slate-500 font-bold">Yeni personel yetkilendir</p>
-                            </div>
-                        </button>
+                        {!isOperator && (
+                            <button className="w-full p-5 bg-white/5 hover:bg-indigo-600/10 rounded-[28px] flex items-center gap-5 transition-all group border border-white/5">
+                                <div className="p-4 bg-indigo-500/10 text-indigo-400 group-hover:bg-indigo-500 group-hover:text-white rounded-2xl transition-all shadow-lg"><ShieldCheck size={22} /></div>
+                                <div className="text-left">
+                                    <p className="text-[15px] font-black text-white">Moderatör Ekle</p>
+                                    <p className="text-[11px] text-slate-500 font-bold">Yeni personel yetkilendir</p>
+                                </div>
+                            </button>
+                        )}
                     </div>
                     
                     <div className="pt-10 mt-6 border-t border-white/5">

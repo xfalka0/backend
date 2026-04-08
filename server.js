@@ -1703,6 +1703,27 @@ app.post('/api/admin/staff', authenticateToken, authorizeRole('admin', 'super_ad
     }
 });
 
+// CREATE STAFF MEMBER (Admin/Moderator/Staff)
+app.post('/api/admin/staff', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
+    const { username, email, password, role } = req.body;
+
+    if (!['admin', 'moderator', 'staff'].includes(role)) {
+        return res.status(400).json({ error: 'Geçersiz rol yetkisi.' });
+    }
+
+    try {
+        const hashedPassword = await bcrypt.hash(password, 10);
+        const result = await db.query(
+            "INSERT INTO users (username, email, password, password_hash, role, account_status) VALUES ($1, $2, $3, $3, $4, 'active') RETURNING id, username, email, role",
+            [username, email, hashedPassword, role]
+        );
+        res.status(201).json(result.rows[0]);
+    } catch (err) {
+        if (err.code === '23505') return res.status(400).json({ error: 'Kullanıcı adı/E-posta kullanımda.' });
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // DELETE STAFF
 app.delete('/api/admin/staff/:id', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
     const { id } = req.params;
@@ -1820,10 +1841,15 @@ app.get('/api/admin/activities', authenticateToken, authorizeRole('admin', 'supe
     }
 });
 
-// GET PERSONAL STATS (For Operators)
+// GET PERSONAL STATS (For Operators and Staff)
 app.get('/api/admin/my-stats', authenticateToken, async (req, res) => {
     try {
         const userId = req.user.id;
+        const role = req.user.role;
+
+        if (role !== 'operator' && role !== 'staff') {
+            return res.status(403).json({ error: 'Bu verileri görme yetkiniz yok.' });
+        }
         
         // 1. Get today's stats from operator_stats
         const todayStats = await db.query(
@@ -1858,7 +1884,7 @@ app.post('/api/admin/users', authenticateToken, authorizeRole('admin', 'super_ad
     const { username, email, password, role } = req.body;
 
     // Validate role
-    if (!['admin', 'moderator', 'operator', 'user'].includes(role)) {
+    if (!['admin', 'moderator', 'operator', 'user', 'staff'].includes(role)) {
         return res.status(400).json({ error: 'Geçersiz rol.' });
     }
 
@@ -1886,7 +1912,7 @@ app.put('/api/admin/users/:id/role', authenticateToken, authorizeRole('admin', '
     const { id } = req.params;
     const { role } = req.body;
 
-    if (!['admin', 'moderator', 'operator', 'user'].includes(role)) {
+    if (!['admin', 'moderator', 'operator', 'user', 'staff'].includes(role)) {
         return res.status(400).json({ error: 'Geçersiz rol.' });
     }
 

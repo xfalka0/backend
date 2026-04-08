@@ -37,6 +37,7 @@ const Placeholder = ({ title }) => (
 
 const ProtectedRoute = ({ allowedRoles }) => {
     const { user, token, loading } = useAuth();
+    const isOperator = user?.role === 'operator' || user?.role === 'staff';
 
     if (loading) return <div className="p-10 text-white">Yükleniyor...</div>;
 

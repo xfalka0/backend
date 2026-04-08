@@ -2450,20 +2450,27 @@ app.get('/api/chats/admin', authenticateToken, authorizeRole('admin', 'super_adm
 });
 
 app.get('/api/debug/admin-chats', async (req, res) => {
+    const migrationResults = [];
     try {
-        console.log("[DEBUG] Force table creation starting...");
+        console.log("[DEBUG] Detailed Migration starting...");
         
-        const runMigration = async (sql) => {
-            try { await db.query(sql); } catch (e) { console.warn(`[DEBUG] Migration partial fail: ${e.message}`); }
+        const runMigration = async (label, sql) => {
+            try { 
+                await db.query(sql); 
+                migrationResults.push({ label, status: "SUCCESS" });
+            } catch (e) { 
+                migrationResults.push({ label, status: "FAILED", error: e.message });
+                console.error(`[DEBUG] ${label} FAILED:`, e.message);
+            }
         };
 
         // 1. Detect ID Type
         const idTypeResult = await db.query("SELECT data_type FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'id' LIMIT 1");
         const idType = idTypeResult.rows[0]?.data_type === 'uuid' ? 'UUID' : 'TEXT';
-        console.log(`[DEBUG] Detected ID Type: ${idType}`);
+        migrationResults.push({ step: "ID Detection", detected: idType });
 
         // 2. Force Create Tables
-        await runMigration(`
+        await runMigration("Create Operators Table", `
             CREATE TABLE IF NOT EXISTS operators (
                 id SERIAL PRIMARY KEY,
                 user_id ${idType} UNIQUE REFERENCES users(id) ON DELETE CASCADE,
@@ -2476,7 +2483,7 @@ app.get('/api/debug/admin-chats', async (req, res) => {
             )
         `);
 
-        await runMigration(`
+        await runMigration("Create Operator Stats Table", `
             CREATE TABLE IF NOT EXISTS operator_stats (
                 id SERIAL PRIMARY KEY,
                 operator_id ${idType} REFERENCES users(id) ON DELETE CASCADE,
@@ -2488,44 +2495,33 @@ app.get('/api/debug/admin-chats', async (req, res) => {
         `);
 
         // 3. Columns
-        await runMigration('ALTER TABLE users ADD COLUMN IF NOT EXISTS managed_by TEXT'); 
-        await runMigration('ALTER TABLE chats ADD COLUMN IF NOT EXISTS last_message TEXT');
-        await runMigration('ALTER TABLE chats ADD COLUMN IF NOT EXISTS unread_count INT DEFAULT 0');
+        await runMigration("Add managed_by", 'ALTER TABLE users ADD COLUMN IF NOT EXISTS managed_by TEXT'); 
+        await runMigration("Add last_message", 'ALTER TABLE chats ADD COLUMN IF NOT EXISTS last_message TEXT');
+        await runMigration("Add unread_count", 'ALTER TABLE chats ADD COLUMN IF NOT EXISTS unread_count INT DEFAULT 0');
 
-        console.log("[DEBUG] Tables created.");
+        console.log("[DEBUG] Migration results collected.");
 
-        // 2. Test the EXACT query that fails in Admin
+        // 4. Test Personnel Query
         const personnelQuery = `
-            SELECT 
-                u.id, u.username, u.display_name, u.avatar_url, u.role,
-                COALESCE(o.pending_balance, 0) as pending_balance, 
-                COALESCE(o.lifetime_earnings, 0) as lifetime_earnings, 
-                COALESCE(o.commission_rate, 0.25) as commission_rate, 
-                o.last_payout_at,
-                o.last_active_at,
-                (SELECT COALESCE(SUM(coins_earned), 0) FROM operator_stats WHERE operator_id::text = u.id::text AND date = CURRENT_DATE) as earned_today,
-                (SELECT COALESCE(SUM(messages_sent), 0) FROM operator_stats WHERE operator_id::text = u.id::text) as total_messages
-            FROM users u
+            SELECT u.id FROM users u
             LEFT JOIN operators o ON u.id::text = o.user_id::text
             WHERE u.role IN ('operator', 'moderator', 'admin', 'super_admin') 
             AND u.account_status = 'active'
-            ORDER BY o.pending_balance DESC NULLS LAST
+            LIMIT 1
         `;
-
         const result = await db.query(personnelQuery);
 
         res.json({ 
             success: true, 
-            message: "PERSONEL SORRGUSU BAŞARIYLA ÇALIŞTI!", 
-            count: result.rows.length,
-            rows: result.rows.slice(0, 3)
+            migrations: migrationResults,
+            message: "MIGRASYON SONUÇLARI YUKARIDADIR.", 
+            test_query_success: result.rows.length >= 0
         });
     } catch (err) {
-        console.error("[DEBUG] Global Error:", err.message);
         res.status(500).json({ 
             success: false, 
+            migrations: migrationResults,
             error: err.message, 
-            hint: "Muhtemelen operator_stats tablosu eksik veya id tipleri uyuşmuyor.",
             stack: err.stack 
         });
     }

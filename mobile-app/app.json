@@ -1,8 +1,8 @@
 {
   "expo": {
     "name": "Fiva",
-    "slug": "fiva",
-    "version": "1.0.37",
+    "slug": "fiva-social",
+    "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -16,16 +16,16 @@
     ],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.fivachat.app"
+      "bundleIdentifier": "com.falkasoft.fiva"
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#8b5cf6"
       },
-      "package": "com.fivachat.app",
+      "package": "com.falkasoft.fiva",
       "googleServicesFile": "./google-services.json",
-      "versionCode": 37
+      "versionCode": 1
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -44,11 +44,6 @@
       "@react-native-google-signin/google-signin",
       "expo-font",
       "expo-notifications"
-    ],
-    "extra": {
-      "eas": {
-        "projectId": "f5d32721-f49a-4d99-9593-af0a6c640f15"
-      }
-    }
+    ]
   }
 }

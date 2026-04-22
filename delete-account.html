@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hesap Silme Talebi - Fiva Sohbet & Arkadaşlık</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 40px 20px; background-color: #f3f4f6; }
+        .container { background: #fff; padding: 30px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
+        h1 { color: #8b5cf6; font-size: 24px; margin-bottom: 20px; }
+        p { color: #4b5563; margin-bottom: 20px; }
+        .form-group { margin-bottom: 15px; }
+        label { display: block; margin-bottom: 5px; font-weight: 600; color: #374151; }
+        input, textarea { width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 6px; box-sizing: border-box; }
+        button { background-color: #ef4444; color: white; padding: 12px 20px; border: none; border-radius: 6px; cursor: pointer; font-weight: 600; width: 100%; transition: background 0.3s; }
+        button:hover { background-color: #dc2626; }
+        .info-box { background-color: #fef2f2; border-left: 4px solid #ef4444; padding: 15px; margin-top: 20px; font-size: 14px; color: #991b1b; }
+        .footer { margin-top: 30px; text-align: center; font-size: 0.8em; color: #9ca3af; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Hesap Silme Talebi</h1>
+        <p>Fiva hesabınızı ve hesabınıza bağlı tüm verileri kalıcı olarak silmek istiyorsanız aşağıdaki formu doldurunuz. Talebiniz alındıktan sonra 72 saat içinde hesabınız kalıcı olarak silinecektir.</p>
+        
+        <form action="mailto:falkasoft@gmail.com" method="post" enctype="text/plain">
+            <div class="form-group">
+                <label for="email">Hesaba Bağlı E-posta veya Telefon:</label>
+                <input type="text" id="email" name="user_identifier" placeholder="ör: test@example.com" required>
+            </div>
+            
+            <div class="form-group">
+                <label for="reason">Silme Nedeni (İsteğe bağlı):</label>
+                <textarea id="reason" name="reason" rows="3" placeholder="Sizi neden kaybediyoruz?"></textarea>
+            </div>
+            
+            <button type="submit">Hesabımı Kalıcı Olarak Sil</button>
+        </form>
+
+        <div class="info-box">
+            <strong>Dikkat:</strong> Hesabınız silindiğinde tüm mesajlarınız, profil bilgileriniz ve satın aldığınız coinlar geri alınamaz şekilde yok edilecektir.
+        </div>
+
+        <div class="footer">
+            &copy; 2026 Fiva - FalkaSoft Support Team
+        </div>
+    </div>
+</body>
+</html>

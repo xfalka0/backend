@@ -13,6 +13,7 @@ export default function SignupScreen({ navigation }) {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [loading, setLoading] = useState(false);
+    const [agreed, setAgreed] = useState(false);
     const [alert, setAlert] = useState({ visible: false, title: '', message: '', type: 'info' });
 
     const handleSignup = async () => {
@@ -90,11 +91,24 @@ export default function SignupScreen({ navigation }) {
                             />
                         </View>
 
+                        <TouchableOpacity 
+                            style={styles.checkboxRow} 
+                            onPress={() => setAgreed(!agreed)}
+                        >
+                            <View style={[styles.checkbox, agreed && styles.checkboxActive]}>
+                                {agreed && <Text style={styles.checkmark}>✓</Text>}
+                            </View>
+                            <Text style={styles.checkboxLabel}>
+                                18 yaşından büyük olduğumu ve <Text style={styles.linkText} onPress={() => navigation.navigate('Legal', { type: 'privacy' })}>Gizlilik Politikası</Text>'nı kabul ediyorum.
+                            </Text>
+                        </TouchableOpacity>
+
                         <GradientButton
                             title="KAYIT OL"
                             onPress={handleSignup}
                             loading={loading}
-                            style={styles.button}
+                            disabled={!agreed}
+                            style={[styles.button, !agreed && { opacity: 0.5 }]}
                         />
 
                         <View style={styles.loginRow}>
@@ -193,5 +207,42 @@ const styles = StyleSheet.create({
         color: '#d946ef',
         fontWeight: 'bold',
         fontSize: 14,
+    },
+    checkboxRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginVertical: 15,
+        paddingRight: 20,
+    },
+    checkbox: {
+        width: 22,
+        height: 22,
+        borderRadius: 6,
+        borderWidth: 2,
+        borderColor: 'rgba(255,255,255,0.3)',
+        marginRight: 12,
+        justifyContent: 'center',
+        alignItems: 'center',
+        backgroundColor: 'rgba(255,255,255,0.05)',
+    },
+    checkboxActive: {
+        backgroundColor: '#d946ef',
+        borderColor: '#d946ef',
+    },
+    checkmark: {
+        color: 'white',
+        fontSize: 14,
+        fontWeight: 'bold',
+    },
+    checkboxLabel: {
+        color: COLORS.textSecondary,
+        fontSize: 13,
+        lineHeight: 18,
+        flex: 1,
+    },
+    linkText: {
+        color: '#d946ef',
+        textDecorationLine: 'underline',
+        fontWeight: 'bold',
     }
 });

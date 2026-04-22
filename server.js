@@ -627,6 +627,15 @@ app.use('/uploads', express.static(uploadsDir));
 app.use(express.static(path.join(__dirname, 'public/admin')));
 app.use('/admin', express.static(path.join(__dirname, 'public/admin')));
 
+// --- SERVING LEGAL PAGES ---
+app.get('/privacy.html', (req, res) => {
+    res.sendFile(path.join(__dirname, 'privacy.html'));
+});
+app.get('/delete-account.html', (req, res) => {
+    res.sendFile(path.join(__dirname, 'delete-account.html'));
+});
+// ---------------------------
+
 app.get('*', (req, res, next) => {
     // If it's an asset request that reached here, it means it's missing.
     // Don't serve index.html for these, let it 404 naturally or return 404.
@@ -664,9 +673,15 @@ app.post('/api/auth/verify-otp', async (req, res) => {
     const { email, phone, code, deviceId } = req.body;
     const identifier = email || phone;
     try {
-        const otpRes = await db.query('SELECT * FROM otps WHERE identifier = $1 AND code = $2 AND expires_at > NOW()', [identifier, code]);
-        if (otpRes.rows.length === 0) return res.status(401).json({ error: 'Geçersiz veya süresi dolmuş kod.' });
-        await db.query('DELETE FROM otps WHERE identifier = $1', [identifier]);
+        // --- GOOGLE REVIEWER BYPASS ---
+        if ((email === 'test@example.com' || phone === '+10000000000') && code === '123456') {
+            console.log('[AUTH] Google Reviewer Bypass triggered for:', identifier);
+        } else {
+            const otpRes = await db.query('SELECT * FROM otps WHERE identifier = $1 AND code = $2 AND expires_at > NOW()', [identifier, code]);
+            if (otpRes.rows.length === 0) return res.status(401).json({ error: 'Geçersiz veya süresi dolmuş kod.' });
+            await db.query('DELETE FROM otps WHERE identifier = $1', [identifier]);
+        }
+        // --- END BYPASS ---
         let result;
         if (email) result = await db.query('SELECT * FROM users WHERE email = $1', [email]);
         else result = await db.query('SELECT * FROM users WHERE phone = $1', [phone]);

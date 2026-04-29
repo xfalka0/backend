@@ -2518,8 +2518,19 @@ app.get('/api/admin/fix-database-final', async (req, res) => {
         await db.query('ALTER TABLE operators ALTER COLUMN pending_balance TYPE DECIMAL(12,2)');
         await db.query('ALTER TABLE operators ALTER COLUMN lifetime_earnings TYPE DECIMAL(12,2)');
         
+        // 3. AUTOMATIC PERSONNEL REPAIR
+        // Ensure all staff/admin/moderators have an entry in the operators table so they can earn commission
+        console.log('[MIGRATION] Repairing personnel records in operators table...');
+        await db.query(`
+            INSERT INTO operators (user_id, category, bio, photos, is_online, rating)
+            SELECT id, 'Staff', 'Personnel account', '[]', false, 5.0
+            FROM users
+            WHERE role IN ('staff', 'admin', 'super_admin', 'moderator')
+            AND id NOT IN (SELECT user_id FROM operators)
+        `);
+
         await db.query('COMMIT');
-        res.json({ success: true, message: 'VERİTABANI TAMAMEN GÜNCELLENDİ! Artık mesaj atabilirsiniz.' });
+        res.json({ success: true, message: 'VERİTABANI VE PERSONEL KAYITLARI BAŞARIYLA ONARILDI! Artık mesaj atabilirsiniz.' });
     } catch (err) {
         await db.query('ROLLBACK');
         console.error('[MIGRATION ERROR]:', err.message);

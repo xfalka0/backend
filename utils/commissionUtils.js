@@ -15,19 +15,38 @@ async function recordOperatorCommission(client, chatId, senderId, cost, type) {
         return;
     }
 
-    console.log(`[PAYOUT] STARTING: chat=${chatId}, sender=${senderId}, cost=${cost}, type=${type}`);
+    const logEntry = { 
+        timestamp: new Date().toISOString(), 
+        chatId, 
+        senderId, 
+        cost, 
+        type, 
+        steps: [] 
+    };
+    if (!global.payoutLogs) global.payoutLogs = [];
+    global.payoutLogs.push(logEntry);
+
+    const log = (msg) => {
+        console.log(`[PAYOUT] ${msg}`);
+        logEntry.steps.push(msg);
+    };
+
+    log(`STARTING: chat=${chatId}, sender=${senderId}, cost=${cost}`);
+
     // 1. Find the operator for this chat
     const chatRes = await client.query('SELECT operator_id FROM chats WHERE id = $1', [chatId]);
     if (chatRes.rows.length === 0) {
-        console.log(`[PAYOUT] Chat ${chatId} not found`);
+        log(`FAILED: Chat ${chatId} not found`);
         return;
     }
     
     const operatorId = chatRes.rows[0].operator_id;
     if (!operatorId) {
-        console.log(`[PAYOUT] No operator assigned to chat ${chatId}`);
+        log(`FAILED: No operator assigned to chat ${chatId}`);
         return;
     }
+
+    log(`Found Operator/Avatar ID: ${operatorId}`);
 
     // 1.5 Find who manages this avatar (to pay the actual human)
     const managerRes = await client.query('SELECT managed_by FROM users WHERE id = $1', [operatorId]);
@@ -35,7 +54,8 @@ async function recordOperatorCommission(client, chatId, senderId, cost, type) {
         ? managerRes.rows[0].managed_by 
         : operatorId;
 
-    console.log(`[PAYOUT] Payee determined: ${actualPayeeId}`);
+    log(`Payee determined: ${actualPayeeId} (Manager of ${operatorId})`);
+    logEntry.payeeId = actualPayeeId;
 
     // 1.6 Activity Tracking
     await client.query('UPDATE operators SET last_active_at = NOW() WHERE user_id = $1', [actualPayeeId]);

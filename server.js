@@ -2503,8 +2503,13 @@ app.get('/api/chats/admin', authenticateToken, authorizeRole('admin', 'super_adm
     }
 });
 
-// FINAL DATABASE MIGRATION FOR DECIMAL SUPPORT (Temporarily unprotected for easy access)
-app.get('/api/admin/fix-database-final', async (req, res) => {
+// DEBUG PAYOUT TRACKER
+let payoutLogs = [];
+app.get('/api/debug/payout-logs', (req, res) => {
+    res.json(payoutLogs.slice(-50).reverse()); // Show last 50 logs
+});
+
+// FINAL DATABASE MIGRATION...
     try {
         await db.query('BEGIN');
         

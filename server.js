@@ -2508,21 +2508,18 @@ app.get('/api/admin/fix-database-final', async (req, res) => {
     try {
         await db.query('BEGIN');
         
-        console.log('[MIGRATION] Converting operator_stats columns to DECIMAL...');
+        console.log('[MIGRATION] Adding missing columns and converting to DECIMAL...');
         
-        // 1. Update operator_stats table
+        // 1. Add missing column first if it doesn't exist, then change types
+        await db.query('ALTER TABLE operator_stats ADD COLUMN IF NOT EXISTS total_user_spend DECIMAL(12,2) DEFAULT 0');
         await db.query('ALTER TABLE operator_stats ALTER COLUMN coins_earned TYPE DECIMAL(12,2)');
-        await db.query('ALTER TABLE operator_stats ALTER COLUMN total_user_spend TYPE DECIMAL(12,2)');
         
         // 2. Ensure operators table is also updated (just in case)
         await db.query('ALTER TABLE operators ALTER COLUMN pending_balance TYPE DECIMAL(12,2)');
         await db.query('ALTER TABLE operators ALTER COLUMN lifetime_earnings TYPE DECIMAL(12,2)');
         
-        // 3. Ensure users balance can handle decimals if we ever decide to use them (optional but safer)
-        // await db.query('ALTER TABLE users ALTER COLUMN balance TYPE DECIMAL(12,2)');
-        
         await db.query('COMMIT');
-        res.json({ success: true, message: 'VERİTABANI BAŞARIYLA GÜNCELLENDİ! Artık küsuratlı kazançlar kaydedilebilir.' });
+        res.json({ success: true, message: 'VERİTABANI TAMAMEN GÜNCELLENDİ! Artık mesaj atabilirsiniz.' });
     } catch (err) {
         await db.query('ROLLBACK');
         console.error('[MIGRATION ERROR]:', err.message);

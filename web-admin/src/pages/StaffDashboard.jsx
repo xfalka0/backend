@@ -174,39 +174,53 @@ const StaffDashboard = () => {
                     <Clock size={80} className="text-white/5 -rotate-12 group-hover:rotate-0 transition-transform duration-700" />
                 </div>
             </div>
-            {/* Earnings Guide & Info */}
-            <div className="bg-slate-900/40 backdrop-blur-2xl border border-white/5 rounded-[40px] p-10 mt-8">
-                <h3 className="text-xl font-black text-white mb-8 flex items-center gap-3">
-                    <DollarSign size={20} className="text-emerald-500" />
+            {/* Earnings Guide & Info - Enhanced Version */}
+            <div className="bg-slate-900/40 backdrop-blur-3xl border border-white/5 rounded-[48px] p-12 mt-12 relative overflow-hidden">
+                <div className="absolute top-0 left-0 w-64 h-64 bg-emerald-500/5 blur-[100px] rounded-full -ml-32 -mt-32" />
+                
+                <h3 className="text-2xl font-black text-white mb-10 flex items-center gap-4 relative z-10">
+                    <div className="w-10 h-10 rounded-xl bg-emerald-500/20 flex items-center justify-center text-emerald-400">
+                        <DollarSign size={20} />
+                    </div>
                     Kazanç Rehberi
                 </h3>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    <div className="bg-white/5 p-6 rounded-3xl border border-white/5">
-                        <p className="text-slate-500 text-[10px] font-black uppercase tracking-widest mb-2">Metin Mesajı (10 Coin)</p>
-                        <div className="flex items-end gap-2">
-                            <span className="text-2xl font-black text-white">1.15 TL</span>
-                            <span className="text-xs font-bold text-slate-600 mb-1">/ 2.3 Coin</span>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-8 relative z-10">
+                    {/* Text Message Card */}
+                    <div className="bg-gradient-to-br from-blue-600/10 to-transparent p-8 rounded-[32px] border border-blue-500/10 hover:border-blue-500/30 transition-all group">
+                        <p className="text-blue-400 text-[12px] font-black uppercase tracking-[0.2em] mb-4">Metin Mesajı (10 Coin)</p>
+                        <div className="flex flex-col gap-1">
+                            <span className="text-4xl font-black text-white tracking-tighter">1.15 TL</span>
+                            <span className="text-sm font-bold text-slate-500">Kazanılan: 2.3 Coin</span>
                         </div>
                     </div>
-                    <div className="bg-white/5 p-6 rounded-3xl border border-white/5">
-                        <p className="text-slate-500 text-[10px] font-black uppercase tracking-widest mb-2">Fotoğraf (50 Coin)</p>
-                        <div className="flex items-end gap-2">
-                            <span className="text-2xl font-black text-white">10.00 TL</span>
-                            <span className="text-xs font-bold text-slate-600 mb-1">/ 20 Coin</span>
+
+                    {/* Photo Card */}
+                    <div className="bg-gradient-to-br from-purple-600/10 to-transparent p-8 rounded-[32px] border border-purple-500/10 hover:border-purple-500/30 transition-all group">
+                        <p className="text-purple-400 text-[12px] font-black uppercase tracking-[0.2em] mb-4">Fotoğraf (50 Coin)</p>
+                        <div className="flex flex-col gap-1">
+                            <span className="text-4xl font-black text-white tracking-tighter">10.00 TL</span>
+                            <span className="text-sm font-bold text-slate-500">Kazanılan: 20 Coin</span>
                         </div>
                     </div>
-                    <div className="bg-white/5 p-6 rounded-3xl border border-white/5">
-                        <p className="text-slate-500 text-[10px] font-black uppercase tracking-widest mb-2">Ses Kaydı (30 Coin)</p>
-                        <div className="flex items-end gap-2">
-                            <span className="text-2xl font-black text-white">5.00 TL</span>
-                            <span className="text-xs font-bold text-slate-600 mb-1">/ 10 Coin</span>
+
+                    {/* Audio Card */}
+                    <div className="bg-gradient-to-br from-amber-600/10 to-transparent p-8 rounded-[32px] border border-amber-500/10 hover:border-amber-500/30 transition-all group">
+                        <p className="text-amber-400 text-[12px] font-black uppercase tracking-[0.2em] mb-4">Ses Kaydı (30 Coin)</p>
+                        <div className="flex flex-col gap-1">
+                            <span className="text-4xl font-black text-white tracking-tighter">5.00 TL</span>
+                            <span className="text-sm font-bold text-slate-500">Kazanılan: 10 Coin</span>
                         </div>
                     </div>
                 </div>
-                <div className="mt-8 p-4 bg-blue-600/10 border border-blue-500/20 rounded-2xl">
-                    <p className="text-xs text-blue-400 font-medium text-center italic">
-                        * Hakedişler coin harcamasının %25'i olarak hesaplanır ve admin tarafından belirlenen kur (1 Coin = 0.5 TL) üzerinden TL'ye çevrilir.
-                    </p>
+
+                <div className="mt-12 p-6 bg-slate-950/50 border border-white/5 rounded-3xl relative z-10">
+                    <div className="flex items-start gap-4">
+                        <Zap size={18} className="text-blue-500 mt-1 shrink-0" />
+                        <p className="text-sm text-slate-400 font-medium leading-relaxed">
+                            <strong className="text-white">Bilgilendirme:</strong> Hakedişler coin harcamasının belirli oranlarında (Mesaj %23, Foto %40, Ses %33) hesaplanır. Kazancınız otomatik olarak bakiyenize eklenir ve admin tarafından belirlenen sabit kur <span className="text-blue-400 font-bold">(1 Coin = 0.5 TL)</span> üzerinden hesaplanır.
+                        </p>
+                    </div>
                 </div>
             </div>
         </div>

@@ -36,6 +36,14 @@ const Placeholder = ({ title }) => (
     </div>
 );
 
+const Home = () => {
+    const { user } = useAuth();
+    if (user?.role === 'admin' || user?.role === 'super_admin' || user?.role === 'moderator') {
+        return <Dashboard />;
+    }
+    return <StaffDashboard />;
+};
+
 const ProtectedRoute = ({ allowedRoles }) => {
     const { user, token, loading } = useAuth();
     const isOperator = user?.role === 'operator' || user?.role === 'staff';
@@ -98,11 +106,7 @@ function App() {
 
                             {/* General Dashboard - Restricted to Staff */}
                             <Route element={<ProtectedRoute allowedRoles={['admin', 'super_admin', 'moderator', 'operator', 'staff']} />}>
-                                <Route path="/" element={
-                                    (useAuth().user?.role === 'admin' || useAuth().user?.role === 'super_admin' || useAuth().user?.role === 'moderator') 
-                                    ? <Dashboard /> 
-                                    : <StaffDashboard />
-                                } />
+                                <Route path="/" element={<Home />} />
                                 <Route path="/quick-replies" element={<QuickRepliesPage />} />
                             </Route>
 

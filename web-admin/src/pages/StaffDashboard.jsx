@@ -58,7 +58,7 @@ const StaffDashboard = () => {
                 <div>
                     <p className="text-slate-500 text-[11px] font-black uppercase tracking-[0.2em] mb-2">{title}</p>
                     <h3 className="text-4xl font-black text-white tracking-tighter mb-1">
-                        {value} <span className="text-sm font-bold text-slate-600 ml-1">COIN</span>
+                        {typeof value === 'number' ? value.toFixed(2) : value} <span className="text-sm font-bold text-slate-600 ml-1">COIN</span>
                     </h3>
                     {secondaryValue && (
                         <p className="text-xl font-bold text-blue-400/80 tracking-tight">
@@ -117,16 +117,16 @@ const StaffDashboard = () => {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
                 <StatCard 
                     title="Toplam Bekleyen Bakiye" 
-                    value={stats?.pending_balance || 0} 
-                    secondaryValue={((stats?.pending_balance || 0) * 0.5).toLocaleString('tr-TR')}
+                    value={parseFloat(stats?.pending_balance || 0)} 
+                    secondaryValue={(parseFloat(stats?.pending_balance || 0) * 0.5).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     icon={Wallet} 
                     color="blue"
                     subText="Son ödemeden beri kazanılan"
                 />
                 <StatCard 
                     title="Bugünkü Kazanç" 
-                    value={stats?.earned_today || 0} 
-                    secondaryValue={((stats?.earned_today || 0) * 0.5).toLocaleString('tr-TR')}
+                    value={parseFloat(stats?.earned_today || 0)} 
+                    secondaryValue={(parseFloat(stats?.earned_today || 0) * 0.5).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     icon={Zap} 
                     color="amber"
                     subText="Bugün gece yarısından itibaren"

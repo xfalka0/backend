@@ -10,12 +10,12 @@ const db = require('../db');
  * @param {string} type - Action type ('text', 'image', 'gift', etc.)
  */
 async function recordOperatorCommission(client, chatId, senderId, cost, type) {
-    if (cost <= 0) return;
+    if (cost <= 0) {
+        console.log(`[PAYOUT] Skipping for zero cost message in chat: ${chatId}`);
+        return;
+    }
 
-    // No internal try-catch here so it bubbles up to the main transaction in server.js
-    // This is necessary because a failed query inside a transaction aborts the whole block.
-    
-    console.log(`[PAYOUT] Processing for chat: ${chatId}, sender: ${senderId}`);
+    console.log(`[PAYOUT] STARTING: chat=${chatId}, sender=${senderId}, cost=${cost}, type=${type}`);
     // 1. Find the operator for this chat
     const chatRes = await client.query('SELECT operator_id FROM chats WHERE id = $1', [chatId]);
     if (chatRes.rows.length === 0) {

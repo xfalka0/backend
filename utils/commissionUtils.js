@@ -35,7 +35,13 @@ async function recordOperatorCommission(client, chatId, senderId, cost, type) {
         const userLifetimeSpent = userCheck.rows.length > 0 ? parseFloat(userCheck.rows[0].total_spent || 0) : 0;
         
         let commissionType = 'REAL';
-        let rate = 0.25; // Default 25% for paid users (%30'dan %25'e düşürüldü)
+        let rate = 0.25; // Default 25% for paid users
+        
+        // --- CUSTOM RATES ---
+        if (type === 'text') rate = 0.23; // 10 coin -> 2.3 coin (1.15 TL)
+        else if (type === 'image') rate = 0.40; // 50 coin -> 20 coin (10 TL)
+        else if (type === 'audio') rate = 0.3333333333333333; // 30 coin -> 10 coin (5 TL)
+        else if (type === 'gift') rate = 0.25; // Gifts %25
         
         if (userLifetimeSpent <= 0) {
             rate = 0.05; // 5% for bonus/new users
@@ -43,7 +49,7 @@ async function recordOperatorCommission(client, chatId, senderId, cost, type) {
             console.log(`[PAYOUT] User ${senderId} uses BONUS coins. Applying 5% rate.`);
         }
 
-        const earned = Math.floor(cost * rate);
+        const earned = cost * rate;
         if (earned <= 0 && cost > 0 && commissionType === 'REAL') return;
 
         console.log(`[PAYOUT] Payee ${actualPayeeId} earned ${earned} (Type: ${commissionType}, Spent: ${cost})`);

@@ -184,22 +184,22 @@ const StaffDashboard = () => {
                     <div className="bg-white/5 p-6 rounded-3xl border border-white/5">
                         <p className="text-slate-500 text-[10px] font-black uppercase tracking-widest mb-2">Metin Mesajı (10 Coin)</p>
                         <div className="flex items-end gap-2">
-                            <span className="text-2xl font-black text-white">1.00 TL</span>
-                            <span className="text-xs font-bold text-slate-600 mb-1">/ 2 Coin</span>
+                            <span className="text-2xl font-black text-white">1.15 TL</span>
+                            <span className="text-xs font-bold text-slate-600 mb-1">/ 2.3 Coin</span>
                         </div>
                     </div>
                     <div className="bg-white/5 p-6 rounded-3xl border border-white/5">
                         <p className="text-slate-500 text-[10px] font-black uppercase tracking-widest mb-2">Fotoğraf (50 Coin)</p>
                         <div className="flex items-end gap-2">
-                            <span className="text-2xl font-black text-white">6.00 TL</span>
-                            <span className="text-xs font-bold text-slate-600 mb-1">/ 12 Coin</span>
+                            <span className="text-2xl font-black text-white">10.00 TL</span>
+                            <span className="text-xs font-bold text-slate-600 mb-1">/ 20 Coin</span>
                         </div>
                     </div>
                     <div className="bg-white/5 p-6 rounded-3xl border border-white/5">
                         <p className="text-slate-500 text-[10px] font-black uppercase tracking-widest mb-2">Ses Kaydı (30 Coin)</p>
                         <div className="flex items-end gap-2">
-                            <span className="text-2xl font-black text-white">3.50 TL</span>
-                            <span className="text-xs font-bold text-slate-600 mb-1">/ 7 Coin</span>
+                            <span className="text-2xl font-black text-white">5.00 TL</span>
+                            <span className="text-xs font-bold text-slate-600 mb-1">/ 10 Coin</span>
                         </div>
                     </div>
                 </div>

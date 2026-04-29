@@ -2509,7 +2509,8 @@ app.get('/api/debug/payout-logs', (req, res) => {
     res.json(payoutLogs.slice(-50).reverse()); // Show last 50 logs
 });
 
-// FINAL DATABASE MIGRATION...
+// FINAL DATABASE MIGRATION FOR DECIMAL SUPPORT (Temporarily unprotected for easy access)
+app.get('/api/admin/fix-database-final', async (req, res) => {
     try {
         await db.query('BEGIN');
         

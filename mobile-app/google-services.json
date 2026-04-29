@@ -7,67 +7,6 @@
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:46669084263:android:e0f8efa920817a4fe2c6c2",
-        "android_client_info": {
-          "package_name": "com.fiva.app"
-        }
-      },
-      "oauth_client": [
-        {
-          "client_id": "46669084263-61q201o3p2npu0q52i4frnnlgoh4md40.apps.googleusercontent.com",
-          "client_type": 1,
-          "android_info": {
-            "package_name": "com.fiva.app",
-            "certificate_hash": "976b94aab64157ce938a2b160431aed5332b7e8c"
-          }
-        },
-        {
-          "client_id": "46669084263-8tuote6tmtneqojdva2v0fks3ekqb75i.apps.googleusercontent.com",
-          "client_type": 1,
-          "android_info": {
-            "package_name": "com.fiva.app",
-            "certificate_hash": "39253785f89b4cf88aa9f177dc131409f221de34"
-          }
-        },
-        {
-          "client_id": "46669084263-h2e8cfp3b4slrhtesu5sle81ckc9hd3q.apps.googleusercontent.com",
-          "client_type": 1,
-          "android_info": {
-            "package_name": "com.fiva.app",
-            "certificate_hash": "ad615c64c5299f885c589a64ec24bc0f1e92f5e5"
-          }
-        },
-        {
-          "client_id": "46669084263-nr965kavjol3nervt5n0pfftrvibiol1.apps.googleusercontent.com",
-          "client_type": 1,
-          "android_info": {
-            "package_name": "com.fiva.app",
-            "certificate_hash": "5e8f16062ea3cd2c4a0d547876baa6f38cabf625"
-          }
-        },
-        {
-          "client_id": "46669084263-drv76chuoahgvfitcdmctvvqm3cbudl7.apps.googleusercontent.com",
-          "client_type": 3
-        }
-      ],
-      "api_key": [
-        {
-          "current_key": "AIzaSyCNPhiT6EV2ksdb9y67vqcoJWf0YPYYKvE"
-        }
-      ],
-      "services": {
-        "appinvite_service": {
-          "other_platform_oauth_client": [
-            {
-              "client_id": "46669084263-drv76chuoahgvfitcdmctvvqm3cbudl7.apps.googleusercontent.com",
-              "client_type": 3
-            }
-          ]
-        }
-      }
-    },
-    {
-      "client_info": {
         "mobilesdk_app_id": "1:46669084263:android:71160b344a191733e2c6c2",
         "android_client_info": {
           "package_name": "com.fivachat.app"
@@ -75,19 +14,11 @@
       },
       "oauth_client": [
         {
-          "client_id": "46669084263-lp536qqejk2uihonq0vo9du7piv2ml3l.apps.googleusercontent.com",
+          "client_id": "46669084263-g2uq0s88qsufv77dct7pnoggkedugs0g.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {
             "package_name": "com.fivachat.app",
-            "certificate_hash": "39253785f89b4cf88aa9f177dc131409f221de34"
-          }
-        },
-        {
-          "client_id": "46669084263-oa93deitqgekq237u6qma39ol47h3jiu.apps.googleusercontent.com",
-          "client_type": 1,
-          "android_info": {
-            "package_name": "com.fivachat.app",
-            "certificate_hash": "976b94aab64157ce938a2b160431aed5332b7e8c"
+            "certificate_hash": "f62935c25265e13e4195253ae748273e8c1c3555"
           }
         },
         {

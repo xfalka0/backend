@@ -742,6 +742,7 @@ app.get('/api/operators', async (req, res) => {
             FROM users u
             JOIN operators o ON u.id = o.user_id
             WHERE u.account_status = 'active'
+              AND u.role NOT IN ('admin', 'super_admin', 'moderator')
         `;
 
         let params = [];
@@ -1691,19 +1692,21 @@ app.delete('/api/admin/quick-replies/:id', authenticateToken, authorizeRole('adm
     }
 });
 
-// CREATE STAFF
+// CREATE STAFF (Admin, Moderator, Operator, Staff)
 app.post('/api/admin/staff', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
     const { username, email, password, role } = req.body;
-    if (!['admin', 'moderator', 'operator'].includes(role)) return res.status(400).json({ error: 'Geçersiz rol.' });
+    if (!['admin', 'moderator', 'operator', 'staff'].includes(role)) {
+        return res.status(400).json({ error: 'Geçersiz rol.' });
+    }
 
     try {
         const hashedPassword = await bcrypt.hash(password, 10);
         const result = await db.query(
-            "INSERT INTO users (username, email, password, password_hash, role, balance) VALUES ($1, $2, $3, $3, $4, 0) RETURNING id, username, email, role",
+            "INSERT INTO users (username, email, password, password_hash, role, balance, account_status) VALUES ($1, $2, $3, $3, $4, 0, 'active') RETURNING id, username, email, role",
             [username, email, hashedPassword, role]
         );
 
-        // If Operator, add to operators table too
+        // If Operator (Avatar Profile), add to operators table too
         if (role === 'operator') {
             await db.query(
                 "INSERT INTO operators (user_id, category, bio, photos, is_online, rating) VALUES ($1, 'Genel', 'Merhaba!', '{}', false, 5.0)",
@@ -1718,26 +1721,6 @@ app.post('/api/admin/staff', authenticateToken, authorizeRole('admin', 'super_ad
     }
 });
 
-// CREATE STAFF MEMBER (Admin/Moderator/Staff)
-app.post('/api/admin/staff', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
-    const { username, email, password, role } = req.body;
-
-    if (!['admin', 'moderator', 'staff'].includes(role)) {
-        return res.status(400).json({ error: 'Geçersiz rol yetkisi.' });
-    }
-
-    try {
-        const hashedPassword = await bcrypt.hash(password, 10);
-        const result = await db.query(
-            "INSERT INTO users (username, email, password, password_hash, role, account_status) VALUES ($1, $2, $3, $3, $4, 'active') RETURNING id, username, email, role",
-            [username, email, hashedPassword, role]
-        );
-        res.status(201).json(result.rows[0]);
-    } catch (err) {
-        if (err.code === '23505') return res.status(400).json({ error: 'Kullanıcı adı/E-posta kullanımda.' });
-        res.status(500).json({ error: err.message });
-    }
-});
 
 // DELETE STAFF
 app.delete('/api/admin/staff/:id', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {

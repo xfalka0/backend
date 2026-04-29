@@ -360,7 +360,8 @@ export default function OnboardingScreen({ navigation, route }) {
                 </View>
 
                 <KeyboardAvoidingView
-                    behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+                    behavior={Platform.OS === 'ios' ? 'padding' : 'padding'}
+                    keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
                     style={styles.content}
                 >
                     {renderStepContent()}

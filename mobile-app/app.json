@@ -2,7 +2,7 @@
   "expo": {
     "name": "Fiva",
     "slug": "fiva-social",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -16,16 +16,16 @@
     ],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.falkasoft.fiva"
+      "bundleIdentifier": "com.fivachat.app"
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#8b5cf6"
       },
-      "package": "com.falkasoft.fiva",
+      "package": "com.fivachat.app",
       "googleServicesFile": "./google-services.json",
-      "versionCode": 1
+      "versionCode": 99
     },
     "web": {
       "favicon": "./assets/favicon.png"

@@ -689,8 +689,8 @@ export default function ChatScreen({ route, navigation }) {
             <ChatBackground themeMode={themeMode} />
 
             <KeyboardAvoidingView
-                behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-                keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
+                behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+                keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 20}
                 style={{ flex: 1 }}
             >
                 <FlatList
@@ -716,9 +716,10 @@ export default function ChatScreen({ route, navigation }) {
                                 placeholderTextColor="rgba(255,255,255,0.4)"
                                 multiline
                                 maxHeight={100}
+                                cursorColor={theme.colors.primary}
                             />
 
-                            <TouchableOpacity onPress={sendMessage} style={styles.sendButton}>
+                            <TouchableOpacity onPress={sendMessage} style={styles.sendButton} activeOpacity={0.7}>
                                 <LinearGradient colors={theme.gradients.primary} style={styles.sendGradient}>
                                     <Ionicons name="send" size={20} color="white" />
                                 </LinearGradient>

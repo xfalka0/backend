@@ -3307,9 +3307,18 @@ io.on('connection', (socket) => {
     // Send Message
     socket.on('send_message', async (data) => {
         console.log('[SOCKET] send_message received:', JSON.stringify(data, null, 2));
-        const { chatId, content, type, giftId, tempId } = data; // Catch tempId
-        // SECURITY: Use authenticated user ID
+        const { chatId, content, type, giftId, tempId } = data;
         const senderId = socket.user.id;
+
+        // DEBUG LOGGING
+        if (!global.payoutLogs) global.payoutLogs = [];
+        global.payoutLogs.push({
+            timestamp: new Date().toISOString(),
+            type: 'SEND_MESSAGE_START',
+            chatId,
+            senderId,
+            contentType: type
+        });
 
         let client;
 

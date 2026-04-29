@@ -1511,7 +1511,7 @@ app.get('/api/admin/payments', authenticateToken, authorizeRole('admin', 'super_
 // GET ALL STAFF (Admins, Moderators, Operators)
 app.get('/api/admin/staff', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
     try {
-        const result = await db.query("SELECT id, username, email, role, created_at FROM users WHERE role IN ('admin', 'moderator', 'operator') ORDER BY created_at DESC");
+        const result = await db.query("SELECT id, username, email, role, created_at FROM users WHERE role IN ('admin', 'moderator', 'operator', 'staff') ORDER BY created_at DESC");
         res.json(result.rows);
     } catch (err) {
         res.status(500).json({ error: err.message });

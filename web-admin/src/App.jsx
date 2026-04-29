@@ -96,7 +96,7 @@ function App() {
                         <Route element={<Layout />}>
 
                             {/* General Dashboard - Restricted to Staff */}
-                            <Route element={<ProtectedRoute allowedRoles={['admin', 'super_admin', 'moderator', 'operator']} />}>
+                            <Route element={<ProtectedRoute allowedRoles={['admin', 'super_admin', 'moderator', 'operator', 'staff']} />}>
                                 <Route path="/" element={<Dashboard />} />
                                 <Route path="/quick-replies" element={<QuickRepliesPage />} />
                             </Route>
@@ -112,7 +112,7 @@ function App() {
                             </Route>
 
                             {/* Moderator & Admin Routes */}
-                            <Route element={<ProtectedRoute allowedRoles={['admin', 'super_admin', 'moderator', 'operator']} />}>
+                            <Route element={<ProtectedRoute allowedRoles={['admin', 'super_admin', 'moderator', 'operator', 'staff']} />}>
                                 <Route path="/formatted-chats" element={<ChatsPage />} />
                                 <Route path="/chats" element={<ChatsPage />} />
                                 <Route path="/reports" element={<ReportsPage />} />

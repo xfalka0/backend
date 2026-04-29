@@ -2529,7 +2529,7 @@ app.get('/api/admin/fix-database-final', async (req, res) => {
         console.log('[MIGRATION] Repairing personnel records in operators table...');
         await db.query(`
             INSERT INTO operators (user_id, category, bio, photos, is_online, rating)
-            SELECT id, 'Staff', 'Personnel account', '[]', false, 5.0
+            SELECT id, 'Staff', 'Personnel account', '{}', false, 5.0
             FROM users
             WHERE role IN ('staff', 'admin', 'super_admin', 'moderator')
             AND id NOT IN (SELECT user_id FROM operators)

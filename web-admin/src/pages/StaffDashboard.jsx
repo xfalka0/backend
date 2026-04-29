@@ -174,6 +174,41 @@ const StaffDashboard = () => {
                     <Clock size={80} className="text-white/5 -rotate-12 group-hover:rotate-0 transition-transform duration-700" />
                 </div>
             </div>
+            {/* Earnings Guide & Info */}
+            <div className="bg-slate-900/40 backdrop-blur-2xl border border-white/5 rounded-[40px] p-10 mt-8">
+                <h3 className="text-xl font-black text-white mb-8 flex items-center gap-3">
+                    <DollarSign size={20} className="text-emerald-500" />
+                    Kazanç Rehberi
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div className="bg-white/5 p-6 rounded-3xl border border-white/5">
+                        <p className="text-slate-500 text-[10px] font-black uppercase tracking-widest mb-2">Metin Mesajı (10 Coin)</p>
+                        <div className="flex items-end gap-2">
+                            <span className="text-2xl font-black text-white">1.00 TL</span>
+                            <span className="text-xs font-bold text-slate-600 mb-1">/ 2 Coin</span>
+                        </div>
+                    </div>
+                    <div className="bg-white/5 p-6 rounded-3xl border border-white/5">
+                        <p className="text-slate-500 text-[10px] font-black uppercase tracking-widest mb-2">Fotoğraf (50 Coin)</p>
+                        <div className="flex items-end gap-2">
+                            <span className="text-2xl font-black text-white">6.00 TL</span>
+                            <span className="text-xs font-bold text-slate-600 mb-1">/ 12 Coin</span>
+                        </div>
+                    </div>
+                    <div className="bg-white/5 p-6 rounded-3xl border border-white/5">
+                        <p className="text-slate-500 text-[10px] font-black uppercase tracking-widest mb-2">Ses Kaydı (30 Coin)</p>
+                        <div className="flex items-end gap-2">
+                            <span className="text-2xl font-black text-white">3.50 TL</span>
+                            <span className="text-xs font-bold text-slate-600 mb-1">/ 7 Coin</span>
+                        </div>
+                    </div>
+                </div>
+                <div className="mt-8 p-4 bg-blue-600/10 border border-blue-500/20 rounded-2xl">
+                    <p className="text-xs text-blue-400 font-medium text-center italic">
+                        * Hakedişler coin harcamasının %25'i olarak hesaplanır ve admin tarafından belirlenen kur (1 Coin = 0.5 TL) üzerinden TL'ye çevrilir.
+                    </p>
+                </div>
+            </div>
         </div>
     );
 };

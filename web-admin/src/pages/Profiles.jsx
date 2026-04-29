@@ -44,7 +44,9 @@ export default function ProfilesPage() {
             const res = await axios.get(`${API_URL}/api/admin/operators/earnings`, {
                 headers: { Authorization: `Bearer ${token}` }
             });
-            setPersonnel(res.data);
+            // Filter out 'operator' role as they are virtual profiles, not workers
+            const workers = res.data.filter(p => p.role !== 'operator');
+            setPersonnel(workers);
         } catch (err) {
             console.error("Fetch Personnel Error:", err);
         }

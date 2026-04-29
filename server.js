@@ -2968,7 +2968,7 @@ app.get('/api/admin/operators/earnings', authenticateToken, authorizeRole('admin
                 (SELECT COALESCE(SUM(messages_sent), 0) FROM operator_stats WHERE operator_id::text = u.id::text) as total_messages
             FROM users u
             LEFT JOIN operators o ON u.id::text = o.user_id::text
-            WHERE u.role IN ('operator', 'moderator', 'admin', 'super_admin') AND u.account_status = 'active'
+            WHERE u.role IN ('operator', 'moderator', 'admin', 'super_admin', 'staff') AND u.account_status = 'active'
             ORDER BY o.pending_balance DESC NULLS LAST
         `;
         const result = await db.query(query);

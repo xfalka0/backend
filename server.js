@@ -3418,9 +3418,12 @@ io.on('connection', (socket) => {
             console.error('[SOCKET] Failed Message Data:', JSON.stringify({ chatId, senderId, type, tempId }));
             
             // Send specific error message if it's a known one, otherwise generic
-            const errorMsg = (err.message === 'BU_PROFIL_SIZE_ZIMMETLI_DEGIL') 
-                ? 'Bu profil size zimmetli değil. Mesaj gönderemezsiniz.' 
-                : (err.message === 'User not found' ? 'Kullanıcı bulunamadı.' : 'Mesaj gönderilemedi. Lütfen tekrar deneyin.');
+            let errorMsg = (err.message === 'BU_PROFIL_SIZE_ZIMMETLI_DEGIL') 
+                ? 'Bu profil size zimmetli değil.' 
+                : 'Mesaj gönderilemedi.';
+            
+            // Append debug info directly to the message so it shows up in current APKs
+            errorMsg += ` (${err.message})`;
 
             io.to(socket.id).emit('message_error', {
                 code: err.message === 'BU_PROFIL_SIZE_ZIMMETLI_DEGIL' ? 'UNAUTHORIZED' : 'SEND_FAILED',

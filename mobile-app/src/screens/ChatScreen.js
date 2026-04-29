@@ -265,7 +265,8 @@ export default function ChatScreen({ route, navigation }) {
                     // Show Coin Modal on insufficient balance error
                     setShowCoinModal(true);
                 } else {
-                    showAlert({ title: 'Hata', message: data.message || 'Mesaj gönderilemedi.', type: 'error' });
+                    const errorMsg = data.debug ? `${data.message}\n(Hata: ${data.debug})` : (data.message || 'Mesaj gönderilemedi.');
+                    showAlert({ title: 'Hata', message: errorMsg, type: 'error' });
                 }
             });
 

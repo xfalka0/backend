@@ -3408,12 +3408,21 @@ io.on('connection', (socket) => {
 
         } catch (err) {
             if (client) {
-                await client.query('ROLLBACK');
+                try { await client.query('ROLLBACK'); } catch (e) { console.error('[SOCKET] Rollback Error:', e.message); }
             }
-            console.error('[SOCKET] Send Message Error:', err.message);
+            console.error('[SOCKET] CRITICAL Send Message Error:', err.message);
+            console.error('[SOCKET] Error Stack:', err.stack);
+            console.error('[SOCKET] Failed Message Data:', JSON.stringify({ chatId, senderId, type, tempId }));
+            
+            // Send specific error message if it's a known one, otherwise generic
+            const errorMsg = (err.message === 'BU_PROFIL_SIZE_ZIMMETLI_DEGIL') 
+                ? 'Bu profil size zimmetli değil. Mesaj gönderemezsiniz.' 
+                : (err.message === 'User not found' ? 'Kullanıcı bulunamadı.' : 'Mesaj gönderilemedi. Lütfen tekrar deneyin.');
+
             io.to(socket.id).emit('message_error', {
-                code: 'SEND_FAILED',
-                message: 'Mesaj gönderilemedi. Lütfen tekrar deneyin.'
+                code: err.message === 'BU_PROFIL_SIZE_ZIMMETLI_DEGIL' ? 'UNAUTHORIZED' : 'SEND_FAILED',
+                message: errorMsg,
+                debug: process.env.NODE_ENV === 'development' ? err.message : undefined
             });
         } finally {
             if (client) {

@@ -3288,7 +3288,10 @@ io.on('connection', (socket) => {
             let giftDetails = null;
 
             // --- 1. COIN DEDUCTION LOGIC ---
-            if (!isOperator && socket.user.role !== 'admin' && socket.user.role !== 'super_admin') {
+            // Management roles don't pay for messages
+            const isManagement = ['admin', 'super_admin', 'moderator', 'staff', 'operator'].includes(socket.user.role);
+            
+            if (!isManagement) {
                 cost = 10; // Default text
                 if (type === 'gift' && giftId) {
                     const giftRes = await client.query('SELECT * FROM gifts WHERE id = $1', [giftId]);
@@ -3304,14 +3307,10 @@ io.on('connection', (socket) => {
                     cost = 30;
                 }
 
-                // Lock the user row for update to prevent race conditions
                 const userResult = await client.query('SELECT balance FROM users WHERE id = $1 FOR UPDATE', [senderId]);
+                if (userResult.rows.length === 0) throw new Error('User not found');
 
-                if (userResult.rows.length === 0) {
-                    throw new Error('User not found');
-                }
-
-                currentBalance = userResult.rows[0].balance;
+                currentBalance = parseFloat(userResult.rows[0].balance || 0);
 
                 if (currentBalance < cost) {
                     await client.query('ROLLBACK');
@@ -3319,41 +3318,40 @@ io.on('connection', (socket) => {
                         code: 'INSUFFICIENT_FUNDS',
                         message: `Yetersiz bakiye. Bu işlem için ${cost} coin gerekli.`,
                         required: cost,
-                        tempId: tempId // Return tempId so client can undo
+                        tempId: tempId
                     });
-                    return; // Exit transaction
+                    return;
                 }
 
-                // Deduct Coins
                 await client.query('UPDATE users SET balance = balance - $2 WHERE id = $1', [senderId, cost]);
                 userBalance = currentBalance - cost;
 
-                // Record Operator Commission (Hakedis)
+                // Record Operator Commission
                 await recordOperatorCommission(client, chatId, senderId, cost, type || 'text');
             }
 
-            // --- 2. SENDER MAPPING (Zimmetleme) ---
+            // --- 2. SENDER MAPPING (Zimmetleme & Management Check) ---
             let finalSenderId = senderId;
             
-            // If the sender is personnel (operator/moderator role), we check which profile they are messaging as
-            if (isOperator || socket.user.role === 'moderator') {
+            // If sender is management, they should message AS the operator of this chat
+            if (isManagement) {
                 const chatRes = await client.query('SELECT operator_id FROM chats WHERE id = $1', [chatId]);
                 if (chatRes.rows.length > 0) {
                     const avatarId = chatRes.rows[0].operator_id;
                     
-                    // Verify if this personnel manages this avatar (Zimmet Check)
-                    const manageCheck = await client.query('SELECT managed_by FROM users WHERE id = $1', [avatarId]);
-                    if (manageCheck.rows.length > 0) {
-                       const managerId = manageCheck.rows[0].managed_by;
-                       
-                       // If assigned to someone else (and not admin), block.
-                       if (managerId && managerId.toString() !== senderId.toString() && socket.user.role !== 'admin' && socket.user.role !== 'super_admin') {
-                           throw new Error('BU_PROFIL_SIZE_ZIMMETLI_DEGIL');
-                       }
-
-                       // The personnel messages AS the avatar
-                       finalSenderId = avatarId;
+                    // Zimmet Check: If it's a staff/moderator, check if they are allowed
+                    if (socket.user.role === 'staff' || socket.user.role === 'moderator') {
+                        const manageCheck = await client.query('SELECT managed_by FROM users WHERE id = $1', [avatarId]);
+                        const managerId = manageCheck.rows.length > 0 ? manageCheck.rows[0].managed_by : null;
+                        
+                        if (managerId && managerId.toString() !== senderId.toString() && socket.user.role !== 'admin' && socket.user.role !== 'super_admin') {
+                            console.warn(`[SOCKET] Blocked unauthorized message attempt by ${senderId} for avatar ${avatarId}`);
+                            throw new Error('BU_PROFIL_SIZE_ZIMMETLI_DEGIL');
+                        }
                     }
+                    
+                    // All management roles message AS the avatar to keep chat consistent
+                    finalSenderId = avatarId;
                 }
             }
 
@@ -3366,62 +3364,36 @@ io.on('connection', (socket) => {
 
             let lastMsgPreview = content;
             if (type === 'gift') lastMsgPreview = '🎁 Hediye Gönderildi';
-            if (type === 'image') lastMsgPreview = '📷 Resim';
-            if (type === 'audio') lastMsgPreview = '🎤 Ses Kaydı';
-            if (type === 'video') lastMsgPreview = '🎥 Video'; // Future proofing
+            else if (type === 'image') lastMsgPreview = '📷 Resim';
+            else if (type === 'audio') lastMsgPreview = '🎤 Ses Kaydı';
 
             await client.query('UPDATE chats SET last_message_at = NOW(), last_message = $2 WHERE id = $1', [chatId, lastMsgPreview]);
 
-            await client.query('COMMIT'); // Commit Transaction
+            await client.query('COMMIT');
 
-            // --- 3. EMIT EVENTS (After Commit) ---
-
-            // Emit Balance Update if coins were deducted
-            if (!isOperator) {
-                // To the sender specifically
-                io.to(socket.id).emit('balance_update', {
-                    userId: senderId,
-                    newBalance: userBalance
-                });
+            // --- 4. EMIT EVENTS ---
+            if (!isManagement) {
+                io.to(socket.id).emit('balance_update', { userId: senderId, newBalance: userBalance });
             }
 
-            // Attach gift details if available
             if (giftDetails) {
                 savedMsg.gift_name = giftDetails.name;
                 savedMsg.gift_cost = giftDetails.cost;
                 savedMsg.gift_icon = giftDetails.icon_url;
             }
 
-            // Broadcast Message to Chat Room
-            const msgToEmit = {
-                ...savedMsg,
-                chat_id: savedMsg.chat_id.toString(), // Force string for client-side comparison
-                tempId
-            };
-            const roomName = chatId.toString();
-            console.log(`[SOCKET] Emitting receive_message to room: ${roomName}`);
-
-            // io.to ensures everyone including the sender (if in room) receives it
-            io.to(roomName).emit('receive_message', msgToEmit);
-
-            // Also emit to individual rooms of participants (as fallback)
-            // This ensures if someone isn't joined to the specific chat room they still get it if they have their own room
-            // But usually chat room is enough.
-
-            // Notify Admins
-            console.log(`[SOCKET] Emitting admin_notification globally for chat ${roomName}`);
+            const msgToEmit = { ...savedMsg, chat_id: savedMsg.chat_id.toString(), tempId };
+            io.to(chatId.toString()).emit('receive_message', msgToEmit);
             io.emit('admin_notification', msgToEmit);
 
-            // --- 4. PUSH NOTIFICATION (Phase 4) ---
+            // --- 5. PUSH NOTIFICATION ---
             try {
-                // Determine recipient
-                const participantsRes = await db.query('SELECT user1_id, user2_id FROM chats WHERE id = $1', [chatId]);
+                const participantsRes = await db.query('SELECT user_id, operator_id FROM chats WHERE id = $1', [chatId]);
                 if (participantsRes.rows.length > 0) {
-                    const { user1_id, user2_id } = participantsRes.rows[0];
-                    const recipientId = senderId.toString() === user1_id.toString() ? user2_id : user1_id;
+                    const { user_id, operator_id } = participantsRes.rows[0];
+                    const recipientId = finalSenderId.toString() === user_id.toString() ? operator_id : user_id;
 
-                    // Fetch sender name for the notification
-                    const senderRes = await db.query('SELECT display_name FROM users WHERE id = $1', [senderId]);
+                    const senderRes = await db.query('SELECT display_name FROM users WHERE id = $1', [finalSenderId]);
                     const senderName = senderRes.rows[0]?.display_name || 'Bir kullanıcı';
 
                     await sendPushNotification(recipientId, {

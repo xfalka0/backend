@@ -2443,7 +2443,7 @@ app.post('/api/chats', async (req, res) => {
 });
 
 // GET CHATS FOR ADMIN / OPERATORS (PERSONNEL)
-app.get('/api/chats/admin', authenticateToken, authorizeRole('admin', 'super_admin', 'operator', 'moderator'), async (req, res) => {
+app.get('/api/chats/admin', authenticateToken, authorizeRole('admin', 'super_admin', 'operator', 'moderator', 'staff'), async (req, res) => {
     try {
         console.log(`[ADMIN] Fetching chats for ${req.user.role}: ${req.user.id}`);
         

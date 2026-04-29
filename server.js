@@ -283,7 +283,7 @@ const initializeDatabase = async () => {
         // 2. Fix missing operators table entries
         const missingOps = await db.query(`
             SELECT id FROM users 
-            WHERE role IN ('operator', 'moderator', 'admin', 'super_admin')
+            WHERE role IN ('operator', 'moderator', 'admin', 'super_admin', 'staff')
             AND id NOT IN (SELECT user_id FROM operators)
         `);
 
@@ -1706,8 +1706,8 @@ app.post('/api/admin/staff', authenticateToken, authorizeRole('admin', 'super_ad
             [username, email, hashedPassword, role]
         );
 
-        // If Operator (Avatar Profile), add to operators table too
-        if (role === 'operator') {
+        // If Operator or Staff, add to operators table to track earnings/balance
+        if (role === 'operator' || role === 'staff') {
             await db.query(
                 "INSERT INTO operators (user_id, category, bio, photos, is_online, rating) VALUES ($1, 'Genel', 'Merhaba!', '{}', false, 5.0)",
                 [result.rows[0].id]
@@ -2925,6 +2925,33 @@ app.post('/api/admin/maintenance/cleanup', authenticateToken, authorizeRole('adm
 });
 
 // --- OPERATOR PAYOUT & PERFORMANCE API (Admin) ---
+
+// GET CURRENT OPERATOR/STAFF STATS
+app.get('/api/operator/my-stats', authenticateToken, async (req, res) => {
+    try {
+        const userId = req.user.id;
+        const query = `
+            SELECT 
+                u.id, u.username, u.display_name, u.avatar_url, u.role,
+                COALESCE(o.pending_balance, 0) as pending_balance, 
+                COALESCE(o.lifetime_earnings, 0) as lifetime_earnings, 
+                COALESCE(o.commission_rate, 0.25) as commission_rate, 
+                o.last_payout_at,
+                o.last_active_at,
+                (SELECT COALESCE(SUM(coins_earned), 0) FROM operator_stats WHERE operator_id::text = u.id::text AND date = CURRENT_DATE) as earned_today,
+                (SELECT COALESCE(COUNT(*), 0) FROM chats WHERE operator_id::text = u.id::text OR managed_by::text = u.id::text) as active_chats,
+                (SELECT COALESCE(SUM(messages_sent), 0) FROM operator_stats WHERE operator_id::text = u.id::text) as total_messages
+            FROM users u
+            LEFT JOIN operators o ON u.id::text = o.user_id::text
+            WHERE u.id = $1
+        `;
+        const result = await db.query(query, [userId]);
+        if (result.rows.length === 0) return res.status(404).json({ error: 'Stats not found' });
+        res.json(result.rows[0]);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
 
 // GET ALL PERSONNEL (Staff) for assignment and earnings
 app.get('/api/admin/operators/earnings', authenticateToken, authorizeRole('admin', 'super_admin', 'operator', 'moderator'), async (req, res) => {

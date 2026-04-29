@@ -25,6 +25,7 @@ import FakeSchedulerPage from './pages/FakeScheduler';
 import AdminManagement from './pages/AdminManagement';
 import MaintenancePage from './pages/Maintenance';
 import AgencyPayoutsPage from './pages/AgencyPayouts';
+import StaffDashboard from './pages/StaffDashboard';
 import SplashIntro from './components/SplashIntro';
 
 // Placeholder Pages
@@ -97,7 +98,11 @@ function App() {
 
                             {/* General Dashboard - Restricted to Staff */}
                             <Route element={<ProtectedRoute allowedRoles={['admin', 'super_admin', 'moderator', 'operator', 'staff']} />}>
-                                <Route path="/" element={<Dashboard />} />
+                                <Route path="/" element={
+                                    (useAuth().user?.role === 'admin' || useAuth().user?.role === 'super_admin' || useAuth().user?.role === 'moderator') 
+                                    ? <Dashboard /> 
+                                    : <StaffDashboard />
+                                } />
                                 <Route path="/quick-replies" element={<QuickRepliesPage />} />
                             </Route>
 

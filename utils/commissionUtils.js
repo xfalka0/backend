@@ -13,43 +13,50 @@ async function recordOperatorCommission(client, chatId, senderId, cost, type) {
     if (cost <= 0) return;
 
     try {
+        console.log(`[PAYOUT] Processing for chat: ${chatId}, sender: ${senderId}`);
         // 1. Find the operator for this chat
         const chatRes = await client.query('SELECT operator_id FROM chats WHERE id = $1', [chatId]);
-        if (chatRes.rows.length === 0) return;
+        if (chatRes.rows.length === 0) {
+            console.log(`[PAYOUT] Chat ${chatId} not found`);
+            return;
+        }
         
         const operatorId = chatRes.rows[0].operator_id;
-        if (!operatorId) return;
+        if (!operatorId) {
+            console.log(`[PAYOUT] No operator assigned to chat ${chatId}`);
+            return;
+        }
 
         // 1.5 Find who manages this avatar (to pay the actual human)
         const managerRes = await client.query('SELECT managed_by FROM users WHERE id = $1', [operatorId]);
         const actualPayeeId = (managerRes.rows.length > 0 && managerRes.rows[0].managed_by) 
             ? managerRes.rows[0].managed_by 
-            : operatorId; // Fallback to avatar if no manager
+            : operatorId;
 
-        // 1.6 Activity Tracking (Saniye saniyesine takip)
+        console.log(`[PAYOUT] Payee determined: ${actualPayeeId}`);
+
+        // 1.6 Activity Tracking
         await client.query('UPDATE operators SET last_active_at = NOW() WHERE user_id = $1', [actualPayeeId]);
 
         // 2. Bonus Protection Check
-        // If user total_spent is 0, they are using welcome bonus. We pay a lower % (e.g. 5%)
         const userCheck = await client.query('SELECT total_spent FROM users WHERE id = $1', [senderId]);
         const userLifetimeSpent = userCheck.rows.length > 0 ? parseFloat(userCheck.rows[0].total_spent || 0) : 0;
         
         let commissionType = 'REAL';
-        let rate = 0.25; // Default 25% for paid users
+        let rate = 0.25; 
         
-        // --- CUSTOM RATES ---
-        if (type === 'text') rate = 0.23; // 10 coin -> 2.3 coin (1.15 TL)
-        else if (type === 'image') rate = 0.40; // 50 coin -> 20 coin (10 TL)
-        else if (type === 'audio') rate = 0.3333333333333333; // 30 coin -> 10 coin (5 TL)
-        else if (type === 'gift') rate = 0.25; // Gifts %25
+        if (type === 'text') rate = 0.23;
+        else if (type === 'image') rate = 0.40;
+        else if (type === 'audio') rate = 0.3333333333333333;
+        else if (type === 'gift') rate = 0.25;
         
         if (userLifetimeSpent <= 0) {
-            rate = 0.05; // 5% for bonus/new users
+            rate = 0.05; 
             commissionType = 'BONUS';
-            console.log(`[PAYOUT] User ${senderId} uses BONUS coins. Applying 5% rate.`);
         }
 
         const earned = cost * rate;
+        console.log(`[PAYOUT] Earned: ${earned}, Rate: ${rate}`);
         if (earned <= 0 && cost > 0 && commissionType === 'REAL') return;
 
         console.log(`[PAYOUT] Payee ${actualPayeeId} earned ${earned} (Type: ${commissionType}, Spent: ${cost})`);

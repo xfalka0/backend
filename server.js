@@ -3272,6 +3272,7 @@ io.on('connection', (socket) => {
 
         try {
             client = await db.pool.connect();
+            console.log(`[SOCKET] Starting send_message transaction for chatId: ${chatId}, senderId: ${senderId}`);
             await client.query('BEGIN'); // Start Transaction
 
             // Check if sender is an operator
@@ -3327,9 +3328,11 @@ io.on('connection', (socket) => {
                 userBalance = currentBalance - cost;
 
                 // Record Operator Commission
+                console.log(`[SOCKET] Recording commission for cost: ${cost}, type: ${type}`);
                 await recordOperatorCommission(client, chatId, senderId, cost, type || 'text');
             }
 
+            console.log(`[SOCKET] Checking management status for role: ${socket.user.role}`);
             // --- 2. SENDER MAPPING (Zimmetleme & Management Check) ---
             let finalSenderId = senderId;
             
@@ -3422,7 +3425,7 @@ io.on('connection', (socket) => {
             io.to(socket.id).emit('message_error', {
                 code: err.message === 'BU_PROFIL_SIZE_ZIMMETLI_DEGIL' ? 'UNAUTHORIZED' : 'SEND_FAILED',
                 message: errorMsg,
-                debug: process.env.NODE_ENV === 'development' ? err.message : undefined
+                debug: err.message // Force show debug message to user for troubleshooting
             });
         } finally {
             if (client) {

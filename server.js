@@ -2503,6 +2503,33 @@ app.get('/api/chats/admin', authenticateToken, authorizeRole('admin', 'super_adm
     }
 });
 
+// FINAL DATABASE MIGRATION FOR DECIMAL SUPPORT (Temporarily unprotected for easy access)
+app.get('/api/admin/fix-database-final', async (req, res) => {
+    try {
+        await db.query('BEGIN');
+        
+        console.log('[MIGRATION] Converting operator_stats columns to DECIMAL...');
+        
+        // 1. Update operator_stats table
+        await db.query('ALTER TABLE operator_stats ALTER COLUMN coins_earned TYPE DECIMAL(12,2)');
+        await db.query('ALTER TABLE operator_stats ALTER COLUMN total_user_spend TYPE DECIMAL(12,2)');
+        
+        // 2. Ensure operators table is also updated (just in case)
+        await db.query('ALTER TABLE operators ALTER COLUMN pending_balance TYPE DECIMAL(12,2)');
+        await db.query('ALTER TABLE operators ALTER COLUMN lifetime_earnings TYPE DECIMAL(12,2)');
+        
+        // 3. Ensure users balance can handle decimals if we ever decide to use them (optional but safer)
+        // await db.query('ALTER TABLE users ALTER COLUMN balance TYPE DECIMAL(12,2)');
+        
+        await db.query('COMMIT');
+        res.json({ success: true, message: 'VERİTABANI BAŞARIYLA GÜNCELLENDİ! Artık küsuratlı kazançlar kaydedilebilir.' });
+    } catch (err) {
+        await db.query('ROLLBACK');
+        console.error('[MIGRATION ERROR]:', err.message);
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
 app.get('/api/debug/admin-chats', async (req, res) => {
     const migrationResults = [];
     try {

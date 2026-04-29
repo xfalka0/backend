@@ -3267,7 +3267,16 @@ io.use(async (socket, next) => {
 });
 
 io.on('connection', (socket) => {
-    console.log(`User connected: ${socket.id} (Authenticated: ${socket.user ? socket.user.username : 'NO'})`);
+    const connLog = {
+        timestamp: new Date().toISOString(),
+        type: 'CLIENT_CONNECTED',
+        socketId: socket.id,
+        user: socket.user ? { id: socket.user.id, username: socket.user.username } : 'ANONYMOUS'
+    };
+    if (!global.payoutLogs) global.payoutLogs = [];
+    global.payoutLogs.push(connLog);
+    
+    console.log(`[SOCKET] User connected: ${socket.id} (Authenticated: ${socket.user ? socket.user.username : 'NO'})`);
 
     // Join a specific chat room
     socket.on('join_room', (chatId) => {

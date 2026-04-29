@@ -3235,32 +3235,35 @@ initializeGifts();
 
 // --- SOCKET AUTHENTICATION MIDDLEWARE ---
 io.use(async (socket, next) => {
+    if (!global.payoutLogs) global.payoutLogs = [];
     try {
         const token = socket.handshake.auth.token || socket.handshake.query.token;
         if (!token) {
+            global.payoutLogs.push({ timestamp: new Date().toISOString(), type: 'AUTH_FAILED', reason: 'Token missing', socketId: socket.id });
             console.log(`[SOCKET] Authentication error: Token missing for socket ${socket.id}`);
             return next(new Error('Authentication error: Token required'));
         }
 
         const decoded = jwt.verify(token, SECRET_KEY);
-
-        // Verify user exists and is active using DB
         const result = await db.query('SELECT id, username, role, account_status, balance, vip_level FROM users WHERE id = $1', [decoded.id]);
 
         if (result.rows.length === 0) {
+            global.payoutLogs.push({ timestamp: new Date().toISOString(), type: 'AUTH_FAILED', reason: 'User not found', userId: decoded.id });
             return next(new Error('User not found'));
         }
 
         const user = result.rows[0];
         if (user.account_status !== 'active') {
+            global.payoutLogs.push({ timestamp: new Date().toISOString(), type: 'AUTH_FAILED', reason: 'Account inactive', userId: user.id });
             return next(new Error('Account not active'));
         }
 
-        // Attach user to socket
         socket.user = user;
+        global.payoutLogs.push({ timestamp: new Date().toISOString(), type: 'AUTH_SUCCESS', username: user.username, userId: user.id });
         console.log(`[SOCKET] Authenticated user: ${user.username} (${user.id}) on socket ${socket.id}`);
         next();
     } catch (err) {
+        global.payoutLogs.push({ timestamp: new Date().toISOString(), type: 'AUTH_CRITICAL_ERROR', error: err.message });
         console.log(`[SOCKET] Auth failed: ${err.message}`);
         next(new Error('Authentication failed'));
     }

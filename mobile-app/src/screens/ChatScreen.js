@@ -338,9 +338,21 @@ export default function ChatScreen({ route, navigation }) {
 
     const sendMessage = () => {
         if (input.trim() === '' || !chatId) return;
+        
+        // SOCKET CHECK
+        if (!socketRef.current || !socketRef.current.connected) {
+            showAlert({ 
+                title: 'Bağlantı Hatası', 
+                message: 'Sunucu ile bağlantı kurulamadı. Lütfen internetinizi kontrol edin veya birazdan tekrar deneyin.', 
+                type: 'error' 
+            });
+            console.error('[ChatScreen] Socket is not connected!');
+            return;
+        }
+
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
         // Check Balance
-        if (currentBalance < 10 && vip_level < 1) { // Assuming 10 is cost and VIPs might bypass or checking balance logic
+        if (currentBalance < 10 && vip_level < 1) { 
             setShowCoinModal(true);
             return;
         }
@@ -356,24 +368,25 @@ export default function ChatScreen({ route, navigation }) {
             content: input,
             type: 'text',
             created_at: new Date().toISOString(),
-            is_optimistic: true // Flag to identify and replace later
+            is_optimistic: true
         };
 
         setMessages(prev => [...prev, optimisticMsg]);
+        const originalInput = input;
         setInput('');
 
         const msgData = {
             chatId: chatId,
             senderId: user.id,
-            content: input,
+            content: originalInput,
             type: 'text',
-            tempId: tempId // Send tempId to track confirmation
+            tempId: tempId
         };
 
-        socketRef.current?.emit('send_message', msgData);
+        socketRef.current.emit('send_message', msgData);
 
         // Stop typing immediately
-        socketRef.current?.emit('typing_end', { chatId });
+        socketRef.current.emit('typing_end', { chatId });
         if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
     };
 

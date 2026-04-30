@@ -49,12 +49,26 @@ async function recordOperatorCommission(client, chatId, senderId, cost, type) {
     log(`Found Operator/Avatar ID: ${operatorId}`);
 
     // 1.5 Find who manages this avatar (to pay the actual human)
-    const managerRes = await client.query('SELECT managed_by FROM users WHERE id = $1', [operatorId]);
-    const actualPayeeId = (managerRes.rows.length > 0 && managerRes.rows[0].managed_by) 
-        ? managerRes.rows[0].managed_by 
-        : operatorId;
+    const managerRes = await client.query('SELECT managed_by, role FROM users WHERE id = $1', [operatorId]);
+    const avatarData = managerRes.rows[0] || {};
+    
+    // Check if the sender is a staff/moderator/admin
+    const senderRes = await client.query('SELECT role FROM users WHERE id = $1', [senderId]);
+    const senderRole = senderRes.rows.length > 0 ? senderRes.rows[0].role : 'user';
+    const isSenderStaff = ['staff', 'moderator', 'admin', 'super_admin'].includes(senderRole);
 
-    log(`Payee determined: ${actualPayeeId} (Manager of ${operatorId})`);
+    // PAYEE LOGIC: 
+    // 1. If sender is a staff member, they get the money directly for their work.
+    // 2. Otherwise, if the avatar has a fixed manager, the manager gets it.
+    // 3. Fallback to the avatar itself.
+    let actualPayeeId = operatorId;
+    if (isSenderStaff) {
+        actualPayeeId = senderId;
+    } else if (avatarData.managed_by) {
+        actualPayeeId = avatarData.managed_by;
+    }
+
+    log(`Payee determined: ${actualPayeeId} (Sender Role: ${senderRole})`);
     logEntry.payeeId = actualPayeeId;
 
     // 1.6 Activity Tracking

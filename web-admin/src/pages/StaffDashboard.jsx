@@ -128,12 +128,9 @@ const StaffDashboard = () => {
                                 <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">Durum</p>
                                 <div className="flex items-center gap-2">
                                     <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                                    <span className="text-[11px] font-black text-emerald-400 uppercase">Aktif</span>
+                                    <span className="text-[11px] font-black text-emerald-400 uppercase">Aktif Çalışıyor</span>
                                 </div>
                             </div>
-                            <button className="px-5 py-2.5 bg-blue-500 hover:bg-blue-600 text-white text-[10px] font-black uppercase tracking-widest rounded-2xl shadow-lg shadow-blue-500/30 transition-all active:scale-95">
-                                Ödeme Al
-                            </button>
                         </div>
                     </div>
                 </div>
@@ -147,7 +144,7 @@ const StaffDashboard = () => {
                     <div className="h-px flex-1 bg-white/5" />
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                     <StatCard 
                         title="Atılan Metin Mesajı" 
                         value={parseFloat(stats?.text_earned_today || 0)}
@@ -165,12 +162,20 @@ const StaffDashboard = () => {
                         color="purple"
                     />
                     <StatCard 
-                        title="Sesli/Hediye Kazancı" 
-                        value={(parseFloat(stats?.audio_earned_today || 0))}
-                        tlValue={(parseFloat(stats?.audio_earned_today || 0)) * 0.5}
+                        title="Sesli Mesaj Kazancı" 
+                        value={parseFloat(stats?.audio_earned_today || 0)}
+                        tlValue={parseFloat(stats?.audio_earned_today || 0) * 0.5}
                         count={stats?.audio_count_today || 0}
                         icon={Zap} 
                         color="amber"
+                    />
+                    <StatCard 
+                        title="Hediye Kazancı" 
+                        value={0}
+                        tlValue={0}
+                        count={0}
+                        icon={Trophy} 
+                        color="rose"
                     />
                 </div>
             </div>
@@ -234,27 +239,41 @@ const StaffDashboard = () => {
             </div>
 
             {/* Earnings Guide Card */}
-            <div className="bg-slate-900/60 backdrop-blur-3xl border border-white/5 rounded-[48px] p-10 flex flex-col md:flex-row items-center gap-10">
-                <div className="flex-1">
+            <div className="bg-slate-900/60 backdrop-blur-3xl border border-white/5 rounded-[48px] p-10">
+                <div className="mb-10">
                     <h3 className="text-2xl font-black text-white mb-4">Kazanç Rehberiniz</h3>
                     <p className="text-slate-500 text-sm font-medium leading-relaxed">
-                        Hakedişleriniz otomatik olarak hesaplanır. Metin mesajlarından <span className="text-blue-400 font-bold">1.15 TL</span>, fotoğraflardan <span className="text-purple-400 font-bold">10.00 TL</span> kazanırsınız. 
-                        Tüm ödemeleriniz belirttiğiniz tarihlerde net bakiyeniz üzerinden yapılır.
+                        Hakedişleriniz otomatik olarak hesaplanır. Her etkileşim türü için belirlenen TL tutarları aşağıdadır.
                     </p>
                 </div>
-                <div className="flex gap-4">
-                    <div className="bg-white/5 p-6 rounded-3xl border border-white/5 text-center min-w-[120px]">
-                        <p className="text-blue-400 text-[10px] font-black uppercase mb-2">Metin</p>
-                        <p className="text-xl font-black text-white">1.15₺</p>
+                
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <div className="bg-white/5 p-6 rounded-3xl border border-white/5 group hover:bg-blue-500/10 transition-all">
+                        <p className="text-blue-400 text-[10px] font-black uppercase tracking-widest mb-2">Metin Mesajı</p>
+                        <p className="text-2xl font-black text-white">1.15₺</p>
+                        <p className="text-[10px] text-slate-600 mt-2 font-bold uppercase">2.3 COIN / MESAJ</p>
                     </div>
-                    <div className="bg-white/5 p-6 rounded-3xl border border-white/5 text-center min-w-[120px]">
-                        <p className="text-purple-400 text-[10px] font-black uppercase mb-2">Foto</p>
-                        <p className="text-xl font-black text-white">10.00₺</p>
+                    <div className="bg-white/5 p-6 rounded-3xl border border-white/5 group hover:bg-purple-500/10 transition-all">
+                        <p className="text-purple-400 text-[10px] font-black uppercase tracking-widest mb-2">Fotoğraf</p>
+                        <p className="text-2xl font-black text-white">10.00₺</p>
+                        <p className="text-[10px] text-slate-600 mt-2 font-bold uppercase">20 COIN / FOTO</p>
+                    </div>
+                    <div className="bg-white/5 p-6 rounded-3xl border border-white/5 group hover:bg-amber-500/10 transition-all">
+                        <p className="text-amber-400 text-[10px] font-black uppercase tracking-widest mb-2">Ses Kaydı</p>
+                        <p className="text-2xl font-black text-white">5.00₺</p>
+                        <p className="text-[10px] text-slate-600 mt-2 font-bold uppercase">10 COIN / SES</p>
+                    </div>
+                    <div className="bg-white/5 p-6 rounded-3xl border border-white/5 group hover:bg-rose-500/10 transition-all">
+                        <p className="text-rose-400 text-[10px] font-black uppercase tracking-widest mb-2">Hediye</p>
+                        <p className="text-2xl font-black text-white">%25</p>
+                        <p className="text-[10px] text-slate-600 mt-2 font-bold uppercase">COIN TUTARI ÜZERİNDEN</p>
                     </div>
                 </div>
             </div>
         </div>
     );
 };
+
+export default StaffDashboard;
 
 export default StaffDashboard;

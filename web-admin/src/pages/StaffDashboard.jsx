@@ -52,32 +52,33 @@ const StaffDashboard = () => {
         );
     }
 
-    const StatCard = ({ title, value, icon: Icon, color, subText, secondaryValue }) => (
-        <div className="bg-slate-900/50 backdrop-blur-3xl border border-white/5 p-8 rounded-[40px] relative overflow-hidden group hover:border-white/10 transition-all duration-500">
-            <div className={`absolute top-0 right-0 w-40 h-40 bg-${color}-600/10 blur-[80px] rounded-full -mr-20 -mt-20 group-hover:bg-${color}-600/20 transition-all duration-700`} />
-            
-            <div className="flex items-start justify-between relative z-10">
-                <div>
-                    <p className="text-slate-500 text-[11px] font-black uppercase tracking-[0.2em] mb-2">{title}</p>
-                    <h3 className="text-4xl font-black text-white tracking-tighter mb-1">
-                        {typeof value === 'number' ? value.toFixed(2) : value} <span className="text-sm font-bold text-slate-600 ml-1">COIN</span>
-                    </h3>
-                    {secondaryValue && (
-                        <p className="text-xl font-bold text-blue-400/80 tracking-tight">
-                            ≈ {secondaryValue} <span className="text-[10px] font-black uppercase ml-1">TRY</span>
+    const StatCard = ({ title, value, icon: Icon, color, subText }) => {
+        const tlValue = (parseFloat(value) || 0) * 0.5;
+        return (
+            <div className="bg-slate-900/50 backdrop-blur-3xl border border-white/5 p-8 rounded-[40px] relative overflow-hidden group hover:border-white/10 transition-all duration-500">
+                <div className={`absolute top-0 right-0 w-40 h-40 bg-${color}-600/10 blur-[80px] rounded-full -mr-20 -mt-20 group-hover:bg-${color}-600/20 transition-all duration-700`} />
+                
+                <div className="flex items-start justify-between relative z-10">
+                    <div>
+                        <p className="text-slate-500 text-[11px] font-black uppercase tracking-[0.2em] mb-2">{title}</p>
+                        <h3 className="text-4xl font-black text-white tracking-tighter mb-1">
+                            {tlValue.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} <span className="text-sm font-bold text-slate-600 ml-1">TL</span>
+                        </h3>
+                        <p className="text-[10px] font-bold text-slate-500/60 tracking-tight uppercase">
+                            {value.toLocaleString('tr-TR', { minimumFractionDigits: 1 })} COIN
                         </p>
-                    )}
-                    {subText && <p className="text-[10px] font-bold text-slate-500 mt-4 uppercase tracking-widest flex items-center gap-2">
-                        <Activity size={10} className={`text-${color}-400`} />
-                        {subText}
-                    </p>}
-                </div>
-                <div className={`w-14 h-14 rounded-2xl bg-${color}-600/10 border border-${color}-500/20 flex items-center justify-center text-${color}-400 shadow-xl group-hover:scale-110 transition-transform duration-500`}>
-                    <Icon size={24} />
+                        {subText && <p className="text-[10px] font-bold text-slate-500 mt-4 uppercase tracking-widest flex items-center gap-2">
+                            <Activity size={10} className={`text-${color}-400`} />
+                            {subText}
+                        </p>}
+                    </div>
+                    <div className={`w-14 h-14 rounded-2xl bg-${color}-600/10 border border-${color}-500/20 flex items-center justify-center text-${color}-400 shadow-xl group-hover:scale-110 transition-transform duration-500`}>
+                        <Icon size={24} />
+                    </div>
                 </div>
             </div>
-        </div>
-    );
+        );
+    };
 
     return (
         <div className="p-8 space-y-10 animate-in fade-in slide-in-from-bottom-4 duration-1000">
@@ -93,7 +94,7 @@ const StaffDashboard = () => {
                     <h1 className="text-5xl font-black text-white tracking-tighter leading-tight">
                         İyi Mesailer, <br />
                         <span className="bg-clip-text text-transparent bg-gradient-to-r from-blue-400 via-indigo-500 to-blue-400 bg-[length:200%_auto] animate-gradient-text">
-                            {user?.display_name || user?.username}
+                            {stats?.display_name || stats?.username || user?.username}
                         </span>
                     </h1>
                     <p className="text-slate-500 text-base font-medium mt-4 max-w-md">Bugünkü performansınızı takip edin ve kazancınızı artırmak için sohbetlere odaklanın.</p>
@@ -109,7 +110,7 @@ const StaffDashboard = () => {
                     </div>
                     <div className="w-24 h-24 rounded-[32px] bg-gradient-to-br from-blue-500 to-indigo-600 p-[3px] shadow-2xl">
                         <div className="w-full h-full rounded-[29px] bg-slate-950 overflow-hidden">
-                            <img src={user?.avatar_url || 'https://via.placeholder.com/150'} alt="Profile" className="w-full h-full object-cover" />
+                            <img src={stats?.avatar_url || user?.avatar_url || 'https://via.placeholder.com/150'} alt="Profile" className="w-full h-full object-cover" />
                         </div>
                     </div>
                 </div>
@@ -120,7 +121,6 @@ const StaffDashboard = () => {
                 <StatCard 
                     title="Toplam Bekleyen Bakiye" 
                     value={parseFloat(stats?.pending_balance || 0)} 
-                    secondaryValue={(parseFloat(stats?.pending_balance || 0) * 0.5).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     icon={Wallet} 
                     color="blue"
                     subText="Son ödemeden beri kazanılan"
@@ -128,7 +128,6 @@ const StaffDashboard = () => {
                 <StatCard 
                     title="Bugünkü Kazanç" 
                     value={parseFloat(stats?.earned_today || 0)} 
-                    secondaryValue={(parseFloat(stats?.earned_today || 0) * 0.5).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     icon={Zap} 
                     color="amber"
                     subText="Bugün gece yarısından itibaren"

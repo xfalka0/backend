@@ -1297,8 +1297,11 @@ app.get('/api/debug/payout-logs', async (req, res) => {
                 u.id as staff_id,
                 o.pending_balance,
                 o.lifetime_earnings,
-                (SELECT SUM(coins_earned) FROM operator_stats WHERE operator_id::text = u.id::text AND date = CURRENT_DATE) as earned_today,
-                (SELECT COUNT(*) FROM messages m JOIN chats c ON m.chat_id = c.id WHERE c.managed_by::text = u.id::text AND m.created_at > CURRENT_DATE) as msgs_today
+                (SELECT COALESCE(SUM(coins_earned), 0) FROM operator_stats WHERE operator_id::text = u.id::text AND date = CURRENT_DATE) as earned_today,
+                (SELECT COUNT(*) FROM messages m 
+                 JOIN chats c ON m.chat_id = c.id 
+                 JOIN users a ON c.operator_id = a.id
+                 WHERE a.managed_by::text = u.id::text AND m.created_at > CURRENT_DATE) as msgs_today
             FROM users u
             JOIN operators o ON u.id::text = o.user_id::text
             WHERE u.role IN ('staff', 'admin', 'operator', 'moderator')

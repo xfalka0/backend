@@ -3582,7 +3582,12 @@ io.on('connection', (socket) => {
                 savedMsg.gift_icon = giftDetails.icon_url;
             }
 
-            const msgToEmit = { ...savedMsg, chat_id: savedMsg.chat_id.toString(), tempId };
+            const msgToEmit = { 
+                ...savedMsg, 
+                chat_id: savedMsg.chat_id.toString(), 
+                type: savedMsg.content_type, // Alias for mobile app compatibility
+                tempId 
+            };
             // EMIT ASAP
             io.to(chatId.toString()).emit('receive_message', msgToEmit);
             io.emit('admin_notification', msgToEmit);

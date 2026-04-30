@@ -464,7 +464,7 @@ export default function ChatScreen({ route, navigation }) {
             });
 
             const res = await axios.post(`${API_URL}/upload`, formData, {
-                headers: { 'Content-Type': 'multipart/form-type' },
+                headers: { 'Content-Type': 'multipart/form-data' },
             });
 
             const imageUrl = res.data.url || `${API_URL}${res.data.relativePath}`; // Handle both formats if flexible

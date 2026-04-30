@@ -3430,10 +3430,10 @@ io.on('connection', (socket) => {
 
                 await client.query('UPDATE users SET balance = balance - $2 WHERE id = $1', [senderId, cost]);
                 userBalance = currentBalance - cost;
-
-                // Record Operator Commission
-                console.log(`[SOCKET] Recording commission for cost: ${cost}, type: ${type}`);
-                await recordOperatorCommission(client, chatId, senderId, cost, type || 'text');
+            } else {
+                // STAFF EARNS ON RESPONSE
+                console.log(`[SOCKET] Staff ${senderId} responded. Awarding commission.`);
+                await recordOperatorCommission(client, chatId, senderId, 10, type || 'text');
             }
 
             console.log(`[SOCKET] Checking management status for role: ${socket.user.role}`);

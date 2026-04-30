@@ -3459,21 +3459,35 @@ io.on('connection', (socket) => {
 
                 await client.query('UPDATE users SET balance = balance - $2 WHERE id = $1', [senderId, cost]);
                 userBalance = currentBalance - cost;
+
+                // AWARD COMMISSION TO STAFF for User Spend (Gifts, Images, Messages)
+                const chatRes = await client.query('SELECT operator_id FROM chats WHERE id = $1', [chatId]);
+                if (chatRes.rows.length > 0) {
+                    const avatarId = chatRes.rows[0].operator_id;
+                    console.log(`[PAYOUT-DEBUG] User ${senderId} spent ${cost} coins in Chat ${chatId}. Awarding commission to avatar manager.`);
+                    // We pass 0 as senderId because it's a user spend, recordOperatorCommission will find the manager
+                    await recordOperatorCommission(client, chatId, '00000000-0000-0000-0000-000000000000', cost, type || 'text');
+                }
             } else {
                 // STAFF EARNS ON RESPONSE - But ONLY if they are NOT the "user" side of the chat
                 const chatCheck = await client.query('SELECT user_id FROM chats WHERE id = $1', [chatId]);
                 const chatUserId = chatCheck.rows.length > 0 ? chatCheck.rows[0].user_id : null;
                 
                 if (chatUserId && chatUserId.toString() !== senderId.toString()) {
-                    console.log(`[SOCKET] Staff ${senderId} responded as Avatar. Awarding commission.`);
+                    console.log(`[PAYOUT-DEBUG] Staff ${senderId} responded to Chat ${chatId}. Awarding commission. Type: ${type}`);
                     
                     let commissionCost = 10;
                     if (type === 'image') commissionCost = 50;
                     else if (type === 'audio') commissionCost = 30;
                     
-                    await recordOperatorCommission(client, chatId, senderId, commissionCost, type || 'text');
+                    try {
+                        await recordOperatorCommission(client, chatId, senderId, commissionCost, type || 'text');
+                        console.log(`[PAYOUT-DEBUG] Commission record call finished successfully.`);
+                    } catch (payoutErr) {
+                        console.error(`[PAYOUT-ERROR] Error recording commission:`, payoutErr);
+                    }
                 } else {
-                    console.log(`[SOCKET] Staff ${senderId} is acting as a USER in this chat. No commission.`);
+                    console.log(`[PAYOUT-DEBUG] Commission skipped. chatUserId: ${chatUserId}, senderId: ${senderId}`);
                 }
             }
 

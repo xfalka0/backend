@@ -67,18 +67,27 @@ async function recordOperatorCommission(client, chatId, senderId, cost, type) {
     let commissionType = 'REAL';
     let rate = 0.25; 
     
-    if (type === 'text') rate = 0.23;
-    else if (type === 'image') rate = 0.40;
-    else if (type === 'audio') rate = 0.3333333333333333;
+    if (type === 'text') rate = 0.23; // 10 * 0.23 = 2.3 coins = 1.15 TL
+    else if (type === 'image') rate = 0.40; 
+    else if (type === 'audio') rate = 0.3333333333333333; 
     else if (type === 'gift') rate = 0.25;
     
+    // Bonus Protection: If user never spent money AND never got coins from Admin, use lower rate
     if (userLifetimeSpent <= 0) {
-        rate = 0.05; 
-        commissionType = 'BONUS';
+        // Check if admin ever added coins to this user
+        const adminAddCheck = await client.query(
+            "SELECT id FROM transactions WHERE user_id = $1 AND (type = 'admin_add' OR type = 'admin_edit' OR type = 'purchase') LIMIT 1", 
+            [senderId]
+        );
+        
+        if (adminAddCheck.rows.length === 0) {
+            rate = 0.05; // Still a bonus user
+            commissionType = 'BONUS';
+        }
     }
-
+    
     const earned = cost * rate;
-    console.log(`[PAYOUT] Earned: ${earned}, Rate: ${rate}`);
+    console.log(`[PAYOUT] Type: ${commissionType}, Earned: ${earned}, Rate: ${rate}`);
 
     if (earned <= 0 && cost > 0 && commissionType === 'REAL') return;
 

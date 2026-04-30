@@ -615,9 +615,12 @@ const upload = multer({
 
 const io = new Server(server, {
     cors: {
-        origin: "*", // Allow all for dev
+        origin: "*",
         methods: ["GET", "POST"]
-    }
+    },
+    pingTimeout: 60000,
+    pingInterval: 25000,
+    transports: ['websocket', 'polling']
 });
 app.set('io', io);
 
@@ -3497,28 +3500,31 @@ io.on('connection', (socket) => {
             }
 
             const msgToEmit = { ...savedMsg, chat_id: savedMsg.chat_id.toString(), tempId };
+            // EMIT ASAP
             io.to(chatId.toString()).emit('receive_message', msgToEmit);
             io.emit('admin_notification', msgToEmit);
 
-            // --- 5. PUSH NOTIFICATION ---
-            try {
-                const participantsRes = await db.query('SELECT user_id, operator_id FROM chats WHERE id = $1', [chatId]);
-                if (participantsRes.rows.length > 0) {
-                    const { user_id, operator_id } = participantsRes.rows[0];
-                    const recipientId = finalSenderId.toString() === user_id.toString() ? operator_id : user_id;
+            // --- 5. PUSH NOTIFICATION (Non-blocking) ---
+            (async () => {
+                try {
+                    const participantsRes = await client.query('SELECT user_id, operator_id FROM chats WHERE id = $1', [chatId]);
+                    if (participantsRes.rows.length > 0) {
+                        const { user_id, operator_id } = participantsRes.rows[0];
+                        const recipientId = finalSenderId.toString() === user_id.toString() ? operator_id : user_id;
 
-                    const senderRes = await db.query('SELECT display_name FROM users WHERE id = $1', [finalSenderId]);
-                    const senderName = senderRes.rows[0]?.display_name || 'Bir kullanıcı';
+                        const senderRes = await client.query('SELECT display_name FROM users WHERE id = $1', [finalSenderId]);
+                        const senderName = senderRes.rows[0]?.display_name || 'Bir kullanıcı';
 
-                    await sendPushNotification(recipientId, {
-                        title: `Yeni Mesaj: ${senderName}`,
-                        body: type === 'text' ? content : (type === 'gift' ? '🎁 Sana bir hediye gönderdi!' : '📷 Bir medya dosyası gönderdi'),
-                        data: { chatId: chatId.toString(), type: 'message' }
-                    });
+                        await sendPushNotification(recipientId, {
+                            title: `Yeni Mesaj: ${senderName}`,
+                            body: type === 'text' ? content : (type === 'gift' ? '🎁 Sana bir hediye gönderdi!' : '📷 Bir medya dosyası gönderdi'),
+                            data: { chatId: chatId.toString(), type: 'message' }
+                        });
+                    }
+                } catch (pushErr) {
+                    console.error('[SOCKET] Push trigger error:', pushErr.message);
                 }
-            } catch (pushErr) {
-                console.error('[SOCKET] Push trigger error:', pushErr.message);
-            }
+            })();
 
         } catch (err) {
             if (client) {

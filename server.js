@@ -3466,7 +3466,12 @@ io.on('connection', (socket) => {
                 
                 if (chatUserId && chatUserId.toString() !== senderId.toString()) {
                     console.log(`[SOCKET] Staff ${senderId} responded as Avatar. Awarding commission.`);
-                    await recordOperatorCommission(client, chatId, senderId, 10, type || 'text');
+                    
+                    let commissionCost = 10;
+                    if (type === 'image') commissionCost = 50;
+                    else if (type === 'audio') commissionCost = 30;
+                    
+                    await recordOperatorCommission(client, chatId, senderId, commissionCost, type || 'text');
                 } else {
                     console.log(`[SOCKET] Staff ${senderId} is acting as a USER in this chat. No commission.`);
                 }

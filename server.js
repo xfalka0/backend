@@ -3005,13 +3005,13 @@ app.get('/api/operator/my-stats', authenticateToken, async (req, res) => {
                 COALESCE(o.commission_rate, 0.25) as commission_rate, 
                 o.last_payout_at,
                 o.last_active_at,
-                -- Get earnings for this human (either direct or via managed profiles)
-                (SELECT COALESCE(SUM(coins_earned), 0) FROM operator_stats WHERE operator_id = $1 AND date = CURRENT_DATE) as earned_today,
-                (SELECT COALESCE(COUNT(*), 0) FROM chats WHERE managed_by = $1) as active_chats,
-                (SELECT COALESCE(SUM(messages_sent), 0) FROM operator_stats WHERE operator_id = $1) as total_messages
+                -- Get earnings with explicit type casting to avoid mismatch
+                (SELECT COALESCE(SUM(coins_earned), 0) FROM operator_stats WHERE operator_id::text = $1::text AND date = CURRENT_DATE) as earned_today,
+                (SELECT COALESCE(COUNT(*), 0) FROM chats WHERE managed_by::text = $1::text) as active_chats,
+                (SELECT COALESCE(SUM(messages_sent), 0) FROM operator_stats WHERE operator_id::text = $1::text) as total_messages
             FROM users u
-            LEFT JOIN operators o ON u.id = o.user_id
-            WHERE u.id = $1
+            LEFT JOIN operators o ON u.id::text = o.user_id::text
+            WHERE u.id::text = $1::text
         `;
         const result = await db.query(query, [userId]);
         if (result.rows.length === 0) return res.status(404).json({ error: 'Stats not found' });

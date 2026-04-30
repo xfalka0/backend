@@ -3431,9 +3431,16 @@ io.on('connection', (socket) => {
                 await client.query('UPDATE users SET balance = balance - $2 WHERE id = $1', [senderId, cost]);
                 userBalance = currentBalance - cost;
             } else {
-                // STAFF EARNS ON RESPONSE
-                console.log(`[SOCKET] Staff ${senderId} responded. Awarding commission.`);
-                await recordOperatorCommission(client, chatId, senderId, 10, type || 'text');
+                // STAFF EARNS ON RESPONSE - But ONLY if they are NOT the "user" side of the chat
+                const chatCheck = await client.query('SELECT user_id FROM chats WHERE id = $1', [chatId]);
+                const chatUserId = chatCheck.rows.length > 0 ? chatCheck.rows[0].user_id : null;
+                
+                if (chatUserId && chatUserId.toString() !== senderId.toString()) {
+                    console.log(`[SOCKET] Staff ${senderId} responded as Avatar. Awarding commission.`);
+                    await recordOperatorCommission(client, chatId, senderId, 10, type || 'text');
+                } else {
+                    console.log(`[SOCKET] Staff ${senderId} is acting as a USER in this chat. No commission.`);
+                }
             }
 
             console.log(`[SOCKET] Checking management status for role: ${socket.user.role}`);

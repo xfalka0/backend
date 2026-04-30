@@ -44,8 +44,11 @@ async function recordOperatorCommission(client, chatId, senderId, cost, type) {
     // 1.6 Activity Tracking
     await client.query('UPDATE operators SET last_active_at = NOW() WHERE user_id = $1', [actualPayeeId]);
 
-    // 2. Bonus Protection Check
-    const userCheck = await client.query('SELECT total_spent FROM users WHERE id = $1', [senderId]);
+    // 2. Bonus Protection Check - CHECK THE CUSTOMER (user_id in chat), NOT THE SENDER (staff)
+    const chatUserRes = await client.query('SELECT user_id FROM chats WHERE id = $1', [chatId]);
+    const customerId = chatUserRes.rows.length > 0 ? chatUserRes.rows[0].user_id : null;
+    
+    const userCheck = await client.query('SELECT total_spent FROM users WHERE id = $1', [customerId]);
     const userLifetimeSpent = userCheck.rows.length > 0 ? parseFloat(userCheck.rows[0].total_spent || 0) : 0;
     
     let rate = 0.25; 
@@ -54,10 +57,11 @@ async function recordOperatorCommission(client, chatId, senderId, cost, type) {
     else if (type === 'audio') rate = 0.3333333333333333; 
     else if (type === 'gift') rate = 0.25;
     
-    if (userLifetimeSpent <= 0) {
+    // If customer has never spent money, use bonus rate
+    if (userLifetimeSpent <= 0 && customerId) {
         const adminAddCheck = await client.query(
             "SELECT id FROM transactions WHERE user_id = $1 AND (type = 'admin_add' OR type = 'admin_edit' OR type = 'purchase') LIMIT 1", 
-            [senderId]
+            [customerId]
         );
         if (adminAddCheck.rows.length === 0) {
             rate = 0.05; 

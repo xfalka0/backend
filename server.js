@@ -3504,13 +3504,12 @@ io.on('connection', (socket) => {
                 await client.query('UPDATE users SET balance = balance - $2 WHERE id = $1', [senderId, cost]);
                 userBalance = currentBalance - cost;
 
-                // AWARD COMMISSION TO STAFF for User Spend (Gifts, Images, Messages)
-                const chatRes = await client.query('SELECT operator_id FROM chats WHERE id = $1', [chatId]);
-                if (chatRes.rows.length > 0) {
-                    const avatarId = chatRes.rows[0].operator_id;
-                    console.log(`[PAYOUT-DEBUG] User ${senderId} spent ${cost} coins in Chat ${chatId}. Awarding commission to avatar manager.`);
-                    // We pass null as senderId because it's a user spend, recordOperatorCommission will find the manager
-                    await recordOperatorCommission(client, chatId, null, cost, type || 'text');
+                // AWARD COMMISSION TO STAFF for Gifts (Automated)
+                if (type === 'gift') {
+                    const chatRes = await client.query('SELECT operator_id FROM chats WHERE id = $1', [chatId]);
+                    if (chatRes.rows.length > 0) {
+                        await recordOperatorCommission(client, chatId, null, cost, 'gift');
+                    }
                 }
             } else {
                 // STAFF EARNS ON RESPONSE - But ONLY if they are NOT the "user" side of the chat

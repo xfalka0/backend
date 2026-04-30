@@ -3491,20 +3491,15 @@ io.on('connection', (socket) => {
                 const chatUserId = chatCheck.rows.length > 0 ? chatCheck.rows[0].user_id : null;
                 
                 if (chatUserId && chatUserId.toString() !== senderId.toString()) {
-                    console.log(`[PAYOUT-DEBUG] Staff ${senderId} responded to Chat ${chatId}. Awarding commission. Type: ${type}`);
-                    
                     let commissionCost = 10;
                     if (type === 'image') commissionCost = 50;
                     else if (type === 'audio') commissionCost = 30;
                     
                     try {
                         await recordOperatorCommission(client, chatId, senderId, commissionCost, type || 'text');
-                        console.log(`[PAYOUT-DEBUG] Commission record call finished successfully.`);
                     } catch (payoutErr) {
-                        console.error(`[PAYOUT-ERROR] Error recording commission:`, payoutErr);
+                        console.error('Commission error:', payoutErr.message);
                     }
-                } else {
-                    console.log(`[PAYOUT-DEBUG] Commission skipped. chatUserId: ${chatUserId}, senderId: ${senderId}`);
                 }
             }
 

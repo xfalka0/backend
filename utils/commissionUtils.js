@@ -10,43 +10,14 @@ const db = require('../db');
  * @param {string} type - Action type ('text', 'image', 'gift', etc.)
  */
 async function recordOperatorCommission(client, chatId, senderId, cost, type) {
-    if (cost <= 0) {
-        console.log(`[PAYOUT] Skipping for zero cost message in chat: ${chatId}`);
-        return;
-    }
-
-    const logEntry = { 
-        timestamp: new Date().toISOString(), 
-        chatId, 
-        senderId, 
-        cost, 
-        type, 
-        steps: [] 
-    };
-    if (!global.payoutLogs) global.payoutLogs = [];
-    global.payoutLogs.push(logEntry);
-
-    const log = (msg) => {
-        console.log(`[PAYOUT] ${msg}`);
-        logEntry.steps.push(msg);
-    };
-
-    log(`STARTING: chat=${chatId}, sender=${senderId}, cost=${cost}`);
+    if (cost <= 0) return;
 
     // 1. Find the operator for this chat
     const chatRes = await client.query('SELECT operator_id FROM chats WHERE id = $1', [chatId]);
-    if (chatRes.rows.length === 0) {
-        log(`FAILED: Chat ${chatId} not found`);
-        return;
-    }
+    if (chatRes.rows.length === 0) return;
     
     const operatorId = chatRes.rows[0].operator_id;
-    if (!operatorId) {
-        log(`FAILED: No operator assigned to chat ${chatId}`);
-        return;
-    }
-
-    log(`Found Operator/Avatar ID: ${operatorId}`);
+    if (!operatorId) return;
 
     // 1.5 Find who manages this avatar (to pay the actual human)
     const managerRes = await client.query('SELECT managed_by, role FROM users WHERE id::text = $1::text', [operatorId]);
@@ -70,9 +41,6 @@ async function recordOperatorCommission(client, chatId, senderId, cost, type) {
         actualPayeeId = avatarData.managed_by;
     }
 
-    log(`Payee determined: ${actualPayeeId} (Sender Role: ${senderRole})`);
-    logEntry.payeeId = actualPayeeId;
-
     // 1.6 Activity Tracking
     await client.query('UPDATE operators SET last_active_at = NOW() WHERE user_id = $1', [actualPayeeId]);
 
@@ -80,32 +48,24 @@ async function recordOperatorCommission(client, chatId, senderId, cost, type) {
     const userCheck = await client.query('SELECT total_spent FROM users WHERE id = $1', [senderId]);
     const userLifetimeSpent = userCheck.rows.length > 0 ? parseFloat(userCheck.rows[0].total_spent || 0) : 0;
     
-    let commissionType = 'REAL';
     let rate = 0.25; 
-    
-    if (type === 'text') rate = 0.23; // 10 * 0.23 = 2.3 coins = 1.15 TL
+    if (type === 'text') rate = 0.23; 
     else if (type === 'image') rate = 0.40; 
     else if (type === 'audio') rate = 0.3333333333333333; 
     else if (type === 'gift') rate = 0.25;
     
-    // Bonus Protection: If user never spent money AND never got coins from Admin, use lower rate
     if (userLifetimeSpent <= 0) {
-        // Check if admin ever added coins to this user
         const adminAddCheck = await client.query(
             "SELECT id FROM transactions WHERE user_id = $1 AND (type = 'admin_add' OR type = 'admin_edit' OR type = 'purchase') LIMIT 1", 
             [senderId]
         );
-        
         if (adminAddCheck.rows.length === 0) {
-            rate = 0.05; // Still a bonus user
-            commissionType = 'BONUS';
+            rate = 0.05; 
         }
     }
     
     const earned = cost * rate;
-    console.log(`[PAYOUT] Type: ${commissionType}, Earned: ${earned}, Rate: ${rate}`);
-
-    if (earned <= 0 && cost > 0 && commissionType === 'REAL') return;
+    if (earned <= 0 && cost > 0) return;
 
     // 3. Update PAYEE balance
     await client.query(
@@ -151,8 +111,6 @@ async function recordOperatorCommission(client, chatId, senderId, cost, type) {
         type === 'audio' ? earned : 0,
         type === 'gift' ? earned : 0
     ]);
-    
-    console.log(`[PAYOUT] Success for ${actualPayeeId}`);
 }
 
 module.exports = { recordOperatorCommission };

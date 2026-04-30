@@ -2618,8 +2618,8 @@ app.get('/api/debug/admin-chats', async (req, res) => {
             )
         `);
 
-        // Add granular stats columns to operator_stats
-        await runMigration("Add granular stats columns", `
+        // Add granular stats columns to operator_stats - FORCED UPDATE v3
+        await runMigration("Force Add Stats Columns v3", `
             ALTER TABLE operator_stats 
             ADD COLUMN IF NOT EXISTS text_count INTEGER DEFAULT 0,
             ADD COLUMN IF NOT EXISTS image_count INTEGER DEFAULT 0,

@@ -2995,6 +2995,7 @@ app.post('/api/admin/maintenance/cleanup', authenticateToken, authorizeRole('adm
 
 // GET CURRENT OPERATOR/STAFF STATS
 app.get('/api/operator/my-stats', authenticateToken, async (req, res) => {
+    // DEBUG: Forced update to fix dashboard zeros
     try {
         const userId = req.user.id;
         const query = `
@@ -3005,7 +3006,6 @@ app.get('/api/operator/my-stats', authenticateToken, async (req, res) => {
                 COALESCE(o.commission_rate, 0.25) as commission_rate, 
                 o.last_payout_at,
                 o.last_active_at,
-                -- Get earnings with explicit type casting to avoid mismatch
                 (SELECT COALESCE(SUM(coins_earned), 0) FROM operator_stats WHERE operator_id::text = $1::text AND date = CURRENT_DATE) as earned_today,
                 (SELECT COALESCE(COUNT(*), 0) FROM chats WHERE managed_by::text = $1::text) as active_chats,
                 (SELECT COALESCE(SUM(messages_sent), 0) FROM operator_stats WHERE operator_id::text = $1::text) as total_messages

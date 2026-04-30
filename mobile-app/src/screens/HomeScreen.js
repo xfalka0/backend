@@ -271,7 +271,10 @@ export default function HomeScreen({ navigation, route }) {
 
     useFocusEffect(
         React.useCallback(() => {
-            fetchOperators(true);
+            // Only fetch if we have no operators yet, to prevent lag on every tab switch
+            if (operators.length === 0) {
+                fetchOperators(true);
+            }
 
             const syncLiveBalance = async () => {
                 try {

@@ -128,8 +128,11 @@ export default function ExploreScreen({ navigation, route }) {
     useFocusEffect(
         React.useCallback(() => {
             fetchUser();
-            fetchExploreData();
-        }, [])
+            // Only fetch if we have no posts yet, to prevent lag on every tab switch
+            if (posts.length === 0) {
+                fetchExploreData();
+            }
+        }, [posts.length])
     );
 
     const fetchUser = async () => {

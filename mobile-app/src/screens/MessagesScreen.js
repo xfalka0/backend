@@ -72,13 +72,14 @@ export default function MessagesScreen({ navigation, route }) {
 
     useFocusEffect(
         React.useCallback(() => {
-            if (user?.id) {
+            // Only fetch if we have no chats yet, to prevent lag on every tab switch
+            if (user?.id && chats.length === 0) {
                 fetchChats();
-            } else {
+            } else if (!user?.id) {
                 console.log('MessagesScreen: No user ID, stop loading');
                 setLoading(false);
             }
-        }, [user])
+        }, [user, chats.length])
     );
 
     const fetchChats = async () => {

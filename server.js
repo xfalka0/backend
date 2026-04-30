@@ -1288,8 +1288,31 @@ app.get('/api/debug/db-check', async (req, res) => {
     }
 });
 
-
-// ... (existing routes) ...
+// REAL-TIME PAYOUT & EARNINGS DEBUG
+app.get('/api/debug/payout-logs', async (req, res) => {
+    try {
+        const stats = await db.query(`
+            SELECT 
+                u.username as staff_name,
+                u.id as staff_id,
+                o.pending_balance,
+                o.lifetime_earnings,
+                (SELECT SUM(coins_earned) FROM operator_stats WHERE operator_id::text = u.id::text AND date = CURRENT_DATE) as earned_today,
+                (SELECT COUNT(*) FROM messages m JOIN chats c ON m.chat_id = c.id WHERE c.managed_by::text = u.id::text AND m.created_at > CURRENT_DATE) as msgs_today
+            FROM users u
+            JOIN operators o ON u.id::text = o.user_id::text
+            WHERE u.role IN ('staff', 'admin', 'operator', 'moderator')
+            ORDER BY earned_today DESC NULLS LAST
+        `);
+        res.json({
+            info: "Bu liste GERÇEK veritabanı kazançlarını gösterir.",
+            timestamp: new Date().toISOString(),
+            data: stats.rows
+        });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
 
 
 // DEBUG: Dump Users

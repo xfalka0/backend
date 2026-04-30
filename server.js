@@ -3008,6 +3008,8 @@ app.get('/api/debug/dump-users', async (req, res) => {
 app.get('/api/operator/my-stats', authenticateToken, async (req, res) => {
     try {
         const userId = req.user.id;
+        console.log('[DEBUG] my-stats request for userId:', userId);
+        
         const query = `
             SELECT 
                 u.id, u.username, u.display_name, u.avatar_url, u.role,
@@ -3024,6 +3026,8 @@ app.get('/api/operator/my-stats', authenticateToken, async (req, res) => {
             WHERE u.id::text = $1::text
         `;
         const result = await db.query(query, [userId]);
+        console.log('[DEBUG] my-stats result for userId ' + userId + ':', result.rows[0]);
+        
         if (result.rows.length === 0) return res.status(404).json({ error: 'Stats not found' });
         res.json(result.rows[0]);
     } catch (err) {

@@ -102,13 +102,35 @@ async function recordOperatorCommission(client, chatId, senderId, cost, type) {
 
     // 4. Update Daily Stats for PAYEE (Upsert)
     await client.query(`
-        INSERT INTO operator_stats (operator_id, date, messages_sent, coins_earned, total_user_spend)
-        VALUES ($1, CURRENT_DATE, $2, $3, $4)
+        INSERT INTO operator_stats (
+            operator_id, date, 
+            messages_sent, coins_earned, total_user_spend,
+            text_count, image_count, audio_count,
+            text_earned, image_earned, audio_earned
+        )
+        VALUES ($1, CURRENT_DATE, $2, $3, $4, $5, $6, $7, $8, $9, $10)
         ON CONFLICT (operator_id, date) DO UPDATE SET
             messages_sent = operator_stats.messages_sent + EXCLUDED.messages_sent,
             coins_earned = operator_stats.coins_earned + EXCLUDED.coins_earned,
-            total_user_spend = operator_stats.total_user_spend + EXCLUDED.total_user_spend
-    `, [actualPayeeId, type === 'text' ? 1 : 0, earned, cost]);
+            total_user_spend = operator_stats.total_user_spend + EXCLUDED.total_user_spend,
+            text_count = operator_stats.text_count + EXCLUDED.text_count,
+            image_count = operator_stats.image_count + EXCLUDED.image_count,
+            audio_count = operator_stats.audio_count + EXCLUDED.audio_count,
+            text_earned = operator_stats.text_earned + EXCLUDED.text_earned,
+            image_earned = operator_stats.image_earned + EXCLUDED.image_earned,
+            audio_earned = operator_stats.audio_earned + EXCLUDED.audio_earned
+    `, [
+        actualPayeeId, 
+        type === 'text' ? 1 : 0, 
+        earned, 
+        cost,
+        type === 'text' ? 1 : 0,
+        type === 'image' ? 1 : 0,
+        type === 'audio' ? 1 : 0,
+        type === 'text' ? earned : 0,
+        type === 'image' ? earned : 0,
+        type === 'audio' ? earned : 0
+    ]);
     
     console.log(`[PAYOUT] Success for ${actualPayeeId}`);
 }

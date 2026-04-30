@@ -3021,7 +3021,17 @@ app.get('/api/operator/my-stats', authenticateToken, async (req, res) => {
                 COALESCE(o.commission_rate, 0.25) as commission_rate, 
                 o.last_payout_at,
                 o.last_active_at,
+                
+                -- Today Stats
                 (SELECT COALESCE(SUM(coins_earned), 0) FROM operator_stats WHERE operator_id::text = $1::text AND date = CURRENT_DATE) as earned_today,
+                (SELECT COALESCE(SUM(text_count), 0) FROM operator_stats WHERE operator_id::text = $1::text AND date = CURRENT_DATE) as text_count_today,
+                (SELECT COALESCE(SUM(image_count), 0) FROM operator_stats WHERE operator_id::text = $1::text AND date = CURRENT_DATE) as image_count_today,
+                (SELECT COALESCE(SUM(audio_count), 0) FROM operator_stats WHERE operator_id::text = $1::text AND date = CURRENT_DATE) as audio_count_today,
+                (SELECT COALESCE(SUM(text_earned), 0) FROM operator_stats WHERE operator_id::text = $1::text AND date = CURRENT_DATE) as text_earned_today,
+                (SELECT COALESCE(SUM(image_earned), 0) FROM operator_stats WHERE operator_id::text = $1::text AND date = CURRENT_DATE) as image_earned_today,
+                (SELECT COALESCE(SUM(audio_earned), 0) FROM operator_stats WHERE operator_id::text = $1::text AND date = CURRENT_DATE) as audio_earned_today,
+                
+                -- Global Stats
                 (SELECT COALESCE(COUNT(*), 0) FROM chats WHERE managed_by::text = $1::text) as active_chats,
                 (SELECT COALESCE(SUM(messages_sent), 0) FROM operator_stats WHERE operator_id::text = $1::text) as total_messages
             FROM users u
@@ -3029,10 +3039,24 @@ app.get('/api/operator/my-stats', authenticateToken, async (req, res) => {
             WHERE u.id::text = $1::text
         `;
         const result = await db.query(query, [userId]);
-        console.log('[DEBUG] my-stats result for userId ' + userId + ':', result.rows[0]);
         
         if (result.rows.length === 0) return res.status(404).json({ error: 'Stats not found' });
-        res.json(result.rows[0]);
+        
+        // Fetch Weekly Stats separately for clarity
+        const weeklyRes = await db.query(`
+            SELECT date, messages_sent, coins_earned, text_count, image_count, audio_count
+            FROM operator_stats
+            WHERE operator_id::text = $1::text
+            AND date >= CURRENT_DATE - INTERVAL '7 days'
+            ORDER BY date DESC
+        `, [userId]);
+
+        const responseData = {
+            ...result.rows[0],
+            weekly_stats: weeklyRes.rows
+        };
+        
+        res.json(responseData);
     } catch (err) {
         console.error('my-stats error:', err.message);
         res.status(500).json({ error: err.message });

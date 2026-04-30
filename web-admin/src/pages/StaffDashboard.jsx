@@ -171,9 +171,9 @@ const StaffDashboard = () => {
                     />
                     <StatCard 
                         title="Hediye Kazancı" 
-                        value={0}
-                        tlValue={0}
-                        count={0}
+                        value={parseFloat(stats?.gift_earned_today || 0)}
+                        tlValue={parseFloat(stats?.gift_earned_today || 0) * 0.5}
+                        count={stats?.gift_count_today || 0}
                         icon={Trophy} 
                         color="rose"
                     />

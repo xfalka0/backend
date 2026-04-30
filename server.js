@@ -3027,9 +3027,11 @@ app.get('/api/operator/my-stats', authenticateToken, async (req, res) => {
                 (SELECT COALESCE(SUM(text_count), 0) FROM operator_stats WHERE operator_id::text = $1::text AND date = CURRENT_DATE) as text_count_today,
                 (SELECT COALESCE(SUM(image_count), 0) FROM operator_stats WHERE operator_id::text = $1::text AND date = CURRENT_DATE) as image_count_today,
                 (SELECT COALESCE(SUM(audio_count), 0) FROM operator_stats WHERE operator_id::text = $1::text AND date = CURRENT_DATE) as audio_count_today,
+                (SELECT COALESCE(SUM(gift_count), 0) FROM operator_stats WHERE operator_id::text = $1::text AND date = CURRENT_DATE) as gift_count_today,
                 (SELECT COALESCE(SUM(text_earned), 0) FROM operator_stats WHERE operator_id::text = $1::text AND date = CURRENT_DATE) as text_earned_today,
                 (SELECT COALESCE(SUM(image_earned), 0) FROM operator_stats WHERE operator_id::text = $1::text AND date = CURRENT_DATE) as image_earned_today,
                 (SELECT COALESCE(SUM(audio_earned), 0) FROM operator_stats WHERE operator_id::text = $1::text AND date = CURRENT_DATE) as audio_earned_today,
+                (SELECT COALESCE(SUM(gift_earned), 0) FROM operator_stats WHERE operator_id::text = $1::text AND date = CURRENT_DATE) as gift_earned_today,
                 
                 -- Global Stats
                 (SELECT COALESCE(COUNT(*), 0) FROM chats WHERE managed_by::text = $1::text) as active_chats,

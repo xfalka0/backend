@@ -119,10 +119,10 @@ async function recordOperatorCommission(client, chatId, senderId, cost, type) {
         INSERT INTO operator_stats (
             operator_id, date, 
             messages_sent, coins_earned, total_user_spend,
-            text_count, image_count, audio_count,
-            text_earned, image_earned, audio_earned
+            text_count, image_count, audio_count, gift_count,
+            text_earned, image_earned, audio_earned, gift_earned
         )
-        VALUES ($1, CURRENT_DATE, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+        VALUES ($1, CURRENT_DATE, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
         ON CONFLICT (operator_id, date) DO UPDATE SET
             messages_sent = operator_stats.messages_sent + EXCLUDED.messages_sent,
             coins_earned = operator_stats.coins_earned + EXCLUDED.coins_earned,
@@ -130,9 +130,11 @@ async function recordOperatorCommission(client, chatId, senderId, cost, type) {
             text_count = operator_stats.text_count + EXCLUDED.text_count,
             image_count = operator_stats.image_count + EXCLUDED.image_count,
             audio_count = operator_stats.audio_count + EXCLUDED.audio_count,
+            gift_count = operator_stats.gift_count + EXCLUDED.gift_count,
             text_earned = operator_stats.text_earned + EXCLUDED.text_earned,
             image_earned = operator_stats.image_earned + EXCLUDED.image_earned,
-            audio_earned = operator_stats.audio_earned + EXCLUDED.audio_earned
+            audio_earned = operator_stats.audio_earned + EXCLUDED.audio_earned,
+            gift_earned = operator_stats.gift_earned + EXCLUDED.gift_earned
     `, [
         actualPayeeId, 
         type === 'text' ? 1 : 0, 
@@ -141,9 +143,11 @@ async function recordOperatorCommission(client, chatId, senderId, cost, type) {
         type === 'text' ? 1 : 0,
         type === 'image' ? 1 : 0,
         type === 'audio' ? 1 : 0,
+        type === 'gift' ? 1 : 0,
         type === 'text' ? earned : 0,
         type === 'image' ? earned : 0,
-        type === 'audio' ? earned : 0
+        type === 'audio' ? earned : 0,
+        type === 'gift' ? earned : 0
     ]);
     
     console.log(`[PAYOUT] Success for ${actualPayeeId}`);

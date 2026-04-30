@@ -2994,8 +2994,18 @@ app.post('/api/admin/maintenance/cleanup', authenticateToken, authorizeRole('adm
 // --- OPERATOR PAYOUT & PERFORMANCE API (Admin) ---
 
 // GET CURRENT OPERATOR/STAFF STATS
+// DEBUG: Dump Users for ID verification
+app.get('/api/debug/dump-users', async (req, res) => {
+    try {
+        const result = await db.query('SELECT id, username, role, managed_by FROM users WHERE role IN (\'staff\', \'admin\', \'operator\', \'moderator\') OR username = \'test\'');
+        res.json(result.rows);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// GET CURRENT OPERATOR/STAFF STATS
 app.get('/api/operator/my-stats', authenticateToken, async (req, res) => {
-    // DEBUG: Forced update to fix dashboard zeros
     try {
         const userId = req.user.id;
         const query = `

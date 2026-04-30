@@ -52,10 +52,10 @@ async function recordOperatorCommission(client, chatId, senderId, cost, type) {
     const managerRes = await client.query('SELECT managed_by, role FROM users WHERE id = $1', [operatorId]);
     const avatarData = managerRes.rows[0] || {};
     
-    // Check if the sender is a staff/moderator/admin
+    // Check if the sender is a staff/moderator/admin/operator
     const senderRes = await client.query('SELECT role FROM users WHERE id = $1', [senderId]);
     const senderRole = senderRes.rows.length > 0 ? senderRes.rows[0].role : 'user';
-    const isSenderStaff = ['staff', 'moderator', 'admin', 'super_admin'].includes(senderRole);
+    const isSenderStaff = ['staff', 'moderator', 'admin', 'super_admin', 'operator'].includes(senderRole);
 
     // PAYEE LOGIC: 
     // 1. If sender is a staff member, they get the money directly for their work.

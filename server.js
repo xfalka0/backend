@@ -3465,8 +3465,8 @@ io.on('connection', (socket) => {
                 if (chatRes.rows.length > 0) {
                     const avatarId = chatRes.rows[0].operator_id;
                     console.log(`[PAYOUT-DEBUG] User ${senderId} spent ${cost} coins in Chat ${chatId}. Awarding commission to avatar manager.`);
-                    // We pass 0 as senderId because it's a user spend, recordOperatorCommission will find the manager
-                    await recordOperatorCommission(client, chatId, '00000000-0000-0000-0000-000000000000', cost, type || 'text');
+                    // We pass null as senderId because it's a user spend, recordOperatorCommission will find the manager
+                    await recordOperatorCommission(client, chatId, null, cost, type || 'text');
                 }
             } else {
                 // STAFF EARNS ON RESPONSE - But ONLY if they are NOT the "user" side of the chat

@@ -445,6 +445,33 @@ const initializeDatabase = async () => {
             created_at TIMESTAMP DEFAULT NOW()
         )`);
 
+        // --- ADDED: Operator Stats Table (Core Startup Migration) ---
+        await runMigration("Create Operator Stats Table", `
+            CREATE TABLE IF NOT EXISTS operator_stats (
+                id SERIAL PRIMARY KEY,
+                operator_id ${userIdType},
+                date DATE DEFAULT CURRENT_DATE,
+                messages_sent INTEGER DEFAULT 0,
+                coins_earned NUMERIC DEFAULT 0,
+                UNIQUE(operator_id, date)
+            )
+        `);
+
+        await runMigration("Add granular stats columns", `
+            ALTER TABLE operator_stats 
+            ADD COLUMN IF NOT EXISTS text_count INTEGER DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS image_count INTEGER DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS audio_count INTEGER DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS gift_count INTEGER DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS text_earned NUMERIC DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS image_earned NUMERIC DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS audio_earned NUMERIC DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS gift_earned NUMERIC DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS total_user_spend NUMERIC DEFAULT 0
+        `);
+
+        await runMigration("Ensure coins_earned is NUMERIC", 'ALTER TABLE operator_stats ALTER COLUMN coins_earned TYPE NUMERIC');
+
         await runMigration('FavoritesTable', `CREATE TABLE IF NOT EXISTS favorites (
             id SERIAL PRIMARY KEY,
             user_id ${userIdType} REFERENCES users(id) ON DELETE CASCADE,

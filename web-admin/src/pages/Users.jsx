@@ -271,11 +271,20 @@ export default function UsersPage() {
                                             </div>
                                         </td>
                                         <td className="px-8 py-5 text-sm font-medium text-slate-300">
-                                            {user.is_vip ? (
-                                                <span className="text-amber-500 font-bold flex items-center gap-1">
-                                                    <Crown size={14} /> VIP
+                                            <div className="flex flex-col gap-1">
+                                                {user.is_vip ? (
+                                                    <span className="text-amber-500 font-bold flex items-center gap-1">
+                                                        <Crown size={14} /> VIP
+                                                    </span>
+                                                ) : (
+                                                    <span className="text-slate-400 font-medium">Standart</span>
+                                                )}
+                                                <span className={`text-[9px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded border w-fit ${
+                                                    user.role === 'user' ? 'border-blue-500/30 text-blue-400/60' : 'border-rose-500/50 text-rose-500'
+                                                }`}>
+                                                    {user.role}
                                                 </span>
-                                            ) : 'Standart'}
+                                            </div>
                                         </td>
                                         <td className="px-8 py-5 text-sm font-bold text-slate-500 uppercase tabular-nums tracking-tighter">
                                             {new Date(user.created_at).toLocaleDateString()}

@@ -48,11 +48,22 @@ export default function ReferralsPage() {
                 headers: { Authorization: `Bearer ${token}` }
             });
             const allUsers = res.data || [];
-            console.log("DEBUG - Total users from server:", allUsers.length);
             
-            // TEST MODE: List everyone as staff to see if data arrives
-            setStaff(allUsers);
-            setUsers(allUsers);
+            // Filter staff: Anything that is NOT a regular 'user'
+            const staffMembers = allUsers.filter(u => {
+                const r = String(u.role || '').toLowerCase();
+                return r !== 'user' && r !== '' && r !== 'null';
+            });
+            
+            console.log("Detected staff members:", staffMembers.length);
+            setStaff(staffMembers);
+            
+            // Filter customers: Only regular 'user'
+            const customers = allUsers.filter(u => {
+                const r = String(u.role || '').toLowerCase();
+                return r === 'user' || r === '';
+            });
+            setUsers(customers);
         } catch (err) {
             console.error("Fetch data error:", err);
             setError("Kullanıcı listesi alınamadı: " + err.message);

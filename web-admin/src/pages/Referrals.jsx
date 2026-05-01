@@ -184,13 +184,15 @@ export default function ReferralsPage() {
                                             onClick={async () => {
                                                 try {
                                                     const token = localStorage.getItem('token');
-                                                    await axios.get(`${API_URL}/api/admin/repair-db-referred`, {
+                                                    const res = await axios.get(`${API_URL}/api/admin/repair-db-referred`, {
                                                         headers: { Authorization: `Bearer ${token}` }
                                                     });
-                                                    alert("Veritabanı onarıldı! Sayfayı yenileyin.");
+                                                    alert("Sonuç: " + res.data.message + "\n\n" + res.data.diagnostics?.join("\n"));
                                                     window.location.reload();
                                                 } catch (err) {
-                                                    alert("Hata: " + err.message);
+                                                    const errMsg = err.response?.data?.error || err.message;
+                                                    const diag = err.response?.data?.diagnostics?.join("\n") || "Teşhis bilgisi yok.";
+                                                    alert("Hata: " + errMsg + "\n\nTeşhis:\n" + diag);
                                                 }
                                             }}
                                             className="w-full bg-amber-600/20 hover:bg-amber-600/30 text-amber-500 text-xs font-black py-2 rounded-lg border border-amber-500/20 transition-all"

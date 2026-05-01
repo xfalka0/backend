@@ -2867,43 +2867,41 @@ app.post('/api/admin/referrals/link', authenticateToken, async (req, res) => {
     
     const { userId, referrerId } = req.body;
     try {
-        await db.query('UPDATE users SET referred_by = $1 WHERE id = $2', [referrerId, userId]);
-        res.json({ message: 'Kullanıcı başarıyla personelle eşleştirildi' });
+        await db.query('UPDATE users SET affiliate_id = $1 WHERE id = $2', [referrerId, userId]);
+        res.json({ success: true, message: 'Kullanıcı başarıyla personelle eşleştirildi' });
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
 });
 
 // --- REPAIR DB ENDPOINT (DIAGNOSTIC) ---
-app.post('/api/admin/referrals/link', authenticateToken, async (req, res) => {
+app.get('/api/admin/repair-db-referred', authenticateToken, async (req, res) => {
     if (!['admin', 'super_admin'].includes(req.user.role.toLowerCase())) return res.status(403).json({ error: 'Yetkisiz erişim' });
     
-    const { userId, referrerId } = req.body;
+    const diagnostics = [];
     try {
-        await db.query('UPDATE users SET affiliate_id = $1 WHERE id = $2', [referrerId, userId]);
-        res.json({ message: 'Kullanıcı başarıyla personelle eşleştirildi' });
-    } catch (error) {
-        res.status(500).json({ error: error.message });
-    }
-});
+        diagnostics.push("Onarım başlatıldı...");
+        
+        // 1. Drop existing column if it's UUID or anything else (Force clean start)
+        try {
+            await db.query('ALTER TABLE users DROP COLUMN IF EXISTS referred_by CASCADE');
+            await db.query('ALTER TABLE users DROP COLUMN IF EXISTS affiliate_id CASCADE');
+            diagnostics.push("Eski sütunlar temizlendi.");
+        } catch (e) { diagnostics.push("Temizleme hatası (önemsiz): " + e.message); }
 
-app.get('/api/admin/repair-db-referred', authenticateToken, async (req, res) => {
-    if (!['admin', 'super_admin'].includes(req.user.role.toLowerCase())) return res.status(403).json({ error: 'Yetkisiz' });
-    let diagnostics = [];
-    try {
-        console.log('[DB-REPAIR] Force Re-creating affiliate_id as INTEGER...');
-        // CRITICAL: Drop existing column with CASCADE to ensure type change
-        try { 
-            await db.query('ALTER TABLE users DROP COLUMN IF EXISTS affiliate_id CASCADE'); 
-            diagnostics.push('Eski hatalı sütun başarıyla silindi.');
-        } catch(e){
-            diagnostics.push('Silme hatası (atlanabilir): ' + e.message);
-        }
-        
+        // 2. Add affiliate_id as INTEGER (Matching production ID type)
         await db.query('ALTER TABLE users ADD COLUMN affiliate_id INTEGER');
-        diagnostics.push('Yeni affiliate_id (INTEGER) sütunu eklendi.');
-        
-        res.json({ message: 'Veritabanı taze bir şekilde onarıldı!', diagnostics });
+        diagnostics.push("affiliate_id sütunu INTEGER olarak oluşturuldu.");
+
+        // 3. Verify
+        const check = await db.query("SELECT column_name, data_type FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'affiliate_id'");
+        diagnostics.push("Yeni durum: " + JSON.stringify(check.rows[0]));
+
+        res.json({ 
+            success: true, 
+            message: "Veritabanı başarıyla onarıldı. Artık eşleştirme yapabilirsiniz.",
+            diagnostics
+        });
     } catch (err) {
         res.status(500).json({ error: err.message, diagnostics });
     }

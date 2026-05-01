@@ -3507,6 +3507,9 @@ io.on('connection', (socket) => {
                 userBalance = parseFloat(updateRes.rows[0].balance);
                 console.log(`[PAYOUT-DEBUG] Balance updated for ${senderId}. New balance: ${userBalance}`);
 
+                // Real-time update for Admin Panel
+                io.emit('admin_balance_update', { userId: senderId, newBalance: userBalance });
+
                 // AWARD COMMISSION TO STAFF for Gifts (Automated)
                 if (type === 'gift') {
                     const chatRes = await client.query('SELECT operator_id FROM chats WHERE id = $1', [chatId]);

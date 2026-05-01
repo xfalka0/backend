@@ -44,6 +44,11 @@ export default function UsersPage() {
             setUsers(prev => [newUser, ...prev]);
         });
 
+        socket.on('admin_balance_update', (data) => {
+            console.log('[Admin] Balance Update received:', data);
+            setUsers(prev => prev.map(u => u.id === data.userId ? { ...u, balance: data.newBalance } : u));
+        });
+
         return () => socket.disconnect();
     }, []);
 

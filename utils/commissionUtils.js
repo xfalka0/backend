@@ -51,11 +51,11 @@ async function recordOperatorCommission(client, chatId, senderId, cost, type) {
     const userCheck = await client.query('SELECT total_spent FROM users WHERE id = $1', [customerId]);
     const userLifetimeSpent = userCheck.rows.length > 0 ? parseFloat(userCheck.rows[0].total_spent || 0) : 0;
     
-    let rate = 0.25; 
-    if (type === 'text') rate = 0.23; 
-    else if (type === 'image') rate = 0.40; 
-    else if (type === 'audio') rate = 0.3333333333333333; 
-    else if (type === 'gift') rate = 0.25;
+    let rate = 0.12; 
+    if (type === 'text') rate = 0.115; 
+    else if (type === 'image') rate = 0.20; 
+    else if (type === 'audio') rate = 0.165; 
+    else if (type === 'gift') rate = 0.12;
     
     // If customer has never spent money, use bonus rate
     if (userLifetimeSpent <= 0 && customerId) {

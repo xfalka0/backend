@@ -1827,7 +1827,6 @@ app.get('/api/admin/users', authenticateToken, authorizeRole('admin', 'super_adm
             SELECT id, username, email, role, account_status, balance, 
                    is_vip, created_at, last_login_at, ban_expires_at, avatar_url 
             FROM users 
-            WHERE role = 'user' 
             ORDER BY created_at DESC
         `);
         console.log(`[ADMIN] User List Fetch Success: Found ${result.rows.length} users. IDs: ${result.rows.map(u => u.id).join(', ')}`);

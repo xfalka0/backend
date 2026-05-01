@@ -2875,26 +2875,34 @@ app.post('/api/admin/referrals/link', authenticateToken, async (req, res) => {
     }
 });
 
-// --- REPAIR DB ENDPOINT (EMERGENCY) ---
+// --- REPAIR DB ENDPOINT (DIAGNOSTIC) ---
 app.get('/api/admin/repair-db-referred', authenticateToken, async (req, res) => {
     if (!['admin', 'super_admin'].includes(req.user.role.toLowerCase())) return res.status(403).json({ error: 'Yetkisiz' });
+    let diagnostics = [];
     try {
+        // Step 0: Check current columns
+        const currentCols = await db.query("SELECT column_name FROM information_schema.columns WHERE table_name = 'users'");
+        diagnostics.push('Mevcut sütunlar: ' + currentCols.rows.map(c => c.column_name).join(', '));
+
         console.log('[DB-REPAIR] Step 1: Adding column...');
         await db.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS referred_by UUID');
+        diagnostics.push('Step 1: referred_by sütunu eklendi.');
         
         console.log('[DB-REPAIR] Step 2: Adding constraint...');
         try {
             await db.query('ALTER TABLE users ADD CONSTRAINT fk_referred_by FOREIGN KEY (referred_by) REFERENCES users(id)');
+            diagnostics.push('Step 2: Foreign Key kısıtlaması eklendi.');
         } catch (e) {
-            console.log('[DB-REPAIR] Constraint might already exist, skipping Step 2.');
+            diagnostics.push('Step 2 Atlandı (Zaten var olabilir): ' + e.message);
         }
         
-        res.json({ message: 'Veritabanı onarımı tamamlandı!' });
+        res.json({ message: 'Onarım denendi.', diagnostics });
     } catch (err) {
         console.error('[DB-REPAIR] Critical Failure:', err.message);
         res.status(500).json({ 
-            error: 'Veritabanı hatası: ' + err.message,
-            hint: 'Eğer sütun zaten varsa bu hata normal olabilir, sayfayı yenileyip kontrol edin.'
+            error: err.message,
+            diagnostics,
+            hint: 'Veritabanı yöneticisi ile iletişime geçin veya bir süre sonra tekrar deneyin.'
         });
     }
 });

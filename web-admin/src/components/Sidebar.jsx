@@ -51,6 +51,7 @@ export default function Sidebar() {
             title: 'PERSONEL & EKİP',
             items: [
                 { path: '/staff-activity', icon: <TrendingUp size={18} />, label: 'Çalışma Takibi', roles: ['admin', 'super_admin'] },
+                { path: '/referrals', icon: <Users size={18} />, label: 'Referans Takibi', roles: ['admin', 'super_admin'] },
                 { path: '/operators', icon: <Shield size={18} />, label: 'Yetkililer', roles: ['admin', 'super_admin'] },
                 { path: '/agency-payouts', icon: <Wallet size={18} />, label: 'Personel Yönetimi', roles: ['admin', 'super_admin'] },
                 { path: '/quick-replies', icon: <MessageSquare size={18} />, label: 'Hızlı Cevaplar', roles: ['admin', 'super_admin', 'operator', 'staff'] },

@@ -114,6 +114,10 @@ const initializeDatabase = async () => {
         // Check and update columns for existing tables
         try {
             await db.query('ALTER TABLE users ALTER COLUMN balance TYPE INTEGER USING balance::integer');
+            const userCols = await getColumns('users');
+            if (!userCols.includes('referred_by')) {
+                await db.query('ALTER TABLE users ADD COLUMN referred_by UUID REFERENCES users(id)');
+            }
         } catch (e) { /* ignore */ }
         const getColumns = async (table) => {
             const res = await db.query("SELECT column_name FROM information_schema.columns WHERE table_name = $1", [table]);
@@ -2857,6 +2861,43 @@ app.get('/api/admin/commission-logs', authenticateToken, authorizeRole('admin', 
         res.json(logs.rows);
     } catch (err) {
         res.status(500).json({ error: err.message });
+    }
+});
+
+// --- Referral System Endpoints ---
+app.post('/api/admin/referrals/link', authenticateToken, async (req, res) => {
+    if (!['admin', 'super_admin'].includes(req.user.role.toLowerCase())) return res.status(403).json({ error: 'Yetkisiz erişim' });
+    
+    const { userId, referrerId } = req.body;
+    try {
+        await db.query('UPDATE users SET referred_by = $1 WHERE id = $2', [referrerId, userId]);
+        res.json({ message: 'Kullanıcı başarıyla personelle eşleştirildi' });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+app.get('/api/admin/referrals/stats', authenticateToken, async (req, res) => {
+    if (!['admin', 'super_admin'].includes(req.user.role.toLowerCase())) return res.status(403).json({ error: 'Yetkisiz erişim' });
+    
+    try {
+        const stats = await db.query(`
+            SELECT 
+                r.username as referrer_name,
+                u.id as user_id,
+                u.username as user_name,
+                u.email as user_email,
+                COALESCE(SUM(p.amount), 0) as total_deposit,
+                u.created_at as joined_at
+            FROM users u
+            JOIN users r ON u.referred_by = r.id
+            LEFT JOIN payments p ON u.id = p.user_id AND p.status = 'completed'
+            GROUP BY r.username, u.id, u.username, u.email, u.created_at
+            ORDER BY u.created_at DESC
+        `);
+        res.json(stats.rows);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
     }
 });
 

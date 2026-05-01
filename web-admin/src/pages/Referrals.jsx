@@ -14,6 +14,7 @@ export default function ReferralsPage() {
 
     // Lists for Selection
     const [staff, setStaff] = useState([]);
+    const [filteredStaff, setFilteredStaff] = useState([]);
     const [users, setUsers] = useState([]);
     const [userSearch, setUserSearch] = useState('');
 
@@ -115,17 +116,41 @@ export default function ReferralsPage() {
                         </h2>
                         
                         <form onSubmit={handleLink} className="space-y-6">
-                            {/* Staff Selection */}
-                            <div>
-                                <label className="block text-sm font-bold text-slate-400 mb-2 uppercase tracking-wider">Personel Seçin</label>
+                            {/* Staff Selection with Search */}
+                            <div className="space-y-2">
+                                <label className="block text-sm font-bold text-slate-400 mb-2 uppercase tracking-wider">Personel Ara ve Seç</label>
+                                <div className="relative mb-2">
+                                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" size={16} />
+                                    <input
+                                        type="text"
+                                        placeholder="Personel adı veya e-posta..."
+                                        className="w-full bg-slate-950 border border-slate-800 rounded-xl px-10 py-3 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
+                                        onChange={(e) => {
+                                            const term = e.target.value.toLowerCase();
+                                            if (!term) {
+                                                setFilteredStaff([]);
+                                                return;
+                                            }
+                                            const filtered = staff.filter(s => 
+                                                s.username?.toLowerCase().includes(term) || 
+                                                s.email?.toLowerCase().includes(term) ||
+                                                s.display_name?.toLowerCase().includes(term)
+                                            );
+                                            setFilteredStaff(filtered.slice(0, 10));
+                                        }}
+                                    />
+                                </div>
+                                
                                 <select
                                     value={selectedReferrerId}
                                     onChange={(e) => setSelectedReferrerId(e.target.value)}
                                     className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all cursor-pointer"
                                 >
                                     <option value="">-- Personel Seçin --</option>
-                                    {staff.map(s => (
-                                        <option key={s.id} value={s.id}>{s.username.toUpperCase()} ({s.role})</option>
+                                    {(filteredStaff.length > 0 ? filteredStaff : staff.slice(0, 20)).map(s => (
+                                        <option key={s.id} value={s.id}>
+                                            {(s.display_name || s.username).toUpperCase()} ({s.role || 'user'})
+                                        </option>
                                     ))}
                                 </select>
                             </div>

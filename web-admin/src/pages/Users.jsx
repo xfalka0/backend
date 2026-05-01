@@ -246,6 +246,7 @@ export default function UsersPage() {
                                                     <p className="text-sm font-black text-white group-hover/row:text-blue-400 transition-colors uppercase tracking-tight">{user.username}</p>
                                                     <div className="flex flex-col">
                                                         {user.email && <p className="text-[10px] text-slate-500 font-bold tracking-tight">{user.email}</p>}
+                                                        <p className="text-[9px] text-slate-600 font-mono mt-0.5">{user.id}</p>
                                                         {user.phone && <p className="text-[10px] text-blue-500/60 font-black tracking-widest">{user.phone}</p>}
                                                     </div>
                                                 </div>

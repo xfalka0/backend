@@ -48,16 +48,26 @@ export default function ReferralsPage() {
                 headers: { Authorization: `Bearer ${token}` }
             });
             const allUsers = res.data || [];
+            console.log("Total users fetched:", allUsers.length);
             
-            // Filter staff (operators and admins) - more robust check
-            const staffMembers = allUsers.filter(u => 
-                u.role && ['operator', 'admin', 'super_admin', 'staff'].includes(u.role.toLowerCase())
-            );
-            console.log("Detected staff:", staffMembers.length);
+            // Log roles to debug if staff not found
+            const uniqueRoles = [...new Set(allUsers.map(u => String(u.role).toLowerCase()))];
+            console.log("Unique roles in DB:", uniqueRoles);
+
+            // Filter staff (operators and admins) - extremely robust check
+            const staffMembers = allUsers.filter(u => {
+                const r = String(u.role || '').toLowerCase();
+                return r === 'operator' || r === 'admin' || r === 'super_admin' || r === 'staff' || r === 'yetkili';
+            });
+            
+            console.log("Detected staff members:", staffMembers.length);
             setStaff(staffMembers);
             
             // Filter potential customers (regular users)
-            const customers = allUsers.filter(u => !u.role || u.role.toLowerCase() === 'user');
+            const customers = allUsers.filter(u => {
+                const r = String(u.role || '').toLowerCase();
+                return r === 'user' || r === 'müşteri' || r === '' || r === 'null';
+            });
             setUsers(customers);
         } catch (err) {
             console.error("Fetch data error:", err);

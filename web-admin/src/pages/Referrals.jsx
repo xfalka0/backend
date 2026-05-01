@@ -62,8 +62,8 @@ export default function ReferralsPage() {
             setUsers(allUsers);
             
             // If still empty, let's at least show the first 3 users as "Potential Staff" for debug
-            if (staffMembers.length === 0 && allUsers.length > 0) {
-                console.log("Emergency fallback: No staff found, showing debug info");
+            if (sortedStaff.length === 0 && allUsers.length > 0) {
+                console.log("Emergency fallback: No users found at all");
             }
         } catch (err) {
             console.error("Fetch data error:", err);

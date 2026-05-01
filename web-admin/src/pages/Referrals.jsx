@@ -11,7 +11,7 @@ export default function ReferralsPage() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const [success, setSuccess] = useState(null);
-    const [commissionRate, setCommissionRate] = useState(10); // Default %10
+    const [commissionRate, setCommissionRate] = useState(20); // Default %20
 
     // Lists for Selection
     const [staff, setStaff] = useState([]);

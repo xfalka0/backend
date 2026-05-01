@@ -178,7 +178,7 @@ export default function ReferralsPage() {
                                         <AlertCircle className="w-5 h-5 flex-shrink-0" />
                                         {error}
                                     </div>
-                                    {error.includes('referred_by') && (
+                                    {(error.includes('affiliate_id') || error.includes('referred_by') || error.includes('uuid')) && (
                                         <button
                                             type="button"
                                             onClick={async () => {
@@ -197,7 +197,7 @@ export default function ReferralsPage() {
                                             }}
                                             className="w-full bg-amber-600/20 hover:bg-amber-600/30 text-amber-500 text-xs font-black py-2 rounded-lg border border-amber-500/20 transition-all"
                                         >
-                                            VERİTABANINI ŞİMDİ ONAR
+                                            VERİTABANINI ŞİMDİ ONAR (KESİN ÇÖZÜM)
                                         </button>
                                     )}
                                 </div>

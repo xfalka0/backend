@@ -2892,12 +2892,19 @@ app.get('/api/admin/repair-db-referred', authenticateToken, async (req, res) => 
     if (!['admin', 'super_admin'].includes(req.user.role.toLowerCase())) return res.status(403).json({ error: 'Yetkisiz' });
     let diagnostics = [];
     try {
-        console.log('[DB-REPAIR] Forcing affiliate_id column as INTEGER...');
-        // Drop if exists first to change type
-        try { await db.query('ALTER TABLE users DROP COLUMN IF EXISTS affiliate_id'); } catch(e){}
+        console.log('[DB-REPAIR] Force Re-creating affiliate_id as INTEGER...');
+        // CRITICAL: Drop existing column with CASCADE to ensure type change
+        try { 
+            await db.query('ALTER TABLE users DROP COLUMN IF EXISTS affiliate_id CASCADE'); 
+            diagnostics.push('Eski hatalı sütun başarıyla silindi.');
+        } catch(e){
+            diagnostics.push('Silme hatası (atlanabilir): ' + e.message);
+        }
+        
         await db.query('ALTER TABLE users ADD COLUMN affiliate_id INTEGER');
-        diagnostics.push('affiliate_id sütunu INTEGER olarak eklendi.');
-        res.json({ message: 'İşlem tamamlandı, lütfen sayfayı yenileyip kontrol edin.', diagnostics });
+        diagnostics.push('Yeni affiliate_id (INTEGER) sütunu eklendi.');
+        
+        res.json({ message: 'Veritabanı taze bir şekilde onarıldı!', diagnostics });
     } catch (err) {
         res.status(500).json({ error: err.message, diagnostics });
     }

@@ -47,17 +47,21 @@ export default function ReferralsPage() {
             const res = await axios.get(`${API_URL}/api/admin/users`, {
                 headers: { Authorization: `Bearer ${token}` }
             });
-            const allUsers = res.data;
+            const allUsers = res.data || [];
             
-            // Filter staff (operators and admins)
-            const staffMembers = allUsers.filter(u => ['operator', 'admin', 'super_admin'].includes(u.role.toLowerCase()));
+            // Filter staff (operators and admins) - more robust check
+            const staffMembers = allUsers.filter(u => 
+                u.role && ['operator', 'admin', 'super_admin', 'staff'].includes(u.role.toLowerCase())
+            );
+            console.log("Detected staff:", staffMembers.length);
             setStaff(staffMembers);
             
             // Filter potential customers (regular users)
-            const customers = allUsers.filter(u => u.role === 'user');
+            const customers = allUsers.filter(u => !u.role || u.role.toLowerCase() === 'user');
             setUsers(customers);
         } catch (err) {
             console.error("Fetch data error:", err);
+            setError("Kullanıcı listesi alınamadı: " + err.message);
         }
     };
 

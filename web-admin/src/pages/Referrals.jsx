@@ -57,10 +57,14 @@ export default function ReferralsPage() {
             // Filter staff (operators and admins) - extremely robust check
             const staffMembers = allUsers.filter(u => {
                 const r = String(u.role || '').toLowerCase();
-                return r === 'operator' || r === 'admin' || r === 'super_admin' || r === 'staff' || r === 'yetkili';
+                const isAdmin = u.is_admin === true || u.is_admin === 1 || u.is_admin === 'true';
+                return r === 'operator' || r === 'admin' || r === 'super_admin' || r === 'staff' || r === 'yetkili' || isAdmin;
             });
             
             console.log("Detected staff members:", staffMembers.length);
+            if (staffMembers.length === 0 && allUsers.length > 0) {
+                console.log("Sample user structure for debugging:", allUsers[0]);
+            }
             setStaff(staffMembers);
             
             // Filter potential customers (regular users)

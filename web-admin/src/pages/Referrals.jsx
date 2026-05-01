@@ -173,9 +173,31 @@ export default function ReferralsPage() {
                             </div>
 
                             {error && (
-                                <div className="p-4 bg-rose-500/10 border border-rose-500/20 rounded-xl flex items-center gap-3 text-rose-400 text-sm animate-pulse">
-                                    <AlertCircle className="w-5 h-5 flex-shrink-0" />
-                                    {error}
+                                <div className="space-y-3">
+                                    <div className="p-4 bg-rose-500/10 border border-rose-500/20 rounded-xl flex items-center gap-3 text-rose-400 text-sm animate-pulse">
+                                        <AlertCircle className="w-5 h-5 flex-shrink-0" />
+                                        {error}
+                                    </div>
+                                    {error.includes('referred_by') && (
+                                        <button
+                                            type="button"
+                                            onClick={async () => {
+                                                try {
+                                                    const token = localStorage.getItem('token');
+                                                    await axios.get(`${API_URL}/api/admin/repair-db-referred`, {
+                                                        headers: { Authorization: `Bearer ${token}` }
+                                                    });
+                                                    alert("Veritabanı onarıldı! Sayfayı yenileyin.");
+                                                    window.location.reload();
+                                                } catch (err) {
+                                                    alert("Hata: " + err.message);
+                                                }
+                                            }}
+                                            className="w-full bg-amber-600/20 hover:bg-amber-600/30 text-amber-500 text-xs font-black py-2 rounded-lg border border-amber-500/20 transition-all"
+                                        >
+                                            VERİTABANINI ŞİMDİ ONAR
+                                        </button>
+                                    )}
                                 </div>
                             )}
 

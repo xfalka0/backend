@@ -49,21 +49,28 @@ export default function ReferralsPage() {
             });
             const allUsers = res.data || [];
             
-            // Filter staff: Anything that is NOT a regular 'user'
+            // Filter staff: Any account marked as admin OR having a non-user role
             const staffMembers = allUsers.filter(u => {
                 const r = String(u.role || '').toLowerCase();
-                return r !== 'user' && r !== '' && r !== 'null';
+                const isAdmin = u.is_admin === true || u.is_admin === 1 || String(u.is_admin) === 'true';
+                return isAdmin || (r !== 'user' && r !== '' && r !== 'null');
             });
             
             console.log("Detected staff members:", staffMembers.length);
             setStaff(staffMembers);
             
-            // Filter customers: Only regular 'user'
+            // Filter customers: Regular users who are NOT admins
             const customers = allUsers.filter(u => {
                 const r = String(u.role || '').toLowerCase();
-                return r === 'user' || r === '';
+                const isAdmin = u.is_admin === true || u.is_admin === 1 || String(u.is_admin) === 'true';
+                return !isAdmin && (r === 'user' || r === '');
             });
             setUsers(customers);
+            
+            // If still empty, let's at least show the first 3 users as "Potential Staff" for debug
+            if (staffMembers.length === 0 && allUsers.length > 0) {
+                console.log("Emergency fallback: No staff found, showing debug info");
+            }
         } catch (err) {
             console.error("Fetch data error:", err);
             setError("Kullanıcı listesi alınamadı: " + err.message);

@@ -92,13 +92,19 @@ const initializeDatabase = async () => {
         await db.query(`
             CREATE TABLE IF NOT EXISTS commission_logs (
                 id SERIAL PRIMARY KEY,
-                operator_id UUID REFERENCES users(id),
-                chat_id UUID REFERENCES chats(id),
+                operator_id TEXT,
+                chat_id TEXT,
                 amount DECIMAL(10, 2) NOT NULL,
                 type VARCHAR(50) NOT NULL,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         `);
+
+        // Migration for existing table if types were wrong
+        try {
+            await db.query('ALTER TABLE commission_logs ALTER COLUMN operator_id TYPE TEXT');
+            await db.query('ALTER TABLE commission_logs ALTER COLUMN chat_id TYPE TEXT');
+        } catch (e) { /* ignore if column doesn't exist yet */ }
 
         // Check and update columns for existing tables
         const getColumns = async (table) => {

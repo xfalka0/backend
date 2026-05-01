@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Users, Link as LinkIcon, DollarSign, Calendar, Search, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { Users, Link as LinkIcon, DollarSign, Calendar, Search, AlertCircle, CheckCircle2, UserCircle } from 'lucide-react';
 import axios from 'axios';
 
 const API_URL = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
@@ -12,14 +12,18 @@ export default function ReferralsPage() {
     const [error, setError] = useState(null);
     const [success, setSuccess] = useState(null);
 
-    // Form States
-    const [userId, setUserId] = useState('');
-    const [referrerId, setReferrerId] = useState('');
-    const [allUsers, setAllUsers] = useState([]); // To help search for IDs
+    // Lists for Selection
+    const [staff, setStaff] = useState([]);
+    const [users, setUsers] = useState([]);
+    const [userSearch, setUserSearch] = useState('');
+
+    // Selection States
+    const [selectedUserId, setSelectedUserId] = useState('');
+    const [selectedReferrerId, setSelectedReferrerId] = useState('');
 
     useEffect(() => {
         fetchStats();
-        fetchAllUsers();
+        fetchInitialData();
     }, []);
 
     const fetchStats = async () => {
@@ -37,15 +41,23 @@ export default function ReferralsPage() {
         }
     };
 
-    const fetchAllUsers = async () => {
+    const fetchInitialData = async () => {
         try {
             const token = localStorage.getItem('token');
             const res = await axios.get(`${API_URL}/api/admin/users`, {
                 headers: { Authorization: `Bearer ${token}` }
             });
-            setAllUsers(res.data);
+            const allUsers = res.data;
+            
+            // Filter staff (operators and admins)
+            const staffMembers = allUsers.filter(u => ['operator', 'admin', 'super_admin'].includes(u.role.toLowerCase()));
+            setStaff(staffMembers);
+            
+            // Filter potential customers (regular users)
+            const customers = allUsers.filter(u => u.role === 'user');
+            setUsers(customers);
         } catch (err) {
-            console.error("Fetch users error:", err);
+            console.error("Fetch data error:", err);
         }
     };
 
@@ -54,28 +66,33 @@ export default function ReferralsPage() {
         setError(null);
         setSuccess(null);
 
-        if (!userId || !referrerId) {
-            setError("Lütfen her iki ID'yi de girin.");
+        if (!selectedUserId || !selectedReferrerId) {
+            setError("Lütfen hem personeli hem de kullanıcıyı seçin.");
             return;
         }
 
         try {
             const token = localStorage.getItem('token');
             await axios.post(`${API_URL}/api/admin/referrals/link`, {
-                userId,
-                referrerId
+                userId: selectedUserId,
+                referrerId: selectedReferrerId
             }, {
                 headers: { Authorization: `Bearer ${token}` }
             });
 
-            setSuccess("Kullanıcı ve personel başarıyla eşleştirildi!");
-            setUserId('');
-            setReferrerId('');
-            fetchStats(); // Refresh table
+            setSuccess("Eşleştirme başarıyla tamamlandı!");
+            setSelectedUserId('');
+            setUserSearch('');
+            fetchStats(); 
         } catch (err) {
             setError(err.response?.data?.error || err.message);
         }
     };
+
+    const filteredUsers = users.filter(u => 
+        u.username.toLowerCase().includes(userSearch.toLowerCase()) || 
+        u.email.toLowerCase().includes(userSearch.toLowerCase())
+    ).slice(0, 5); // Show top 5 matches
 
     return (
         <div className="p-6 max-w-7xl mx-auto">
@@ -83,122 +100,166 @@ export default function ReferralsPage() {
                 <div>
                     <h1 className="text-2xl font-bold text-white flex items-center gap-2">
                         <Users className="w-8 h-8 text-indigo-500" />
-                        Referans ve Komisyon Yönetimi
+                        Referans ve Komisyon Sistemi
                     </h1>
-                    <p className="text-slate-400 mt-1">Personellerin getirdiği kullanıcıları takip edin ve kazançlarını yönetin.</p>
+                    <p className="text-slate-400 mt-1">Yetkililer ve getirdikleri kullanıcılar arasındaki bağı yönetin.</p>
                 </div>
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                {/* Link Form */}
-                <div className="lg:col-span-1">
-                    <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-6 backdrop-blur-sm">
-                        <h2 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+                {/* Form Section */}
+                <div className="lg:col-span-1 space-y-6">
+                    <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-6 backdrop-blur-sm shadow-xl">
+                        <h2 className="text-lg font-semibold text-white mb-6 flex items-center gap-2">
                             <LinkIcon className="w-5 h-5 text-indigo-400" />
-                            Yeni Referans Eşle
+                            Hızlı Eşleştirme
                         </h2>
                         
-                        <form onSubmit={handleLink} className="space-y-4">
+                        <form onSubmit={handleLink} className="space-y-6">
+                            {/* Staff Selection */}
                             <div>
-                                <label className="block text-sm font-medium text-slate-400 mb-1">Getirilen Kullanıcı ID</label>
-                                <input
-                                    type="text"
-                                    value={userId}
-                                    onChange={(e) => setUserId(e.target.value)}
-                                    placeholder="Örn: 550e8400-e29b..."
-                                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                                />
+                                <label className="block text-sm font-bold text-slate-400 mb-2 uppercase tracking-wider">Personel Seçin</label>
+                                <select
+                                    value={selectedReferrerId}
+                                    onChange={(e) => setSelectedReferrerId(e.target.value)}
+                                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all cursor-pointer"
+                                >
+                                    <option value="">-- Personel Seçin --</option>
+                                    {staff.map(s => (
+                                        <option key={s.id} value={s.id}>{s.username.toUpperCase()} ({s.role})</option>
+                                    ))}
+                                </select>
                             </div>
 
+                            {/* User Search & Selection */}
                             <div>
-                                <label className="block text-sm font-medium text-slate-400 mb-1">Personel (Referans) ID</label>
-                                <input
-                                    type="text"
-                                    value={referrerId}
-                                    onChange={(e) => setReferrerId(e.target.value)}
-                                    placeholder="Personel ID girin..."
-                                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                                />
+                                <label className="block text-sm font-bold text-slate-400 mb-2 uppercase tracking-wider">Getirilen Kullanıcıyı Ara</label>
+                                <div className="relative mb-2">
+                                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" size={16} />
+                                    <input
+                                        type="text"
+                                        value={userSearch}
+                                        onChange={(e) => setUserSearch(e.target.value)}
+                                        placeholder="Kullanıcı adı veya e-posta..."
+                                        className="w-full bg-slate-950 border border-slate-800 rounded-xl px-10 py-3 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
+                                    />
+                                </div>
+                                
+                                {userSearch && filteredUsers.length > 0 && (
+                                    <div className="bg-slate-950 border border-slate-800 rounded-xl overflow-hidden mt-1 max-h-48 overflow-y-auto shadow-2xl">
+                                        {filteredUsers.map(u => (
+                                            <button
+                                                key={u.id}
+                                                type="button"
+                                                onClick={() => {
+                                                    setSelectedUserId(u.id);
+                                                    setUserSearch(u.username);
+                                                }}
+                                                className={`w-full px-4 py-3 text-left hover:bg-indigo-600/20 flex items-center justify-between transition-colors ${selectedUserId === u.id ? 'bg-indigo-600/30' : ''}`}
+                                            >
+                                                <div>
+                                                    <div className="text-sm font-bold text-white">{u.username}</div>
+                                                    <div className="text-[10px] text-slate-500">{u.email}</div>
+                                                </div>
+                                                {selectedUserId === u.id && <CheckCircle2 size={16} className="text-indigo-400" />}
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
                             </div>
 
                             {error && (
-                                <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-xl flex items-center gap-2 text-red-400 text-sm">
-                                    <AlertCircle className="w-4 h-4" />
+                                <div className="p-4 bg-rose-500/10 border border-rose-500/20 rounded-xl flex items-center gap-3 text-rose-400 text-sm animate-pulse">
+                                    <AlertCircle className="w-5 h-5 flex-shrink-0" />
                                     {error}
                                 </div>
                             )}
 
                             {success && (
-                                <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-xl flex items-center gap-2 text-emerald-400 text-sm">
-                                    <CheckCircle2 className="w-4 h-4" />
+                                <div className="p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-xl flex items-center gap-3 text-emerald-400 text-sm">
+                                    <CheckCircle2 className="w-5 h-5 flex-shrink-0" />
                                     {success}
                                 </div>
                             )}
 
                             <button
                                 type="submit"
-                                className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3 rounded-xl transition-all shadow-lg shadow-indigo-500/20"
+                                className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-black py-4 rounded-xl transition-all shadow-lg shadow-indigo-600/20 active:scale-95 disabled:opacity-50"
+                                disabled={!selectedUserId || !selectedReferrerId}
                             >
-                                Eşleştirmeyi Kaydet
+                                SİSTEME KAYDET
                             </button>
                         </form>
+                    </div>
 
-                        <div className="mt-6 pt-6 border-t border-slate-800">
-                            <h3 className="text-sm font-medium text-slate-300 mb-2">Nasıl Çalışır?</h3>
-                            <ul className="text-xs text-slate-500 space-y-2">
-                                <li>• Kullanıcılar listesinden hedefin ID'sini kopyalayın.</li>
-                                <li>• Personelin (Operatör) ID'sini girin.</li>
-                                <li>• Eşleşme sonrası o kullanıcının tüm yatırımları personelin istatistiklerine yansır.</li>
-                            </ul>
+                    <div className="bg-indigo-600/5 border border-indigo-500/10 rounded-2xl p-6">
+                        <div className="flex items-center gap-2 text-indigo-400 font-bold mb-3">
+                            <UserCircle size={18} />
+                            <span className="text-xs uppercase tracking-widest">Bilgi Paneli</span>
                         </div>
+                        <p className="text-[11px] text-slate-500 leading-relaxed">
+                            Buradan yapılan eşleştirmeler kalıcıdır. Bir kullanıcı bir personele bağlandığında, o kullanıcının tüm harcamaları personelin performans raporlarına dahil edilir.
+                        </p>
                     </div>
                 </div>
 
-                {/* Stats Table */}
+                {/* Table Section */}
                 <div className="lg:col-span-2">
-                    <div className="bg-slate-900/50 border border-slate-800 rounded-2xl overflow-hidden backdrop-blur-sm">
-                        <div className="p-6 border-b border-slate-800">
-                            <h2 className="text-lg font-semibold text-white">Aktif Referanslar ve Kazançlar</h2>
+                    <div className="bg-slate-900/50 border border-slate-800 rounded-2xl overflow-hidden backdrop-blur-sm shadow-xl">
+                        <div className="p-6 border-b border-slate-800 flex items-center justify-between">
+                            <h2 className="text-lg font-semibold text-white">Referans İstatistikleri</h2>
+                            <div className="px-3 py-1 bg-indigo-500/10 rounded-full border border-indigo-500/20 text-[10px] font-black text-indigo-400 uppercase tracking-widest">
+                                {stats.length} Aktif Bağlantı
+                            </div>
                         </div>
 
                         <div className="overflow-x-auto">
                             <table className="w-full text-left">
                                 <thead>
                                     <tr className="bg-slate-950/50 border-b border-slate-800">
-                                        <th className="px-6 py-4 text-xs font-bold text-slate-400 uppercase tracking-wider">Personel</th>
-                                        <th className="px-6 py-4 text-xs font-bold text-slate-400 uppercase tracking-wider">Getirilen Kullanıcı</th>
-                                        <th className="px-6 py-4 text-xs font-bold text-slate-400 uppercase tracking-wider">Toplam Yatırım</th>
-                                        <th className="px-6 py-4 text-xs font-bold text-slate-400 uppercase tracking-wider">Katılım</th>
+                                        <th className="px-6 py-5 text-[10px] font-black text-slate-500 uppercase tracking-widest">Personel</th>
+                                        <th className="px-6 py-5 text-[10px] font-black text-slate-500 uppercase tracking-widest">Getirilen Kişi</th>
+                                        <th className="px-6 py-5 text-[10px] font-black text-slate-500 uppercase tracking-widest text-right">Harcanan</th>
+                                        <th className="px-6 py-5 text-[10px] font-black text-slate-500 uppercase tracking-widest text-right">Kayıt</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-slate-800">
                                     {loading ? (
                                         <tr>
-                                            <td colSpan="4" className="px-6 py-12 text-center text-slate-500 italic">Veriler yükleniyor...</td>
+                                            <td colSpan="4" className="px-6 py-16 text-center">
+                                                <div className="w-8 h-8 border-4 border-indigo-500/30 border-t-indigo-500 rounded-full animate-spin mx-auto mb-2" />
+                                                <span className="text-sm font-bold text-slate-600 uppercase tracking-widest">Yükleniyor...</span>
+                                            </td>
                                         </tr>
                                     ) : stats.length === 0 ? (
                                         <tr>
-                                            <td colSpan="4" className="px-6 py-12 text-center text-slate-500 italic">Henüz referans kaydı bulunamadı.</td>
+                                            <td colSpan="4" className="px-6 py-16 text-center text-slate-600 font-bold uppercase tracking-widest italic">Veri bulunamadı</td>
                                         </tr>
                                     ) : (
                                         stats.map((row, idx) => (
-                                            <tr key={idx} className="hover:bg-slate-800/30 transition-colors">
-                                                <td className="px-6 py-4">
-                                                    <span className="text-white font-medium">{row.referrer_name}</span>
-                                                </td>
-                                                <td className="px-6 py-4 text-sm">
-                                                    <div className="text-white font-medium">{row.user_name}</div>
-                                                    <div className="text-slate-500 text-xs">{row.user_email}</div>
-                                                </td>
-                                                <td className="px-6 py-4">
-                                                    <div className="flex items-center gap-1 text-emerald-400 font-bold">
-                                                        <DollarSign className="w-4 h-4" />
-                                                        {parseFloat(row.total_deposit).toLocaleString('tr-TR')} TL
+                                            <tr key={idx} className="hover:bg-indigo-600/5 transition-colors group">
+                                                <td className="px-6 py-5">
+                                                    <div className="flex items-center gap-3">
+                                                        <div className="w-8 h-8 rounded-lg bg-indigo-500/10 flex items-center justify-center text-indigo-500 font-black text-xs uppercase">
+                                                            {row.referrer_name[0]}
+                                                        </div>
+                                                        <span className="text-white font-black uppercase text-xs tracking-tight">{row.referrer_name}</span>
                                                     </div>
                                                 </td>
-                                                <td className="px-6 py-4 text-slate-400 text-sm">
-                                                    <div className="flex items-center gap-2">
-                                                        <Calendar className="w-4 h-4" />
+                                                <td className="px-6 py-5 text-sm">
+                                                    <div className="text-white font-bold">{row.user_name}</div>
+                                                    <div className="text-slate-600 text-[10px] font-medium">{row.user_email}</div>
+                                                </td>
+                                                <td className="px-6 py-5 text-right">
+                                                    <div className="flex items-center justify-end gap-1 text-emerald-400 font-black text-sm">
+                                                        <DollarSign size={14} />
+                                                        {parseFloat(row.total_deposit).toLocaleString('tr-TR')}
+                                                    </div>
+                                                    <div className="text-[10px] text-slate-600 font-bold uppercase tracking-tighter">TL YATIRIM</div>
+                                                </td>
+                                                <td className="px-6 py-5 text-right">
+                                                    <div className="flex items-center justify-end gap-2 text-slate-500 font-bold text-xs">
+                                                        <Calendar size={14} className="text-slate-700" />
                                                         {new Date(row.joined_at).toLocaleDateString('tr-TR')}
                                                     </div>
                                                 </td>

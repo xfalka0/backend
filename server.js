@@ -2888,6 +2888,19 @@ app.post('/api/admin/referrals/link', authenticateToken, async (req, res) => {
     }
 });
 
+// --- REPAIR DB ENDPOINT (EMERGENCY) ---
+app.get('/api/admin/repair-db-referred', authenticateToken, async (req, res) => {
+    if (!['admin', 'super_admin'].includes(req.user.role.toLowerCase())) return res.status(403).json({ error: 'Yetkisiz' });
+    try {
+        console.log('[DB-REPAIR] Forcing referred_by column...');
+        await db.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS referred_by UUID REFERENCES users(id)');
+        res.json({ message: 'Sütun başarıyla eklendi veya zaten mevcuttu.' });
+    } catch (err) {
+        console.error('[DB-REPAIR] Failed:', err.message);
+        res.status(500).json({ error: err.message });
+    }
+});
+
 app.get('/api/admin/referrals/stats', authenticateToken, async (req, res) => {
     if (!['admin', 'super_admin'].includes(req.user.role.toLowerCase())) return res.status(403).json({ error: 'Yetkisiz erişim' });
     

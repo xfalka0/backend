@@ -88,6 +88,18 @@ const initializeDatabase = async () => {
             )
         `);
 
+        // 4. Commission Logs Table
+        await db.query(`
+            CREATE TABLE IF NOT EXISTS commission_logs (
+                id SERIAL PRIMARY KEY,
+                operator_id UUID REFERENCES users(id),
+                chat_id UUID REFERENCES chats(id),
+                amount DECIMAL(10, 2) NOT NULL,
+                type VARCHAR(50) NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        `);
+
         // Check and update columns for existing tables
         const getColumns = async (table) => {
             const res = await db.query("SELECT column_name FROM information_schema.columns WHERE table_name = $1", [table]);
@@ -2789,6 +2801,47 @@ app.post('/api/messages', async (req, res) => {
         res.json(savedMsg);
     } catch (err) {
         console.error('HTTP Send Message Error:', err.message);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// --- STAFF TRACKING API ---
+app.get('/api/admin/staff-activity', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
+    try {
+        const stats = await db.query(`
+            SELECT 
+                os.*,
+                u.username,
+                u.display_name,
+                u.avatar_url
+            FROM operator_stats os
+            JOIN users u ON os.operator_id = u.id
+            WHERE os.date >= CURRENT_DATE - INTERVAL '30 days'
+            ORDER BY os.date DESC, os.coins_earned DESC
+        `);
+        res.json(stats.rows);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.get('/api/admin/commission-logs', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
+    try {
+        const logs = await db.query(`
+            SELECT 
+                cl.*,
+                u.username as operator_name,
+                c.user_id as customer_id,
+                cu.username as customer_name
+            FROM commission_logs cl
+            JOIN users u ON cl.operator_id = u.id
+            JOIN chats c ON cl.chat_id = c.id
+            JOIN users cu ON c.user_id = cu.id
+            ORDER BY cl.created_at DESC
+            LIMIT 200
+        `);
+        res.json(logs.rows);
+    } catch (err) {
         res.status(500).json({ error: err.message });
     }
 });

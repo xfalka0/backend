@@ -26,6 +26,7 @@ import AdminManagement from './pages/AdminManagement';
 import MaintenancePage from './pages/Maintenance';
 import AgencyPayoutsPage from './pages/AgencyPayouts';
 import StaffDashboard from './pages/StaffDashboard';
+import StaffActivity from './pages/StaffActivity';
 import SplashIntro from './components/SplashIntro';
 
 // Placeholder Pages
@@ -116,6 +117,7 @@ function App() {
                                 <Route path="/admins" element={<AdminManagement />} />
                                 <Route path="/operators" element={<AdminManagement />} />
                                 <Route path="/agency-payouts" element={<AgencyPayoutsPage />} />
+                                <Route path="/staff-activity" element={<StaffActivity />} />
                                 <Route path="/moderation" element={<Moderation />} />
                                 <Route path="/maintenance" element={<MaintenancePage />} />
                             </Route>

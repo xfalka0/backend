@@ -80,6 +80,12 @@ async function recordOperatorCommission(client, chatId, senderId, cost, type) {
         [earned, actualPayeeId]
     );
 
+    // 3.5 Detailed Log for tracking
+    await client.query(
+        'INSERT INTO commission_logs (operator_id, chat_id, amount, type) VALUES ($1, $2, $3, $4)',
+        [actualPayeeId, chatId, earned, type]
+    );
+
     // 4. Update Daily Stats for PAYEE (Upsert)
     await client.query(`
         INSERT INTO operator_stats (

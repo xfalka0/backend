@@ -48,31 +48,11 @@ export default function ReferralsPage() {
                 headers: { Authorization: `Bearer ${token}` }
             });
             const allUsers = res.data || [];
-            console.log("Total users fetched:", allUsers.length);
+            console.log("DEBUG - Total users from server:", allUsers.length);
             
-            // Log roles to debug if staff not found
-            const uniqueRoles = [...new Set(allUsers.map(u => String(u.role).toLowerCase()))];
-            console.log("Unique roles in DB:", uniqueRoles);
-
-            // Filter staff (operators and admins) - extremely robust check
-            const staffMembers = allUsers.filter(u => {
-                const r = String(u.role || '').toLowerCase();
-                const isAdmin = u.is_admin === true || u.is_admin === 1 || u.is_admin === 'true';
-                return r === 'operator' || r === 'admin' || r === 'super_admin' || r === 'staff' || r === 'yetkili' || isAdmin;
-            });
-            
-            console.log("Detected staff members:", staffMembers.length);
-            if (staffMembers.length === 0 && allUsers.length > 0) {
-                console.log("Sample user structure for debugging:", allUsers[0]);
-            }
-            setStaff(staffMembers);
-            
-            // Filter potential customers (regular users)
-            const customers = allUsers.filter(u => {
-                const r = String(u.role || '').toLowerCase();
-                return r === 'user' || r === 'müşteri' || r === '' || r === 'null';
-            });
-            setUsers(customers);
+            // TEST MODE: List everyone as staff to see if data arrives
+            setStaff(allUsers);
+            setUsers(allUsers);
         } catch (err) {
             console.error("Fetch data error:", err);
             setError("Kullanıcı listesi alınamadı: " + err.message);

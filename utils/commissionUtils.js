@@ -81,10 +81,17 @@ async function recordOperatorCommission(client, chatId, senderId, cost, type) {
     );
 
     // 3.5 Detailed Log for tracking
-    await client.query(
-        'INSERT INTO commission_logs (operator_id, chat_id, amount, type) VALUES ($1, $2, $3, $4)',
-        [actualPayeeId, chatId, earned, type]
-    );
+    try {
+        if (chatId && actualPayeeId) {
+            await client.query(
+                'INSERT INTO commission_logs (operator_id, chat_id, amount, type) VALUES ($1, $2, $3, $4)',
+                [actualPayeeId, chatId, earned, type]
+            );
+        }
+    } catch (logErr) {
+        console.error('[COMMISSION-LOG-ERROR] Failed to write detailed log:', logErr.message);
+        // We don't block the message if log fails, but we want to know why
+    }
 
     // 4. Update Daily Stats for PAYEE (Upsert)
     await client.query(`

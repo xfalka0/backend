@@ -107,9 +107,6 @@ const initializeDatabase = async () => {
         } catch (e) { /* ignore if column doesn't exist yet */ }
 
         // Check and update columns for existing tables
-        try {
-            await db.query('ALTER TABLE users ALTER COLUMN balance TYPE DECIMAL(10, 2)');
-        } catch (e) { /* ignore */ }
         const getColumns = async (table) => {
             const res = await db.query("SELECT column_name FROM information_schema.columns WHERE table_name = $1", [table]);
             return res.rows.map(c => c.column_name);
@@ -3533,9 +3530,7 @@ io.on('connection', (socket) => {
             const isManagement = ['admin', 'super_admin', 'moderator', 'staff', 'operator'].includes(userRole);
             
             if (!isManagement) {
-                if (type === 'image') cost = 20;
-                else if (type === 'audio') cost = 10;
-                else cost = 2.3; // Standard text
+                cost = 10; // Default text
                 if (type === 'gift' && giftId) {
                     const giftRes = await client.query('SELECT * FROM gifts WHERE id = $1', [giftId]);
                     if (giftRes.rows.length > 0) {

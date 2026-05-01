@@ -49,22 +49,11 @@ export default function ReferralsPage() {
             });
             const allUsers = res.data || [];
             
-            // Show all users in the staff list sorted by role
-            const sortedStaff = [...allUsers].sort((a, b) => {
-                const aAdmin = a.role !== 'user' || a.is_admin;
-                const bAdmin = b.role !== 'user' || b.is_admin;
-                if (aAdmin && !bAdmin) return -1;
-                if (!aAdmin && bAdmin) return 1;
-                return 0;
-            });
-            
-            setStaff(sortedStaff);
+            // Simplest possible: Direct set
+            setStaff(allUsers);
             setUsers(allUsers);
             
-            // If still empty, let's at least show the first 3 users as "Potential Staff" for debug
-            if (sortedStaff.length === 0 && allUsers.length > 0) {
-                console.log("Emergency fallback: No users found at all");
-            }
+            console.log("DEBUG: Staff list set with", allUsers.length, "users");
         } catch (err) {
             console.error("Fetch data error:", err);
             setError("Kullanıcı listesi alınamadı: " + err.message);

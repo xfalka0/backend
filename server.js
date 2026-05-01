@@ -3467,7 +3467,8 @@ io.on('connection', (socket) => {
 
             // --- 1. COIN DEDUCTION LOGIC ---
             // Management roles don't pay for messages
-            const isManagement = ['admin', 'super_admin', 'moderator', 'staff', 'operator'].includes(socket.user.role);
+            const userRole = (socket.user.role || '').toLowerCase();
+            const isManagement = ['admin', 'super_admin', 'moderator', 'staff', 'operator'].includes(userRole);
             
             if (!isManagement) {
                 cost = 10; // Default text

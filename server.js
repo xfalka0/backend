@@ -2884,9 +2884,9 @@ app.get('/api/admin/repair-db-referred', authenticateToken, async (req, res) => 
         const currentCols = await db.query("SELECT column_name FROM information_schema.columns WHERE table_name = 'users'");
         diagnostics.push('Mevcut sütunlar: ' + currentCols.rows.map(c => c.column_name).join(', '));
 
-        console.log('[DB-REPAIR] Step 1: Adding column...');
+        console.log('[DB-REPAIR] Attempting simple column addition...');
         await db.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS referred_by UUID');
-        diagnostics.push('Step 1: referred_by sütunu eklendi.');
+        diagnostics.push('Step 1: referred_by sütunu (basit) denendi.');
         
         console.log('[DB-REPAIR] Step 2: Adding constraint...');
         try {

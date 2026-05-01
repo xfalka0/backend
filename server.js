@@ -107,6 +107,9 @@ const initializeDatabase = async () => {
         } catch (e) { /* ignore if column doesn't exist yet */ }
 
         // Check and update columns for existing tables
+        try {
+            await db.query('ALTER TABLE users ALTER COLUMN balance TYPE INTEGER USING balance::integer');
+        } catch (e) { /* ignore */ }
         const getColumns = async (table) => {
             const res = await db.query("SELECT column_name FROM information_schema.columns WHERE table_name = $1", [table]);
             return res.rows.map(c => c.column_name);

@@ -22,6 +22,14 @@
           }
         },
         {
+          "client_id": "46669084263-vk43fvjtff4f95ep61rr8cv5mvj4t1h6.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.fivachat.app",
+            "certificate_hash": "e7f8fd90a0ee6c1c5b11e18fb57b695fd18c3a00"
+          }
+        },
+        {
           "client_id": "46669084263-drv76chuoahgvfitcdmctvvqm3cbudl7.apps.googleusercontent.com",
           "client_type": 3
         }

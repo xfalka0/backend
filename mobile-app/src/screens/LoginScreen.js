@@ -23,6 +23,7 @@ export default function LoginScreen({ navigation }) {
     useEffect(() => {
         GoogleSignin.configure({
             webClientId: '46669084263-drv76chuoahgvfitcdmctvvqm3cbudl7.apps.googleusercontent.com',
+            androidClientId: '46669084263-vk43fvjtff4f95ep61rr8cv5mvj4t1h6.apps.googleusercontent.com',
             offlineAccess: true,
         });
     }, []);

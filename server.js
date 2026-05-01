@@ -3489,8 +3489,10 @@ io.on('connection', (socket) => {
                 if (userResult.rows.length === 0) throw new Error('User not found');
 
                 currentBalance = parseFloat(userResult.rows[0].balance || 0);
+                console.log(`[PAYOUT-DEBUG] Sender ${senderId} (Role: ${socket.user.role}) current balance: ${currentBalance}, cost: ${cost}`);
 
                 if (currentBalance < cost) {
+                    console.log(`[PAYOUT-DEBUG] Insufficient funds for ${senderId}. Has ${currentBalance}, needs ${cost}`);
                     await client.query('ROLLBACK');
                     io.to(socket.id).emit('message_error', {
                         code: 'INSUFFICIENT_FUNDS',
@@ -3501,8 +3503,9 @@ io.on('connection', (socket) => {
                     return;
                 }
 
-                await client.query('UPDATE users SET balance = balance - $2 WHERE id = $1', [senderId, cost]);
-                userBalance = currentBalance - cost;
+                const updateRes = await client.query('UPDATE users SET balance = balance - $2 WHERE id = $1 RETURNING balance', [senderId, cost]);
+                userBalance = parseFloat(updateRes.rows[0].balance);
+                console.log(`[PAYOUT-DEBUG] Balance updated for ${senderId}. New balance: ${userBalance}`);
 
                 // AWARD COMMISSION TO STAFF for Gifts (Automated)
                 if (type === 'gift') {

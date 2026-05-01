@@ -2876,34 +2876,30 @@ app.post('/api/admin/referrals/link', authenticateToken, async (req, res) => {
 });
 
 // --- REPAIR DB ENDPOINT (DIAGNOSTIC) ---
+app.post('/api/admin/referrals/link', authenticateToken, async (req, res) => {
+    if (!['admin', 'super_admin'].includes(req.user.role.toLowerCase())) return res.status(403).json({ error: 'Yetkisiz erişim' });
+    
+    const { userId, referrerId } = req.body;
+    try {
+        await db.query('UPDATE users SET affiliate_id = $1 WHERE id = $2', [referrerId, userId]);
+        res.json({ message: 'Kullanıcı başarıyla personelle eşleştirildi' });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
 app.get('/api/admin/repair-db-referred', authenticateToken, async (req, res) => {
     if (!['admin', 'super_admin'].includes(req.user.role.toLowerCase())) return res.status(403).json({ error: 'Yetkisiz' });
     let diagnostics = [];
     try {
-        // Step 0: Check current columns
-        const currentCols = await db.query("SELECT column_name FROM information_schema.columns WHERE table_name = 'users'");
-        diagnostics.push('Mevcut sütunlar: ' + currentCols.rows.map(c => c.column_name).join(', '));
-
-        console.log('[DB-REPAIR] Attempting simple column addition...');
-        await db.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS referred_by UUID');
-        diagnostics.push('Step 1: referred_by sütunu (basit) denendi.');
-        
-        console.log('[DB-REPAIR] Step 2: Adding constraint...');
-        try {
-            await db.query('ALTER TABLE users ADD CONSTRAINT fk_referred_by FOREIGN KEY (referred_by) REFERENCES users(id)');
-            diagnostics.push('Step 2: Foreign Key kısıtlaması eklendi.');
-        } catch (e) {
-            diagnostics.push('Step 2 Atlandı (Zaten var olabilir): ' + e.message);
-        }
-        
-        res.json({ message: 'Onarım denendi.', diagnostics });
+        console.log('[DB-REPAIR] Forcing affiliate_id column as INTEGER...');
+        // Drop if exists first to change type
+        try { await db.query('ALTER TABLE users DROP COLUMN IF EXISTS affiliate_id'); } catch(e){}
+        await db.query('ALTER TABLE users ADD COLUMN affiliate_id INTEGER');
+        diagnostics.push('affiliate_id sütunu INTEGER olarak eklendi.');
+        res.json({ message: 'İşlem tamamlandı, lütfen sayfayı yenileyip kontrol edin.', diagnostics });
     } catch (err) {
-        console.error('[DB-REPAIR] Critical Failure:', err.message);
-        res.status(500).json({ 
-            error: err.message,
-            diagnostics,
-            hint: 'Veritabanı yöneticisi ile iletişime geçin veya bir süre sonra tekrar deneyin.'
-        });
+        res.status(500).json({ error: err.message, diagnostics });
     }
 });
 
@@ -2920,7 +2916,7 @@ app.get('/api/admin/referrals/stats', authenticateToken, async (req, res) => {
                 COALESCE(SUM(p.amount), 0) as total_deposit,
                 u.created_at as joined_at
             FROM users u
-            JOIN users r ON u.referred_by = r.id
+            JOIN users r ON u.affiliate_id = r.id
             LEFT JOIN payments p ON u.id = p.user_id AND p.status = 'completed'
             GROUP BY r.username, u.id, u.username, u.email, u.created_at
             ORDER BY u.created_at DESC

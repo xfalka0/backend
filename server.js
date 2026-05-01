@@ -114,21 +114,8 @@ const initializeDatabase = async () => {
         // Check and update columns for existing tables
         try {
             await db.query('ALTER TABLE users ALTER COLUMN balance TYPE INTEGER USING balance::integer');
-            
-            // PRODUCTION FIX: Ensure referred_by exists
-            console.log('[DB] Checking for referred_by column...');
-            const userColsRes = await db.query("SELECT column_name FROM information_schema.columns WHERE table_name = 'users'");
-            const userCols = userColsRes.rows.map(c => c.column_name);
-            
-            if (!userCols.includes('referred_by')) {
-                console.log('[DB] Adding referred_by column to users table...');
-                await db.query('ALTER TABLE users ADD COLUMN referred_by UUID REFERENCES users(id)');
-                console.log('[DB] referred_by column added successfully!');
-            } else {
-                console.log('[DB] referred_by column already exists.');
-            }
         } catch (e) { 
-            console.error('[DB] Migration Error (users table):', e.message);
+            console.error('[DB] Migration Error (users balance):', e.message);
         }
         const getColumns = async (table) => {
             const res = await db.query("SELECT column_name FROM information_schema.columns WHERE table_name = $1", [table]);

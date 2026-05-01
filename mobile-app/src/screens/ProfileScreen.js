@@ -243,6 +243,16 @@ export default function ProfileScreen({ route, navigation }) {
         setShowContactModal(true);
     };
 
+    // Handle editMode from navigation
+    useEffect(() => {
+        if (route.params?.editMode) {
+            setIsEditingInfo(true);
+            setIsEditingBio(true);
+            // Clear the param so it doesn't stay in edit mode forever
+            navigation.setParams({ editMode: undefined });
+        }
+    }, [route.params?.editMode]);
+
     // Fetch latest balance, VIP, and approved photos on Focus
     useFocusEffect(
         useCallback(() => {

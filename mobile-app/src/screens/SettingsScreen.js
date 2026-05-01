@@ -142,7 +142,7 @@ export default function SettingsScreen({ navigation, route }) {
                     <SettingItem
                         icon="person-outline"
                         label="Profil Bilgilerini Düzenle"
-                        onPress={() => navigation.navigate('Profil')}
+                        onPress={() => navigation.navigate('Profil', { editMode: true })}
                     />
                     <SettingItem
                         icon="eye-off-outline"

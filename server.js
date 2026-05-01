@@ -88,17 +88,22 @@ const initializeDatabase = async () => {
             )
         `);
 
-        // 4. Commission Logs Table
-        await db.query(`
-            CREATE TABLE IF NOT EXISTS commission_logs (
-                id SERIAL PRIMARY KEY,
-                operator_id TEXT,
-                chat_id TEXT,
-                amount DECIMAL(10, 2) NOT NULL,
-                type VARCHAR(50) NOT NULL,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        `);
+        // 4. Commission Logs Table - FORCE CREATE IMMEDIATELY
+        try {
+            await db.query(`
+                CREATE TABLE IF NOT EXISTS commission_logs (
+                    id SERIAL PRIMARY KEY,
+                    operator_id TEXT,
+                    chat_id TEXT,
+                    amount DECIMAL(10, 2) NOT NULL,
+                    type VARCHAR(50) NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            `);
+            console.log('[DB] commission_logs table verified');
+        } catch (tableErr) {
+            console.error('[DB] Error creating commission_logs table:', tableErr.message);
+        }
 
         // Migration for existing table if types were wrong
         try {

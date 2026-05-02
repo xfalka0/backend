@@ -3780,12 +3780,12 @@ io.on('connection', (socket) => {
                 // Real-time update for Admin Panel
                 io.emit('admin_balance_update', { userId: senderId, newBalance: userBalance });
 
-                // AWARD COMMISSION TO STAFF for Gifts (Automated)
-                if (type === 'gift') {
-                    const chatRes = await client.query('SELECT operator_id FROM chats WHERE id = $1', [chatId]);
-                    if (chatRes.rows.length > 0) {
-                        await recordOperatorCommission(client, chatId, null, cost, 'gift');
-                    }
+            let commissionDataToRunLater = null;
+
+            if (type === 'gift') {
+                const chatRes = await client.query('SELECT operator_id FROM chats WHERE id = $1', [chatId]);
+                if (chatRes.rows.length > 0) {
+                    commissionDataToRunLater = { chatId, senderId: null, cost, type: 'gift' };
                 }
             } else {
                 // STAFF EARNS ON RESPONSE - But ONLY if they are NOT the "user" side of the chat
@@ -3797,11 +3797,7 @@ io.on('connection', (socket) => {
                     if (type === 'image') commissionCost = 50;
                     else if (type === 'audio') commissionCost = 30;
                     
-                    try {
-                        await recordOperatorCommission(client, chatId, senderId, commissionCost, type || 'text');
-                    } catch (payoutErr) {
-                        console.error('Commission error:', payoutErr.message);
-                    }
+                    commissionDataToRunLater = { chatId, senderId, cost: commissionCost, type: type || 'text' };
                 }
             }
 
@@ -3846,6 +3842,21 @@ io.on('connection', (socket) => {
             await client.query('UPDATE chats SET last_message_at = NOW(), last_message = $2 WHERE id = $1', [chatId, lastMsgPreview]);
 
             await client.query('COMMIT');
+
+            // --- 3.5. EXECUTE COMMISSION LATER (SAFE ZONE) ---
+            if (commissionDataToRunLater) {
+                try {
+                    await recordOperatorCommission(
+                        client, 
+                        commissionDataToRunLater.chatId, 
+                        commissionDataToRunLater.senderId, 
+                        commissionDataToRunLater.cost, 
+                        commissionDataToRunLater.type
+                    );
+                } catch (commissionErr) {
+                    console.error('[COMMISSION-SAFE] Commission failed but message was sent:', commissionErr.message);
+                }
+            }
 
             // --- 4. EMIT EVENTS ---
             if (!isManagement) {

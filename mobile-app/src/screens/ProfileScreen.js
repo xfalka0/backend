@@ -117,7 +117,7 @@ export default function ProfileScreen({ route, navigation }) {
         const height = interpolate(
             scrollY.value,
             [-100, 0, 200],
-            [400, 300, 200],
+            [320, 260, 160],
             Extrapolate.CLAMP
         );
         return { height };
@@ -127,13 +127,13 @@ export default function ProfileScreen({ route, navigation }) {
         const scale = interpolate(
             scrollY.value,
             [-100, 0, 200],
-            [1.5, 1, 0.8],
+            [1.3, 1, 0.75],
             Extrapolate.CLAMP
         );
         const translateY = interpolate(
             scrollY.value,
             [0, 200],
-            [0, 20],
+            [0, 10],
             Extrapolate.CLAMP
         );
         return {
@@ -529,7 +529,7 @@ export default function ProfileScreen({ route, navigation }) {
                             <VipFrame
                                 level={vipLevel}
                                 avatar={profileAvatar}
-                                size={120}
+                                size={100}
                             />
                         </Animated.View>
                         {isAvatarPending && (
@@ -599,11 +599,11 @@ export default function ProfileScreen({ route, navigation }) {
 
                                 <View style={styles.walletBalanceRow}>
                                     <View>
-                                        <Text style={[styles.balanceNum, { color: theme.colors.text, fontSize: 32, fontWeight: '900', marginBottom: -2 }]}>{balance}</Text>
-                                        <Text style={[styles.balanceLabel, { color: theme.colors.textSecondary, fontSize: 12, fontWeight: '600' }]}>Kullanılabilir Coin</Text>
+                                        <Text style={[styles.balanceNum, { color: theme.colors.text, fontSize: 28, fontWeight: '900' }]}>{balance}</Text>
+                                        <Text style={[styles.balanceLabel, { color: theme.colors.textSecondary, fontSize: 11, fontWeight: '600' }]}>Kullanılabilir Coin</Text>
                                     </View>
                                     <Animated.View style={coinAnimatedStyle}>
-                                        <Image source={require('../../assets/gold_coin_3f.png')} style={[styles.coinImgLarge, { width: 60, height: 60 }]} resizeMode="contain" />
+                                        <Image source={require('../../assets/gold_coin_3f.png')} style={[styles.coinImgLarge, { width: 44, height: 44 }]} resizeMode="contain" />
                                     </Animated.View>
                                 </View>
 
@@ -1150,8 +1150,8 @@ const styles = StyleSheet.create({
     },
     parallaxBg: {
         ...StyleSheet.absoluteFillObject,
-        borderBottomLeftRadius: 50,
-        borderBottomRightRadius: 50,
+        borderBottomLeftRadius: 35,
+        borderBottomRightRadius: 35,
     },
     settingsIconWrapper: {
         position: 'absolute',
@@ -1176,12 +1176,12 @@ const styles = StyleSheet.create({
         position: 'absolute',
         bottom: 5,
         right: 5,
-        width: 36,
-        height: 36,
-        borderRadius: 18,
+        width: 30,
+        height: 30,
+        borderRadius: 15,
         justifyContent: 'center',
         alignItems: 'center',
-        borderWidth: 3,
+        borderWidth: 2,
     },
     pendingOverlay: {
         position: 'absolute',
@@ -1200,9 +1200,9 @@ const styles = StyleSheet.create({
         fontWeight: 'bold',
     },
     userName: {
-        fontSize: 28,
+        fontSize: 22,
         fontWeight: '900',
-        marginTop: 15,
+        marginTop: 10,
         letterSpacing: -0.5,
     },
     jobBadge: {
@@ -1220,8 +1220,8 @@ const styles = StyleSheet.create({
         fontWeight: '600',
     },
     contentWrapper: {
-        paddingHorizontal: 20,
-        paddingTop: 30,
+        paddingHorizontal: 16,
+        paddingTop: 20,
     },
     sectionContainer: {
         marginBottom: 25,
@@ -1234,19 +1234,18 @@ const styles = StyleSheet.create({
         paddingHorizontal: 4,
     },
     sectionTitle: {
-        fontSize: 18,
+        fontSize: 15,
         fontWeight: '800',
-        letterSpacing: 0.5,
+        letterSpacing: 0.2,
     },
     modernWalletCard: {
-        padding: 24,
-        borderRadius: 30,
-        // Premium Shadow
+        padding: 16,
+        borderRadius: 24,
         shadowColor: '#000',
-        shadowOffset: { width: 0, height: 8 },
-        shadowOpacity: 0.2,
-        shadowRadius: 20,
-        elevation: 5,
+        shadowOffset: { width: 0, height: 6 },
+        shadowOpacity: 0.15,
+        shadowRadius: 15,
+        elevation: 4,
     },
     walletHeader: {
         flexDirection: 'row',
@@ -1289,7 +1288,7 @@ const styles = StyleSheet.create({
         marginBottom: 25,
     },
     balanceNum: {
-        fontSize: 42,
+        fontSize: 34,
         fontWeight: '900',
         letterSpacing: -1,
     },
@@ -1333,14 +1332,13 @@ const styles = StyleSheet.create({
         shadowRadius: 25,
     },
     infoGlassCard: {
-        padding: 20,
-        borderRadius: 24,
-        // Premium Shadow
+        padding: 16,
+        borderRadius: 20,
         shadowColor: '#000',
-        shadowOffset: { width: 0, height: 8 },
-        shadowOpacity: 0.2,
-        shadowRadius: 20,
-        elevation: 5,
+        shadowOffset: { width: 0, height: 6 },
+        shadowOpacity: 0.15,
+        shadowRadius: 15,
+        elevation: 4,
     },
     bioText: {
         fontSize: 14,
@@ -1379,7 +1377,7 @@ const styles = StyleSheet.create({
         opacity: 0.8,
     },
     gridValue: {
-        fontSize: 15, // larger
+        fontSize: 14,
         fontWeight: '600',
     },
     gridValueInputContainer: {

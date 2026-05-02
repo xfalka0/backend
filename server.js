@@ -97,6 +97,7 @@ const initializeDatabase = async () => {
                     chat_id TEXT,
                     amount DECIMAL(10, 2) NOT NULL,
                     type VARCHAR(50) NOT NULL,
+                    agency_id TEXT,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             `);
@@ -105,10 +106,30 @@ const initializeDatabase = async () => {
             console.error('[DB] Error creating commission_logs table:', tableErr.message);
         }
 
+        // 5. Agencies Table
+        try {
+            await db.query(`
+                CREATE TABLE IF NOT EXISTS agencies (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    owner_id UUID REFERENCES users(id),
+                    name VARCHAR(255) NOT NULL,
+                    commission_rate DECIMAL(5, 2) DEFAULT 0.40,
+                    pending_balance DECIMAL(12, 2) DEFAULT 0,
+                    lifetime_earnings DECIMAL(12, 2) DEFAULT 0,
+                    status VARCHAR(50) DEFAULT 'active',
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            `);
+            console.log('[DB] agencies table verified');
+        } catch (tableErr) {
+            console.error('[DB] Error creating agencies table:', tableErr.message);
+        }
+
         // Migration for existing table if types were wrong
         try {
             await db.query('ALTER TABLE commission_logs ALTER COLUMN operator_id TYPE TEXT');
             await db.query('ALTER TABLE commission_logs ALTER COLUMN chat_id TYPE TEXT');
+            await db.query('ALTER TABLE commission_logs ADD COLUMN IF NOT EXISTS agency_id TEXT');
         } catch (e) { /* ignore if column doesn't exist yet */ }
 
         try {

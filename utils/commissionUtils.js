@@ -33,12 +33,23 @@ async function recordOperatorCommission(client, chatId, senderId, cost, type) {
         isSenderStaff = ['staff', 'moderator', 'admin', 'super_admin', 'operator'].includes(senderRole);
     }
 
-    // PAYEE LOGIC: 
     let actualPayeeId = operatorId;
     if (isSenderStaff) {
         actualPayeeId = senderId;
     } else if (avatarData.managed_by) {
         actualPayeeId = avatarData.managed_by;
+    }
+
+    // 1.7 Find Agency (if any)
+    const payeeRes = await client.query('SELECT agency_id FROM users WHERE id = $1', [actualPayeeId]);
+    const agencyId = payeeRes.rows.length > 0 ? payeeRes.rows[0].agency_id : null;
+    
+    let agencyData = null;
+    if (agencyId) {
+        const agencyRes = await client.query('SELECT * FROM agencies WHERE id = $1 AND status = \'active\'', [agencyId]);
+        if (agencyRes.rows.length > 0) {
+            agencyData = agencyRes.rows[0];
+        }
     }
 
     // 1.6 Activity Tracking
@@ -80,17 +91,40 @@ async function recordOperatorCommission(client, chatId, senderId, cost, type) {
         [earned, actualPayeeId]
     );
 
+    // 3.2 Update AGENCY balance (if applicable)
+    if (agencyData) {
+        const agencyRate = parseFloat(agencyData.commission_rate || 0.40);
+        const agencyTotalEarned = cost * agencyRate;
+        
+        await client.query(
+            `UPDATE agencies SET 
+                pending_balance = COALESCE(pending_balance, 0) + $1, 
+                lifetime_earnings = COALESCE(lifetime_earnings, 0) + $1 
+             WHERE id = $2`,
+            [agencyTotalEarned, agencyId]
+        );
+        
+        console.log(`[AGENCY-PAYOUT] Agency ${agencyData.name} earned ${agencyTotalEarned} from transaction of ${cost}`);
+    }
+
     // 3.5 Detailed Log for tracking
     try {
         if (chatId && actualPayeeId) {
             await client.query(
-                'INSERT INTO commission_logs (operator_id, chat_id, amount, type) VALUES ($1, $2, $3, $4)',
-                [actualPayeeId, chatId, earned, type]
+                'INSERT INTO commission_logs (operator_id, chat_id, amount, type, agency_id) VALUES ($1, $2, $3, $4, $5)',
+                [actualPayeeId, chatId, earned, type, agencyId]
             );
         }
     } catch (logErr) {
-        console.error('[COMMISSION-LOG-ERROR] Failed to write detailed log:', logErr.message);
-        // We don't block the message if log fails, but we want to know why
+        // If column doesn't exist yet, try without agency_id
+        try {
+            await client.query(
+                'INSERT INTO commission_logs (operator_id, chat_id, amount, type) VALUES ($1, $2, $3, $4)',
+                [actualPayeeId, chatId, earned, type]
+            );
+        } catch (inner) {
+            console.error('[COMMISSION-LOG-ERROR] Failed to write detailed log:', inner.message);
+        }
     }
 
     // 4. Update Daily Stats for PAYEE (Upsert)

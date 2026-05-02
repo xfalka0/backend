@@ -2585,6 +2585,69 @@ app.get('/api/chats/admin', authenticateToken, authorizeRole('admin', 'super_adm
     }
 });
 
+// --- AGENCY MANAGEMENT ---
+
+// GET ALL AGENCIES
+app.get('/api/admin/agencies', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
+    try {
+        const result = await db.query(`
+            SELECT a.*, u.username as owner_name 
+            FROM agencies a
+            LEFT JOIN users u ON a.owner_id = u.id
+            ORDER BY a.created_at DESC
+        `);
+        res.json(result.rows);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// CREATE AGENCY
+app.post('/api/admin/agencies', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
+    const { name, owner_id, commission_rate } = req.body;
+    try {
+        const result = await db.query(
+            'INSERT INTO agencies (name, owner_id, commission_rate) VALUES ($1, $2, $3) RETURNING *',
+            [name, owner_id || null, commission_rate || 0.40]
+        );
+        res.json(result.rows[0]);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// UPDATE AGENCY
+app.put('/api/admin/agencies/:id', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
+    const { id } = req.params;
+    const { name, owner_id, commission_rate, status } = req.body;
+    try {
+        const result = await db.query(
+            `UPDATE agencies 
+             SET name = COALESCE($1, name), 
+                 owner_id = COALESCE($2, owner_id), 
+                 commission_rate = COALESCE($3, commission_rate),
+                 status = COALESCE($4, status)
+             WHERE id = $5 RETURNING *`,
+            [name, owner_id, commission_rate, status, id]
+        );
+        res.json(result.rows[0]);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// ASSIGN USER TO AGENCY
+app.post('/api/admin/users/:userId/assign-agency', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
+    const { userId } = req.params;
+    const { agencyId } = req.body;
+    try {
+        await db.query('UPDATE users SET agency_id = $1 WHERE id = $2', [agencyId || null, userId]);
+        res.json({ success: true, message: 'Kullanıcı ajansa başarıyla atandı.' });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // DEBUG PAYOUT TRACKER
 let payoutLogs = [];
 app.get('/api/debug/payout-logs', (req, res) => {

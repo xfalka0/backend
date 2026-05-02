@@ -234,10 +234,15 @@ export default function ProfileScreen({ route, navigation }) {
         transform: [{ scale: addPhotoScale.value }]
     }));
 
-    // Boost States
     const [isBoosted, setIsBoosted] = useState(false);
     const [boostEndTime, setBoostEndTime] = useState(null);
     const [showBoostModal, setShowBoostModal] = useState(false);
+
+    // Agency States
+    const [agencyName, setAgencyName] = useState(null);
+    const [showAgencyModal, setShowAgencyModal] = useState(false);
+    const [agencyCode, setAgencyCode] = useState('');
+    const [isJoiningAgency, setIsJoiningAgency] = useState(false);
 
     const handleContact = () => {
         setShowContactModal(true);
@@ -297,33 +302,42 @@ export default function ProfileScreen({ route, navigation }) {
                     })
                     .catch(err => console.log('Fetch user error:', err));
 
-                // Fetch Boost Status
-                axios.get(`${API_URL}/boosts/status/${user.id}`)
+                // Fetch agency info
+                axios.get(`${API_URL}/users/${user.id}/agency`)
                     .then(res => {
-                        setIsBoosted(res.data.isBoosted);
-                        if (res.data.isBoosted) setBoostEndTime(res.data.endTime);
+                        if (res.data && res.data.name) {
+                            setAgencyName(res.data.name);
+                        }
                     })
-                    .catch(err => console.log('Fetch boost status err:', err));
-
-                // Fetch operator album photos ONLY if user is an operator or admin
-                if (user.role === 'operator' || user.role === 'admin' || user.role === 'super_admin') {
-                    axios.get(`${API_URL}/operators/${user.id}`)
-                        .then(res => {
-                            if (res.data.photos && Array.isArray(res.data.photos)) {
-                                setAlbum(res.data.photos);
-                                setPendingAlbumPhotos([]);
-                            }
-                        })
-                        .catch(err => {
-                            // Backend now handles this gracefully, but we log just in case
-                            if (err.response?.status !== 404) {
-                                console.log('Fetch operator photos error:', err.message);
-                            }
-                        });
-                }
+                    .catch(err => {
+                        // If 404 or no agency, it's fine
+                        setAgencyName(null);
+                    });
             }
         }, [user?.id, user?.role, profileAvatar])
     );
+
+    const joinAgency = async () => {
+        if (!agencyCode.trim()) {
+            setAlert({ visible: true, title: 'Hata', message: 'Lütfen geçerli bir ajans kodu girin.', type: 'error' });
+            return;
+        }
+
+        setIsJoiningAgency(true);
+        try {
+            const res = await axios.post(`${API_URL}/agencies/join`, { agencyId: agencyCode.trim() });
+            if (res.data.success) {
+                setAgencyName(res.data.agencyName);
+                setShowAgencyModal(false);
+                setAlert({ visible: true, title: 'Başarı', message: res.data.message, type: 'success' });
+                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            }
+        } catch (err) {
+            setAlert({ visible: true, title: 'Hata', message: err.response?.data?.error || 'Ajansa katılırken bir hata oluştu.', type: 'error' });
+        } finally {
+            setIsJoiningAgency(false);
+        }
+    };
 
     const getVipColors = (level) => {
         switch (level) {
@@ -642,6 +656,42 @@ export default function ProfileScreen({ route, navigation }) {
                         </GlassCard>
                     </View>
 
+                    {/* Agency Section */}
+                    <View style={styles.sectionContainer}>
+                        <GlassCard intensity={themeMode === 'dark' ? 20 : 60} tint={themeMode === 'dark' ? 'dark' : 'light'} noBorder style={{ borderRadius: 24, overflow: 'hidden' }}>
+                            <LinearGradient
+                                colors={themeMode === 'dark' ? ['rgba(124, 58, 237, 0.15)', 'rgba(30, 41, 59, 0.6)'] : ['rgba(124, 58, 237, 0.08)', 'rgba(255, 255, 255, 0.95)']}
+                                style={{ padding: 20 }}
+                            >
+                                <View style={styles.agencyRow}>
+                                    <View style={styles.agencyIconWrapper}>
+                                        <Ionicons name="business" size={26} color="#a78bfa" />
+                                    </View>
+                                    <View style={{ flex: 1, marginLeft: 15 }}>
+                                        <Text style={[styles.agencyTitle, { color: theme.colors.text, fontSize: 18 }]}>
+                                            {agencyName ? 'Ajansınız' : 'Ajans Sistemi'}
+                                        </Text>
+                                        <Text style={[styles.agencyDesc, { color: theme.colors.textSecondary, fontSize: 13 }]}>
+                                            {agencyName ? `${agencyName} ekibindesiniz.` : 'Bir ajansa katılarak daha fazla kazanabilirsin.'}
+                                        </Text>
+                                    </View>
+                                    {agencyName ? (
+                                        <View style={styles.verifiedBadge}>
+                                            <Ionicons name="checkmark-circle" size={28} color="#10b981" />
+                                        </View>
+                                    ) : (
+                                        <TouchableOpacity 
+                                            style={[styles.joinBtn, { backgroundColor: theme.colors.primary }]}
+                                            onPress={() => setShowAgencyModal(true)}
+                                        >
+                                            <Text style={styles.joinBtnText}>Katıl</Text>
+                                        </TouchableOpacity>
+                                    )}
+                                </View>
+                            </LinearGradient>
+                        </GlassCard>
+                    </View>
+
                     {/* Bio Section */}
                     <View style={styles.sectionContainer}>
                         <View style={styles.sectionTitleRow}>
@@ -839,6 +889,54 @@ export default function ProfileScreen({ route, navigation }) {
                     <View style={{ height: 100 }} />
                 </View>
             </Animated.ScrollView>
+
+            {/* Agency Join Modal */}
+            <Modal
+                visible={showAgencyModal}
+                transparent
+                animationType="fade"
+                onRequestClose={() => setShowAgencyModal(false)}
+            >
+                <View style={styles.modalOverlay}>
+                    <BlurView intensity={90} tint="dark" style={styles.modalContent}>
+                        <Text style={[styles.modalTitle, { color: 'white' }]}>Ajansa Katıl</Text>
+                        <Text style={[styles.modalSubtitle, { color: 'rgba(255,255,255,0.7)' }]}>
+                            Size verilen ajans kodunu aşağıya girerek bir ekibe dahil olabilirsiniz.
+                        </Text>
+
+                        <TextInput
+                            style={[styles.agencyInput, { 
+                                backgroundColor: 'rgba(255,255,255,0.05)', 
+                                borderColor: 'rgba(255,255,255,0.1)',
+                                color: 'white'
+                            }]}
+                            placeholder="Ajans Kodunu Girin (UUID)"
+                            placeholderTextColor="rgba(255,255,255,0.3)"
+                            value={agencyCode}
+                            onChangeText={setAgencyCode}
+                            autoCapitalize="none"
+                        />
+
+                        <View style={styles.modalActions}>
+                            <TouchableOpacity 
+                                style={[styles.modalBtn, { backgroundColor: 'rgba(255,255,255,0.1)' }]} 
+                                onPress={() => setShowAgencyModal(false)}
+                            >
+                                <Text style={[styles.modalBtnText, { color: 'white' }]}>İptal</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity 
+                                style={[styles.modalBtn, { backgroundColor: theme.colors.primary, marginLeft: 12 }]} 
+                                onPress={joinAgency}
+                                disabled={isJoiningAgency}
+                            >
+                                <Text style={[styles.modalBtnText, { color: 'white' }]}>
+                                    {isJoiningAgency ? 'Katılınıyor...' : 'Katıl'}
+                                </Text>
+                            </TouchableOpacity>
+                        </View>
+                    </BlurView>
+                </View>
+            </Modal>
 
             <ModernAlert
                 visible={alert.visible}
@@ -1575,4 +1673,77 @@ const styles = StyleSheet.create({
         fontSize: 13,
         color: '#94a3b8',
     },
+    // Agency Styles
+    agencyRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+    agencyIconWrapper: {
+        width: 44,
+        height: 44,
+        borderRadius: 12,
+        backgroundColor: 'rgba(167, 139, 250, 0.1)',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    agencyTitle: {
+        fontSize: 16,
+        fontWeight: '700',
+    },
+    agencyDesc: {
+        fontSize: 12,
+        marginTop: 2,
+    },
+    joinBtn: {
+        paddingHorizontal: 16,
+        paddingVertical: 8,
+        borderRadius: 10,
+    },
+    joinBtnText: {
+        color: 'white',
+        fontWeight: '700',
+        fontSize: 14,
+    },
+    verifiedBadge: {
+        marginLeft: 8,
+    },
+    modalOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0,0,0,0.6)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        padding: 20
+    },
+    modalContent: {
+        width: '100%',
+        maxWidth: 400,
+        borderRadius: 24,
+        padding: 24,
+        overflow: 'hidden',
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.1)'
+    },
+    agencyInput: {
+        height: 54,
+        borderRadius: 14,
+        paddingHorizontal: 16,
+        fontSize: 16,
+        marginBottom: 20,
+        borderWidth: 1,
+    },
+    modalActions: {
+        flexDirection: 'row',
+        marginTop: 10,
+    },
+    modalBtn: {
+        flex: 1,
+        height: 54,
+        borderRadius: 16,
+        justifyContent: 'center',
+        alignItems: 'center'
+    },
+    modalBtnText: {
+        fontSize: 16,
+        fontWeight: '800'
+    }
 });

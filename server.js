@@ -2648,6 +2648,47 @@ app.post('/api/admin/users/:userId/assign-agency', authenticateToken, authorizeR
     }
 });
 
+// GET USER AGENCY INFO
+app.get('/api/users/:id/agency', authenticateToken, async (req, res) => {
+    try {
+        const result = await db.query(`
+            SELECT a.name, a.id, a.status
+            FROM users u
+            JOIN agencies a ON u.agency_id = a.id
+            WHERE u.id = $1
+        `, [req.params.id]);
+        
+        if (result.rows.length === 0) return res.json({ name: null });
+        res.json(result.rows[0]);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// JOIN AGENCY (User side)
+app.post('/api/agencies/join', authenticateToken, async (req, res) => {
+    const { agencyId } = req.body;
+    const userId = req.user.id;
+
+    if (!agencyId) return res.status(400).json({ error: 'Ajans kodu gerekli.' });
+
+    try {
+        // 1. Check if agency exists
+        const agencyRes = await db.query('SELECT name FROM agencies WHERE id = $1 AND status = \'active\'', [agencyId]);
+        if (agencyRes.rows.length === 0) {
+            return res.status(404).json({ error: 'Geçersiz veya aktif olmayan ajans kodu.' });
+        }
+
+        // 2. Update user's agency
+        await db.query('UPDATE users SET agency_id = $1 WHERE id = $2', [agencyId, userId]);
+        
+        console.log(`[AGENCY] User ${userId} joined agency ${agencyRes.rows[0].name}`);
+        res.json({ success: true, message: `${agencyRes.rows[0].name} ajansına başarıyla katıldınız!`, agencyName: agencyRes.rows[0].name });
+    } catch (err) {
+        res.status(500).json({ error: 'Ajansa katılırken bir hata oluştu.' });
+    }
+});
+
 // DEBUG PAYOUT TRACKER
 let payoutLogs = [];
 app.get('/api/debug/payout-logs', (req, res) => {

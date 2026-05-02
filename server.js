@@ -4544,6 +4544,16 @@ app.get('*', (req, res) => {
     }
 });
 
+// DEBUG LOGS VIEW
+app.get('/api/admin/debug-logs', (req, res) => {
+    res.json(global.payoutLogs || []);
+});
+
+app.get('/api/admin/clear-logs', (req, res) => {
+    global.payoutLogs = [];
+    res.json({ success: true });
+});
+
 // Basic Global Error Handler (Phase 2 Stability)
 app.use((err, req, res, next) => {
     const errorLog = `[${new Date().toISOString()}] ${req.method} ${req.url} - ERROR: ${err.message}\n${err.stack}\n`;

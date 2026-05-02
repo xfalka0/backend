@@ -7,7 +7,7 @@ echo Guncellemeler yukleniyor (Deploying updates)...
 echo.
 
 :: Path found in GitHub Desktop
-set GIT_PATH="C:\Users\Falka\AppData\Local\GitHubDesktop\app-3.5.4\resources\app\git\cmd\git.exe"
+set GIT_PATH="C:\Users\Falka\AppData\Local\GitHubDesktop\app-3.5.8\resources\app\git\cmd\git.exe"
 
 echo Admin paneli derleniyor (Building Admin Panel)...
 cd web-admin

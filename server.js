@@ -4532,19 +4532,6 @@ app.get('/privacy', (req, res) => {
 });
 
 // Handle React routing, return all requests to React app
-app.get('*', (req, res) => {
-    // Exclude API routes from being handled by React
-    if (req.path.startsWith('/api')) {
-        return res.status(404).json({ error: 'API route not found' });
-    }
-    const filePath = path.join(__dirname, 'public', 'admin', 'index.html');
-    if (require('fs').existsSync(filePath)) {
-        res.sendFile(filePath);
-    } else {
-        res.status(404).send('Admin Panel Not Found (File Missing on Server)');
-    }
-});
-
 // DEBUG LOGS VIEW
 app.get('/api/admin/schema-dump', async (req, res) => {
     try {
@@ -4571,6 +4558,20 @@ app.get('/api/admin/debug-logs', (req, res) => {
 app.get('/api/admin/clear-logs', (req, res) => {
     global.payoutLogs = [];
     res.json({ success: true });
+});
+
+// Admin Panel Catch-all Route
+app.get('*', (req, res) => {
+    // Exclude API routes from being handled by React
+    if (req.path.startsWith('/api')) {
+        return res.status(404).json({ error: 'API route not found' });
+    }
+    const filePath = path.join(__dirname, 'public', 'admin', 'index.html');
+    if (require('fs').existsSync(filePath)) {
+        res.sendFile(filePath);
+    } else {
+        res.status(404).send('Admin Panel Not Found (File Missing on Server)');
+    }
 });
 
 // Basic Global Error Handler (Phase 2 Stability)

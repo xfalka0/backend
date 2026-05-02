@@ -111,7 +111,6 @@ const initializeDatabase = async () => {
             await db.query('ALTER TABLE commission_logs ALTER COLUMN chat_id TYPE TEXT');
         } catch (e) { /* ignore if column doesn't exist yet */ }
 
-        // Check and update columns for existing tables
         try {
             await db.query('ALTER TABLE users ALTER COLUMN balance TYPE INTEGER USING balance::integer');
         } catch (e) { 
@@ -2492,7 +2491,7 @@ app.get('/api/users/:userId/chats', async (req, res) => {
             FROM chats c
             LEFT JOIN users u ON c.operator_id = u.id
             WHERE c.user_id = $1
-            ORDER BY c.last_message_at DESC
+            ORDER BY COALESCE((SELECT MAX(created_at) FROM messages WHERE chat_id = c.id), c.last_message_at) DESC
         `;
 
         const result = await db.query(simpleQuery, [userId]);
@@ -4175,6 +4174,18 @@ async function runMessageScheduler() {
                     chatId = newChat.rows[0].id;
                 } else {
                     chatId = chatRes.rows[0].id;
+                }
+
+                // --- DUPLICATE PREVENTION ---
+                // If this operator has already sent ANY message to this user in this chat, don't send another auto-message
+                const msgCheck = await db.query(
+                    'SELECT id FROM messages WHERE chat_id = $1 AND sender_id = $2 LIMIT 1',
+                    [chatId, sch.operator_id]
+                );
+                
+                if (msgCheck.rows.length > 0) {
+                    console.log(`[SCHEDULER] Skipping schedule ${sch.id} for user ${u.id} - message already exists.`);
+                    continue;
                 }
 
                 // Send message

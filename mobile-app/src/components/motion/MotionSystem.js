@@ -11,45 +11,80 @@ import Animated, {
     ZoomOut
 } from 'react-native-reanimated';
 
+import { PERFORMANCE } from '../../config';
+
 /**
  * Reusable Motion wrappers to maintain consistency across the app.
  */
 export const Motion = {
-    Fade: ({ children, delay = 0 }) => (
-        <Animated.View entering={FadeIn.delay(delay)} exiting={FadeOut}>
-            {children}
-        </Animated.View>
-    ),
+    Fade: ({ children, delay = 0 }) => {
+        if (PERFORMANCE.reduceMotion) return <>{children}</>;
+        return (
+            <Animated.View entering={FadeIn.delay(delay)} exiting={FadeOut}>
+                {children}
+            </Animated.View>
+        );
+    },
 
-    SlideUp: ({ children, delay = 0 }) => (
-        <Animated.View entering={FadeInDown.delay(delay).springify()} exiting={FadeOut}>
-            {children}
-        </Animated.View>
-    ),
+    SlideUp: ({ children, delay = 0 }) => {
+        if (PERFORMANCE.reduceMotion) return <>{children}</>;
+        const entering = PERFORMANCE.simpleAnimations 
+            ? FadeInDown.delay(delay).duration(400)
+            : FadeInDown.delay(delay).springify();
+            
+        return (
+            <Animated.View entering={entering} exiting={FadeOut}>
+                {children}
+            </Animated.View>
+        );
+    },
 
-    SlideDown: ({ children, delay = 0 }) => (
-        <Animated.View entering={FadeInUp.delay(delay).springify()} exiting={FadeOut}>
-            {children}
-        </Animated.View>
-    ),
+    SlideDown: ({ children, delay = 0 }) => {
+        if (PERFORMANCE.reduceMotion) return <>{children}</>;
+        const entering = PERFORMANCE.simpleAnimations
+            ? FadeInUp.delay(delay).duration(400)
+            : FadeInUp.delay(delay).springify();
 
-    SlideRight: ({ children, delay = 0 }) => (
-        <Animated.View entering={SlideInRight.delay(delay).springify()} exiting={FadeOut}>
-            {children}
-        </Animated.View>
-    ),
+        return (
+            <Animated.View entering={entering} exiting={FadeOut}>
+                {children}
+            </Animated.View>
+        );
+    },
 
-    List: ({ children }) => (
-        <Animated.View layout={Layout.springify().damping(15)}>
-            {children}
-        </Animated.View>
-    ),
+    SlideRight: ({ children, delay = 0 }) => {
+        if (PERFORMANCE.reduceMotion) return <>{children}</>;
+        const entering = PERFORMANCE.simpleAnimations
+            ? SlideInRight.delay(delay).duration(400)
+            : SlideInRight.delay(delay).springify();
+
+        return (
+            <Animated.View entering={entering} exiting={FadeOut}>
+                {children}
+            </Animated.View>
+        );
+    },
+
+    List: ({ children }) => {
+        if (PERFORMANCE.reduceMotion) return <>{children}</>;
+        return (
+            <Animated.View layout={PERFORMANCE.simpleAnimations ? Layout.duration(300) : Layout.springify().damping(15)}>
+                {children}
+            </Animated.View>
+        );
+    },
 
     Bounce: ({ children, visible, delay = 0 }) => {
         if (!visible) return null;
+        if (PERFORMANCE.reduceMotion) return <>{children}</>;
+        
+        const entering = PERFORMANCE.simpleAnimations
+            ? ZoomIn.delay(delay).duration(300)
+            : ZoomIn.delay(delay).springify().damping(12);
+
         return (
             <Animated.View
-                entering={ZoomIn.delay(delay).springify().damping(12)}
+                entering={entering}
                 exiting={ZoomOut.duration(200)}
             >
                 {children}
@@ -57,15 +92,24 @@ export const Motion = {
         );
     },
 
-    Scale: ({ children, delay = 0 }) => (
-        <Animated.View
-            entering={ZoomIn.delay(delay).springify()}
-            exiting={ZoomOut}
-        >
-            {children}
-        </Animated.View>
-    ),
+    Scale: ({ children, delay = 0 }) => {
+        if (PERFORMANCE.reduceMotion) return <>{children}</>;
+        
+        const entering = PERFORMANCE.simpleAnimations
+            ? ZoomIn.delay(delay).duration(300)
+            : ZoomIn.delay(delay).springify();
+
+        return (
+            <Animated.View
+                entering={entering}
+                exiting={ZoomOut}
+            >
+                {children}
+            </Animated.View>
+        );
+    },
 };
+
 
 export const SpringConfig = {
     damping: 15,

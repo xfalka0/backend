@@ -72,14 +72,12 @@ export default function MessagesScreen({ navigation, route }) {
 
     useFocusEffect(
         React.useCallback(() => {
-            // Only fetch if we have no chats yet, to prevent lag on every tab switch
-            if (user?.id && chats.length === 0) {
+            if (user?.id) {
                 fetchChats();
-            } else if (!user?.id) {
-                console.log('MessagesScreen: No user ID, stop loading');
+            } else {
                 setLoading(false);
             }
-        }, [user, chats.length])
+        }, [user])
     );
 
     const fetchChats = async () => {
@@ -94,14 +92,45 @@ export default function MessagesScreen({ navigation, route }) {
     };
 
     const filteredChats = React.useMemo(() => {
-        if (!searchText) return chats;
-        return chats.filter(chat =>
-            chat.name.toLowerCase().includes(searchText.toLowerCase())
-        );
+        let result = searchText 
+            ? chats.filter(chat => chat.name.toLowerCase().includes(searchText.toLowerCase()))
+            : [...chats];
+
+        // Sort: Strictly by date (Newest First) - with NaN protection
+        return [...result].sort((a, b) => {
+            const timeA = a.last_message_at ? new Date(a.last_message_at).getTime() : 0;
+            const timeB = b.last_message_at ? new Date(b.last_message_at).getTime() : 0;
+            
+            // Handle invalid dates
+            const finalA = isNaN(timeA) ? 0 : timeA;
+            const finalB = isNaN(timeB) ? 0 : timeB;
+            
+            return finalB - finalA;
+        });
     }, [chats, searchText]);
 
     const renderChatItem = ({ item, index }) => {
         const hasUnread = item.unread_count > 0;
+        const formatLastMessage = (msg, type) => {
+            if (!msg) return 'Sohbet Başladı 💬';
+            
+            // If it's a URL (Image or Audio)
+            if (msg.startsWith('http')) {
+                if (msg.includes('image') || msg.includes('cloudinary') || msg.match(/\.(jpg|jpeg|png|webp|gif)/i)) {
+                    return '📷 Fotoğraf';
+                }
+                if (msg.includes('audio') || msg.match(/\.(m4a|mp3|wav|ogg)/i)) {
+                    return '🎤 Ses Mesajı';
+                }
+            }
+            
+            // Check by type if available (some backends send type)
+            if (type === 'image') return '📷 Fotoğraf';
+            if (type === 'audio') return '🎤 Ses Mesajı';
+            if (type === 'gift') return '🎁 Hediye';
+            
+            return msg;
+        };
 
         return (
             <Animated.View
@@ -143,7 +172,7 @@ export default function MessagesScreen({ navigation, route }) {
                                 <OnlinePulse themeMode={themeMode} theme={theme} />
                             )}
                         </View>
-
+ 
                         <View style={styles.content}>
                             <View style={styles.mainContent}>
                                 <View style={styles.textContainer}>
@@ -151,7 +180,7 @@ export default function MessagesScreen({ navigation, route }) {
                                         <Text style={[styles.name, { color: theme.colors.text }]} numberOfLines={1}>
                                             {item.name}
                                         </Text>
-
+ 
                                         {item.vip_level > 0 && (
                                             <LinearGradient
                                                 colors={
@@ -177,7 +206,7 @@ export default function MessagesScreen({ navigation, route }) {
                                         ]}
                                         numberOfLines={1}
                                     >
-                                        {item.last_message || 'Sohbet Başladı 💬'}
+                                        {formatLastMessage(item.last_message, item.last_message_type)}
                                     </Text>
                                 </View>
 

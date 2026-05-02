@@ -11,6 +11,8 @@ import Animated, {
     interpolate,
 } from 'react-native-reanimated';
 
+import { PERFORMANCE } from '../../config';
+
 const { width, height } = Dimensions.get('window');
 
 const Blob = ({ color, size, duration, delay }) => {
@@ -19,6 +21,8 @@ const Blob = ({ color, size, duration, delay }) => {
     const scale = useSharedValue(1);
 
     useEffect(() => {
+        if (PERFORMANCE.reduceMotion) return;
+
         translateX.value = withRepeat(
             withTiming(Math.random() * width - width / 2, {
                 duration: duration,
@@ -62,15 +66,17 @@ const Blob = ({ color, size, duration, delay }) => {
                     height: size,
                     borderRadius: size / 2,
                     backgroundColor: color,
-                    opacity: 0.25,
+                    opacity: PERFORMANCE.disableBlur ? 0.1 : 0.25,
                 },
-                animatedStyle,
+                !PERFORMANCE.reduceMotion && animatedStyle,
             ]}
         />
     );
 };
 
 export default function AuthBackground({ hideCircles = false }) {
+    const showBlobs = !hideCircles && !PERFORMANCE.reduceMotion;
+
     return (
         <View style={styles.container} pointerEvents="none">
             <LinearGradient
@@ -82,9 +88,15 @@ export default function AuthBackground({ hideCircles = false }) {
                 <View style={styles.blobsContainer}>
                     <Blob color="#7928ca" size={400} duration={12000} />
                     <Blob color="#ff0080" size={350} duration={15000} />
-                    <Blob color="#0070f3" size={300} duration={18000} />
-                    <Blob color="#8b5cf6" size={250} duration={14000} />
-                    <BlurView intensity={100} style={StyleSheet.absoluteFill} />
+                    {!PERFORMANCE.simpleAnimations && (
+                        <>
+                            <Blob color="#0070f3" size={300} duration={18000} />
+                            <Blob color="#8b5cf6" size={250} duration={14000} />
+                        </>
+                    )}
+                    {!PERFORMANCE.disableBlur && (
+                        <BlurView intensity={100} style={StyleSheet.absoluteFill} />
+                    )}
                 </View>
             )}
 
@@ -92,6 +104,7 @@ export default function AuthBackground({ hideCircles = false }) {
         </View>
     );
 }
+
 
 const styles = StyleSheet.create({
     container: {

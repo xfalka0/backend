@@ -3,10 +3,12 @@ import { View, StyleSheet } from 'react-native';
 import LottieView from 'lottie-react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
 
+import { PERFORMANCE } from '../../config';
+
 const SafeLottie = ({ source, style, loop = true, autoPlay = true, fallback = null }) => {
     const [error, setError] = useState(false);
 
-    if (error || !source) {
+    if (error || !source || PERFORMANCE.reduceMotion) {
         return fallback ? <View style={style}>{fallback}</View> : null;
     }
 
@@ -25,5 +27,6 @@ const SafeLottie = ({ source, style, loop = true, autoPlay = true, fallback = nu
         </Animated.View>
     );
 };
+
 
 export default SafeLottie;

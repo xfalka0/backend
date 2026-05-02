@@ -11,6 +11,8 @@ import Animated, {
     Extrapolate
 } from 'react-native-reanimated';
 
+import { PERFORMANCE } from '../../config';
+
 const { width, height } = Dimensions.get('window');
 
 const Particle = ({ delay = 0 }) => {
@@ -21,6 +23,8 @@ const Particle = ({ delay = 0 }) => {
     const duration = 3000 + Math.random() * 4000;
 
     useEffect(() => {
+        if (PERFORMANCE.reduceMotion) return;
+
         opacity.value = withDelay(delay, withRepeat(
             withSequence(
                 withTiming(0.6, { duration: duration / 2 }),
@@ -36,14 +40,17 @@ const Particle = ({ delay = 0 }) => {
             false
         ));
 
-        scale.value = withDelay(delay, withRepeat(
-            withSequence(
-                withTiming(1.5, { duration: duration / 2 }),
-                withTiming(0.8, { duration: duration / 2 })
-            ),
-            -1,
-            true
-        ));
+        // Disable scale animation in simple mode to save CPU
+        if (!PERFORMANCE.simpleAnimations) {
+            scale.value = withDelay(delay, withRepeat(
+                withSequence(
+                    withTiming(1.5, { duration: duration / 2 }),
+                    withTiming(0.8, { duration: duration / 2 })
+                ),
+                -1,
+                true
+            ));
+        }
     }, []);
 
     const animatedStyle = useAnimatedStyle(() => ({
@@ -61,14 +68,19 @@ const Particle = ({ delay = 0 }) => {
 };
 
 const FloatingParticles = () => {
+    if (PERFORMANCE.reduceMotion) return null;
+
+    const count = PERFORMANCE.simpleAnimations ? PERFORMANCE.maxParticles : 12;
+
     return (
         <View style={StyleSheet.absoluteFill} pointerEvents="none">
-            {[...Array(12)].map((_, i) => (
+            {[...Array(count)].map((_, i) => (
                 <Particle key={i} delay={i * 500} />
             ))}
         </View>
     );
 };
+
 
 const styles = StyleSheet.create({
     particle: {

@@ -15,6 +15,8 @@ import Animated, {
     Extrapolation
 } from 'react-native-reanimated';
 
+import { PERFORMANCE } from '../config';
+
 const { width } = Dimensions.get('window');
 
 const DestinyHero = ({ onPress }) => {
@@ -25,43 +27,48 @@ const DestinyHero = ({ onPress }) => {
     const float = useSharedValue(0);
 
     useEffect(() => {
-        // Continuous Breathing Animation for the whole card
-        scale.value = withRepeat(
-            withSequence(
-                withTiming(1.02, { duration: 2500, easing: Easing.inOut(Easing.ease) }),
-                withTiming(1, { duration: 2500, easing: Easing.inOut(Easing.ease) })
-            ),
-            -1,
-            true
-        );
+        if (PERFORMANCE.reduceMotion) return;
 
-        // Continuous Pulse Animation (Glow)
+        // Simplified Breathing Animation - only if not in simple mode
+        if (!PERFORMANCE.simpleAnimations) {
+            scale.value = withRepeat(
+                withSequence(
+                    withTiming(1.01, { duration: 3000, easing: Easing.inOut(Easing.ease) }),
+                    withTiming(1, { duration: 3000, easing: Easing.inOut(Easing.ease) })
+                ),
+                -1,
+                true
+            );
+
+            // Slow Rotation for the ring - only in high performance mode
+            rotate.value = withRepeat(
+                withTiming(360, { duration: 30000, easing: Easing.linear }),
+                -1,
+                false
+            );
+        }
+
+        // Continuous Pulse Animation (Glow) - Subtler
         pulseGlow.value = withRepeat(
             withSequence(
-                withTiming(1.3, { duration: 2000, easing: Easing.inOut(Easing.ease) }),
-                withTiming(1, { duration: 2000, easing: Easing.inOut(Easing.ease) })
+                withTiming(1.15, { duration: 3000, easing: Easing.inOut(Easing.ease) }),
+                withTiming(1, { duration: 3000, easing: Easing.inOut(Easing.ease) })
             ),
             -1,
             true
         );
-        // ... existing slow rotation and float code ...
-        // Slow Rotation for the ring
-        rotate.value = withRepeat(
-            withTiming(360, { duration: 20000, easing: Easing.linear }),
-            -1,
-            false
-        );
 
-        // Floating Animation for the Icon
+        // Floating Animation for the Icon - Slower
         float.value = withRepeat(
             withSequence(
-                withTiming(1, { duration: 1500, easing: Easing.inOut(Easing.ease) }),
-                withTiming(0, { duration: 1500, easing: Easing.inOut(Easing.ease) })
+                withTiming(1, { duration: 2500, easing: Easing.inOut(Easing.ease) }),
+                withTiming(0, { duration: 2500, easing: Easing.inOut(Easing.ease) })
             ),
             -1,
             true
         );
     }, []);
+
 
     const handlePressIn = () => {
         scale.value = withTiming(0.92, { duration: 150 });

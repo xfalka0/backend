@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { View, Text, StyleSheet, Dimensions, TouchableOpacity, Image, FlatList } from 'react-native';
+import { View, Text, StyleSheet, Dimensions, TouchableOpacity, Image, FlatList, Pressable } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import Animated, {
@@ -14,7 +14,7 @@ import Animated, {
     interpolate,
     Extrapolate
 } from 'react-native-reanimated';
-import { Pressable } from 'react-native';
+import { PERFORMANCE } from '../../config';
 import GlassCard from '../ui/GlassCard';
 
 const { width } = Dimensions.get('window');
@@ -37,8 +37,8 @@ const slides = [
         subtitle: 'Dokun ve eşleşmeni başlat ✨',
         buttonText: 'İNCELE',
         icon: 'star',
-        colors: ['rgba(244, 63, 94, 0.9)', 'rgba(225, 29, 72, 0.9)'], // Rose/Pink gradient
-        buttonColors: ['#FDA4AF', '#FB7185', '#E11D48'], // Pink/Rose button gradient
+        colors: ['rgba(244, 63, 94, 0.9)', 'rgba(225, 29, 72, 0.9)'],
+        buttonColors: ['#FDA4AF', '#FB7185', '#E11D48'],
         image: require('../../../assets/heart_3d.png'),
         isCoin: false,
         isHeart: true
@@ -49,8 +49,8 @@ const slides = [
         subtitle: 'Avantajlı paketler için hemen yazın',
         buttonText: 'BAYİYE YAZ',
         icon: 'logo-whatsapp',
-        colors: ['#065f46', '#059669', 'rgba(0, 0, 0, 0.8)'], // Emerald/Green gradient
-        buttonColors: ['#34D399', '#10B981', '#059669'], // Green button gradient
+        colors: ['#065f46', '#059669', 'rgba(0, 0, 0, 0.8)'],
+        buttonColors: ['#34D399', '#10B981', '#059669'],
         image: require('../../../assets/reseller_coins.png'),
         isCoin: false,
         isHeart: false,
@@ -58,12 +58,15 @@ const slides = [
     }
 ];
 
+
 const FloatingEmber = ({ delay, startX }) => {
     const translateY = useSharedValue(30);
     const opacity = useSharedValue(0);
     const scale = useSharedValue(0.3 + Math.random() * 0.6);
 
     useEffect(() => {
+        if (PERFORMANCE.reduceMotion || PERFORMANCE.simpleAnimations) return;
+
         const duration = 3000 + Math.random() * 1500;
 
         opacity.value = withDelay(delay, withRepeat(
@@ -82,6 +85,7 @@ const FloatingEmber = ({ delay, startX }) => {
         ));
     }, []);
 
+    if (PERFORMANCE.simpleAnimations) return null;
     const style = useAnimatedStyle(() => ({
         transform: [
             { translateY: translateY.value },
@@ -101,6 +105,8 @@ const FloatingHeart = ({ delay }) => {
     const scale = useSharedValue(0);
 
     useEffect(() => {
+        if (PERFORMANCE.reduceMotion || PERFORMANCE.simpleAnimations) return;
+
         const randomX = (Math.random() - 0.5) * 100;
         const randomY = -150 - Math.random() * 50;
         const duration = 2000 + Math.random() * 1000;
@@ -137,6 +143,7 @@ const FloatingHeart = ({ delay }) => {
         ));
     }, []);
 
+    if (PERFORMANCE.simpleAnimations) return null;
     const animatedStyle = useAnimatedStyle(() => ({
         transform: [
             { translateY: translateY.value },
@@ -167,71 +174,75 @@ const PremiumCoinCard = ({ onCoinPress, onExplorePress, onResellerPress }) => {
     const flatListRef = useRef(null);
 
     useEffect(() => {
-        // Ambient Glow Pulse
-        ambientOpacity.value = withRepeat(
-            withSequence(
-                withTiming(0.22, { duration: 5000, easing: Easing.inOut(Easing.ease) }),
-                withTiming(0.12, { duration: 5000, easing: Easing.inOut(Easing.ease) })
-            ),
-            -1,
-            true
-        );
+        if (PERFORMANCE.reduceMotion) return;
 
-        // Breathing Scale
-        cardScale.value = withRepeat(
-            withSequence(
-                withTiming(1.01, { duration: 3000, easing: Easing.inOut(Easing.ease) }),
-                withTiming(1, { duration: 3000, easing: Easing.inOut(Easing.ease) })
-            ),
-            -1,
-            true
-        );
+        // Ambient Glow Pulse - Disable in simple mode
+        if (!PERFORMANCE.simpleAnimations) {
+            ambientOpacity.value = withRepeat(
+                withSequence(
+                    withTiming(0.22, { duration: 5000, easing: Easing.inOut(Easing.ease) }),
+                    withTiming(0.12, { duration: 5000, easing: Easing.inOut(Easing.ease) })
+                ),
+                -1,
+                true
+            );
 
-        // Periodic Banner Sweep (Every 8 seconds)
-        bannerShineX.value = withRepeat(
-            withSequence(
-                withTiming(width * 2.5, { duration: 4000, easing: Easing.bezier(0.4, 0, 0.2, 1) }),
-                withTiming(-width * 2, { duration: 0 }),
-                withTiming(-width * 2, { duration: 4000 })
-            ),
-            -1,
-            false
-        );
+            // Breathing Scale
+            cardScale.value = withRepeat(
+                withSequence(
+                    withTiming(1.01, { duration: 3000, easing: Easing.inOut(Easing.ease) }),
+                    withTiming(1, { duration: 3000, easing: Easing.inOut(Easing.ease) })
+                ),
+                -1,
+                true
+            );
+
+            // Periodic Banner Sweep (Slower)
+            bannerShineX.value = withRepeat(
+                withSequence(
+                    withTiming(width * 2.5, { duration: 6000, easing: Easing.bezier(0.4, 0, 0.2, 1) }),
+                    withTiming(-width * 2, { duration: 0 }),
+                    withTiming(-width * 2, { duration: 8000 })
+                ),
+                -1,
+                false
+            );
+
+            buttonScale.value = withRepeat(
+                withSequence(
+                    withTiming(1.03, { duration: 1500, easing: Easing.inOut(Easing.ease) }),
+                    withTiming(1, { duration: 1500, easing: Easing.inOut(Easing.ease) })
+                ),
+                -1,
+                true
+            );
+        }
 
         shineX.value = withRepeat(
             withSequence(
                 withTiming(350, { duration: 3000, easing: Easing.bezier(0.4, 0, 0.2, 1) }),
                 withTiming(-350, { duration: 0 }),
-                withTiming(-350, { duration: 2500 })
+                withTiming(-350, { duration: 4000 })
             ),
             -1,
             false
         );
 
-        buttonScale.value = withRepeat(
-            withSequence(
-                withTiming(1.05, { duration: 1000, easing: Easing.inOut(Easing.ease) }),
-                withTiming(1, { duration: 1000, easing: Easing.inOut(Easing.ease) })
-            ),
-            -1,
-            true
-        );
-
-        // Heart Sway
+        // Subtler Heart Sway
         heartRotate.value = withRepeat(
             withSequence(
-                withTiming(-5, { duration: 1500, easing: Easing.inOut(Easing.ease) }),
-                withTiming(5, { duration: 1500, easing: Easing.inOut(Easing.ease) })
+                withTiming(-3, { duration: 2500, easing: Easing.inOut(Easing.ease) }),
+                withTiming(3, { duration: 2500, easing: Easing.inOut(Easing.ease) })
             ),
             -1,
             true
         );
 
-        // Coin Float
+        // Subtler Coin Float
         coinTranslateY.value = withRepeat(
             withSequence(
-                withTiming(-8, { duration: 2000, easing: Easing.inOut(Easing.ease) }),
-                withTiming(0, { duration: 2000, easing: Easing.inOut(Easing.ease) })
+                withTiming(-4, { duration: 3000, easing: Easing.inOut(Easing.ease) }),
+                withTiming(0, { duration: 3000, easing: Easing.inOut(Easing.ease) })
             ),
             -1,
             true
@@ -239,18 +250,25 @@ const PremiumCoinCard = ({ onCoinPress, onExplorePress, onResellerPress }) => {
 
         // Auto-Scroll Logic for FlatList
         const intervalId = setInterval(() => {
-            if (flatListRef.current) {
-                const nextIndex = (activeIndex + 1) % slides.length;
-                flatListRef.current.scrollToIndex({
-                    index: nextIndex,
-                    animated: true,
-                });
-                setActiveIndex(nextIndex);
+            if (flatListRef.current && slides.length > 0) {
+                const currentIndex = isNaN(activeIndex) ? 0 : activeIndex;
+                const nextIndex = (currentIndex + 1) % slides.length;
+                
+                try {
+                    flatListRef.current.scrollToIndex({
+                        index: nextIndex,
+                        animated: true,
+                    });
+                    setActiveIndex(nextIndex);
+                } catch (err) {
+                    console.log('Scroll error:', err);
+                }
             }
-        }, 12000); // Increased from 8000 to 12000 for a much slower, more relaxed pace
+        }, 15000); // Relaxed pace
 
         return () => clearInterval(intervalId);
     }, [activeIndex]);
+
 
     const shineStyle = useAnimatedStyle(() => ({
         transform: [
@@ -299,8 +317,13 @@ const PremiumCoinCard = ({ onCoinPress, onExplorePress, onResellerPress }) => {
 
     const onScroll = (event) => {
         const slideSize = event.nativeEvent.layoutMeasurement.width;
-        const index = event.nativeEvent.contentOffset.x / slideSize;
-        setActiveIndex(Math.round(index));
+        if (slideSize > 0) {
+            const index = event.nativeEvent.contentOffset.x / slideSize;
+            const roundedIndex = Math.round(index);
+            if (!isNaN(roundedIndex)) {
+                setActiveIndex(roundedIndex);
+            }
+        }
     };
 
     const renderItem = ({ item }) => {
@@ -437,6 +460,12 @@ const PremiumCoinCard = ({ onCoinPress, onExplorePress, onResellerPress }) => {
                 snapToAlignment="start"
                 decelerationRate="fast"
                 snapToInterval={width}
+                onScrollToIndexFailed={(info) => {
+                    flatListRef.current?.scrollToOffset({
+                        offset: info.averageItemLength * info.index,
+                        animated: true,
+                    });
+                }}
             />
             <View style={styles.paginationContainer}>
                 {slides.map((_, i) => (

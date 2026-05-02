@@ -64,29 +64,35 @@ const initializeDatabase = async () => {
         `);
 
         // 2. Payments Table
-        await db.query(`
-            CREATE TABLE IF NOT EXISTS payments (
-                id SERIAL PRIMARY KEY,
-                user_id UUID REFERENCES users(id),
-                package_id INTEGER REFERENCES coin_packages(id),
-                transaction_id VARCHAR(255) UNIQUE,
-                amount DECIMAL(10, 2) NOT NULL,
-                status VARCHAR(50) DEFAULT 'completed',
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        `);
+        try {
+            await db.query(`
+                CREATE TABLE IF NOT EXISTS payments (
+                    id SERIAL PRIMARY KEY,
+                    user_id TEXT,
+                    package_id INTEGER REFERENCES coin_packages(id),
+                    transaction_id VARCHAR(255) UNIQUE,
+                    amount DECIMAL(10, 2) NOT NULL,
+                    status VARCHAR(50) DEFAULT 'completed',
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            `);
+            console.log('[DB] payments table verified');
+        } catch (e) { console.error('[DB] Error payments:', e.message); }
 
         // 3. Transactions Table
-        await db.query(`
-            CREATE TABLE IF NOT EXISTS transactions (
-                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-                user_id UUID REFERENCES users(id),
-                amount INTEGER NOT NULL,
-                type VARCHAR(50) NOT NULL,
-                description TEXT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        `);
+        try {
+            await db.query(`
+                CREATE TABLE IF NOT EXISTS transactions (
+                    id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+                    user_id TEXT,
+                    amount INTEGER NOT NULL,
+                    type VARCHAR(50) NOT NULL,
+                    description TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            `);
+            console.log('[DB] transactions table verified');
+        } catch (e) { console.error('[DB] Error transactions:', e.message); }
 
         // 4. Commission Logs Table - FORCE CREATE IMMEDIATELY
         try {
@@ -110,8 +116,8 @@ const initializeDatabase = async () => {
         try {
             await db.query(`
                 CREATE TABLE IF NOT EXISTS agencies (
-                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-                    owner_id UUID REFERENCES users(id),
+                    id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+                    owner_id TEXT,
                     name VARCHAR(255) NOT NULL,
                     commission_rate DECIMAL(5, 2) DEFAULT 0.40,
                     pending_balance DECIMAL(12, 2) DEFAULT 0,

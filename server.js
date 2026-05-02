@@ -3898,6 +3898,10 @@ io.on('connection', (socket) => {
             console.error('[SOCKET] Error Stack:', err.stack);
             console.error('[SOCKET] Failed Message Data:', JSON.stringify({ chatId, senderId, type, tempId }));
             
+            // Add error to logs
+            if (!global.payoutLogs) global.payoutLogs = [];
+            global.payoutLogs.push({ timestamp: new Date().toISOString(), type: 'SEND_ERROR', error: err.message, stack: err.stack });
+            
             // Send specific error message if it's a known one, otherwise generic
             let errorMsg = (err.message === 'BU_PROFIL_SIZE_ZIMMETLI_DEGIL') 
                 ? 'Bu profil size zimmetli değil.' 

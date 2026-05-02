@@ -799,7 +799,7 @@ app.get('/api/operators', async (req, res) => {
             FROM users u
             JOIN operators o ON u.id = o.user_id
             WHERE u.account_status = 'active'
-              AND u.role NOT IN ('admin', 'super_admin', 'moderator')
+              AND u.role NOT IN ('admin', 'super_admin', 'moderator', 'staff')
         `;
 
         let params = [];
@@ -906,7 +906,7 @@ app.get('/api/discovery', authenticateToken, async (req, res) => {
             FROM users u
             LEFT JOIN operators o ON u.id = o.user_id
             WHERE (u.gender = $1 OR u.gender = 'coin_bayisi')
-              AND u.role NOT IN ('admin', 'super_admin')
+              AND u.role NOT IN ('admin', 'super_admin', 'moderator', 'staff')
               AND u.id != $2
               AND u.account_status = 'active'
             ${orderByClause}

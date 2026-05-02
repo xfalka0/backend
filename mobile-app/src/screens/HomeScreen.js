@@ -225,7 +225,8 @@ export default function HomeScreen({ navigation, route }) {
             // Filter for female operators who haven't sent a message yet
             const availableOps = operators.filter(op => {
                 const isFemale = op.gender === 'kadin' || op.gender === 'female' || (op.gender && op.gender.toLowerCase() === 'kadin');
-                return isFemale && !sentFakeOperators.current.has(op.id);
+                const isRealOperator = op.role === 'operator';
+                return isFemale && isRealOperator && !sentFakeOperators.current.has(op.id);
             });
 
             if (availableOps.length > 0) {

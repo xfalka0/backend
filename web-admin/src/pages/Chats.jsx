@@ -156,6 +156,11 @@ const Chats = () => {
             }
         });
 
+        socketRef.current.on('message_error', (err) => {
+            alert(`Mesaj gönderilemedi: ${err.message}\nDebug: ${err.debug}`);
+            console.error('[SOCKET] Message Error:', err);
+        });
+
         return () => {
             if (socketRef.current) socketRef.current.disconnect();
         };

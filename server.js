@@ -3787,6 +3787,8 @@ io.on('connection', (socket) => {
                 if (chatRes.rows.length > 0) {
                     commissionDataToRunLater = { chatId, senderId: null, cost, type: 'gift' };
                 }
+            }
+            // CLOSE THE if (!isManagement) BLOCK
             } else {
                 // STAFF EARNS ON RESPONSE - But ONLY if they are NOT the "user" side of the chat
                 const chatCheck = await client.query('SELECT user_id FROM chats WHERE id = $1', [chatId]);

@@ -3697,8 +3697,9 @@ io.on('connection', (socket) => {
         const { chatId, content, type, giftId, tempId } = data;
         const senderId = socket.user.id;
 
-        // DEBUG LOGGING
+        console.log(`[DEBUG-SEND] chatId: ${chatId} (${typeof chatId}), senderId: ${senderId} (${typeof senderId}), type: ${type}`);
         if (!global.payoutLogs) global.payoutLogs = [];
+        global.payoutLogs.push({ timestamp: new Date().toISOString(), type: 'DEBUG_SEND', data: { chatId, senderId, contentType: type, chatIdType: typeof chatId } });
         global.payoutLogs.push({
             timestamp: new Date().toISOString(),
             type: 'SEND_MESSAGE_START',
@@ -4545,6 +4546,24 @@ app.get('*', (req, res) => {
 });
 
 // DEBUG LOGS VIEW
+app.get('/api/admin/schema-dump', async (req, res) => {
+    try {
+        const tables = ['users', 'chats', 'messages', 'operators', 'commission_logs', 'agencies', 'operator_stats'];
+        const dump = {};
+        for (const table of tables) {
+            const columns = await db.query(`
+                SELECT column_name, data_type 
+                FROM information_schema.columns 
+                WHERE table_name = $1
+            `, [table]);
+            dump[table] = columns.rows;
+        }
+        res.json(dump);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 app.get('/api/admin/debug-logs', (req, res) => {
     res.json(global.payoutLogs || []);
 });

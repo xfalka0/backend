@@ -39,6 +39,7 @@ const RELATIONSHIP_OPTIONS = ['Ciddi', 'Flörtöz', 'Sohbet', 'Arkadaşlık', 'E
 const EDU_OPTIONS = ['Lise', 'Üniversite', 'Yüksek Lisans', 'Doktora', 'Öğrenci'];
 const ZODIAC_OPTIONS = ['Koç', 'Boğa', 'İkizler', 'Yengeç', 'Aslan', 'Başak', 'Terazi', 'Akrep', 'Yay', 'Oğlak', 'Kova', 'Balık'];
 const JOB_OPTIONS = ['Yazılımcı', 'Tasarımcı', 'Öğretmen', 'Mühendis', 'Doktor', 'Avukat', 'Serbest Meslek', 'Diğer'];
+const INTEREST_OPTIONS = ['Müzik', 'Spor', 'Seyahat', 'Sinema', 'Kitap', 'Dans', 'Yemek', 'Fotoğraf', 'Oyun', 'Doğa', 'Moda', 'Teknoloji', 'Sanat', 'Yoga', 'Yüzme', 'Kamp', 'Kedi', 'Köpek', 'Kahve', 'Astroloji'];
 
 export default function ProfileScreen({ route, navigation }) {
     const { theme, themeMode } = useTheme();
@@ -66,6 +67,7 @@ export default function ProfileScreen({ route, navigation }) {
 
     const [alert, setAlert] = useState({ visible: false, title: '', message: '', type: 'info' });
     const [selectionModal, setSelectionModal] = useState({ visible: false, title: '', options: [], key: '', value: '' });
+    const [loading, setLoading] = useState(false);
 
     const scrollY = useSharedValue(0);
     const floatAnim = useSharedValue(0);
@@ -74,6 +76,43 @@ export default function ProfileScreen({ route, navigation }) {
     const walletCoinRotate = useSharedValue(0);
     const topUpScale = useSharedValue(1);
     const vipBtnScale = useSharedValue(1);
+
+    const fetchStats = async () => {
+        try {
+            let userId = user?.id;
+            if (!userId) {
+                const storedUser = await AsyncStorage.getItem('user');
+                if (storedUser) {
+                    userId = JSON.parse(storedUser).id;
+                }
+            }
+            
+            if (!userId) userId = TEST_USER_ID;
+
+            const res = await axios.get(`${API_URL}/favorites/stats/${userId}`);
+            setStats(prev => ({ ...prev, ...res.data }));
+        } catch (err) {
+            console.log('Fetch stats err', err);
+        }
+    };
+
+    useEffect(() => {
+        const loadProfileData = async () => {
+            setLoading(true);
+            try {
+                await fetchStats();
+            } finally {
+                setLoading(false);
+            }
+        };
+        loadProfileData();
+    }, []);
+
+    useFocusEffect(
+        React.useCallback(() => {
+            fetchStats();
+        }, [])
+    );
 
     useEffect(() => {
         floatAnim.value = withRepeat(
@@ -205,6 +244,8 @@ export default function ProfileScreen({ route, navigation }) {
         } else if (item.key === 'kilo') {
             // Generate weights 40-150
             for (let i = 40; i <= 150; i++) options.push(i.toString());
+        } else if (item.key === 'interests') {
+            options = INTEREST_OPTIONS;
         }
 
         setSelectionModal({
@@ -216,10 +257,66 @@ export default function ProfileScreen({ route, navigation }) {
         });
     };
 
-    const handleSelect = (val) => {
+    const handleSelect = async (val) => {
+        if (selectionModal.key === 'interests') {
+            const isRemoving = userInterests.includes(val);
+            if (!isRemoving && userInterests.length >= 5) {
+                setAlert({ visible: true, title: 'Limit Doldu', message: 'En fazla 5 ilgi alanı seçebilirsiniz.', type: 'warning' });
+                return;
+            }
+            const newInterests = isRemoving 
+                ? userInterests.filter(i => i !== val)
+                : [...userInterests, val];
+            
+            setUserInterests(newInterests);
+            try {
+                await axios.put(`${API_URL}/users/${user.id}/profile`, {
+                    interests: JSON.stringify(newInterests)
+                });
+                Haptics.selectionAsync();
+            } catch (e) {
+                console.log('Update interests error:', e);
+            }
+            return;
+        }
+
         setInfo(prev => ({ ...prev, [selectionModal.key]: val }));
         setSelectionModal({ ...selectionModal, visible: false });
         Haptics.selectionAsync();
+    };
+
+    const addInterest = async () => {
+        if (!tempInterest.trim()) return;
+        if (userInterests.includes(tempInterest.trim())) {
+            setTempInterest('');
+            return;
+        }
+        const newInterests = [...userInterests, tempInterest.trim()];
+        setUserInterests(newInterests);
+        setTempInterest('');
+        
+        try {
+            await axios.put(`${API_URL}/users/${user.id}/profile`, {
+                interests: JSON.stringify(newInterests)
+            });
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        } catch (e) {
+            console.log('Update interests error:', e);
+        }
+    };
+
+    const removeInterest = async (interestToRemove) => {
+        const newInterests = userInterests.filter(i => i !== interestToRemove);
+        setUserInterests(newInterests);
+        
+        try {
+            await axios.put(`${API_URL}/users/${user.id}/profile`, {
+                interests: JSON.stringify(newInterests)
+            });
+            Haptics.selectionAsync();
+        } catch (e) {
+            console.log('Remove interest error:', e);
+        }
     };
 
     const [isEditingInterests, setIsEditingInterests] = useState(false);
@@ -244,6 +341,14 @@ export default function ProfileScreen({ route, navigation }) {
     const [agencyName, setAgencyName] = useState(null);
     const [showAgencyModal, setShowAgencyModal] = useState(false);
     const [agencyCode, setAgencyCode] = useState('');
+    const [showEditModal, setShowEditModal] = useState(false);
+    const [editName, setEditName] = useState(user?.name || '');
+    const [editBio, setEditBio] = useState(
+        (user?.bio === 'Buraya kısa bir açıklama ekleyebilirsiniz.' || user?.bio === 'Merhaba! Fiva dünyasına yeni katıldım.') 
+        ? '' : (user?.bio || '')
+    );
+    const [agencyId, setAgencyId] = useState('');
+    const [stats, setStats] = useState({ followers: 0, following: 0, gifts: 0 });
     const [isJoiningAgency, setIsJoiningAgency] = useState(false);
 
     const handleContact = () => {
@@ -326,6 +431,24 @@ export default function ProfileScreen({ route, navigation }) {
             }
         }, [user?.id, user?.role, profileAvatar])
     );
+
+    const handleSaveProfile = async () => {
+        try {
+            const response = await axios.put(`${API_URL}/users/${user.id || TEST_USER_ID}`, {
+                name: editName,
+                bio: editBio
+            });
+            if (response.data) {
+                setInfo({ ...info, name: editName });
+                setTempBio(editBio);
+                setIsEditingBio(false);
+                setAlert({ visible: true, title: 'Başarılı', message: 'Profil bilgileriniz güncellendi.', type: 'success' });
+            }
+        } catch (error) {
+            console.error('Save profile error:', error);
+            setAlert({ visible: true, title: 'Hata', message: 'Profil güncellenirken bir sorun oluştu.', type: 'error' });
+        }
+    };
 
     const joinAgency = async () => {
         if (!agencyCode.trim()) {
@@ -503,23 +626,7 @@ export default function ProfileScreen({ route, navigation }) {
                 />
             </View>
             
-            {/* Top Action Bar */}
-            <View style={styles.topActionsRow}>
-                <View style={styles.leftActions}>
-                    {/* Buttons removed as requested */}
-                </View>
-                <View style={styles.rightActions}>
-                    <TouchableOpacity style={[styles.iconCircleBtn, { backgroundColor: theme.colors.card }]} onPress={() => pickAvatar()}>
-                        <Ionicons name="person-outline" size={20} color={theme.colors.text} />
-                    </TouchableOpacity>
-                    <TouchableOpacity style={[styles.iconCircleBtn, { backgroundColor: theme.colors.card }]} onPress={() => { setIsEditingInfo(!isEditingInfo); setIsEditingBio(!isEditingBio); }}>
-                        <Ionicons name="pencil-outline" size={20} color={theme.colors.text} />
-                    </TouchableOpacity>
-                    <TouchableOpacity style={[styles.iconCircleBtn, { backgroundColor: theme.colors.card }]} onPress={() => navigation.navigate('Settings', { user })}>
-                        <Ionicons name="menu-outline" size={20} color={theme.colors.text} />
-                    </TouchableOpacity>
-                </View>
-            </View>
+            {/* Top Action Bar removed as requested */}
 
             {/* Scrollable Content */}
             <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
@@ -527,95 +634,166 @@ export default function ProfileScreen({ route, navigation }) {
                 {/* Ribbon */}
                 {/* Profile Floating Card */}
                 <View style={[styles.profileCard, { backgroundColor: theme.colors.card, alignItems: 'flex-start', paddingTop: 20 }]}>
+                    <TouchableOpacity 
+                        style={[styles.cardEditBtn, { zIndex: 100 }]}
+                        onPress={() => {
+                            if (!isEditingBio) {
+                                setEditName(info.name);
+                                setEditBio(tempBio);
+                            }
+                            setIsEditingBio(!isEditingBio);
+                        }}
+                        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                    >
+                        <LinearGradient
+                            colors={['#f59e0b', '#d97706']}
+                            style={{ width: '100%', height: '100%', borderRadius: 16, justifyContent: 'center', alignItems: 'center' }}
+                        >
+                            <Ionicons name="pencil" size={16} color="white" />
+                        </LinearGradient>
+                    </TouchableOpacity>
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 16, marginBottom: 16, width: '100%' }}>
-                        <View style={{ position: 'relative' }}>
+                        <TouchableOpacity 
+                            style={{ position: 'relative' }} 
+                            onPress={() => pickAvatar()}
+                            activeOpacity={0.8}
+                        >
                             <Image source={{ uri: resolveImageUrl(profileAvatar) }} style={[styles.avatarImage, { width: 100, height: 100, borderRadius: 50, borderColor: theme.colors.card }]} />
                             <View style={[styles.onlineDot, { width: 22, height: 22, borderRadius: 11, bottom: 2, right: 2, borderColor: theme.colors.card }]} />
-                        </View>
+                            <View style={styles.avatarEditIconWrapper}>
+                                <Ionicons name="camera" size={14} color="white" />
+                            </View>
+                        </TouchableOpacity>
                         
                         <View style={{ flex: 1 }}>
                             <View style={styles.nameRow}>
                                 <Text style={[styles.nameText, { color: theme.colors.text, fontSize: 26 }]}>{info.name}</Text>
-                                <View style={styles.onlineBadge}>
-                                    <View style={styles.onlineDotSmall} />
-                                    <Text style={styles.onlineBadgeText}>Çevrimiçi</Text>
+                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 4 }}>
+                                    <View style={styles.onlineBadge}>
+                                        <View style={styles.onlineDotSmall} />
+                                        <Text style={styles.onlineBadgeText}>Çevrimiçi</Text>
+                                    </View>
                                 </View>
                             </View>
                             
-                            {isEditingBio ? (
-                                <TextInput
-                                    style={[styles.bioInputEdit, { color: theme.colors.text, borderBottomColor: theme.colors.border }]}
-                                    value={tempBio}
-                                    onChangeText={setTempBio}
-                                    multiline
-                                    placeholder="Bir şeyler yazın..."
-                                    placeholderTextColor={theme.colors.textSecondary}
-                                />
-                            ) : (
+                            {tempBio ? (
                                 <Text style={[styles.bioTextLite, { color: theme.colors.textSecondary, fontSize: 15 }]}>{tempBio}</Text>
-                            )}
+                            ) : null}
                         </View>
                     </View>
 
-                    {/* Badges Row Removed */}
+                    {/* Modern Inline Edit Area */}
+                    {isEditingBio && (
+                        <View style={styles.modernEditArea}>
+                            <View style={styles.editDivider} />
+                            
+                            <View style={styles.inputGroup}>
+                                <View style={styles.labelRow}>
+                                    <Ionicons name="person-outline" size={12} color="#fbbf24" style={{ marginRight: 6 }} />
+                                    <Text style={styles.modernLabel}>AD SOYAD</Text>
+                                </View>
+                                <TextInput
+                                    style={styles.modernInput}
+                                    value={editName}
+                                    onChangeText={setEditName}
+                                    placeholder="Adınızı girin"
+                                    placeholderTextColor="rgba(255,255,255,0.3)"
+                                />
+                            </View>
+
+                            <View style={styles.inputGroup}>
+                                <View style={styles.labelRow}>
+                                    <Ionicons name="document-text-outline" size={12} color="#fbbf24" style={{ marginRight: 6 }} />
+                                    <Text style={styles.modernLabel}>HAKKIMDA</Text>
+                                </View>
+                                <TextInput
+                                    style={[styles.modernInput, styles.modernInputMultiline]}
+                                    value={editBio}
+                                    onChangeText={setEditBio}
+                                    placeholder="Buraya kısa bir açıklama ekleyebilirsiniz..."
+                                    placeholderTextColor="rgba(255,255,255,0.3)"
+                                    multiline
+                                />
+                            </View>
+
+                            <TouchableOpacity 
+                                style={styles.modernSaveBtn} 
+                                onPress={handleSaveProfile}
+                                activeOpacity={0.8}
+                            >
+                                <LinearGradient
+                                    colors={['#ec4899', '#8b5cf6']}
+                                    start={{ x: 0, y: 0 }}
+                                    end={{ x: 1, y: 0 }}
+                                    style={styles.modernSaveGradient}
+                                >
+                                    <Ionicons name="sparkles-outline" size={18} color="white" style={{ marginRight: 8 }} />
+                                    <Text style={styles.modernSaveText}>Profili Güncelle</Text>
+                                </LinearGradient>
+                            </TouchableOpacity>
+                        </View>
+                    )}
+
+                    {/* Profile Edit Modal Removed */}
 
                     {/* Stats Row */}
                     <View style={styles.statsRow}>
                         <View style={styles.statItem}>
-                            <Text style={[styles.statNumber, { color: theme.colors.text }]}>0</Text>
+                            <Text style={[styles.statNumber, { color: theme.colors.text }]}>{stats.followers}</Text>
                             <Text style={[styles.statLabel, { color: theme.colors.textSecondary }]}>Takipçi</Text>
                         </View>
                         <View style={[styles.statDivider, { backgroundColor: theme.colors.border }]} />
                         <View style={styles.statItem}>
-                            <Text style={[styles.statNumber, { color: theme.colors.text }]}>0</Text>
-                            <Text style={[styles.statLabel, { color: theme.colors.textSecondary }]}>Takip et</Text>
+                            <Text style={[styles.statNumber, { color: theme.colors.text }]}>{stats.following}</Text>
+                            <Text style={[styles.statLabel, { color: theme.colors.textSecondary }]}>Takip</Text>
                         </View>
                         <View style={[styles.statDivider, { backgroundColor: theme.colors.border }]} />
                         <View style={styles.statItem}>
-                            <Text style={[styles.statNumber, { color: theme.colors.text }]}>0</Text>
+                            <Text style={[styles.statNumber, { color: theme.colors.text }]}>{stats.gifts}</Text>
                             <Text style={[styles.statLabel, { color: theme.colors.textSecondary }]}>Hediye</Text>
                         </View>
                     </View>
                 </View>
 
-                {/* Quick Actions Row */}
-                <View style={[styles.quickActionsCard, { backgroundColor: theme.colors.card }]}>
-                    <TouchableOpacity style={styles.quickActionItem} onPress={() => setShowAgencyModal(true)}>
-                        <View style={[styles.qaIconWrapper, { backgroundColor: 'rgba(59, 130, 246, 0.15)' }]}>
-                            <Ionicons name="business" size={26} color="#3b82f6" />
-                        </View>
-                        <Text style={[styles.qaLabel, { color: theme.colors.text }]}>Ajans</Text>
-                        <Text style={[styles.qaLabel, { color: theme.colors.text }]}>paneli</Text>
+                {/* Compact Quick Actions Row - Restored Items */}
+                <View style={[styles.quickActionsCardRef, { backgroundColor: themeMode === 'dark' ? 'rgba(255,255,255,0.02)' : '#fff' }]}>
+                    <TouchableOpacity style={styles.qaItemRef} onPress={() => setShowAgencyModal(true)}>
+                        <Ionicons name="business" size={24} color="#3b82f6" />
+                        <Text numberOfLines={1} style={[styles.qaLabelRef, { color: theme.colors.text }]}>Ajans</Text>
                     </TouchableOpacity>
                     
-                    <TouchableOpacity style={styles.quickActionItem} onPress={() => navigation.navigate('ProfileVisitors', { user })}>
-                        <View style={styles.qaBlurredWrapper}>
-                            <Image source={{ uri: 'https://i.pravatar.cc/100?img=5' }} style={styles.qaBlurredImage} blurRadius={4} />
-                            <Image source={{ uri: 'https://i.pravatar.cc/100?img=6' }} style={[styles.qaBlurredImage, { position: 'absolute', left: 10 }]} blurRadius={4} />
+                    <TouchableOpacity style={styles.qaItemRef} onPress={() => navigation.navigate('ProfileVisitors', { user })}>
+                        <View style={styles.qaVisitorWrapper}>
+                            <Image source={{ uri: 'https://i.pravatar.cc/100?img=5' }} style={styles.qaVisitorImage} blurRadius={4} />
+                            <View style={styles.qaVisitorDots}>
+                                <View style={[styles.qaVisitorDot, { backgroundColor: '#ff4d6d' }]} />
+                                <View style={[styles.qaVisitorDot, { backgroundColor: '#fff' }]} />
+                            </View>
                         </View>
-                        <Text numberOfLines={1} adjustsFontSizeToFit style={[styles.qaLabel, { color: theme.colors.text }]}>Ziyaretçiler</Text>
+                        <Text numberOfLines={1} style={[styles.qaLabelRef, { color: theme.colors.text }]}>Ziyaretçi</Text>
                     </TouchableOpacity>
 
-                    <TouchableOpacity style={styles.quickActionItem} onPress={() => navigation.navigate('Vip', { userVip: vipLevel, user: { ...user, balance: user?.balance || 0, vip_level: vipLevel, profile_image: profileAvatar } })}>
-                        <View style={[styles.qaIconWrapper, { backgroundColor: 'rgba(251, 191, 36, 0.1)' }]}>
-                            <Ionicons name="diamond" size={24} color="#fbbf24" />
+                    <TouchableOpacity style={styles.qaItemRef} onPress={() => navigation.navigate('Vip', { userVip: vipLevel, user: { ...user, balance: user?.balance || 0, vip_level: vipLevel, profile_image: profileAvatar } })}>
+                        <Ionicons name="ribbon" size={24} color="#fbbf24" />
+                        <Text numberOfLines={1} style={[styles.qaLabelRef, { color: theme.colors.text }]}>VIP</Text>
+                        <View style={styles.vipProgressBarContainer}>
+                            <View style={[styles.vipProgressBar, { width: '40%' }]} />
                         </View>
-                        <Text numberOfLines={1} adjustsFontSizeToFit style={[styles.qaLabel, { color: theme.colors.text }]}>VIP</Text>
-                        <View style={styles.vipIndicator} />
                     </TouchableOpacity>
 
-                    <TouchableOpacity style={styles.quickActionItem}>
-                        <View style={[styles.qaIconWrapper, { backgroundColor: 'rgba(236, 72, 153, 0.15)' }]}>
-                            <Ionicons name="heart" size={26} color="#ec4899" />
-                        </View>
-                        <Text numberOfLines={1} adjustsFontSizeToFit style={[styles.qaLabel, { color: theme.colors.text }]}>Gizli Hayran</Text>
+                    <TouchableOpacity style={styles.qaItemRef} onPress={() => navigation.navigate('Shop', { user })}>
+                        <Ionicons name="cart" size={24} color="#f59e0b" />
+                        <Text numberOfLines={1} style={[styles.qaLabelRef, { color: theme.colors.text }]}>Mağaza</Text>
                     </TouchableOpacity>
 
-                    <TouchableOpacity style={styles.quickActionItem}>
-                        <View style={[styles.qaIconWrapper, { backgroundColor: 'rgba(168, 85, 247, 0.15)' }]}>
-                            <Ionicons name="star" size={26} color="#a855f7" />
-                        </View>
-                        <Text numberOfLines={1} adjustsFontSizeToFit style={[styles.qaLabel, { color: theme.colors.text }]}>Favorilerim</Text>
+                    <TouchableOpacity style={styles.qaItemRef} onPress={() => navigation.navigate('WhoFavoritedMe', { user })}>
+                        <Ionicons name="heart" size={24} color="#ec4899" />
+                        <Text numberOfLines={1} style={[styles.qaLabelRef, { color: theme.colors.text }]}>Hayran</Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity style={styles.qaItemRef} onPress={() => navigation.navigate('Favorites', { user })}>
+                        <Ionicons name="star" size={24} color="#a855f7" />
+                        <Text numberOfLines={1} style={[styles.qaLabelRef, { color: theme.colors.text }]}>Favori</Text>
                     </TouchableOpacity>
                 </View>
 
@@ -623,22 +801,26 @@ export default function ProfileScreen({ route, navigation }) {
                 <View style={[styles.bottomContentArea, { backgroundColor: theme.colors.card }]}>
                     
                     {/* Wallet Section */}
-                    <View style={{ marginBottom: 24, backgroundColor: themeMode === 'dark' ? 'rgba(255, 255, 255, 0.03)' : '#f8fafc', padding: 16, borderRadius: 20, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <View style={{ marginBottom: 16, backgroundColor: themeMode === 'dark' ? 'rgba(255, 255, 255, 0.03)' : '#f8fafc', padding: 16, borderRadius: 24, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.05)' }}>
                         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-                            <Image source={require('../../assets/gold_coin_3f.png')} style={{ width: 40, height: 40 }} />
+                            <View style={{ width: 44, height: 44, borderRadius: 14, backgroundColor: 'rgba(251, 191, 36, 0.1)', justifyContent: 'center', alignItems: 'center' }}>
+                                <Image source={require('../../assets/gold_coin_3f.png')} style={{ width: 28, height: 28 }} />
+                            </View>
                             <View>
-                                <Text style={{ color: theme.colors.textSecondary, fontSize: 12, fontWeight: '700', textTransform: 'uppercase' }}>Cüzdanım</Text>
-                                <Text style={{ color: theme.colors.text, fontSize: 24, fontWeight: '900' }}>{balance}</Text>
+                                <Text style={{ color: theme.colors.textSecondary, fontSize: 11, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5 }}>Mevcut Bakiye</Text>
+                                <Text style={{ color: theme.colors.text, fontSize: 22, fontWeight: '900' }}>{balance}</Text>
                             </View>
                         </View>
                         <TouchableOpacity 
-                            style={{ backgroundColor: '#fbbf24', paddingHorizontal: 20, paddingVertical: 10, borderRadius: 16, flexDirection: 'row', alignItems: 'center', gap: 6 }}
+                            style={{ backgroundColor: '#fbbf24', paddingHorizontal: 16, paddingVertical: 10, borderRadius: 14, flexDirection: 'row', alignItems: 'center', gap: 6 }}
                             onPress={() => navigation.navigate('Shop')}
                         >
-                            <Ionicons name="wallet-outline" size={16} color="#422006" />
-                            <Text style={{ color: '#422006', fontWeight: '800', fontSize: 14 }}>Yükle</Text>
+                            <Ionicons name="add-circle" size={18} color="#422006" />
+                            <Text style={{ color: '#422006', fontWeight: '800', fontSize: 13 }}>Yükle</Text>
                         </TouchableOpacity>
                     </View>
+
+
 
                     {/* Boost Section */}
                     <TouchableOpacity 
@@ -666,9 +848,9 @@ export default function ProfileScreen({ route, navigation }) {
 
                     {/* Album Section */}
                     <View style={{ marginBottom: 24 }}>
-                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-                            <Text style={{ fontSize: 16, fontWeight: '800', color: theme.colors.text }}>Albüm</Text>
-                            <TouchableOpacity onPress={() => {/* View all */}}><Text style={{ color: theme.colors.primary, fontSize: 12, fontWeight: '700' }}>Tümünü Gör</Text></TouchableOpacity>
+                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                            <Text style={{ fontSize: 15, fontWeight: '800', color: theme.colors.text }}>Albüm</Text>
+                            <TouchableOpacity onPress={() => {/* View all */}}><Text style={{ color: theme.colors.primary, fontSize: 11, fontWeight: '700' }}>Tümünü Gör</Text></TouchableOpacity>
                         </View>
                         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 10 }}>
                             <TouchableOpacity 
@@ -680,26 +862,18 @@ export default function ProfileScreen({ route, navigation }) {
                             {album.map((photo, index) => (
                                 <Image key={index} source={{ uri: resolveImageUrl(photo?.url || photo) }} style={{ width: 80, height: 80, borderRadius: 16 }} />
                             ))}
-                            {pendingAlbumPhotos.map((uri, index) => (
-                                <View key={`pending-${index}`} style={{ width: 80, height: 80, borderRadius: 16, backgroundColor: 'rgba(0,0,0,0.3)', justifyContent: 'center', alignItems: 'center' }}>
-                                    <Image source={{ uri }} style={{ width: 80, height: 80, borderRadius: 16, opacity: 0.6 }} />
-                                    <View style={{ position: 'absolute' }}>
-                                        <TypingIndicator color="white" />
-                                    </View>
-                                </View>
-                            ))}
                         </ScrollView>
                     </View>
 
                     {/* Information Section */}
                     <View style={{ marginBottom: 24 }}>
-                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-                            <Text style={{ fontSize: 18, fontWeight: '800', color: theme.colors.text }}>Temel Bilgiler</Text>
-                            <TouchableOpacity onPress={toggleEditInfo} style={{ backgroundColor: theme.colors.primary + '20', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 10 }}>
-                                <Text style={{ color: theme.colors.primary, fontSize: 13, fontWeight: '700' }}>{isEditingInfo ? 'Kaydet' : 'Düzenle'}</Text>
+                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                            <Text style={{ fontSize: 15, fontWeight: '800', color: theme.colors.text }}>Temel Bilgiler</Text>
+                            <TouchableOpacity onPress={toggleEditInfo} style={{ backgroundColor: theme.colors.primary + '20', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8 }}>
+                                <Text style={{ color: theme.colors.primary, fontSize: 12, fontWeight: '700' }}>{isEditingInfo ? 'Kaydet' : 'Düzenle'}</Text>
                             </TouchableOpacity>
                         </View>
-                        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
+                        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
                             {['age', 'job', 'edu', 'boy', 'kilo', 'zodiac', 'relationship'].map((key) => {
                                 const labels = { age: 'Yaş', job: 'Meslek', edu: 'Eğitim', boy: 'Boy', kilo: 'Kilo', zodiac: 'Burç', relationship: 'İlişki' };
                                 const icons = { age: 'calendar', job: 'briefcase', edu: 'school', boy: 'body', kilo: 'barbell', zodiac: 'star', relationship: 'heart' };
@@ -707,17 +881,17 @@ export default function ProfileScreen({ route, navigation }) {
                                 
                                 if (isEditingInfo) {
                                     return (
-                                        <TouchableOpacity key={key} onPress={() => openSelection({ key, label: labels[key], value: info[key] })} style={{ paddingHorizontal: 14, paddingVertical: 10, borderRadius: 14, backgroundColor: themeMode === 'dark' ? 'rgba(255,255,255,0.08)' : '#f1f5f9', flexDirection: 'row', alignItems: 'center', gap: 8, borderWidth: 1, borderColor: 'rgba(255,255,255,0.05)' }}>
-                                            <Ionicons name={icons[key]} size={16} color={iconColors[key]} />
-                                            <Text style={{ color: theme.colors.text, fontSize: 13, fontWeight: '600' }}>{info[key] || 'Seçiniz'}</Text>
+                                        <TouchableOpacity key={key} onPress={() => openSelection({ key, label: labels[key], value: info[key] })} style={{ paddingHorizontal: 10, paddingVertical: 6, borderRadius: 10, backgroundColor: themeMode === 'dark' ? 'rgba(255,255,255,0.08)' : '#f1f5f9', flexDirection: 'row', alignItems: 'center', gap: 5, borderWidth: 1, borderColor: 'rgba(255,255,255,0.05)' }}>
+                                            <Ionicons name={icons[key]} size={12} color={iconColors[key]} />
+                                            <Text style={{ color: theme.colors.text, fontSize: 11, fontWeight: '600' }}>{info[key] || 'Seçiniz'}</Text>
                                         </TouchableOpacity>
                                     );
                                 }
                                 
                                 return info[key] ? (
-                                    <View key={key} style={{ paddingHorizontal: 14, paddingVertical: 10, borderRadius: 14, backgroundColor: themeMode === 'dark' ? 'rgba(255,255,255,0.08)' : '#f1f5f9', flexDirection: 'row', alignItems: 'center', gap: 8, borderWidth: 1, borderColor: 'rgba(255,255,255,0.05)' }}>
-                                        <Ionicons name={icons[key]} size={16} color={iconColors[key]} />
-                                        <Text style={{ color: theme.colors.text, fontSize: 13, fontWeight: '600' }}>{info[key]}</Text>
+                                    <View key={key} style={{ paddingHorizontal: 10, paddingVertical: 6, borderRadius: 10, backgroundColor: themeMode === 'dark' ? 'rgba(255,255,255,0.08)' : '#f1f5f9', flexDirection: 'row', alignItems: 'center', gap: 5, borderWidth: 1, borderColor: 'rgba(255,255,255,0.05)' }}>
+                                        <Ionicons name={icons[key]} size={12} color={iconColors[key]} />
+                                        <Text style={{ color: theme.colors.text, fontSize: 11, fontWeight: '600' }}>{info[key]}</Text>
                                     </View>
                                 ) : null;
                             })}
@@ -728,35 +902,54 @@ export default function ProfileScreen({ route, navigation }) {
 
                     {/* Tags / Interests Section */}
                     <View style={{ marginBottom: 24 }}>
-                        <Text style={{ fontSize: 18, fontWeight: '800', color: theme.colors.text, marginBottom: 16 }}>İlgi Alanları</Text>
-                        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
+                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                            <Text style={{ fontSize: 15, fontWeight: '800', color: theme.colors.text }}>İlgi Alanları</Text>
+                            <TouchableOpacity 
+                                onPress={() => openSelection({ key: 'interests', label: 'İlgi Alanları', value: '' })}
+                                style={{ backgroundColor: theme.colors.primary + '20', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8 }}
+                            >
+                                <Text style={{ color: theme.colors.primary, fontSize: 12, fontWeight: '700' }}>Düzenle</Text>
+                            </TouchableOpacity>
+                        </View>
+
+                        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
                             {userInterests.map((interest, index) => (
-                                <View key={index} style={{ paddingHorizontal: 16, paddingVertical: 10, borderRadius: 18, backgroundColor: 'rgba(168, 85, 247, 0.12)', borderWidth: 1, borderColor: 'rgba(168, 85, 247, 0.25)' }}>
-                                    <Text style={{ color: '#a855f7', fontSize: 13, fontWeight: '700' }}>#{interest}</Text>
+                                <View key={index} style={{ paddingHorizontal: 12, paddingVertical: 8, borderRadius: 12, backgroundColor: 'rgba(168, 85, 247, 0.12)', borderWidth: 1, borderColor: 'rgba(168, 85, 247, 0.25)', flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                                    <Text style={{ color: '#a855f7', fontSize: 12, fontWeight: '700' }}>#{interest}</Text>
                                 </View>
                             ))}
-                            {isEditingInfo && (
-                                <TouchableOpacity style={{ paddingHorizontal: 18, paddingVertical: 10, borderRadius: 18, borderWidth: 1, borderColor: theme.colors.primary, borderStyle: 'dashed', backgroundColor: theme.colors.primary + '10' }}>
-                                    <Text style={{ color: theme.colors.primary, fontSize: 13, fontWeight: '700' }}>+ Ekle</Text>
-                                </TouchableOpacity>
+                            {userInterests.length === 0 && (
+                                <Text style={{ color: theme.colors.textSecondary, fontSize: 12, fontStyle: 'italic' }}>Henüz ilgi alanı eklenmemiş.</Text>
                             )}
                         </View>
                     </View>
 
-                    {/* ID & Logout Section */}
-                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 10, paddingBottom: 10 }}>
-                        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                            <Ionicons name="id-card-outline" size={16} color={theme.colors.textSecondary} style={{ marginRight: 6 }} />
-                            <Text style={{ fontSize: 12, color: theme.colors.textSecondary, fontWeight: '600' }}>ID: {user?.id?.toString()?.substring(0,8) || '110866638'}</Text>
-                        </View>
+                    {/* Bottom Quick Actions */}
+                    <View style={styles.quickActionsContainer}>
                         <TouchableOpacity 
-                            style={{ paddingHorizontal: 16, paddingVertical: 8, borderRadius: 12, backgroundColor: 'rgba(239, 68, 68, 0.1)' }}
-                            onPress={async () => {
-                                await AsyncStorage.clear();
-                                navigation.replace('Welcome');
+                            style={styles.quickActionButton}
+                            onPress={() => navigation.navigate('Settings', { user })}
+                        >
+                            <View style={styles.quickActionIcon}>
+                                <Ionicons name="settings-outline" size={22} color={theme.colors.textSecondary} />
+                            </View>
+                            <Text style={[styles.quickActionText, { color: theme.colors.text }]}>Ayarlar</Text>
+                            <Ionicons name="chevron-forward" size={18} color="rgba(255,255,255,0.2)" />
+                        </TouchableOpacity>
+
+                        <View style={[styles.quickActionDivider, { backgroundColor: theme.colors.border }]} />
+
+                        <TouchableOpacity 
+                            style={styles.quickActionButton}
+                            onPress={() => {
+                                Linking.openURL('mailto:falkasoft@gmail.com?subject=Fiva Geri Bildirim');
                             }}
                         >
-                            <Text style={{ color: '#ef4444', fontSize: 12, fontWeight: '800' }}>Çıkış Yap</Text>
+                            <View style={styles.quickActionIcon}>
+                                <Ionicons name="chatbubble-outline" size={22} color={theme.colors.textSecondary} />
+                            </View>
+                            <Text style={[styles.quickActionText, { color: theme.colors.text }]}>Geri Bildirim</Text>
+                            <Ionicons name="chevron-forward" size={18} color="rgba(255,255,255,0.2)" />
                         </TouchableOpacity>
                     </View>
 
@@ -968,6 +1161,12 @@ export default function ProfileScreen({ route, navigation }) {
                         onPress={() => setSelectionModal({ ...selectionModal, visible: false })}
                     />
                     <GlassCard intensity={80} tint="dark" noBorder style={styles.selectionModalContent}>
+                        <TouchableOpacity 
+                            style={{ position: 'absolute', top: 20, right: 20, zIndex: 100 }}
+                            onPress={() => setSelectionModal({ ...selectionModal, visible: false })}
+                        >
+                            <Ionicons name="close-circle" size={30} color="rgba(255,255,255,0.4)" />
+                        </TouchableOpacity>
                         <View style={styles.modalHeaderIndicator} />
                         <Text style={[styles.modalTitle, { color: theme.colors.text }]}>{selectionModal.title}</Text>
                         <ScrollView style={{ maxHeight: 400 }} showsVerticalScrollIndicator={false}>
@@ -978,7 +1177,7 @@ export default function ProfileScreen({ route, navigation }) {
                                         style={[
                                             styles.optionBtn,
                                             {
-                                                backgroundColor: selectionModal.value === option ? theme.colors.primary : 'rgba(255,255,255,0.05)',
+                                                backgroundColor: (selectionModal.key === 'interests' ? userInterests.includes(option) : selectionModal.value === option) ? theme.colors.primary : 'rgba(255,255,255,0.05)',
                                                 flexDirection: 'row',
                                                 alignItems: 'center',
                                                 justifyContent: 'center',
@@ -989,11 +1188,11 @@ export default function ProfileScreen({ route, navigation }) {
                                     >
                                         <Text style={[
                                             styles.optionText,
-                                            { color: selectionModal.value === option ? 'white' : theme.colors.text }
+                                            { color: (selectionModal.key === 'interests' ? userInterests.includes(option) : selectionModal.value === option) ? 'white' : theme.colors.text }
                                         ]}>
                                             {option}
                                         </Text>
-                                        {selectionModal.value === option && (
+                                        {(selectionModal.key === 'interests' ? userInterests.includes(option) : selectionModal.value === option) && (
                                             <Ionicons name="checkmark-circle" size={16} color="white" />
                                         )}
                                     </TouchableOpacity>
@@ -1004,7 +1203,9 @@ export default function ProfileScreen({ route, navigation }) {
                             style={styles.modalCancelBtn}
                             onPress={() => setSelectionModal({ ...selectionModal, visible: false })}
                         >
-                            <Text style={[styles.modalCancelText, { color: theme.colors.textSecondary }]}>Vazgeç</Text>
+                            <Text style={[styles.modalCancelText, { color: theme.colors.textSecondary }]}>
+                                {selectionModal.key === 'interests' ? 'Tamam' : 'Vazgeç'}
+                            </Text>
                         </TouchableOpacity>
                     </GlassCard>
                 </View>
@@ -1631,16 +1832,64 @@ const styles = StyleSheet.create({
     topBtnTextWhite: { color: 'white', fontWeight: '800', fontSize: 13 },
     rightActions: { flexDirection: 'row', gap: 12 },
     iconCircleBtn: { width: 36, height: 36, borderRadius: 18, justifyContent: 'center', alignItems: 'center' },
-    scrollContent: { paddingTop: 20 },
+    scrollContent: { paddingTop: 60 },
     ribbonWrapper: { alignItems: 'flex-start', paddingHorizontal: 20, marginBottom: 10 },
     yellowRibbon: { backgroundColor: 'rgba(253, 224, 71, 0.9)', paddingHorizontal: 12, paddingVertical: 4, borderRadius: 8 },
     ribbonText: { color: '#854d0e', fontSize: 12, fontWeight: '700' },
-    profileCard: { marginHorizontal: 16, borderRadius: 24, padding: 20, paddingTop: 15, marginBottom: 16, shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.1, shadowRadius: 20, elevation: 8, alignItems: 'flex-start' },
+    profileCard: { marginHorizontal: 16, borderRadius: 24, padding: 20, paddingTop: 15, marginBottom: 16, shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.1, shadowRadius: 20, elevation: 8, alignItems: 'flex-start', position: 'relative' },
+    cardEditBtn: { 
+        position: 'absolute', 
+        top: 16, 
+        right: 16, 
+        width: 34, 
+        height: 34, 
+        borderRadius: 17, 
+        shadowColor: '#f59e0b',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 8,
+        elevation: 6,
+        zIndex: 100
+    },
     avatarWrapper: { position: 'absolute', top: -35, left: 20 },
     avatarImage: { width: 80, height: 80, borderRadius: 40, borderWidth: 4 },
+    avatarEditIconWrapper: {
+        position: 'absolute',
+        top: 0,
+        right: 0,
+        backgroundColor: '#ec4899',
+        width: 28,
+        height: 28,
+        borderRadius: 14,
+        justifyContent: 'center',
+        alignItems: 'center',
+        borderWidth: 3,
+        borderColor: '#1e1b4b', // matches card background
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.2,
+        shadowRadius: 4,
+        elevation: 4
+    },
     onlineDot: { position: 'absolute', bottom: 4, right: 4, width: 16, height: 16, borderRadius: 8, backgroundColor: '#10b981', borderWidth: 2, borderColor: 'white' },
     nameRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4, marginTop: 10 },
     nameText: { fontSize: 24, fontWeight: '900' },
+    idBadge: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: 'rgba(255, 255, 255, 0.05)',
+        paddingHorizontal: 8,
+        paddingVertical: 4,
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: 'rgba(255, 255, 255, 0.1)',
+        gap: 4,
+    },
+    idBadgeText: {
+        color: 'rgba(255, 255, 255, 0.6)',
+        fontSize: 11,
+        fontWeight: '700',
+    },
     onlineBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 6, paddingVertical: 2 },
     onlineDotSmall: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#10b981' },
     onlineBadgeText: { color: '#10b981', fontSize: 11, fontWeight: '700' },
@@ -1653,17 +1902,129 @@ const styles = StyleSheet.create({
     flagBadge: { justifyContent: 'center' },
     statsRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingTop: 16, borderTopWidth: 1, borderTopColor: 'rgba(0,0,0,0.05)' },
     statItem: { flex: 1, alignItems: 'center' },
-    statNumber: { fontSize: 18, fontWeight: '800', marginBottom: 2 },
-    statLabel: { fontSize: 11 },
+    statNumber: { fontSize: 16, fontWeight: '800', marginBottom: 2 },
+    statLabel: { fontSize: 10 },
     statDivider: { width: 1, height: 24 },
-    quickActionsCard: { flexDirection: 'row', justifyContent: 'space-between', marginHorizontal: 16, borderRadius: 20, padding: 16, marginBottom: 20, shadowColor: '#000', shadowOffset: { width: 0, height: 5 }, shadowOpacity: 0.05, shadowRadius: 10, elevation: 4 },
-    quickActionItem: { alignItems: 'center', width: 60 },
-    qaIconWrapper: { width: 44, height: 44, borderRadius: 14, justifyContent: 'center', alignItems: 'center', marginBottom: 6 },
-    qaBlurredWrapper: { width: 44, height: 44, marginBottom: 6, justifyContent: 'center', alignItems: 'center' },
-    qaBlurredImage: { width: 36, height: 36, borderRadius: 10 },
-    qaCrownIcon: { width: 32, height: 32 },
-    qaLabel: { fontSize: 10, fontWeight: '600', textAlign: 'center' },
-    vipIndicator: { position: 'absolute', bottom: 18, right: 10, width: 8, height: 4, backgroundColor: '#ec4899', borderRadius: 2 },
+    quickActionsCardRef: { 
+        flexDirection: 'row', 
+        justifyContent: 'space-between', 
+        marginHorizontal: 10, 
+        borderRadius: 24, 
+        paddingVertical: 14, 
+        paddingHorizontal: 10, 
+        marginBottom: 20, 
+        borderWidth: 1, 
+        borderColor: 'rgba(255,255,255,0.05)',
+        alignItems: 'center'
+    },
+    qaItemRef: { 
+        alignItems: 'center', 
+        flex: 1,
+    },
+    qaLabelRef: { 
+        fontSize: 8.5, 
+        fontWeight: '800', 
+        textAlign: 'center',
+        marginTop: 6
+    },
+    qaVisitorWrapper: {
+        width: 36,
+        height: 36,
+        borderRadius: 12,
+        overflow: 'hidden',
+        backgroundColor: '#333',
+        justifyContent: 'center',
+        alignItems: 'center'
+    },
+    qaVisitorImage: {
+        width: '100%',
+        height: '100%',
+    },
+    qaVisitorDots: {
+        position: 'absolute',
+        bottom: 2,
+        flexDirection: 'row',
+        gap: 2
+    },
+    qaVisitorDot: {
+        width: 4,
+        height: 4,
+        borderRadius: 2,
+    },
+    vipProgressBarContainer: {
+        width: 24,
+        height: 3,
+        backgroundColor: 'rgba(255,255,255,0.15)',
+        borderRadius: 1.5,
+        marginTop: 4,
+        overflow: 'hidden'
+    },
+    vipProgressBar: {
+        height: '100%',
+        backgroundColor: '#ff4d6d',
+    },
+    modernEditArea: {
+        width: '100%',
+        marginTop: 10,
+    },
+    editDivider: {
+        height: 1,
+        backgroundColor: 'rgba(255,255,255,0.06)',
+        width: '100%',
+        marginBottom: 20,
+    },
+    inputGroup: {
+        marginBottom: 18,
+    },
+    labelRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: 8,
+        paddingLeft: 4,
+    },
+    modernLabel: {
+        color: 'rgba(255,255,255,0.5)',
+        fontSize: 10,
+        fontWeight: '800',
+        letterSpacing: 1,
+    },
+    modernInput: {
+        backgroundColor: 'rgba(255,255,255,0.04)',
+        borderRadius: 14,
+        paddingHorizontal: 16,
+        height: 52,
+        color: 'white',
+        fontSize: 15,
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.08)',
+    },
+    modernInputMultiline: {
+        height: 100,
+        textAlignVertical: 'top',
+        paddingTop: 14,
+    },
+    modernSaveBtn: {
+        marginTop: 10,
+        borderRadius: 16,
+        overflow: 'hidden',
+        shadowColor: '#ec4899',
+        shadowOffset: { width: 0, height: 6 },
+        shadowOpacity: 0.4,
+        shadowRadius: 12,
+        elevation: 8,
+    },
+    modernSaveGradient: {
+        height: 54,
+        flexDirection: 'row',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    modernSaveText: {
+        color: 'white',
+        fontSize: 16,
+        fontWeight: '800',
+        letterSpacing: 0.5,
+    },
     bottomContentArea: { borderTopLeftRadius: 30, borderTopRightRadius: 30, paddingTop: 20, paddingHorizontal: 20, minHeight: 500 },
     tabsRow: { flexDirection: 'row', gap: 24, borderBottomWidth: 1, paddingBottom: 12, marginBottom: 20 },
     activeTab: { alignItems: 'center' },
@@ -1671,7 +2032,7 @@ const styles = StyleSheet.create({
     activeTabIndicator: { width: 20, height: 3, borderRadius: 2 },
     inactiveTabText: { fontSize: 16, fontWeight: '600' },
     verificationSection: { marginBottom: 24 },
-    sectionHeading: { fontSize: 16, fontWeight: '800', marginBottom: 12 },
+    sectionHeading: { fontSize: 15, fontWeight: '800', marginBottom: 10 },
     verificationGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
     verifyCard: { width: '48%', flexDirection: 'row', alignItems: 'center', padding: 12, borderRadius: 12 },
     verifyTextGray: { fontSize: 12, fontWeight: '600' },
@@ -1685,5 +2046,38 @@ const styles = StyleSheet.create({
     addTagBtn: { alignSelf: 'flex-start', paddingHorizontal: 16, paddingVertical: 6, borderRadius: 16, borderWidth: 1 },
     addTagText: { fontSize: 13, fontWeight: '700' },
     logoutSimpleBtn: { padding: 16, borderRadius: 16, alignItems: 'center', marginTop: 10 },
-    logoutSimpleText: { fontSize: 15, fontWeight: '800' }
+    logoutSimpleText: { fontSize: 15, fontWeight: '800' },
+    quickActionsContainer: {
+        marginTop: 20,
+        marginLeft: 0,
+        width: '100%',
+        backgroundColor: 'rgba(255, 255, 255, 0.03)',
+        borderRadius: 16,
+        borderWidth: 1,
+        borderColor: 'rgba(255, 255, 255, 0.05)',
+        overflow: 'hidden',
+    },
+    quickActionButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        padding: 12,
+        gap: 10,
+    },
+    quickActionIcon: {
+        width: 32,
+        height: 32,
+        borderRadius: 10,
+        backgroundColor: 'rgba(255, 255, 255, 0.05)',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    quickActionText: {
+        flex: 1,
+        fontSize: 13,
+        fontWeight: '600',
+    },
+    quickActionDivider: {
+        height: 1,
+        marginHorizontal: 16,
+    },
 });

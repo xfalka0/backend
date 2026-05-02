@@ -73,12 +73,26 @@ const CoinPackageCard = ({ pack, index, handlePurchase, theme, themeMode }) => {
 export default function ShopScreen({ navigation, route }) {
     const { theme, themeMode } = useTheme();
     const { user, initialTab } = route.params || {};
-    const currentUserId = user?.id; // Removed hardcoded TEST_USER_ID fallback
+    const [currentUserId, setCurrentUserId] = useState(user?.id);
     const [balance, setBalance] = useState(user?.balance || 0);
     const [offerings, setOfferings] = useState([]);
     const [loading, setLoading] = useState(true);
     const [dealer, setDealer] = useState(null);
     const [alertConfig, setAlertConfig] = useState({ visible: false, title: '', message: '', type: 'info' });
+
+    // Load userId from AsyncStorage if missing
+    useEffect(() => {
+        if (!currentUserId) {
+            AsyncStorage.getItem('user').then(storedUser => {
+                if (storedUser) {
+                    const parsed = JSON.parse(storedUser);
+                    console.log('[Shop] Loaded userId from storage:', parsed.id);
+                    setCurrentUserId(parsed.id);
+                    if (parsed.balance !== undefined) setBalance(parsed.balance);
+                }
+            });
+        }
+    }, []);
 
     // Premium Animations
     const shimmerAnim = useRef(new Animated.Value(-width)).current;
@@ -115,12 +129,13 @@ export default function ShopScreen({ navigation, route }) {
         ).start();
     }, [shimmerAnim, floatAnim]);
 
-    // Sync balance from server on focus
     useFocusEffect(
         React.useCallback(() => {
+            console.log('[Shop] Focus triggered, currentUserId:', currentUserId);
             if (currentUserId) {
                 axios.get(`${API_URL}/users/${currentUserId}`)
                     .then(res => {
+                        console.log('[Shop] Balance fetch success:', res.data.balance);
                         if (res.data && res.data.balance !== undefined) {
                             setBalance(res.data.balance);
                             // Also update stored user for consistency
@@ -133,7 +148,7 @@ export default function ShopScreen({ navigation, route }) {
                             });
                         }
                     })
-                    .catch(err => console.log('[Shop] Balance sync error:', err));
+                    .catch(err => console.log('[Shop] Balance sync error:', err.message));
             }
         }, [currentUserId])
     );

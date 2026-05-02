@@ -68,6 +68,23 @@ router.get('/check/:userId/:targetUserId', async (req, res) => {
     }
 });
 
+// Get follow/follower counts
+router.get('/stats/:userId', async (req, res) => {
+    const { userId } = req.params;
+    try {
+        const following = await pool.query('SELECT COUNT(*) FROM favorites WHERE user_id = $1', [userId]);
+        const followers = await pool.query('SELECT COUNT(*) FROM favorites WHERE target_user_id = $1', [userId]);
+        
+        res.json({
+            following: parseInt(following.rows[0].count),
+            followers: parseInt(followers.rows[0].count)
+        });
+    } catch (err) {
+        console.error('Get Stats Error:', err);
+        res.status(500).json({ error: 'Server error' });
+    }
+});
+
 // Get users I have favorited
 router.get('/:userId', async (req, res) => {
     const { userId } = req.params;

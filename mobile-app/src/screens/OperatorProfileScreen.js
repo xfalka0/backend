@@ -32,6 +32,7 @@ export default function OperatorProfileScreen({ route, navigation }) {
     const [isFavorited, setIsFavorited] = useState(false);
     const [isImageViewerVisible, setIsImageViewerVisible] = useState(false);
     const [currentImageIndex, setCurrentImageIndex] = useState(0);
+    const [followerStats, setFollowerStats] = useState({ followers: 0, following: 0 });
 
     const submitReport = async (reason) => {
         try {
@@ -63,6 +64,16 @@ export default function OperatorProfileScreen({ route, navigation }) {
                 .then(res => setIsFavorited(res.data.isFavorited))
                 .catch(e => console.log('Fav check err', e));
         }
+        // Fetch follower stats
+        const fetchFollowerStats = async () => {
+            try {
+                const targetId = operator.id || operator.user_id;
+                const res = await axios.get(`${API_URL}/favorites/stats/${targetId}`);
+                setFollowerStats(res.data);
+            } catch (e) { console.log('Stat fetch err', e); }
+        };
+
+        if (operator) fetchFollowerStats();
     }, [user, operator]);
 
     const handleFavorite = async () => {
@@ -73,12 +84,14 @@ export default function OperatorProfileScreen({ route, navigation }) {
             if (isFavorited) {
                 await axios.delete(`${API_URL}/favorites/${targetId}`, { data: { userId: user.id } });
                 setIsFavorited(false);
+                setFollowerStats(prev => ({ ...prev, followers: Math.max(0, prev.followers - 1) }));
             } else {
                 await axios.post(`${API_URL}/favorites`, { userId: user.id, targetUserId: targetId });
                 setIsFavorited(true);
+                setFollowerStats(prev => ({ ...prev, followers: prev.followers + 1 }));
             }
         } catch (e) {
-            console.error('Fav action err', e);
+            console.error('Follow action err', e);
         }
     };
 
@@ -227,11 +240,24 @@ export default function OperatorProfileScreen({ route, navigation }) {
                 <View>
                     <View style={styles.heroActionsRow}>
                         <TouchableOpacity
-                            style={[styles.heroActionButton, { backgroundColor: isFavorited ? 'rgba(239, 68, 68, 0.95)' : 'rgba(255, 255, 255, 0.15)' }]}
+                            style={[
+                                styles.followButton, 
+                                { backgroundColor: isFavorited ? 'rgba(239, 68, 68, 0.2)' : theme.colors.primary }
+                            ]}
                             activeOpacity={0.8}
                             onPress={handleFavorite}
                         >
-                            <Ionicons name="heart" size={24} color={isFavorited ? "white" : "#cbd5e1"} />
+                            <Ionicons 
+                                name={isFavorited ? "person-remove" : "person-add"} 
+                                size={18} 
+                                color={isFavorited ? "#ef4444" : "white"} 
+                            />
+                            <Text style={[
+                                styles.followButtonText, 
+                                { color: isFavorited ? "#ef4444" : "white" }
+                            ]}>
+                                {isFavorited ? 'Takibi Bırak' : 'Takip Et'}
+                            </Text>
                         </TouchableOpacity>
                     </View>
                 </View>
@@ -296,12 +322,30 @@ export default function OperatorProfileScreen({ route, navigation }) {
                                     <Text style={[styles.category, { marginBottom: 6 }]}>
                                         {operator.job || (operator.is_operator ? 'Öğrenci' : 'Kullanıcı')}
                                     </Text>
-                                    {operator.is_online && (
-                                        <View style={[styles.onlineBadge, { alignSelf: 'flex-start' }]}>
-                                            <View style={styles.onlineDot} />
-                                            <Text style={styles.onlineText}>Çevrimiçi</Text>
+                                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                                        {operator.is_online && (
+                                            <View style={[styles.onlineBadge, { alignSelf: 'flex-start' }]}>
+                                                <View style={styles.onlineDot} />
+                                                <Text style={styles.onlineText}>Çevrimiçi</Text>
+                                            </View>
+                                        )}
+                                        <View style={styles.idBadge}>
+                                            <Ionicons name="id-card-outline" size={12} color="rgba(255,255,255,0.5)" />
+                                            <Text style={styles.idBadgeText}>ID: {operator.id?.toString().slice(-4) || operator.user_id?.toString().slice(-4)}</Text>
                                         </View>
-                                    )}
+                                    </View>
+
+                                    {/* Follow Stats in Operator Profile */}
+                                    <View style={{ flexDirection: 'row', gap: 15, marginTop: 10 }}>
+                                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                                            <Text style={{ color: 'white', fontWeight: '900', fontSize: 16 }}>{followerStats.followers}</Text>
+                                            <Text style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12, fontWeight: '600' }}>Takipçi</Text>
+                                        </View>
+                                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                                            <Text style={{ color: 'white', fontWeight: '900', fontSize: 16 }}>{followerStats.following}</Text>
+                                            <Text style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12, fontWeight: '600' }}>Takip</Text>
+                                        </View>
+                                    </View>
                                 </View>
                             </View>
                         </View>
@@ -519,6 +563,24 @@ const styles = StyleSheet.create({
         shadowRadius: 8,
         elevation: 8,
     },
+    followButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingHorizontal: 24,
+        paddingVertical: 12,
+        borderRadius: 25,
+        gap: 8,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.2,
+        shadowRadius: 6,
+        elevation: 5,
+    },
+    followButtonText: {
+        fontSize: 15,
+        fontWeight: '800',
+    },
     contentCard: {
         marginHorizontal: 15,
         padding: 20,
@@ -588,6 +650,23 @@ const styles = StyleSheet.create({
         borderRadius: 3,
         backgroundColor: '#10b981',
         marginRight: 4,
+    },
+    idBadge: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: 'rgba(255, 255, 255, 0.05)',
+        paddingHorizontal: 8,
+        paddingVertical: 4,
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: 'rgba(255, 255, 255, 0.1)',
+        gap: 4,
+        marginTop: 0,
+    },
+    idBadgeText: {
+        color: 'rgba(255, 255, 255, 0.6)',
+        fontSize: 11,
+        fontWeight: '700',
     },
     onlineText: {
         color: '#10b981',

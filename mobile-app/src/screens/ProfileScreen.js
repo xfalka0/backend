@@ -14,6 +14,7 @@ import Animated, {
     withRepeat,
     withTiming,
     withSequence,
+    withDelay,
     Easing
 } from 'react-native-reanimated';
 import React, { useState, useCallback, useEffect } from 'react';
@@ -27,7 +28,8 @@ import axios from 'axios';
 import { useTheme } from '../contexts/ThemeContext';
 import { API_URL } from '../config';
 import { resolveImageUrl } from '../utils/imageUtils';
-import PremiumBackground from '../components/animated/PremiumBackground';
+import TypingIndicator from '../components/animated/TypingIndicator';
+import ChatBackground from '../components/animated/ChatBackground';
 import VipFrame from '../components/ui/VipFrame';
 import ModernAlert from '../components/ui/ModernAlert';
 import GlassCard from '../components/ui/GlassCard';
@@ -37,8 +39,6 @@ const RELATIONSHIP_OPTIONS = ['Ciddi', 'Flörtöz', 'Sohbet', 'Arkadaşlık', 'E
 const EDU_OPTIONS = ['Lise', 'Üniversite', 'Yüksek Lisans', 'Doktora', 'Öğrenci'];
 const ZODIAC_OPTIONS = ['Koç', 'Boğa', 'İkizler', 'Yengeç', 'Aslan', 'Başak', 'Terazi', 'Akrep', 'Yay', 'Oğlak', 'Kova', 'Balık'];
 const JOB_OPTIONS = ['Yazılımcı', 'Tasarımcı', 'Öğretmen', 'Mühendis', 'Doktor', 'Avukat', 'Serbest Meslek', 'Diğer'];
-// For boy/kilo/age we can use a range or a simple numeric input still, but better to have categories or a specialized picker.
-// For now let's focus on the categorical ones as requested.
 
 export default function ProfileScreen({ route, navigation }) {
     const { theme, themeMode } = useTheme();
@@ -185,6 +185,8 @@ export default function ProfileScreen({ route, navigation }) {
                 setAlert({ visible: true, title: 'Hata', message: 'Bilgiler kaydedilemedi.', type: 'error' });
             }
         }
+        setIsEditingInfo(!isEditingInfo);
+        setIsEditingBio(!isEditingBio);
         LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     };
 
@@ -269,6 +271,7 @@ export default function ProfileScreen({ route, navigation }) {
                         if (updatedData.balance !== undefined) setBalance(updatedData.balance);
                         if (updatedData.vip_level !== undefined) setVipLevel(updatedData.vip_level);
                         if (updatedData.interests) setUserInterests(parseInterests(updatedData.interests));
+                        if (updatedData.album) setAlbum(updatedData.album); // Sync album
                         if (updatedData.edu) setInfo(prev => ({ ...prev, edu: updatedData.edu }));
                         if (updatedData.boy) setInfo(prev => ({ ...prev, boy: updatedData.boy }));
                         if (updatedData.kilo) setInfo(prev => ({ ...prev, kilo: updatedData.kilo }));
@@ -286,6 +289,13 @@ export default function ProfileScreen({ route, navigation }) {
                             // If backend says no photo is pending, clear the local pending state
                             setIsAvatarPending(false);
                         }
+
+                        // Also fetch album specifically if not in user object
+                        axios.get(`${API_URL}/users/${user.id}/album`)
+                            .then(albumRes => {
+                                if (albumRes.data) setAlbum(albumRes.data);
+                            })
+                            .catch(e => console.log('Album fetch error:', e));
 
                         // CRITICAL: Persist to AsyncStorage so it stays updated after restart
                         try {
@@ -475,422 +485,285 @@ export default function ProfileScreen({ route, navigation }) {
                     setPendingAlbumPhotos([...pendingAlbumPhotos, response.data.url]);
                 }
             } catch (error) {
-                console.error('Album Upload Error Detail:', error.response?.data || error.message);
-                setPendingAlbumPhotos(pendingAlbumPhotos.filter(u => u !== uri));
-                const errorMsg = error.response?.data?.error || 'Fotoğraf yüklenemedi.';
-                setAlert({ visible: true, title: 'Hata', message: errorMsg, type: 'error' });
+                setAlert({ visible: true, title: 'Hata', message: 'Fotoğraf yüklenirken bir sorun oluştu.', type: 'error' });
+                setPendingAlbumPhotos(pendingAlbumPhotos.filter(p => p !== uri));
             }
         }
     };
 
     return (
-        <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
-            {/* Background Layer */}
-            {themeMode === 'dark' ? (
-                <PremiumBackground />
-            ) : (
-                <View pointerEvents="none" style={StyleSheet.absoluteFill}>
-                    <LinearGradient
-                        colors={['#f8fafc', '#f1f5f9']}
-                        style={StyleSheet.absoluteFill}
-                    />
+        <View style={[styles.mainContainer, { backgroundColor: theme.colors.background }]}>
+            {/* Chat Style Background Layer */}
+            <View style={styles.bgWrapper}>
+                <ChatBackground themeMode={themeMode} />
+                <LinearGradient 
+                    colors={['transparent', 'rgba(15, 5, 26, 0.4)', '#0f051a']} 
+                    style={StyleSheet.absoluteFill} 
+                    locations={[0, 0.5, 0.9]}
+                />
+            </View>
+            
+            {/* Top Action Bar */}
+            <View style={styles.topActionsRow}>
+                <View style={styles.leftActions}>
+                    {/* Buttons removed as requested */}
                 </View>
-            )}
+                <View style={styles.rightActions}>
+                    <TouchableOpacity style={[styles.iconCircleBtn, { backgroundColor: theme.colors.card }]} onPress={() => pickAvatar()}>
+                        <Ionicons name="person-outline" size={20} color={theme.colors.text} />
+                    </TouchableOpacity>
+                    <TouchableOpacity style={[styles.iconCircleBtn, { backgroundColor: theme.colors.card }]} onPress={() => { setIsEditingInfo(!isEditingInfo); setIsEditingBio(!isEditingBio); }}>
+                        <Ionicons name="pencil-outline" size={20} color={theme.colors.text} />
+                    </TouchableOpacity>
+                    <TouchableOpacity style={[styles.iconCircleBtn, { backgroundColor: theme.colors.card }]} onPress={() => navigation.navigate('Settings', { user })}>
+                        <Ionicons name="menu-outline" size={20} color={theme.colors.text} />
+                    </TouchableOpacity>
+                </View>
+            </View>
 
-            <Animated.ScrollView
-                onScroll={scrollHandler}
-                scrollEventThrottle={16}
-                showsVerticalScrollIndicator={false}
-                style={styles.scrollView}
-            >
-                {/* Parallax Header */}
-                <Animated.View style={[styles.parallaxHeader, headerAnimatedStyle]}>
-                    <LinearGradient
-                        colors={vipLevel > 0 ? [vipColors[0], vipColors[1]] : (themeMode === 'dark' ? ['#1e293b', '#0f172a'] : ['#e2e8f0', '#f1f5f9'])}
-                        style={styles.parallaxBg}
-                    />
-
-                    <View style={styles.settingsIconWrapper}>
-                        <TouchableOpacity onPress={() => navigation.navigate('Settings', { user })}>
-                            <Ionicons name="settings-outline" size={26} color={theme.colors.text} />
-                        </TouchableOpacity>
-                    </View>
-
-                    <Animated.View style={[styles.avatarContainer, avatarAnimatedStyle]}>
-                        {/* Extremely subtle Radial Glow using LinearGradient */}
-                        <LinearGradient
-                            colors={['rgba(168, 85, 247, 0.15)', 'transparent']}
-                            style={styles.avatarRadialGlow}
-                            start={{ x: 0.5, y: 0.5 }}
-                            end={{ x: 1, y: 1 }}
-                        />
-
-                        <Animated.View style={floatingStyle}>
-                            <VipFrame
-                                level={vipLevel}
-                                avatar={profileAvatar}
-                                size={100}
-                            />
-                        </Animated.View>
-                        {isAvatarPending && (
-                            <View style={styles.pendingOverlay}>
-                                <Text style={styles.pendingText}>Onay Bekliyor</Text>
+            {/* Scrollable Content */}
+            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+                
+                {/* Ribbon */}
+                {/* Profile Floating Card */}
+                <View style={[styles.profileCard, { backgroundColor: theme.colors.card, alignItems: 'flex-start', paddingTop: 20 }]}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 16, marginBottom: 16, width: '100%' }}>
+                        <View style={{ position: 'relative' }}>
+                            <Image source={{ uri: resolveImageUrl(profileAvatar) }} style={[styles.avatarImage, { width: 100, height: 100, borderRadius: 50, borderColor: theme.colors.card }]} />
+                            <View style={[styles.onlineDot, { width: 22, height: 22, borderRadius: 11, bottom: 2, right: 2, borderColor: theme.colors.card }]} />
+                        </View>
+                        
+                        <View style={{ flex: 1 }}>
+                            <View style={styles.nameRow}>
+                                <Text style={[styles.nameText, { color: theme.colors.text, fontSize: 26 }]}>{info.name}</Text>
+                                <View style={styles.onlineBadge}>
+                                    <View style={styles.onlineDotSmall} />
+                                    <Text style={styles.onlineBadgeText}>Çevrimiçi</Text>
+                                </View>
                             </View>
-                        )}
-                        <TouchableOpacity
-                            style={[styles.editBadge, { backgroundColor: theme.colors.primary, borderColor: theme.colors.background }]}
-                            onPress={() => {
-                                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                                pickAvatar();
-                            }}
-                        >
-                            <Ionicons name="camera" size={20} color="white" />
-                        </TouchableOpacity>
-                    </Animated.View>
-
-                    <Text style={[styles.userName, { color: theme.colors.text }]}>{info.name}</Text>
-                    <View style={styles.jobBadge}>
-                        <Ionicons name="briefcase" size={14} color={theme.colors.primary} />
-                        <Text style={[styles.jobText, { color: theme.colors.textSecondary }]}>{info.job}</Text>
-                    </View>
-                </Animated.View>
-
-                {/* Content Sections */}
-                <View style={styles.contentWrapper}>
-                    {/* Boost Section */}
-                    {isBoosted ? (
-                        <View style={styles.sectionContainer}>
-                            <LinearGradient
-                                colors={['rgba(236, 72, 153, 0.15)', 'rgba(139, 92, 246, 0.15)']}
-                                style={styles.boostActiveContainer}
-                            >
-                                <View style={styles.boostActiveHeader}>
-                                    <Ionicons name="rocket" size={24} color="#ec4899" />
-                                    <Text style={[styles.boostActiveTitle, { color: theme.colors.text }]}>Profilin Öne Çıkarıldı!</Text>
-                                </View>
-                                <Text style={styles.boostActiveDesc}>Profilin şu anda keşfet bölümünde daha üst sıralarda gösteriliyor.</Text>
-                            </LinearGradient>
-                        </View>
-                    ) : (
-                        <View style={styles.sectionContainer}>
-                            <BoostPromoCard onPress={() => setShowBoostModal(true)} />
-                        </View>
-                    )}
-
-                    {/* Wallet Section */}
-                    <View style={styles.sectionContainer}>
-                        <GlassCard intensity={80} tint="dark" noBorder style={{ padding: 0, borderRadius: 30, overflow: 'hidden' }}>
-                            <LinearGradient
-                                colors={themeMode === 'dark' ? ['rgba(30,41,59,0.5)', 'rgba(15,23,42,0.5)'] : ['rgba(255,255,255,0.9)', 'rgba(241,245,249,0.9)']}
-                                style={{ padding: 16 }}
-                            >
-                                <View style={styles.walletHeader}>
-                                    <View style={styles.walletLabel}>
-                                        <View style={{ backgroundColor: 'rgba(251,191,36,0.15)', padding: 6, borderRadius: 10, marginRight: 8 }}>
-                                            <Ionicons name="wallet" size={18} color="#fbbf24" />
-                                        </View>
-                                        <Text style={[styles.walletLabelText, { color: theme.colors.text, fontSize: 10, letterSpacing: 1.2 }]}>CÜZDAN</Text>
-                                    </View>
-                                    <View style={[styles.statusBadge, { backgroundColor: 'rgba(255,255,255,0.05)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' }]}>
-                                        <View style={[styles.statusDot, { backgroundColor: vipLevel > 0 ? '#10b981' : '#64748b', shadowColor: vipLevel > 0 ? '#10b981' : '#64748b', shadowOpacity: 1, shadowRadius: 4, elevation: 5 }]} />
-                                        <Text style={[styles.statusText, { color: theme.colors.textSecondary, fontWeight: '700' }]}>{vipLevel > 0 ? 'PREMIUM' : 'STANDART'}</Text>
-                                    </View>
-                                </View>
-
-                                <View style={styles.walletBalanceRow}>
-                                    <View>
-                                        <Text style={[styles.balanceNum, { color: theme.colors.text, fontSize: 28, fontWeight: '900' }]}>{balance}</Text>
-                                        <Text style={[styles.balanceLabel, { color: theme.colors.textSecondary, fontSize: 11, fontWeight: '600' }]}>Kullanılabilir Coin</Text>
-                                    </View>
-                                    <Animated.View style={coinAnimatedStyle}>
-                                        <Image source={require('../../assets/gold_coin_3f.png')} style={[styles.coinImgLarge, { width: 44, height: 44 }]} resizeMode="contain" />
-                                    </Animated.View>
-                                </View>
-
-                                <View style={[styles.walletActions, { gap: 8, marginTop: 12 }]}>
-                                    <Animated.View style={{ flex: 1, transform: [{ scale: topUpScale }] }}>
-                                        <TouchableOpacity
-                                            activeOpacity={1}
-                                            onPressIn={() => topUpScale.value = withSpring(0.95)}
-                                            onPressOut={() => topUpScale.value = withSpring(1)}
-                                            style={{ borderRadius: 14, overflow: 'hidden' }}
-                                            onPress={() => {
-                                                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                                                navigation.navigate('Shop', { initialTab: 'coins', user: { ...user, balance } });
-                                            }}
-                                        >
-                                            <LinearGradient
-                                                colors={['#fbbf24', '#f59e0b', '#d97706']}
-                                                start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
-                                                style={[styles.btnGradient, { paddingVertical: 12, borderRadius: 14, shadowColor: '#fbbf24', shadowOpacity: 0.2, shadowRadius: 6, elevation: 5 }]}
-                                            >
-                                                <Ionicons name="add-circle" size={16} color="white" style={{ marginRight: 4 }} />
-                                                <Text style={[styles.btnText, { fontSize: 14, fontWeight: '900' }]}>Yükle</Text>
-                                            </LinearGradient>
-                                        </TouchableOpacity>
-                                    </Animated.View>
-
-                                    <Animated.View style={{ flex: 1.2, transform: [{ scale: vipBtnScale }] }}>
-                                        <TouchableOpacity
-                                            activeOpacity={1}
-                                            onPressIn={() => vipBtnScale.value = withSpring(0.95)}
-                                            onPressOut={() => vipBtnScale.value = withSpring(1)}
-                                            style={{ borderRadius: 14, overflow: 'hidden' }}
-                                            onPress={() => {
-                                                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                                                navigation.navigate('Vip', { userVip: vipLevel, user: { ...user, ...info, balance, vip_level: vipLevel, profile_image: profileAvatar } });
-                                            }}
-                                        >
-                                            <LinearGradient
-                                                colors={['#8b5cf6', '#7c3aed', '#6d28d9']}
-                                                start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
-                                                style={[styles.btnGradient, { paddingVertical: 12, borderRadius: 14, shadowColor: '#8b5cf6', shadowOpacity: 0.2, shadowRadius: 6, elevation: 5 }]}
-                                            >
-                                                <Ionicons name="ribbon" size={16} color="white" style={{ marginRight: 4 }} />
-                                                <Text style={[styles.btnText, { fontSize: 14, fontWeight: '900' }]}>VIP AL</Text>
-                                            </LinearGradient>
-                                        </TouchableOpacity>
-                                    </Animated.View>
-                                </View>
-                            </LinearGradient>
-                        </GlassCard>
-                    </View>
-
-                    {/* Agency Section */}
-                    <View style={styles.sectionContainer}>
-                        <GlassCard intensity={themeMode === 'dark' ? 20 : 60} tint={themeMode === 'dark' ? 'dark' : 'light'} noBorder style={{ borderRadius: 24, overflow: 'hidden' }}>
-                            <LinearGradient
-                                colors={themeMode === 'dark' ? ['rgba(124, 58, 237, 0.15)', 'rgba(30, 41, 59, 0.6)'] : ['rgba(124, 58, 237, 0.08)', 'rgba(255, 255, 255, 0.95)']}
-                                style={{ padding: 20 }}
-                            >
-                                <View style={styles.agencyRow}>
-                                    <View style={styles.agencyIconWrapper}>
-                                        <Ionicons name="business" size={26} color="#a78bfa" />
-                                    </View>
-                                    <View style={{ flex: 1, marginLeft: 15 }}>
-                                        <Text style={[styles.agencyTitle, { color: theme.colors.text, fontSize: 18 }]}>
-                                            {agencyName ? 'Ajansınız' : 'Ajans Sistemi'}
-                                        </Text>
-                                        <Text style={[styles.agencyDesc, { color: theme.colors.textSecondary, fontSize: 13 }]}>
-                                            {agencyName ? `${agencyName} ekibindesiniz.` : 'Bir ajansa katılarak daha fazla kazanabilirsin.'}
-                                        </Text>
-                                    </View>
-                                    {agencyName ? (
-                                        <View style={styles.verifiedBadge}>
-                                            <Ionicons name="checkmark-circle" size={28} color="#10b981" />
-                                        </View>
-                                    ) : (
-                                        <TouchableOpacity 
-                                            style={[styles.joinBtn, { backgroundColor: theme.colors.primary }]}
-                                            onPress={() => setShowAgencyModal(true)}
-                                        >
-                                            <Text style={styles.joinBtnText}>Katıl</Text>
-                                        </TouchableOpacity>
-                                    )}
-                                </View>
-                            </LinearGradient>
-                        </GlassCard>
-                    </View>
-
-                    {/* Bio Section */}
-                    <View style={styles.sectionContainer}>
-                        <View style={styles.sectionTitleRow}>
-                            <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Hakkımda</Text>
-                            <TouchableOpacity onPress={() => {
-                                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                                toggleEditInfo();
-                                setIsEditingBio(!isEditingBio);
-                            }}>
-                                <Ionicons name={isEditingBio ? "checkmark" : "create-outline"} size={20} color={theme.colors.primary} />
-                            </TouchableOpacity>
-                        </View>
-                        <View style={styles.premiumInfoCard}>
+                            
                             {isEditingBio ? (
                                 <TextInput
-                                    style={[styles.bioInput, { color: theme.colors.text }]}
+                                    style={[styles.bioInputEdit, { color: theme.colors.text, borderBottomColor: theme.colors.border }]}
                                     value={tempBio}
                                     onChangeText={setTempBio}
                                     multiline
-                                    maxLength={200}
+                                    placeholder="Bir şeyler yazın..."
+                                    placeholderTextColor={theme.colors.textSecondary}
                                 />
                             ) : (
-                                <Text style={[styles.bioText, { color: theme.colors.textSecondary }]}>{tempBio}</Text>
+                                <Text style={[styles.bioTextLite, { color: theme.colors.textSecondary, fontSize: 15 }]}>{tempBio}</Text>
                             )}
                         </View>
                     </View>
 
-                    {/* Info Grid Section */}
-                    <View style={styles.sectionContainer}>
-                        <View style={styles.sectionTitleRow}>
-                            <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Bilgiler</Text>
-                            <TouchableOpacity onPress={() => {
-                                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                                toggleEditInfo();
-                                setIsEditingInfo(!isEditingInfo);
-                            }}>
-                                <Ionicons name={isEditingInfo ? "checkmark" : "create-outline"} size={20} color={theme.colors.primary} />
-                            </TouchableOpacity>
+                    {/* Badges Row Removed */}
+
+                    {/* Stats Row */}
+                    <View style={styles.statsRow}>
+                        <View style={styles.statItem}>
+                            <Text style={[styles.statNumber, { color: theme.colors.text }]}>0</Text>
+                            <Text style={[styles.statLabel, { color: theme.colors.textSecondary }]}>Takipçi</Text>
                         </View>
-                        <View style={[styles.premiumInfoCard, styles.infoGrid]}>
-                            {[
-                                { icon: 'calendar', label: 'Yaş', value: info.age, key: 'age' },
-                                { icon: 'briefcase', label: 'İş', value: info.job, key: 'job' },
-                                { icon: 'school', label: 'Eğitim', value: info.edu, key: 'edu' },
-                                { icon: 'heart', label: 'İlişki', value: info.relationship, key: 'relationship' },
-                                { icon: 'sparkles', label: 'Burç', value: info.zodiac, key: 'zodiac' },
-                                { icon: 'resize', label: 'Boy', value: info.boy, key: 'boy' },
-                                { icon: 'fitness', label: 'Kilo', value: info.kilo, key: 'kilo' },
-                            ].map((item, idx) => (
-                                <View key={idx} style={styles.gridItem}>
-                                    <View style={styles.gridIconWrapper}>
-                                        <Ionicons name={item.icon} size={18} color={theme.colors.primary} />
-                                    </View>
-                                    <View style={{ flex: 1 }}>
-                                        <Text style={[styles.gridLabel, { color: theme.colors.textSecondary }]}>{item.label}</Text>
-                                        {isEditingInfo ? (
-                                            <TouchableOpacity
-                                                style={[styles.gridValueInputContainer, { borderBottomColor: theme.colors.border }]}
-                                                onPress={() => openSelection(item)}
-                                            >
-                                                <Text style={[styles.gridValue, { color: theme.colors.primary }]}>{item.value || 'Seç...'}</Text>
-                                                <Ionicons name="chevron-down" size={14} color={theme.colors.primary} />
-                                            </TouchableOpacity>
-                                        ) : (
-                                            <Text style={[styles.gridValue, { color: theme.colors.text }]}>{item.value}</Text>
-                                        )}
+                        <View style={[styles.statDivider, { backgroundColor: theme.colors.border }]} />
+                        <View style={styles.statItem}>
+                            <Text style={[styles.statNumber, { color: theme.colors.text }]}>0</Text>
+                            <Text style={[styles.statLabel, { color: theme.colors.textSecondary }]}>Takip et</Text>
+                        </View>
+                        <View style={[styles.statDivider, { backgroundColor: theme.colors.border }]} />
+                        <View style={styles.statItem}>
+                            <Text style={[styles.statNumber, { color: theme.colors.text }]}>0</Text>
+                            <Text style={[styles.statLabel, { color: theme.colors.textSecondary }]}>Hediye</Text>
+                        </View>
+                    </View>
+                </View>
+
+                {/* Quick Actions Row */}
+                <View style={[styles.quickActionsCard, { backgroundColor: theme.colors.card }]}>
+                    <TouchableOpacity style={styles.quickActionItem} onPress={() => setShowAgencyModal(true)}>
+                        <View style={[styles.qaIconWrapper, { backgroundColor: 'rgba(59, 130, 246, 0.15)' }]}>
+                            <Ionicons name="business" size={26} color="#3b82f6" />
+                        </View>
+                        <Text style={[styles.qaLabel, { color: theme.colors.text }]}>Ajans</Text>
+                        <Text style={[styles.qaLabel, { color: theme.colors.text }]}>paneli</Text>
+                    </TouchableOpacity>
+                    
+                    <TouchableOpacity style={styles.quickActionItem} onPress={() => navigation.navigate('ProfileVisitors', { user })}>
+                        <View style={styles.qaBlurredWrapper}>
+                            <Image source={{ uri: 'https://i.pravatar.cc/100?img=5' }} style={styles.qaBlurredImage} blurRadius={4} />
+                            <Image source={{ uri: 'https://i.pravatar.cc/100?img=6' }} style={[styles.qaBlurredImage, { position: 'absolute', left: 10 }]} blurRadius={4} />
+                        </View>
+                        <Text numberOfLines={1} adjustsFontSizeToFit style={[styles.qaLabel, { color: theme.colors.text }]}>Ziyaretçiler</Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity style={styles.quickActionItem} onPress={() => navigation.navigate('Vip', { userVip: vipLevel, user: { ...user, balance: user?.balance || 0, vip_level: vipLevel, profile_image: profileAvatar } })}>
+                        <View style={[styles.qaIconWrapper, { backgroundColor: 'rgba(251, 191, 36, 0.1)' }]}>
+                            <Ionicons name="diamond" size={24} color="#fbbf24" />
+                        </View>
+                        <Text numberOfLines={1} adjustsFontSizeToFit style={[styles.qaLabel, { color: theme.colors.text }]}>VIP</Text>
+                        <View style={styles.vipIndicator} />
+                    </TouchableOpacity>
+
+                    <TouchableOpacity style={styles.quickActionItem}>
+                        <View style={[styles.qaIconWrapper, { backgroundColor: 'rgba(236, 72, 153, 0.15)' }]}>
+                            <Ionicons name="heart" size={26} color="#ec4899" />
+                        </View>
+                        <Text numberOfLines={1} adjustsFontSizeToFit style={[styles.qaLabel, { color: theme.colors.text }]}>Gizli Hayran</Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity style={styles.quickActionItem}>
+                        <View style={[styles.qaIconWrapper, { backgroundColor: 'rgba(168, 85, 247, 0.15)' }]}>
+                            <Ionicons name="star" size={26} color="#a855f7" />
+                        </View>
+                        <Text numberOfLines={1} adjustsFontSizeToFit style={[styles.qaLabel, { color: theme.colors.text }]}>Favorilerim</Text>
+                    </TouchableOpacity>
+                </View>
+
+                {/* Bottom Content Area */}
+                <View style={[styles.bottomContentArea, { backgroundColor: theme.colors.card }]}>
+                    
+                    {/* Wallet Section */}
+                    <View style={{ marginBottom: 24, backgroundColor: themeMode === 'dark' ? 'rgba(255, 255, 255, 0.03)' : '#f8fafc', padding: 16, borderRadius: 20, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                            <Image source={require('../../assets/gold_coin_3f.png')} style={{ width: 40, height: 40 }} />
+                            <View>
+                                <Text style={{ color: theme.colors.textSecondary, fontSize: 12, fontWeight: '700', textTransform: 'uppercase' }}>Cüzdanım</Text>
+                                <Text style={{ color: theme.colors.text, fontSize: 24, fontWeight: '900' }}>{balance}</Text>
+                            </View>
+                        </View>
+                        <TouchableOpacity 
+                            style={{ backgroundColor: '#fbbf24', paddingHorizontal: 20, paddingVertical: 10, borderRadius: 16, flexDirection: 'row', alignItems: 'center', gap: 6 }}
+                            onPress={() => navigation.navigate('Shop')}
+                        >
+                            <Ionicons name="wallet-outline" size={16} color="#422006" />
+                            <Text style={{ color: '#422006', fontWeight: '800', fontSize: 14 }}>Yükle</Text>
+                        </TouchableOpacity>
+                    </View>
+
+                    {/* Boost Section */}
+                    <TouchableOpacity 
+                        style={{ marginBottom: 24, borderRadius: 20, overflow: 'hidden' }}
+                        onPress={() => setShowBoostModal(true)}
+                        activeOpacity={0.8}
+                    >
+                        <LinearGradient
+                            colors={isBoosted ? ['#10b981', '#059669'] : ['#ec4899', '#8b5cf6']}
+                            start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+                            style={{ padding: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}
+                        >
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                                <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.2)', justifyContent: 'center', alignItems: 'center' }}>
+                                    <Ionicons name={isBoosted ? "rocket" : "flash"} size={20} color="white" />
+                                </View>
+                                <View>
+                                    <Text style={{ color: 'white', fontSize: 16, fontWeight: '800' }}>{isBoosted ? "Profilin Öne Çıkarılıyor" : "Profilini Öne Çıkar"}</Text>
+                                    <Text style={{ color: 'rgba(255,255,255,0.8)', fontSize: 12 }}>Keşfet'te 10 kat daha fazla görün</Text>
+                                </View>
+                            </View>
+                            <Ionicons name="chevron-forward" size={20} color="white" />
+                        </LinearGradient>
+                    </TouchableOpacity>
+
+                    {/* Album Section */}
+                    <View style={{ marginBottom: 24 }}>
+                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                            <Text style={{ fontSize: 16, fontWeight: '800', color: theme.colors.text }}>Albüm</Text>
+                            <TouchableOpacity onPress={() => {/* View all */}}><Text style={{ color: theme.colors.primary, fontSize: 12, fontWeight: '700' }}>Tümünü Gör</Text></TouchableOpacity>
+                        </View>
+                        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 10 }}>
+                            <TouchableOpacity 
+                                style={{ width: 80, height: 80, borderRadius: 16, backgroundColor: themeMode === 'dark' ? 'rgba(255,255,255,0.05)' : '#f1f5f9', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: themeMode === 'dark' ? 'rgba(255,255,255,0.1)' : '#e2e8f0', borderStyle: 'dashed' }}
+                                onPress={() => addToAlbum()}
+                            >
+                                <Ionicons name="add" size={32} color={theme.colors.textSecondary} />
+                            </TouchableOpacity>
+                            {album.map((photo, index) => (
+                                <Image key={index} source={{ uri: resolveImageUrl(photo?.url || photo) }} style={{ width: 80, height: 80, borderRadius: 16 }} />
+                            ))}
+                            {pendingAlbumPhotos.map((uri, index) => (
+                                <View key={`pending-${index}`} style={{ width: 80, height: 80, borderRadius: 16, backgroundColor: 'rgba(0,0,0,0.3)', justifyContent: 'center', alignItems: 'center' }}>
+                                    <Image source={{ uri }} style={{ width: 80, height: 80, borderRadius: 16, opacity: 0.6 }} />
+                                    <View style={{ position: 'absolute' }}>
+                                        <TypingIndicator color="white" />
                                     </View>
                                 </View>
                             ))}
-                        </View>
+                        </ScrollView>
                     </View>
 
-                    {/* Album Section */}
-                    <View style={styles.sectionContainer}>
-                        <View style={styles.sectionTitleRow}>
-                            <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Fotoğraflar</Text>
-                            <Text style={styles.photoCount}>{album.length}/5</Text>
+                    {/* Information Section */}
+                    <View style={{ marginBottom: 24 }}>
+                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                            <Text style={{ fontSize: 18, fontWeight: '800', color: theme.colors.text }}>Temel Bilgiler</Text>
+                            <TouchableOpacity onPress={toggleEditInfo} style={{ backgroundColor: theme.colors.primary + '20', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 10 }}>
+                                <Text style={{ color: theme.colors.primary, fontSize: 13, fontWeight: '700' }}>{isEditingInfo ? 'Kaydet' : 'Düzenle'}</Text>
+                            </TouchableOpacity>
                         </View>
-                        <View style={styles.albumScrollWrapper}>
-                            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.albumContent}>
-                                {album.map((uri, index) => (
-                                    <View key={index} style={styles.albumItem}>
-                                        <Image source={{ uri: resolveImageUrl(uri) }} style={styles.albumImg} />
-                                    </View>
-                                ))}
-                                {album.length < 5 && (
-                                    <Animated.View style={addPhotoAnimatedStyle}>
-                                        <TouchableOpacity
-                                            style={styles.addPhotoSmall}
-                                            activeOpacity={1}
-                                            onPressIn={() => {
-                                                addPhotoScale.value = withSpring(1.03);
-                                            }}
-                                            onPressOut={() => {
-                                                addPhotoScale.value = withSpring(1);
-                                            }}
-                                            onPress={() => {
-                                                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                                                addToAlbum();
-                                            }}
-                                        >
-                                            <Ionicons name="add" size={32} color="rgba(255,255,255,0.3)" />
-                                            <Text style={styles.addPhotoTitle}>Fotoğraf ekle</Text>
-                                            <Text style={styles.addPhotoSub}>Fotoğraf ekleyen profiller %40 daha fazla eşleşme alır</Text>
+                        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
+                            {['age', 'job', 'edu', 'boy', 'kilo', 'zodiac', 'relationship'].map((key) => {
+                                const labels = { age: 'Yaş', job: 'Meslek', edu: 'Eğitim', boy: 'Boy', kilo: 'Kilo', zodiac: 'Burç', relationship: 'İlişki' };
+                                const icons = { age: 'calendar', job: 'briefcase', edu: 'school', boy: 'body', kilo: 'barbell', zodiac: 'star', relationship: 'heart' };
+                                const iconColors = { age: '#f59e0b', job: '#3b82f6', edu: '#10b981', boy: '#6366f1', kilo: '#ef4444', zodiac: '#8b5cf6', relationship: '#ec4899' };
+                                
+                                if (isEditingInfo) {
+                                    return (
+                                        <TouchableOpacity key={key} onPress={() => openSelection({ key, label: labels[key], value: info[key] })} style={{ paddingHorizontal: 14, paddingVertical: 10, borderRadius: 14, backgroundColor: themeMode === 'dark' ? 'rgba(255,255,255,0.08)' : '#f1f5f9', flexDirection: 'row', alignItems: 'center', gap: 8, borderWidth: 1, borderColor: 'rgba(255,255,255,0.05)' }}>
+                                            <Ionicons name={icons[key]} size={16} color={iconColors[key]} />
+                                            <Text style={{ color: theme.colors.text, fontSize: 13, fontWeight: '600' }}>{info[key] || 'Seçiniz'}</Text>
                                         </TouchableOpacity>
-                                    </Animated.View>
-                                )}
-                            </ScrollView>
+                                    );
+                                }
+                                
+                                return info[key] ? (
+                                    <View key={key} style={{ paddingHorizontal: 14, paddingVertical: 10, borderRadius: 14, backgroundColor: themeMode === 'dark' ? 'rgba(255,255,255,0.08)' : '#f1f5f9', flexDirection: 'row', alignItems: 'center', gap: 8, borderWidth: 1, borderColor: 'rgba(255,255,255,0.05)' }}>
+                                        <Ionicons name={icons[key]} size={16} color={iconColors[key]} />
+                                        <Text style={{ color: theme.colors.text, fontSize: 13, fontWeight: '600' }}>{info[key]}</Text>
+                                    </View>
+                                ) : null;
+                            })}
                         </View>
                     </View>
 
-                    {/* Social Menu */}
-                    <View style={styles.sectionContainer}>
-                        <Text style={[styles.sectionTitle, { color: theme.colors.text, marginBottom: 12 }]}>Sosyal Özellikler</Text>
-                        <View style={styles.premiumInfoCard}>
-                            <TouchableOpacity
-                                style={styles.socialBtn}
-                                onPress={() => {
-                                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                                    navigation.navigate('Favorites', { user });
-                                }}
-                            >
-                                <View style={styles.socialIconContainer}>
-                                    <Ionicons name="heart" size={20} color="#ef4444" />
-                                </View>
-                                <View style={styles.socialTextContainer}>
-                                    <Text style={[styles.socialTitle, { color: theme.colors.text }]}>Favorilerim</Text>
-                                    <Text style={[styles.socialDesc, { color: theme.colors.textSecondary }]}>Senin beğendiğin kişiler</Text>
-                                </View>
-                                <Ionicons name="chevron-forward" size={20} color={theme.colors.border} />
-                            </TouchableOpacity>
+                    {/* Social Features Section Removed as it is already in Quick Actions */}
 
-                            <TouchableOpacity
-                                style={styles.socialBtn}
-                                onPress={() => {
-                                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                                    navigation.navigate('WhoFavoritedMe', { user });
-                                }}
-                            >
-                                <View style={styles.socialIconContainer}>
-                                    <Ionicons name="star" size={20} color="#fcd34d" />
+                    {/* Tags / Interests Section */}
+                    <View style={{ marginBottom: 24 }}>
+                        <Text style={{ fontSize: 18, fontWeight: '800', color: theme.colors.text, marginBottom: 16 }}>İlgi Alanları</Text>
+                        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
+                            {userInterests.map((interest, index) => (
+                                <View key={index} style={{ paddingHorizontal: 16, paddingVertical: 10, borderRadius: 18, backgroundColor: 'rgba(168, 85, 247, 0.12)', borderWidth: 1, borderColor: 'rgba(168, 85, 247, 0.25)' }}>
+                                    <Text style={{ color: '#a855f7', fontSize: 13, fontWeight: '700' }}>#{interest}</Text>
                                 </View>
-                                <View style={styles.socialTextContainer}>
-                                    <Text style={[styles.socialTitle, { color: theme.colors.text }]}>Gizli Hayranlar</Text>
-                                    <Text style={[styles.socialDesc, { color: theme.colors.textSecondary }]}>Seni favorilere ekleyenler</Text>
-                                </View>
-                                <Ionicons name="chevron-forward" size={20} color={theme.colors.border} />
-                            </TouchableOpacity>
-
-                            <TouchableOpacity
-                                style={[styles.socialBtn, { borderBottomWidth: 0, paddingBottom: 0 }]}
-                                onPress={() => {
-                                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                                    navigation.navigate('ProfileVisitors', { user });
-                                }}
-                            >
-                                <View style={styles.socialIconContainer}>
-                                    <Ionicons name="eye" size={20} color="#3b82f6" />
-                                </View>
-                                <View style={styles.socialTextContainer}>
-                                    <Text style={[styles.socialTitle, { color: theme.colors.text }]}>Profil Ziyaretçileri</Text>
-                                    <Text style={[styles.socialDesc, { color: theme.colors.textSecondary }]}>Profiline kimler baktı?</Text>
-                                </View>
-                                <Ionicons name="chevron-forward" size={20} color={theme.colors.border} />
-                            </TouchableOpacity>
+                            ))}
+                            {isEditingInfo && (
+                                <TouchableOpacity style={{ paddingHorizontal: 18, paddingVertical: 10, borderRadius: 18, borderWidth: 1, borderColor: theme.colors.primary, borderStyle: 'dashed', backgroundColor: theme.colors.primary + '10' }}>
+                                    <Text style={{ color: theme.colors.primary, fontSize: 13, fontWeight: '700' }}>+ Ekle</Text>
+                                </TouchableOpacity>
+                            )}
                         </View>
                     </View>
 
-                    {/* Footer Buttons */}
-                    <View style={styles.footerBtns}>
-                        <TouchableOpacity style={[styles.footerBtn, { backgroundColor: theme.colors.card }]} onPress={() => setShowContactModal(true)}>
-                            <Ionicons name="chatbubble-ellipses" size={20} color={theme.colors.primary} />
-                            <Text style={[styles.footerBtnText, { color: theme.colors.text }]}>Destek İsteyin</Text>
-                        </TouchableOpacity>
-
-                        <TouchableOpacity
-                            style={[
-                                styles.footerBtn,
-                                styles.logoutBtnModern,
-                                { backgroundColor: isLogoutPressed ? 'rgba(255, 80, 80, 0.08)' : 'transparent' }
-                            ]}
-                            onPressIn={() => setIsLogoutPressed(true)}
-                            onPressOut={() => setIsLogoutPressed(false)}
+                    {/* ID & Logout Section */}
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 10, paddingBottom: 10 }}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                            <Ionicons name="id-card-outline" size={16} color={theme.colors.textSecondary} style={{ marginRight: 6 }} />
+                            <Text style={{ fontSize: 12, color: theme.colors.textSecondary, fontWeight: '600' }}>ID: {user?.id?.toString()?.substring(0,8) || '110866638'}</Text>
+                        </View>
+                        <TouchableOpacity 
+                            style={{ paddingHorizontal: 16, paddingVertical: 8, borderRadius: 12, backgroundColor: 'rgba(239, 68, 68, 0.1)' }}
                             onPress={async () => {
-                                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
                                 await AsyncStorage.clear();
                                 navigation.replace('Welcome');
                             }}
-                            activeOpacity={1}
                         >
-                            <Ionicons name="log-out-outline" size={20} color="rgba(255,80,80,0.9)" />
-                            <Text style={styles.logoutBtnText}>Oturumu Kapat</Text>
+                            <Text style={{ color: '#ef4444', fontSize: 12, fontWeight: '800' }}>Çıkış Yap</Text>
                         </TouchableOpacity>
                     </View>
-                    <View style={{ height: 100 }} />
-                </View>
-            </Animated.ScrollView>
 
-            {/* Agency Join Modal */}
+                    <View style={{height: 120}} />
+                </View>
+            </ScrollView>
+
             <Modal
                 visible={showAgencyModal}
                 transparent
@@ -963,7 +836,7 @@ export default function ProfileScreen({ route, navigation }) {
                             <View style={{ alignItems: 'center', marginBottom: 25 }}>
                                 <View style={{ height: 140, justifyContent: 'center', alignItems: 'center' }}>
                                     {/* Sub-glow behind rocket */}
-                                    <View style={{ position: 'absolute', width: 120, height: 120, borderRadius: 60, backgroundColor: 'rgba(236,72,153,0.3)', filter: 'blur(30px)', zIndex: -1 }} />
+                                    <View style={{ position: 'absolute', width: 120, height: 120, borderRadius: 60, backgroundColor: 'rgba(236,72,153,0.1)', zIndex: -1 }} />
 
                                     <Animated.View style={floatingStyle}>
                                         <LinearGradient
@@ -1743,5 +1616,74 @@ const styles = StyleSheet.create({
     modalBtnText: {
         fontSize: 16,
         fontWeight: '800'
-    }
+    },
+    // --- NEW MODERN ASIAN PROFILE STYLES ---
+    mainContainer: { flex: 1 },
+    bgWrapper: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
+    desertBg: { width: '100%', height: '100%' },
+    topActionsRow: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 16, paddingTop: Platform.OS === 'ios' ? 60 : 40, paddingBottom: 10, zIndex: 10 },
+    leftActions: { flexDirection: 'row', gap: 8 },
+    topBtnYellow: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fde047', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, gap: 4 },
+    coinCircle: { width: 14, height: 14, borderRadius: 7, backgroundColor: '#fbbf24' },
+    topBtnTextDark: { color: '#422006', fontWeight: '800', fontSize: 13 },
+    topBtnPurple: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, gap: 4 },
+    diamondShape: { width: 12, height: 12, backgroundColor: '#c084fc', transform: [{ rotate: '45deg' }] },
+    topBtnTextWhite: { color: 'white', fontWeight: '800', fontSize: 13 },
+    rightActions: { flexDirection: 'row', gap: 12 },
+    iconCircleBtn: { width: 36, height: 36, borderRadius: 18, justifyContent: 'center', alignItems: 'center' },
+    scrollContent: { paddingTop: 20 },
+    ribbonWrapper: { alignItems: 'flex-start', paddingHorizontal: 20, marginBottom: 10 },
+    yellowRibbon: { backgroundColor: 'rgba(253, 224, 71, 0.9)', paddingHorizontal: 12, paddingVertical: 4, borderRadius: 8 },
+    ribbonText: { color: '#854d0e', fontSize: 12, fontWeight: '700' },
+    profileCard: { marginHorizontal: 16, borderRadius: 24, padding: 20, paddingTop: 15, marginBottom: 16, shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.1, shadowRadius: 20, elevation: 8, alignItems: 'flex-start' },
+    avatarWrapper: { position: 'absolute', top: -35, left: 20 },
+    avatarImage: { width: 80, height: 80, borderRadius: 40, borderWidth: 4 },
+    onlineDot: { position: 'absolute', bottom: 4, right: 4, width: 16, height: 16, borderRadius: 8, backgroundColor: '#10b981', borderWidth: 2, borderColor: 'white' },
+    nameRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4, marginTop: 10 },
+    nameText: { fontSize: 24, fontWeight: '900' },
+    onlineBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 6, paddingVertical: 2 },
+    onlineDotSmall: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#10b981' },
+    onlineBadgeText: { color: '#10b981', fontSize: 11, fontWeight: '700' },
+    bioInputEdit: { fontSize: 14, minHeight: 40, borderWidth: 0, borderBottomWidth: 1, paddingVertical: 4, marginBottom: 12 },
+    bioTextLite: { fontSize: 14, marginBottom: 12 },
+    badgesRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 16 },
+    badgePill: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 12 },
+    badgePillTextWhite: { color: 'white', fontSize: 11, fontWeight: '700' },
+    badgePillTextDark: { fontSize: 11, fontWeight: '700' },
+    flagBadge: { justifyContent: 'center' },
+    statsRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingTop: 16, borderTopWidth: 1, borderTopColor: 'rgba(0,0,0,0.05)' },
+    statItem: { flex: 1, alignItems: 'center' },
+    statNumber: { fontSize: 18, fontWeight: '800', marginBottom: 2 },
+    statLabel: { fontSize: 11 },
+    statDivider: { width: 1, height: 24 },
+    quickActionsCard: { flexDirection: 'row', justifyContent: 'space-between', marginHorizontal: 16, borderRadius: 20, padding: 16, marginBottom: 20, shadowColor: '#000', shadowOffset: { width: 0, height: 5 }, shadowOpacity: 0.05, shadowRadius: 10, elevation: 4 },
+    quickActionItem: { alignItems: 'center', width: 60 },
+    qaIconWrapper: { width: 44, height: 44, borderRadius: 14, justifyContent: 'center', alignItems: 'center', marginBottom: 6 },
+    qaBlurredWrapper: { width: 44, height: 44, marginBottom: 6, justifyContent: 'center', alignItems: 'center' },
+    qaBlurredImage: { width: 36, height: 36, borderRadius: 10 },
+    qaCrownIcon: { width: 32, height: 32 },
+    qaLabel: { fontSize: 10, fontWeight: '600', textAlign: 'center' },
+    vipIndicator: { position: 'absolute', bottom: 18, right: 10, width: 8, height: 4, backgroundColor: '#ec4899', borderRadius: 2 },
+    bottomContentArea: { borderTopLeftRadius: 30, borderTopRightRadius: 30, paddingTop: 20, paddingHorizontal: 20, minHeight: 500 },
+    tabsRow: { flexDirection: 'row', gap: 24, borderBottomWidth: 1, paddingBottom: 12, marginBottom: 20 },
+    activeTab: { alignItems: 'center' },
+    activeTabText: { fontSize: 16, fontWeight: '800', marginBottom: 4 },
+    activeTabIndicator: { width: 20, height: 3, borderRadius: 2 },
+    inactiveTabText: { fontSize: 16, fontWeight: '600' },
+    verificationSection: { marginBottom: 24 },
+    sectionHeading: { fontSize: 16, fontWeight: '800', marginBottom: 12 },
+    verificationGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
+    verifyCard: { width: '48%', flexDirection: 'row', alignItems: 'center', padding: 12, borderRadius: 12 },
+    verifyTextGray: { fontSize: 12, fontWeight: '600' },
+    verifyTextPink: { fontSize: 12, fontWeight: '600' },
+    verifyTextGreen: { fontSize: 12, fontWeight: '600' },
+    verifyTextBlue: { fontSize: 12, fontWeight: '600' },
+    idSection: { marginBottom: 24 },
+    idRow: { flexDirection: 'row', alignItems: 'center' },
+    idText: { fontSize: 14, fontWeight: '600' },
+    tagSection: { marginBottom: 24 },
+    addTagBtn: { alignSelf: 'flex-start', paddingHorizontal: 16, paddingVertical: 6, borderRadius: 16, borderWidth: 1 },
+    addTagText: { fontSize: 13, fontWeight: '700' },
+    logoutSimpleBtn: { padding: 16, borderRadius: 16, alignItems: 'center', marginTop: 10 },
+    logoutSimpleText: { fontSize: 15, fontWeight: '800' }
 });

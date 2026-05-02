@@ -1,4 +1,5 @@
 import React from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, SafeAreaView, Dimensions, StatusBar, Platform, Animated } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
@@ -113,6 +114,29 @@ export default function ShopScreen({ navigation, route }) {
             ])
         ).start();
     }, [shimmerAnim, floatAnim]);
+
+    // Sync balance from server on focus
+    useFocusEffect(
+        React.useCallback(() => {
+            if (currentUserId) {
+                axios.get(`${API_URL}/users/${currentUserId}`)
+                    .then(res => {
+                        if (res.data && res.data.balance !== undefined) {
+                            setBalance(res.data.balance);
+                            // Also update stored user for consistency
+                            AsyncStorage.getItem('user').then(storedUser => {
+                                if (storedUser) {
+                                    const parsed = JSON.parse(storedUser);
+                                    parsed.balance = res.data.balance;
+                                    AsyncStorage.setItem('user', JSON.stringify(parsed));
+                                }
+                            });
+                        }
+                    })
+                    .catch(err => console.log('[Shop] Balance sync error:', err));
+            }
+        }, [currentUserId])
+    );
 
     // Pulse balance when it changes
     useEffect(() => {

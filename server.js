@@ -302,6 +302,11 @@ const initializeDatabase = async () => {
             await db.query('ALTER TABLE users ADD COLUMN is_vip BOOLEAN DEFAULT FALSE');
         }
 
+        if (!columnNames.includes('photos')) {
+            console.log('[DB] Adding missing column: photos');
+            await db.query('ALTER TABLE users ADD COLUMN photos TEXT[] DEFAULT \'{}\'');
+        }
+
         if (!columnNames.includes('is_verified')) {
             console.log('[DB] Adding missing column: is_verified');
             await db.query('ALTER TABLE users ADD COLUMN is_verified BOOLEAN DEFAULT FALSE');
@@ -1144,6 +1149,56 @@ app.get('/api/users/:id', async (req, res) => {
         const result = await db.query('SELECT * FROM users WHERE id = $1', [req.params.id]);
         if (result.rows.length === 0) return res.status(404).json({ error: 'User not found' });
         res.json(sanitizeUser(result.rows[0], req));
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// GET USER ALBUM
+app.get('/api/users/:id/album', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const result = await db.query('SELECT photos FROM users WHERE id = $1', [id]);
+        
+        if (result.rows.length === 0) {
+            return res.status(404).json({ error: 'Kullanıcı bulunamadı.' });
+        }
+
+        const photos = result.rows[0].photos || [];
+        
+        // Use sanitizeUser to rewrite URLs (photos array handling is inside)
+        const dummyUser = { photos };
+        const sanitized = sanitizeUser(dummyUser, req);
+        
+        res.json(sanitized.photos);
+    } catch (err) {
+        console.error('[ALBUM FETCH ERROR]:', err.message);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// SYNC ALBUMS (One-time migration to move approved photos to users table)
+app.get('/api/admin/sync-albums', async (req, res) => {
+    try {
+        const approved = await db.query("SELECT user_id, url FROM pending_photos WHERE type = 'album' AND status = 'approved'");
+        let count = 0;
+        
+        for (const photo of approved.rows) {
+            // Check if photo already in users.photos
+            const userRes = await db.query('SELECT photos FROM users WHERE id = $1', [photo.user_id]);
+            if (userRes.rows.length > 0) {
+                const photos = userRes.rows[0].photos || [];
+                if (!photos.includes(photo.url)) {
+                    await db.query(
+                        'UPDATE users SET photos = array_append(COALESCE(photos, \'{}\'), $1) WHERE id = $2',
+                        [photo.url, photo.user_id]
+                    );
+                    count++;
+                }
+            }
+        }
+        
+        res.json({ success: true, migrated_count: count });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
@@ -3191,11 +3246,20 @@ app.post('/api/moderation/approve', authenticateToken, authorizeRole('admin', 's
         if (photo.type === 'avatar') {
             await db.query('UPDATE users SET avatar_url = $1 WHERE id = $2', [photo.url, photo.user_id]);
         } else if (photo.type === 'album') {
-            // Append to array in operators table
+            // Append to array in both users and operators table (if exists)
             await db.query(
-                'UPDATE operators SET photos = array_append(photos, $1) WHERE user_id = $2',
+                'UPDATE users SET photos = array_append(COALESCE(photos, \'{}\'), $1) WHERE id = $2',
                 [photo.url, photo.user_id]
             );
+            
+            // Check if user is an operator
+            const opRes = await db.query('SELECT 1 FROM operators WHERE user_id = $1', [photo.user_id]);
+            if (opRes.rows.length > 0) {
+                await db.query(
+                    'UPDATE operators SET photos = array_append(COALESCE(photos, \'{}\'), $1) WHERE user_id = $2',
+                    [photo.url, photo.user_id]
+                );
+            }
         }
 
         // Log Activity

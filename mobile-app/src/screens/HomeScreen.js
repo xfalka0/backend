@@ -340,7 +340,7 @@ export default function HomeScreen({ navigation, route }) {
         checkFirstLaunch();
     }, []);
 
-    const fetchOperators = async (reset = false, isLoadMore = false, overrideTab = activeTab) => {
+    const fetchOperators = React.useCallback(async (reset = false, isLoadMore = false, overrideTab = activeTab) => {
         if (isFetchingRef.current) return;
         if (isLoadMore && !hasMore) return;
 
@@ -414,7 +414,7 @@ export default function HomeScreen({ navigation, route }) {
         } finally {
             isFetchingRef.current = false;
         }
-    };
+    }, [page, hasMore, activeTab, user, navigation]);
 
     const handleLoadMore = React.useCallback(() => {
         if (!loading && !isFetchingRef.current && hasMore) {
@@ -564,14 +564,22 @@ export default function HomeScreen({ navigation, route }) {
 
     const handleTabPress = (tabName) => {
         if (activeTab === tabName) return;
+        
+        // 1. Update active tab UI state first
         setActiveTab(tabName);
-
-        // InteractionManager tends to hang indefinitely if there are infinite loop animations (like PremiumBackground)
-        // Set state synchronously and fetch data
-        setPage(1);
-        setOperators([]);
-        setHasMore(true);
-        fetchOperators(true, false, tabName);
+        
+        // 2. Use a slight defer to allow UI to render the active state and loading skeletons
+        requestAnimationFrame(() => {
+            setLoading(true);
+            setPage(1);
+            setOperators([]);
+            setHasMore(true);
+            
+            // 3. Actual fetch in next tick
+            setTimeout(() => {
+                fetchOperators(true, false, tabName);
+            }, 50);
+        });
     };
 
     const handleHiPress = React.useCallback(async (item) => {

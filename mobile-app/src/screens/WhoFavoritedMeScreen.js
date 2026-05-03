@@ -59,7 +59,7 @@ export default function WhoFavoritedMeScreen({ navigation, route }) {
                         const operatorData = {
                             id: item.id,
                             user_id: item.id,
-                            name: item.username,
+                            name: item.name || item.username,
                             avatar_url: item.avatar_url,
                             gender: item.gender,
                             job: item.job,
@@ -76,7 +76,7 @@ export default function WhoFavoritedMeScreen({ navigation, route }) {
                             <View style={styles.avatarWrapper}>
                                 <VipFrame
                                     level={0}
-                                    avatar={item.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(item.username)}&background=random&color=fff`}
+                                    avatar={item.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(item.name || item.username)}&background=random&color=fff`}
                                     size={56}
                                     isStatic={true}
                                 />
@@ -94,7 +94,7 @@ export default function WhoFavoritedMeScreen({ navigation, route }) {
                                 <View style={styles.textContainer}>
                                     <View style={styles.nameRow}>
                                         <Text style={[styles.name, { color: theme.colors.text }]} numberOfLines={1}>
-                                            {item.username}
+                                            {item.name || item.username}
                                         </Text>
 
                                         {!isVIP && item.is_blurred && (

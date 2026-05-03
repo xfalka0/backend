@@ -77,21 +77,27 @@ export default function OperatorProfileScreen({ route, navigation }) {
     }, [user, operator]);
 
     const handleFavorite = async () => {
-        if (!user || !operator) return;
+        if (!user || !operator) {
+            console.log('[DEBUG] handleFavorite: user or operator missing', { user: !!user, operator: !!operator });
+            return;
+        }
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
         try {
             const targetId = operator.id || operator.user_id;
+            const url = isFavorited ? `${API_URL}/favorites/${targetId}` : `${API_URL}/favorites`;
+            console.log(`[DEBUG] Follow Action: ${isFavorited ? 'DELETE' : 'POST'} to ${url}`, { userId: user.id, targetId });
+            
             if (isFavorited) {
-                await axios.delete(`${API_URL}/favorites/${targetId}`, { data: { userId: user.id } });
+                await axios.delete(url, { data: { userId: user.id } });
                 setIsFavorited(false);
                 setFollowerStats(prev => ({ ...prev, followers: Math.max(0, prev.followers - 1) }));
             } else {
-                await axios.post(`${API_URL}/favorites`, { userId: user.id, targetUserId: targetId });
+                await axios.post(url, { userId: user.id, targetUserId: targetId });
                 setIsFavorited(true);
                 setFollowerStats(prev => ({ ...prev, followers: prev.followers + 1 }));
             }
         } catch (e) {
-            console.error('Follow action err', e);
+            console.log('[DEBUG] Follow action error:', e.message, e.config?.url);
         }
     };
 
@@ -248,7 +254,7 @@ export default function OperatorProfileScreen({ route, navigation }) {
                             onPress={handleFavorite}
                         >
                             <Ionicons 
-                                name={isFavorited ? "person-remove" : "person-add"} 
+                                name={isFavorited ? "checkmark-circle" : "person-add"} 
                                 size={18} 
                                 color={isFavorited ? "#ef4444" : "white"} 
                             />
@@ -256,7 +262,7 @@ export default function OperatorProfileScreen({ route, navigation }) {
                                 styles.followButtonText, 
                                 { color: isFavorited ? "#ef4444" : "white" }
                             ]}>
-                                {isFavorited ? 'Takibi Bırak' : 'Takip Et'}
+                                {isFavorited ? 'Takip' : 'Takip Et'}
                             </Text>
                         </TouchableOpacity>
                     </View>

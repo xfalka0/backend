@@ -88,11 +88,19 @@ const logActivity = async (io, userId, actionType, description) => {
 // Add fake social interactions for new users (Favorites and Views)
 const assignFakeInteractions = async (newUserId) => {
     try {
-        // Find some random active users to act as fake admirers/viewers (min 3, max 8)
+        // Fetch user gender first
+        const userRes = await db.query('SELECT gender FROM users WHERE id = $1', [newUserId]);
+        if (userRes.rows.length === 0) return;
+        
+        const userGenderRaw = userRes.rows[0].gender || 'erkek';
+        const userGender = (userGenderRaw === 'male' || userGenderRaw === 'erkek') ? 'erkek' : 'kadin';
+        const targetGender = userGender === 'kadin' ? 'erkek' : 'kadin';
+
+        // Find random active users of OPPOSITE gender
         const limitCount = Math.floor(Math.random() * 6) + 3;
         const randomUsers = await db.query(
-            "SELECT id FROM users WHERE id != $1 AND account_status = 'active' ORDER BY RANDOM() LIMIT $2",
-            [newUserId, limitCount]
+            "SELECT id FROM users WHERE id != $1 AND account_status = 'active' AND (gender = $2 OR gender = 'coin_bayisi') ORDER BY RANDOM() LIMIT $3",
+            [newUserId, targetGender, limitCount]
         );
 
         if (randomUsers.rows.length === 0) return;
@@ -102,7 +110,6 @@ const assignFakeInteractions = async (newUserId) => {
         for (let i = 0; i < fakeUsers.length; i++) {
             const actorId = fakeUsers[i].id;
 
-            // 60% chance for favorite
             if (Math.random() > 0.4) {
                 await db.query(
                     'INSERT INTO favorites (user_id, target_user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING',
@@ -110,9 +117,7 @@ const assignFakeInteractions = async (newUserId) => {
                 );
             }
 
-            // 80% chance for profile view
             if (Math.random() > 0.2) {
-                // Insert with a random past timestamp between now and 24 hours ago
                 const randomSeconds = Math.floor(Math.random() * 86400);
                 await db.query(
                     `INSERT INTO profile_views (viewer_id, viewed_user_id, created_at) 
@@ -131,13 +136,26 @@ const triggerAutoEngagement = async (io, newUserId) => {
     try {
         console.log(`[AUTO-ENGAGEMENT] Triggered for user: ${newUserId}`);
 
-        // 1. Find 3 random operators
+        // 1. Fetch user gender
+        const userRes = await db.query('SELECT gender, username FROM users WHERE id = $1', [newUserId]);
+        if (userRes.rows.length === 0) return;
+
+        const userGenderRaw = userRes.rows[0].gender || 'erkek';
+        const userGender = (userGenderRaw === 'male' || userGenderRaw === 'erkek') ? 'erkek' : 'kadin';
+        const targetGender = userGender === 'kadin' ? 'erkek' : 'kadin';
+
+        // 2. Find random operators of OPPOSITE gender
         const opsRes = await db.query(
-            "SELECT u.id, u.username FROM users u JOIN operators o ON u.id = o.user_id WHERE u.account_status = 'active' ORDER BY RANDOM() LIMIT 3"
+            `SELECT u.id, u.username FROM users u 
+             JOIN operators o ON u.id = o.user_id 
+             WHERE u.account_status = 'active' 
+             AND (u.gender = $1 OR u.gender = 'coin_bayisi')
+             ORDER BY RANDOM() LIMIT 3`,
+            [targetGender]
         );
 
         if (opsRes.rows.length === 0) {
-            console.log("[AUTO-ENGAGEMENT] No operators found to send messages.");
+            console.log("[AUTO-ENGAGEMENT] No compatible operators found to send messages.");
             return;
         }
 
@@ -198,9 +216,7 @@ const triggerAutoEngagement = async (io, newUserId) => {
                         };
 
                         console.log(`[AUTO-MESSAGE] Sending to ${newUserId} from ${item.op.username}`);
-                        // Emit to the specific chat room
                         io.to(roomName).emit('receive_message', msgToEmit);
-                        // Emit to global admin feed
                         io.emit('admin_notification', msgToEmit);
                     }
 

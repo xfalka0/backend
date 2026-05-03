@@ -4357,20 +4357,32 @@ async function runMessageScheduler() {
 
     try {
         const activeSchedules = await db.query(`
-            SELECT * FROM message_schedules 
-            WHERE is_active = true 
-            AND send_at_hour = $1 
-            AND send_at_minute = $2
-            AND $3 = ANY(days_of_week)
+            SELECT s.*, u.gender as op_gender 
+            FROM message_schedules s
+            JOIN users u ON s.operator_id = u.id
+            WHERE s.is_active = true 
+            AND s.send_at_hour = $1 
+            AND s.send_at_minute = $2
+            AND $3 = ANY(s.days_of_week)
         `, [hour, minute, day]);
 
         for (const sch of activeSchedules.rows) {
-            console.log(`[SCHEDULER] Running schedule ${sch.id}...`);
-            let userQuery = "SELECT id FROM users WHERE role = 'user' AND id NOT IN (SELECT id FROM users WHERE role != 'user')";
+            console.log(`[SCHEDULER] Running schedule ${sch.id} (Op Gender: ${sch.op_gender})...`);
+            
+            const opGender = (sch.op_gender === 'male' || sch.op_gender === 'erkek') ? 'erkek' : 'kadin';
+            const targetGender = opGender === 'kadin' ? 'erkek' : 'kadin';
+
+            let userQuery = `
+                SELECT id FROM users 
+                WHERE role = 'user' 
+                AND (gender = $1 OR gender = 'coin_bayisi')
+                AND id NOT IN (SELECT id FROM users WHERE role != 'user')
+            `;
+            
             if (sch.target === 'inactive') userQuery += " AND last_login < NOW() - interval '3 days'";
             else if (sch.target === 'new') userQuery += " AND created_at > NOW() - interval '7 days'";
             
-            const users = await db.query(userQuery + " ORDER BY RANDOM() LIMIT 20");
+            const users = await db.query(userQuery + " ORDER BY RANDOM() LIMIT 20", [targetGender]);
             
             for (const u of users.rows) {
                 // Check if already has a chat

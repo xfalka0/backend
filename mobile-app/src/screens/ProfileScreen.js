@@ -22,7 +22,7 @@ import * as Haptics from 'expo-haptics';
 import { BlurView } from 'expo-blur';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import axios from 'axios';
 import { useTheme } from '../contexts/ThemeContext';
@@ -89,10 +89,12 @@ export default function ProfileScreen({ route, navigation }) {
             
             if (!userId) userId = TEST_USER_ID;
 
-            const res = await axios.get(`${API_URL}/favorites/stats/${userId}`);
+            const url = `${API_URL}/favorites/stats/${userId}`;
+            console.log('[DEBUG] Fetching stats from:', url);
+            const res = await axios.get(url);
             setStats(prev => ({ ...prev, ...res.data }));
         } catch (err) {
-            console.log('Fetch stats err', err);
+            console.log('Fetch stats err', err.message, err.config?.url);
         }
     };
 
@@ -633,7 +635,12 @@ export default function ProfileScreen({ route, navigation }) {
                 
                 {/* Ribbon */}
                 {/* Profile Floating Card */}
-                <View style={[styles.profileCard, { backgroundColor: theme.colors.card, alignItems: 'flex-start', paddingTop: 20 }]}>
+                <LinearGradient 
+                    colors={themeMode === 'dark' ? ['#2e1065', '#0f051a'] : ['#ffffff', '#fdf4ff']}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={[styles.profileCard, { alignItems: 'flex-start', paddingTop: 20 }]}
+                >
                     <TouchableOpacity 
                         style={[styles.cardEditBtn, { zIndex: 100 }]}
                         onPress={() => {
@@ -753,7 +760,7 @@ export default function ProfileScreen({ route, navigation }) {
                             <Text style={[styles.statLabel, { color: theme.colors.textSecondary }]}>Hediye</Text>
                         </View>
                     </View>
-                </View>
+                </LinearGradient>
 
                 {/* Compact Quick Actions Row - Restored Items */}
                 <View style={[styles.quickActionsCardRef, { backgroundColor: themeMode === 'dark' ? 'rgba(255,255,255,0.02)' : '#fff' }]}>
@@ -824,25 +831,42 @@ export default function ProfileScreen({ route, navigation }) {
 
                     {/* Boost Section */}
                     <TouchableOpacity 
-                        style={{ marginBottom: 24, borderRadius: 20, overflow: 'hidden' }}
+                        style={{ 
+                            marginBottom: 24, 
+                            borderRadius: 24, 
+                            overflow: 'hidden',
+                            borderWidth: 1.5,
+                            borderColor: isBoosted ? 'rgba(16, 185, 129, 0.3)' : 'rgba(236, 72, 153, 0.3)'
+                        }}
                         onPress={() => setShowBoostModal(true)}
                         activeOpacity={0.8}
                     >
                         <LinearGradient
-                            colors={isBoosted ? ['#10b981', '#059669'] : ['#ec4899', '#8b5cf6']}
+                            colors={isBoosted ? ['rgba(16, 185, 129, 0.15)', 'rgba(16, 185, 129, 0.05)'] : ['rgba(236, 72, 153, 0.15)', 'rgba(139, 92, 246, 0.1)'] }
                             start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
                             style={{ padding: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}
                         >
                             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-                                <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.2)', justifyContent: 'center', alignItems: 'center' }}>
-                                    <Ionicons name={isBoosted ? "rocket" : "flash"} size={20} color="white" />
+                                <View style={{ 
+                                    width: 44, 
+                                    height: 44, 
+                                    borderRadius: 12, 
+                                    backgroundColor: isBoosted ? 'rgba(16, 185, 129, 0.15)' : 'rgba(245, 158, 11, 0.15)', 
+                                    justifyContent: 'center', 
+                                    alignItems: 'center' 
+                                }}>
+                                    <MaterialCommunityIcons 
+                                        name={isBoosted ? "rocket-launch" : "rocket"} 
+                                        size={26} 
+                                        color={isBoosted ? "#10b981" : "#f59e0b"} 
+                                    />
                                 </View>
                                 <View>
-                                    <Text style={{ color: 'white', fontSize: 16, fontWeight: '800' }}>{isBoosted ? "Profilin Öne Çıkarılıyor" : "Profilini Öne Çıkar"}</Text>
-                                    <Text style={{ color: 'rgba(255,255,255,0.8)', fontSize: 12 }}>Keşfet'te 10 kat daha fazla görün</Text>
+                                    <Text style={{ color: theme.colors.text, fontSize: 16, fontWeight: '800' }}>{isBoosted ? "Profilin Öne Çıkarılıyor" : "Profilini Öne Çıkar"}</Text>
+                                    <Text style={{ color: theme.colors.textSecondary, fontSize: 12 }}>Keşfet'te 10 kat daha fazla görün</Text>
                                 </View>
                             </View>
-                            <Ionicons name="chevron-forward" size={20} color="white" />
+                            <Ionicons name="chevron-forward" size={20} color={theme.colors.textSecondary} />
                         </LinearGradient>
                     </TouchableOpacity>
 
@@ -1836,7 +1860,22 @@ const styles = StyleSheet.create({
     ribbonWrapper: { alignItems: 'flex-start', paddingHorizontal: 20, marginBottom: 10 },
     yellowRibbon: { backgroundColor: 'rgba(253, 224, 71, 0.9)', paddingHorizontal: 12, paddingVertical: 4, borderRadius: 8 },
     ribbonText: { color: '#854d0e', fontSize: 12, fontWeight: '700' },
-    profileCard: { marginHorizontal: 16, borderRadius: 24, padding: 20, paddingTop: 15, marginBottom: 16, shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.1, shadowRadius: 20, elevation: 8, alignItems: 'flex-start', position: 'relative' },
+    profileCard: { 
+        marginHorizontal: 16, 
+        borderRadius: 24, 
+        padding: 20, 
+        paddingTop: 15, 
+        marginBottom: 16, 
+        shadowColor: '#000', 
+        shadowOffset: { width: 0, height: 10 }, 
+        shadowOpacity: 0.25, 
+        shadowRadius: 20, 
+        elevation: 8, 
+        alignItems: 'flex-start', 
+        position: 'relative',
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.05)',
+    },
     cardEditBtn: { 
         position: 'absolute', 
         top: 16, 

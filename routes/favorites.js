@@ -90,8 +90,8 @@ router.get('/:userId', async (req, res) => {
     const { userId } = req.params;
     try {
         const favorites = await pool.query(`
-            SELECT u.id, u.username, u.avatar_url, u.gender, u.job, u.is_vip,
-                   o.is_online
+            SELECT u.id, COALESCE(u.display_name, u.username) as name, u.username as raw_username, u.avatar_url, u.gender, u.job, u.is_vip,
+                   o.is_online, o.category
             FROM favorites f
             JOIN users u ON f.target_user_id = u.id
             LEFT JOIN operators o ON u.id = o.user_id
@@ -126,7 +126,7 @@ router.get('/:userId/fans', async (req, res) => {
         const isVIP = user.is_vip && (expireDate > now || !user.vip_expire_date); // Logic: if is_vip is true and not expired
 
         const fans = await pool.query(`
-            SELECT u.id, u.username, u.avatar_url, u.gender, f.created_at,
+            SELECT u.id, COALESCE(u.display_name, u.username) as name, u.username, u.avatar_url, u.gender, u.is_vip, f.created_at,
                    o.is_online
             FROM favorites f
             JOIN users u ON f.user_id = u.id
@@ -142,6 +142,7 @@ router.get('/:userId/fans', async (req, res) => {
             } else {
                 return {
                     id: fan.id,
+                    name: 'Gizli Kullanıcı',
                     username: 'Gizli Kullanıcı',
                     avatar_url: fan.avatar_url, // Let frontend blur it
                     gender: fan.gender,

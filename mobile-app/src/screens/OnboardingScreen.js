@@ -25,6 +25,7 @@ import Animated, {
     withSpring,
     withTiming
 } from 'react-native-reanimated';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import axios from 'axios';
 import * as ImagePicker from 'expo-image-picker';
 import { API_URL } from '../config';
@@ -62,6 +63,7 @@ const INTERESTS_OPTIONS = [
 ];
 
 export default function OnboardingScreen({ navigation, route }) {
+    const insets = useSafeAreaInsets();
     const { userId, token } = route.params || {};
     const [currentStep, setCurrentStep] = useState(0);
     const [loading, setLoading] = useState(false);
@@ -367,7 +369,7 @@ export default function OnboardingScreen({ navigation, route }) {
                     {renderStepContent()}
                 </KeyboardAvoidingView>
 
-                <View style={styles.footer}>
+                <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 20) }]}>
                     <GradientButton
                         title={currentStep === STEPS.length - 1 ? 'TAMAMLA' : 'DEVAM ET'}
                         onPress={nextStep}

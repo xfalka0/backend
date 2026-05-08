@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { View, StyleSheet } from 'react-native';
+import { View, StyleSheet, Platform } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons';
@@ -71,11 +71,20 @@ const ChatBackground = React.memo(({ themeMode }) => {
                 ))}
             </View>
 
-            <BlurView
-                intensity={themeMode === 'dark' ? 40 : 20}
-                style={StyleSheet.absoluteFill}
-                tint={themeMode === 'dark' ? 'dark' : 'light'}
-            />
+            {Platform.OS === 'ios' ? (
+                <BlurView
+                    intensity={themeMode === 'dark' ? 40 : 20}
+                    style={StyleSheet.absoluteFill}
+                    tint={themeMode === 'dark' ? 'dark' : 'light'}
+                />
+            ) : (
+                <View 
+                    style={[
+                        StyleSheet.absoluteFill, 
+                        { backgroundColor: themeMode === 'dark' ? 'rgba(15, 5, 26, 0.4)' : 'rgba(255, 255, 255, 0.3)' }
+                    ]} 
+                />
+            )}
         </View>
     );
 });

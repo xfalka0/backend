@@ -56,7 +56,7 @@ const ProfileItem = React.memo(({ profile, index, onPress, theme, sharedPulse, s
                 >
                     <View style={styles.avatarWrapper}>
                         <AnimatedGradient
-                            colors={['#FBBF24', '#D97706', '#FBBF24']}
+                            colors={['#8b5cf6', '#d946ef', '#8b5cf6']}
                             start={{ x: 0, y: 0 }}
                             end={{ x: 1, y: 1 }}
                             style={[styles.glowBorder, animatedGlowStyle]}
@@ -147,7 +147,7 @@ export default function PromotedProfiles({ data = [], onProfilePress, user, isBo
             <View style={styles.header}>
                 <View style={styles.titleRow}>
                     <LinearGradient
-                        colors={['#FBBF24', '#D97706']}
+                        colors={['#8b5cf6', '#d946ef']}
                         start={{ x: 0, y: 0 }}
                         end={{ x: 1, y: 0 }}
                         style={styles.fireIconBg}
@@ -162,16 +162,16 @@ export default function PromotedProfiles({ data = [], onProfilePress, user, isBo
 
             <View style={styles.premiumCardContainer}>
                 <LinearGradient
-                    colors={themeMode === 'dark' ? ['#0f172a', '#1e293b', '#0f172a'] : ['#ffffff', '#f8fafc', '#ffffff']}
+                    colors={themeMode === 'dark' ? ['#1e1b4b', '#312e81', '#1e1b4b'] : ['#ffffff', '#f3f4f6', '#ffffff']}
                     start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
                     style={StyleSheet.absoluteFill}
                 />
                 <LinearGradient
-                    colors={['rgba(251, 191, 36, 0.08)', 'transparent']}
+                    colors={['rgba(139, 92, 246, 0.1)', 'transparent']}
                     style={[StyleSheet.absoluteFill, { borderRadius: 24 }]}
                 />
                 <AnimatedGradient
-                    colors={['transparent', 'rgba(251, 191, 36, 0.0)', 'rgba(251, 191, 36, 0.1)', 'rgba(251, 191, 36, 0.0)', 'transparent']}
+                    colors={['transparent', 'rgba(232, 121, 249, 0.0)', 'rgba(232, 121, 249, 0.15)', 'rgba(232, 121, 249, 0.0)', 'transparent']}
                     start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
                     style={[StyleSheet.absoluteFill, styles.shineSweep, animatedShineStyle]}
                     pointerEvents="none"
@@ -197,14 +197,14 @@ export default function PromotedProfiles({ data = [], onProfilePress, user, isBo
 const styles = StyleSheet.create({
     container: {
         marginTop: 0,
-        marginBottom: 15,
+        marginBottom: 10,
         paddingHorizontal: 16,
     },
     header: {
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'space-between',
-        marginBottom: 8, // Reduced from 12
+        marginBottom: 5, // Reduced from 8
         paddingHorizontal: 4,
     },
     titleRow: {
@@ -226,16 +226,16 @@ const styles = StyleSheet.create({
     },
     premiumCardContainer: {
         borderRadius: 24,
-        paddingVertical: 14, // Reduced from 18
+        paddingVertical: 14,
         overflow: 'hidden',
-        borderWidth: 1.5,
-        borderColor: 'rgba(217, 119, 6, 0.4)', // Sharp Gold Border
-        backgroundColor: '#0f172a',
-        shadowColor: '#FBBF24',
-        shadowOffset: { width: 0, height: 10 },
-        shadowOpacity: 0.2,
-        shadowRadius: 20,
-        elevation: 10,
+        borderWidth: 1,
+        borderColor: 'rgba(139, 92, 246, 0.3)', // Subtle Purple Border
+        backgroundColor: '#1e1b4b',
+        shadowColor: '#8b5cf6',
+        shadowOffset: { width: 0, height: 8 },
+        shadowOpacity: 0.15,
+        shadowRadius: 15,
+        elevation: 8,
     },
     ornamentContainer: {
         display: 'none',
@@ -306,7 +306,7 @@ const styles = StyleSheet.create({
         position: 'absolute',
         top: -2,
         right: -2,
-        backgroundColor: '#D97706',
+        backgroundColor: '#d946ef',
         width: 16,
         height: 16,
         borderRadius: 8,
@@ -314,7 +314,7 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         borderWidth: 1.5,
         borderColor: 'white',
-        shadowColor: '#FBBF24',
+        shadowColor: '#d946ef',
         shadowOffset: { width: 0, height: 0 },
         shadowOpacity: 1,
         shadowRadius: 5,

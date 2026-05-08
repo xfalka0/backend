@@ -20,6 +20,7 @@ import { useAlert } from '../contexts/AlertContext';
 import { GIFTS } from '../constants/gifts';
 import GlassCard from '../components/ui/GlassCard';
 import ModernAlert from '../components/ui/ModernAlert';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { resolveImageUrl } from '../utils/imageUtils';
 
@@ -29,7 +30,11 @@ import InsufficientCoinsModal from '../components/InsufficientCoinsModal';
 import GiftPickerModal from '../components/GiftPickerModal';
 import GiftOverlay from '../components/animated/GiftOverlay';
 
+import { useChat } from '../contexts/ChatContext';
+
 export default function ChatScreen({ route, navigation }) {
+    const insets = useSafeAreaInsets();
+    const { fetchUnreadCount } = useChat();
     const { showAlert } = useAlert();
     const { theme, themeMode } = useTheme();
     const { operatorId, chatId: existingChatId, name, job, user: routeUser = {}, avatar_url, is_online, vip_level = 0, gender } = route.params;
@@ -181,6 +186,8 @@ export default function ChatScreen({ route, navigation }) {
                 axios.get(`${API_URL}/messages/${realChatId}`),
                 axios.put(`${API_URL}/chats/${realChatId}/read`, { userId: user.id })
             ]);
+
+            fetchUnreadCount(user.id);
 
             if (balanceRes.data && balanceRes.data.balance !== undefined) {
                 setCurrentBalance(balanceRes.data.balance);
@@ -719,7 +726,7 @@ export default function ChatScreen({ route, navigation }) {
 
                 {isTyping && <TypingIndicator />}
 
-                <View style={styles.modernInputWrapper}>
+                <View style={[styles.modernInputWrapper, { paddingBottom: Math.max(insets.bottom + 10, Platform.OS === 'ios' ? 20 : 15) }]}>
                     <GlassCard intensity={40} tint="dark" style={styles.glassInputContainer}>
                         <View style={styles.inputRow}>
                             <TextInput

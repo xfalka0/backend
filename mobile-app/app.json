@@ -2,7 +2,7 @@
   "expo": {
     "name": "Fiva",
     "slug": "fiva-social",
-    "version": "1.0.1",
+    "version": "1.0.2",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -25,7 +25,7 @@
       },
       "package": "com.fivachat.app",
       "googleServicesFile": "./google-services.json",
-      "versionCode": 99
+      "versionCode": 100
     },
     "web": {
       "favicon": "./assets/favicon.png"

@@ -966,13 +966,28 @@ export default function ProfileScreen({ route, navigation }) {
                         <TouchableOpacity 
                             style={styles.quickActionButton}
                             onPress={() => {
-                                Linking.openURL('mailto:falkasoft@gmail.com?subject=Fiva Geri Bildirim');
+                                Linking.openURL('mailto:falkasoft@gmail.com?subject=Fiva Destek');
                             }}
                         >
                             <View style={styles.quickActionIcon}>
-                                <Ionicons name="chatbubble-outline" size={22} color={theme.colors.textSecondary} />
+                                <Ionicons name="mail-outline" size={22} color={theme.colors.textSecondary} />
                             </View>
-                            <Text style={[styles.quickActionText, { color: theme.colors.text }]}>Geri Bildirim</Text>
+                            <Text style={[styles.quickActionText, { color: theme.colors.text }]}>E-posta Destek</Text>
+                            <Ionicons name="chevron-forward" size={18} color="rgba(255,255,255,0.2)" />
+                        </TouchableOpacity>
+
+                        <View style={[styles.quickActionDivider, { backgroundColor: theme.colors.border }]} />
+
+                        <TouchableOpacity 
+                            style={styles.quickActionButton}
+                            onPress={() => {
+                                Linking.openURL('https://wa.me/905414738700');
+                            }}
+                        >
+                            <View style={styles.quickActionIcon}>
+                                <Ionicons name="logo-whatsapp" size={22} color="#25D366" />
+                            </View>
+                            <Text style={[styles.quickActionText, { color: theme.colors.text }]}>WhatsApp Destek</Text>
                             <Ionicons name="chevron-forward" size={18} color="rgba(255,255,255,0.2)" />
                         </TouchableOpacity>
                     </View>

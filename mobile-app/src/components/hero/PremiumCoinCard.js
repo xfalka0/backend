@@ -45,9 +45,9 @@ const slides = [
     },
     {
         id: '3',
-        title: 'Resmi Coin Bayisi',
-        subtitle: 'Avantajlı paketler için hemen yazın',
-        buttonText: 'BAYİYE YAZ',
+        title: 'Kredi mi Yükleyemiyorsun?',
+        subtitle: 'Play Store kullanamıyorsan WhatsApp üzerinden anında yükle',
+        buttonText: 'WHATSAPP DESTEK',
         icon: 'logo-whatsapp',
         colors: ['#065f46', '#059669', 'rgba(0, 0, 0, 0.8)'],
         buttonColors: ['#34D399', '#10B981', '#059669'],
@@ -419,18 +419,6 @@ const PremiumCoinCard = ({ onCoinPress, onExplorePress, onResellerPress }) => {
 
                             <View style={styles.imageContainer}>
                                 {item.isHeart && [1, 2, 3, 4, 5].map(i => <FloatingHeart key={i} delay={i * 400} />)}
-                                {item.isReseller && (
-                                    <>
-                                        {/* Generate 8 embers spread across the image width (-50 to 50) */}
-                                        {[...Array(8)].map((_, i) => (
-                                            <FloatingEmber
-                                                key={`ember-${i}`}
-                                                delay={i * 400 + Math.random() * 300}
-                                                startX={(Math.random() - 0.5) * 110}
-                                            />
-                                        ))}
-                                    </>
-                                )}
                                 <Animated.Image
                                     source={item.image}
                                     style={[styles.coinImage, item.isHeart ? heartAnimatedStyle : (item.isCoin || item.isReseller ? coinAnimatedStyle : {})]}
@@ -472,10 +460,10 @@ const PremiumCoinCard = ({ onCoinPress, onExplorePress, onResellerPress }) => {
                     <View
                         key={i}
                         style={[
-                            styles.paginationLine,
+                            styles.paginationDot,
                             {
-                                backgroundColor: i === activeIndex ? 'white' : 'rgba(255,255,255,0.3)',
-                                width: i === activeIndex ? 24 : 12
+                                backgroundColor: i === activeIndex ? 'white' : 'rgba(255,255,255,0.2)',
+                                width: i === activeIndex ? 18 : 6
                             }
                         ]}
                     />
@@ -571,13 +559,13 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         justifyContent: 'center',
         alignItems: 'center',
-        marginTop: 15,
-        marginBottom: 10,
+        marginTop: 8,
+        marginBottom: 2,
     },
-    paginationLine: {
-        height: 3,
-        borderRadius: 2,
-        marginHorizontal: 4,
+    paginationDot: {
+        height: 6,
+        borderRadius: 3,
+        marginHorizontal: 3,
     },
     shine: {
         position: 'absolute',

@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { StyleSheet, View, Pressable, Dimensions } from 'react-native';
+import { StyleSheet, View, Pressable, Dimensions, Text } from 'react-native';
 import Animated, {
     useSharedValue,
     useAnimatedStyle,
@@ -79,9 +79,12 @@ const AnimatedTab = ({ state, descriptors, navigation }) => {
     );
 };
 
+import { useChat } from '../../contexts/ChatContext';
+
 const TabItem = ({ isFocused, onPress, icon }) => {
     const scale = useSharedValue(1);
     const translateY = useSharedValue(0);
+    const { unreadCount } = useChat();
 
     useEffect(() => {
         if (isFocused) {
@@ -106,11 +109,18 @@ const TabItem = ({ isFocused, onPress, icon }) => {
     return (
         <Pressable onPress={onPress} style={styles.tabItem}>
             <Animated.View style={animatedStyle}>
-                <Ionicons
-                    name={icon}
-                    size={26}
-                    color={isFocused ? '#ffffff' : 'rgba(255,255,255,0.4)'}
-                />
+                <View style={{ position: 'relative' }}>
+                    <Ionicons
+                        name={icon}
+                        size={26}
+                        color={isFocused ? '#ffffff' : 'rgba(255,255,255,0.4)'}
+                    />
+                    {icon === 'chatbubbles' && unreadCount > 0 && (
+                        <View style={styles.badge}>
+                            <Text style={styles.badgeText}>{unreadCount > 9 ? '9+' : unreadCount}</Text>
+                        </View>
+                    )}
+                </View>
             </Animated.View>
         </Pressable>
     );
@@ -158,6 +168,26 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'center',
         height: 30,
+    },
+    badge: {
+        position: 'absolute',
+        right: -8,
+        top: -6,
+        backgroundColor: '#ef4444',
+        borderRadius: 10,
+        minWidth: 18,
+        height: 18,
+        justifyContent: 'center',
+        alignItems: 'center',
+        borderWidth: 1.5,
+        borderColor: '#0f172a',
+        paddingHorizontal: 2,
+        zIndex: 10,
+    },
+    badgeText: {
+        color: 'white',
+        fontSize: 9,
+        fontWeight: '900',
     },
 });
 

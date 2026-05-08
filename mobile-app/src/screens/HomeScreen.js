@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { View, Text, FlatList, Image, TouchableOpacity, StyleSheet, Dimensions, ScrollView, Alert, TextInput, Modal, Pressable, ActivityIndicator } from 'react-native';
+import { View, Text, FlatList, Image, TouchableOpacity, StyleSheet, Dimensions, ScrollView, Alert, TextInput, Modal, Pressable, ActivityIndicator, Linking } from 'react-native';
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -87,8 +87,8 @@ const OperatorItem = React.memo(({ item, navigation, user, theme, themeMode, bal
                     }}
                 >
                     <View style={styles.avatarContainer}>
-                        <StoryRing hasNewStory={!!item.has_active_story} size={68}>
-                            <VipFrame level={item.gender === 'coin_bayisi' ? 'dealer' : (item.vip_level || 0)} avatar={item.avatar_url} size={65} isStatic={true} />
+                        <StoryRing hasNewStory={!!item.has_active_story} size={62}>
+                            <VipFrame level={item.gender === 'coin_bayisi' ? 'dealer' : (item.vip_level || 0)} avatar={item.avatar_url} size={58} isStatic={true} />
                         </StoryRing>
                         {item.is_online && <View style={styles.onlineBadge} />}
                     </View>
@@ -117,14 +117,22 @@ const OperatorItem = React.memo(({ item, navigation, user, theme, themeMode, bal
                             )}
                             <View style={styles.verifiedBadge}><Ionicons name="checkmark-circle" size={16} color="#3b82f6" /></View>
                         </View>
-                        <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4 }}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 2 }}>
                             <Text style={[styles.jobText, { color: theme.colors.textSecondary }]} numberOfLines={1}>{item.job || 'Öğrenci'}</Text>
                             {item.age && (
                                 <View style={[styles.ageBadge, { backgroundColor: item.gender === 'erkek' ? '#3b82f6' : '#f472b6' }]}>
-                                    <Ionicons name={item.gender === 'erkek' ? "male" : "female"} size={12} color="white" />
+                                    <Ionicons name={item.gender === 'erkek' ? "male" : "female"} size={10} color="white" />
                                     <Text style={styles.ageBadgeText}>{item.age}</Text>
                                 </View>
                             )}
+                        </View>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 5, gap: 6 }}>
+                            <View style={{ backgroundColor: 'rgba(139, 92, 246, 0.15)', paddingHorizontal: 5, paddingVertical: 1.5, borderRadius: 6, borderWidth: 1, borderColor: 'rgba(139, 92, 246, 0.3)' }}>
+                                <Text style={{ color: '#c4b5fd', fontSize: 8, fontWeight: '700' }}>{(item.name?.length || 0) % 2 === 0 ? '🎵 Müzik' : '✈️ Seyahat'}</Text>
+                            </View>
+                            <View style={{ backgroundColor: 'rgba(236, 72, 153, 0.15)', paddingHorizontal: 5, paddingVertical: 1.5, borderRadius: 6, borderWidth: 1, borderColor: 'rgba(236, 72, 153, 0.3)' }}>
+                                <Text style={{ color: '#fbcfe8', fontSize: 8, fontWeight: '700' }}>{(item.name?.length || 0) % 3 === 0 ? '🎮 Oyun' : '📸 Fotoğraf'}</Text>
+                            </View>
                         </View>
                     </View>
                 </TouchableOpacity>
@@ -183,6 +191,7 @@ export default function HomeScreen({ navigation, route }) {
     const [showSearch, setShowSearch] = useState(false);
     const [showFilterModal, setShowFilterModal] = useState(false);
     const [showWelcomeAlert, setShowWelcomeAlert] = useState(false);
+    const [showLeaderboardAlert, setShowLeaderboardAlert] = useState(false);
     const [filterOptions, setFilterOptions] = useState({ gender: 'all', online: false });
     const [page, setPage] = useState(1);
     const [hasMore, setHasMore] = useState(true);
@@ -329,7 +338,7 @@ export default function HomeScreen({ navigation, route }) {
 
             syncLiveBalance();
             checkBoostStatus();
-        }, [])
+        }, [operators.length])
     );
 
     useEffect(() => {
@@ -707,8 +716,16 @@ export default function HomeScreen({ navigation, route }) {
             <HeroSection
                 onCoinPress={() => navigation.navigate('PurchaseInfo', { user })}
                 onExplorePress={() => setActiveTab('Önerilen')}
-                onResellerPress={() => navigation.navigate('PurchaseInfo', { user })}
+                onResellerPress={() => {
+                    const phoneNumber = "905414738700";
+                    const message = "Merhaba, kredi yüklemek istiyorum ama Play Store kullanamıyorum, yardımcı olur musunuz?";
+                    Linking.openURL(`https://wa.me/${phoneNumber}?text=${encodeURIComponent(message)}`).catch(() => {
+                        Alert.alert("Hata", "WhatsApp açılamadı. Uygulamanın yüklü olduğundan emin olun.");
+                    });
+                }}
                 onDestinyPress={() => setShowMatchModal(true)}
+                onLeaderboardPress={() => setShowLeaderboardAlert(true)}
+                onNotificationsPress={() => navigation.navigate('Notifications')}
             />
             <PromotedProfiles
                 data={promotedProfiles}
@@ -719,7 +736,10 @@ export default function HomeScreen({ navigation, route }) {
                 }}
                 user={user}
             />
-            <View style={{ marginHorizontal: 16, marginBottom: 15, marginTop: 10 }}>
+            <View style={{ paddingHorizontal: 16 }}>
+                <DestinyHero onPress={() => setShowMatchModal(true)} />
+            </View>
+            <View style={{ marginHorizontal: 16, marginBottom: 10, marginTop: 5 }}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
                     <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flex: 1, marginRight: 10 }}>
                         {['Önerilen', 'Yeni', 'Popüler'].map((tab) => (
@@ -736,7 +756,13 @@ export default function HomeScreen({ navigation, route }) {
                                     borderColor: activeTab === tab ? theme.colors.primary : theme.colors.glassBorder
                                 }}
                             >
-                                <Text style={{ fontSize: 13, fontWeight: '600', color: activeTab === tab ? 'white' : theme.colors.textSecondary }}>{tab}</Text>
+                                <Text style={{ 
+                                    fontSize: 11, 
+                                    fontWeight: '900', 
+                                    color: activeTab === tab ? 'white' : theme.colors.textSecondary,
+                                    textTransform: 'uppercase',
+                                    letterSpacing: 1
+                                }}>{tab}</Text>
                             </TouchableOpacity>
                         ))}
                     </ScrollView>
@@ -759,7 +785,7 @@ export default function HomeScreen({ navigation, route }) {
                                 alignItems: 'center', justifyContent: 'center',
                                 borderWidth: 1, borderColor: (filterOptions.gender !== 'all' || filterOptions.online) ? theme.colors.primary : theme.colors.glassBorder
                             }}>
-                            <Ionicons name="options" size={10} color={(filterOptions.gender !== 'all' || filterOptions.online) ? 'white' : theme.colors.text} />
+                            <Ionicons name="options" size={18} color={(filterOptions.gender !== 'all' || filterOptions.online) ? 'white' : theme.colors.text} />
                         </TouchableOpacity>
                     </View>
                 </View>
@@ -959,6 +985,13 @@ export default function HomeScreen({ navigation, route }) {
                     </TouchableOpacity>
                 </Animated.View>
             )}
+            <ModernAlert
+                visible={showLeaderboardAlert}
+                title="Sıralama"
+                message="Liderlik Tablosu çok yakında aktif olacaktır. Heyecan verici ödüller için takipte kal!"
+                type="info"
+                onClose={() => setShowLeaderboardAlert(false)}
+            />
         </View>
     );
 }
@@ -968,7 +1001,7 @@ const styles = StyleSheet.create({
     background: { ...StyleSheet.absoluteFillObject },
     listContent: {
         flexGrow: 1,
-        paddingBottom: 110, // Just enough to clear the bottom tab bar
+        paddingBottom: 130, // Just enough to clear the bottom tab bar
     },
     headerContainer: { paddingHorizontal: 20, marginBottom: 15, marginTop: 10 },
     topBar: { flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', marginBottom: 20 },
@@ -1021,32 +1054,35 @@ const styles = StyleSheet.create({
         elevation: 20,
     },
     sectionTitle: {
-        fontSize: 18,
-        fontWeight: '800',
+        fontSize: 16,
+        fontWeight: '900',
         marginHorizontal: 20,
         marginBottom: 15,
-        marginTop: 10
+        marginTop: 10,
+        letterSpacing: 0.8,
     },
     userCard: {
         marginHorizontal: 16,
-        marginBottom: 16,
-        borderRadius: 24,
-        padding: 16,
+        marginBottom: 12,
+        borderRadius: 20,
+        padding: 12,
         shadowColor: '#000',
-        shadowOffset: { width: 0, height: 8 },
-        shadowOpacity: 0.25,
-        shadowRadius: 20,
-        elevation: 10,
+        shadowOffset: { width: 0, height: 6 },
+        shadowOpacity: 0.2,
+        shadowRadius: 15,
+        elevation: 8,
+        borderWidth: 1,
+        borderColor: 'rgba(139, 92, 246, 0.1)',
     },
     cardHeader: {
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'space-between',
-        marginBottom: 12,
+        marginBottom: 8,
     },
     avatarContainer: {
         position: 'relative',
-        marginRight: 12,
+        marginRight: 8,
     },
     onlineBadge: {
         position: 'absolute',
@@ -1065,24 +1101,24 @@ const styles = StyleSheet.create({
     nameRow: {
         flexDirection: 'row',
         alignItems: 'center',
-        marginBottom: -5,
+        marginBottom: 0,
     },
     name: {
-        fontSize: 17,
+        fontSize: 15,
         fontWeight: 'bold',
         marginRight: 6,
     },
     premiumVipBadge: {
         flexDirection: 'row',
-        paddingHorizontal: 6,
-        paddingVertical: 2,
-        borderRadius: 8,
+        paddingHorizontal: 4,
+        paddingVertical: 1,
+        borderRadius: 6,
         alignItems: 'center',
         marginRight: 6,
     },
     premiumVipText: {
         color: 'white',
-        fontSize: 10,
+        fontSize: 9,
         fontWeight: 'bold',
         marginLeft: 2,
     },
@@ -1092,24 +1128,30 @@ const styles = StyleSheet.create({
     ageBadge: {
         flexDirection: 'row',
         alignItems: 'center',
-        paddingHorizontal: 6,
-        paddingVertical: 1,
-        borderRadius: 6,
-        marginLeft: 8,
+        paddingHorizontal: 4,
+        paddingVertical: 0,
+        borderRadius: 5,
+        marginLeft: 6,
     },
     ageBadgeText: {
         color: 'white',
         fontSize: 8,
         fontWeight: 'bold',
         marginLeft: 2,
+        lineHeight: 12,
     },
-    jobText: { fontSize: 13, marginTop: 2 },
+    jobText: { 
+        fontSize: 10, 
+        color: '#94a3b8', // Softer color for hierarchy
+        fontWeight: '500',
+        lineHeight: 14,
+    },
 
     // Bio Stilleri
     cardBioContainer: {
-        padding: 2,
+        padding: 0,
         borderRadius: 16,
-        marginBottom: 12,
+        marginBottom: 8,
     },
     cardBioTitle: {
         color: '#d946ef', // Marka rengi
@@ -1120,8 +1162,8 @@ const styles = StyleSheet.create({
         letterSpacing: 0.5,
     },
     cardBioBody: {
-        fontSize: 12, // Reduced from 13
-        lineHeight: 16,
+        fontSize: 11, // Reduced from 12
+        lineHeight: 15,
     },
 
     // Albüm Stilleri
@@ -1132,9 +1174,9 @@ const styles = StyleSheet.create({
         paddingRight: 10,
     },
     albumImage: {
-        width: 50, // Reduced from 80
-        height: 100, // Reduced from 100
-        borderRadius: 5,
+        width: 65,
+        height: 75,
+        borderRadius: 10,
         marginRight: 8,
     },
 

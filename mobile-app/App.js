@@ -48,6 +48,7 @@ import SplashScreen from './src/screens/SplashScreen';
 import WelcomeScreen from './src/screens/WelcomeScreen';
 import OnboardingScreen from './src/screens/OnboardingScreen';
 import PurchaseInfoScreen from './src/screens/PurchaseInfoScreen';
+import LeaderboardScreen from './src/screens/LeaderboardScreen';
 
 
 import AnimatedTabBar from './src/components/animated/AnimatedTabBar';
@@ -131,10 +132,13 @@ function AppContent() {
                 <Stack.Screen name="Welcome" component={WelcomeScreen} />
                 <Stack.Screen name="Onboarding" component={OnboardingScreen} />
                 <Stack.Screen name="PurchaseInfo" component={PurchaseInfoScreen} />
+                <Stack.Screen name="Leaderboard" component={LeaderboardScreen} />
             </Stack.Navigator>
         </NavigationContainer>
     );
 }
+
+import { ChatProvider } from './src/contexts/ChatContext';
 
 export default function App() {
     const [fontsLoaded] = useFonts({
@@ -170,7 +174,9 @@ export default function App() {
             <SafeAreaProvider>
                 <ThemeProvider>
                     <AlertProvider>
-                        <AppContent />
+                        <ChatProvider>
+                            <AppContent />
+                        </ChatProvider>
                     </AlertProvider>
                 </ThemeProvider>
             </SafeAreaProvider>

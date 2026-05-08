@@ -184,9 +184,10 @@ const VipScreen = ({ route, navigation }) => {
     };
 
     const handleUpgrade = () => {
-        if (userVip < 6) {
-            setUserVip(prev => prev + 1);
-            setShowUpgradeModal(true);
+        if (selectedLevel > userVip) {
+            navigation.navigate('Shop', { user });
+        } else {
+            navigation.navigate('VipDetails', { user: { ...user, vip_level: userVip } });
         }
     };
 

@@ -114,8 +114,8 @@ android {
         applicationId 'com.fivachat.app'
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 99
-        versionName "1.0.1"
+        versionCode 100
+        versionName "1.0.2"
     }
     signingConfigs {
         debug {

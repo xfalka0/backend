@@ -891,7 +891,7 @@ app.get('/api/operators/:id', async (req, res) => {
 // UNIFIED DISCOVERY (Operators + Users of opposite gender)
 app.get('/api/discovery', authenticateToken, async (req, res) => {
     try {
-        const userGenderRaw = req.user.gender || 'erkek';
+        const userGenderRaw = (req.user.gender || 'erkek').toLowerCase();
         const userGender = (userGenderRaw === 'male' || userGenderRaw === 'erkek') ? 'erkek' : 'kadin';
         const targetGender = userGender === 'kadin' ? 'erkek' : 'kadin';
 
@@ -2586,6 +2586,26 @@ app.get('/api/users/:userId/chats', async (req, res) => {
     }
 });
 
+// GET TOTAL UNREAD COUNT FOR USER
+app.get('/api/users/:userId/unread-count', async (req, res) => {
+    const { userId } = req.params;
+    try {
+        const query = `
+            SELECT COUNT(*)::int as total_unread
+            FROM messages m
+            JOIN chats c ON m.chat_id = c.id
+            WHERE c.user_id = $1 
+            AND m.sender_id != $1 
+            AND m.is_read = false
+        `;
+        const result = await db.query(query, [userId]);
+        res.json({ count: result.rows[0].total_unread || 0 });
+    } catch (err) {
+        console.error("Get Unread Count Error:", err.message);
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // CREATE OR GET CHAT
 app.post('/api/chats', async (req, res) => {
     const { userId, operatorId } = req.body;
@@ -3282,13 +3302,31 @@ app.post('/api/moderation/reject', authenticateToken, authorizeRole('admin', 'su
 
         await db.query('UPDATE pending_photos SET status = \'rejected\' WHERE id = $1', [photoId]);
 
+        // --- NEW FIX: Clear from user profile if it was already set ---
+        if (photo.type === 'avatar') {
+            await db.query('UPDATE users SET avatar_url = NULL WHERE id = $1 AND avatar_url = $2', [photo.user_id, photo.url]);
+        } else if (photo.type === 'album') {
+            await db.query(
+                'UPDATE users SET photos = array_remove(photos, $1) WHERE id = $2',
+                [photo.url, photo.user_id]
+            );
+            // Also check operators table
+            await db.query(
+                'UPDATE operators SET photos = array_remove(photos, $1) WHERE user_id = $2',
+                [photo.url, photo.user_id]
+            );
+        }
+
         // STORAGE PROTECTION: Delete the file physically if rejected
-        if (photo.url && photo.url.includes('/uploads/')) {
+        if (photo.url && photo.url.includes('cloudinary')) {
+            // Cloudinary deletion if needed, but for now we at least clear it from DB
+            console.log('Rejected photo URL cleared from profile:', photo.url);
+        } else if (photo.url && photo.url.includes('/uploads/')) {
             const fileName = photo.url.split('/').pop();
             const filePath = path.join(__dirname, 'uploads', fileName);
             if (fs.existsSync(filePath)) {
                 fs.unlinkSync(filePath);
-                console.log('Rejected photo deleted from storage:', fileName);
+                console.log('Rejected photo deleted from local storage:', fileName);
             }
         }
 
@@ -3726,7 +3764,12 @@ io.on('connection', (socket) => {
     
     console.log(`[SOCKET] User connected: ${socket.id} (Authenticated: ${socket.user ? socket.user.username : 'NO'})`);
 
-    // Join a specific chat room
+    // Join their own room for global notifications
+    if (socket.user && socket.user.id) {
+        const userRoom = socket.user.id.toString();
+        socket.join(userRoom);
+        console.log(`[SOCKET] User ${socket.user.username} joined personal room: ${userRoom}`);
+    }
     socket.on('join_room', (chatId) => {
         if (!chatId) {
             console.error(`[SOCKET] User ${socket.user?.username || socket.id} tried to join an empty room!`);
@@ -3943,6 +3986,20 @@ io.on('connection', (socket) => {
             };
             // EMIT ASAP
             io.to(chatId.toString()).emit('receive_message', msgToEmit);
+            
+            // Notify recipient globally for unread badge updates
+            try {
+                const chatInfo = await client.query('SELECT user_id, operator_id FROM chats WHERE id = $1', [chatId]);
+                if (chatInfo.rows.length > 0) {
+                    const recipientId = finalSenderId.toString() === chatInfo.rows[0].user_id.toString() 
+                        ? chatInfo.rows[0].operator_id 
+                        : chatInfo.rows[0].user_id;
+                    io.to(recipientId.toString()).emit('new_message', msgToEmit);
+                }
+            } catch (notifyErr) {
+                console.error('[SOCKET] Global notify error:', notifyErr.message);
+            }
+            
             io.emit('admin_notification', msgToEmit);
 
             // --- 5. PUSH NOTIFICATION (Non-blocking) ---

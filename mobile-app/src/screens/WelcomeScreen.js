@@ -26,6 +26,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
 import { GoogleSignin, statusCodes } from '@react-native-google-signin/google-signin';
@@ -69,6 +70,7 @@ const LoadingHeart = () => {
 };
 
 export default function WelcomeScreen({ navigation }) {
+    const insets = useSafeAreaInsets();
     const bubbleY = useSharedValue(0);
     const [loading, setLoading] = useState(false);
     const [onlineCount, setOnlineCount] = useState(72);
@@ -190,7 +192,7 @@ export default function WelcomeScreen({ navigation }) {
             </View>
 
             {/* 2. INTERACTIVE LAYER */}
-            <SafeAreaView style={styles.safeArea}>
+            <SafeAreaView style={[styles.safeArea, { paddingBottom: insets.bottom }]}>
                 <View style={styles.content}>
                     {/* Top Logo Section */}
                     <Animated.View entering={FadeIn.delay(300).duration(1000)} style={styles.header}>
@@ -307,8 +309,8 @@ const styles = StyleSheet.create({
         flex: 1,
         paddingHorizontal: 30,
         justifyContent: 'space-between',
-        paddingBottom: height * 0.1,
-        paddingTop: height * 0.05,
+        paddingBottom: 20, // Reduced base padding
+        paddingTop: 20,
     },
     header: {
         alignItems: 'center',

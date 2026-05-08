@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { View, StyleSheet, Dimensions } from 'react-native';
+import { View, StyleSheet, Dimensions, Platform } from 'react-native';
 import Animated, {
     useSharedValue,
     useAnimatedStyle,
@@ -91,10 +91,18 @@ const styles = StyleSheet.create({
         height: 4,
         borderRadius: 2,
         backgroundColor: 'rgba(255, 255, 255, 0.4)',
-        shadowColor: 'white',
-        shadowOffset: { width: 0, height: 0 },
-        shadowOpacity: 0.8,
-        shadowRadius: 4,
+        // Shadow is extremely heavy on Android when animating 12+ items. Disabling on Android.
+        ...Platform.select({
+            ios: {
+                shadowColor: 'white',
+                shadowOffset: { width: 0, height: 0 },
+                shadowOpacity: 0.8,
+                shadowRadius: 4,
+            },
+            android: {
+                elevation: 0, 
+            }
+        })
     }
 });
 

@@ -61,7 +61,10 @@ const OnlinePulse = ({ themeMode, theme }) => {
     );
 };
 
+import { useChat } from '../contexts/ChatContext';
+
 export default function MessagesScreen({ navigation, route }) {
+    const { fetchUnreadCount } = useChat();
     const insets = useSafeAreaInsets();
     const { theme, themeMode } = useTheme();
     const { user } = route.params || {};
@@ -74,6 +77,7 @@ export default function MessagesScreen({ navigation, route }) {
         React.useCallback(() => {
             if (user?.id) {
                 fetchChats();
+                fetchUnreadCount(user.id);
             } else {
                 setLoading(false);
             }
@@ -343,7 +347,7 @@ const styles = StyleSheet.create({
         textShadowRadius: 2,
     },
     list: {
-        paddingBottom: 40,
+        paddingBottom: 130,
         paddingTop: 10,
     },
     chatItem: {

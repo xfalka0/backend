@@ -361,7 +361,7 @@ export default function ExploreScreen({ navigation, route }) {
             ...op,
             level: op.gender === 'coin_bayisi' ? 'dealer' : (op.vip_level || 1),
             avatar: op.avatar_url,
-            category: op.category || 'Popüler'
+            category: (op.category && !/flirt/i.test(op.category)) ? op.category : 'Popüler'
         }));
     }, [operators]);
 
@@ -374,7 +374,7 @@ export default function ExploreScreen({ navigation, route }) {
     const renderHeader = () => (
         <View>
             <View style={styles.header}>
-                <Text style={[styles.headerTitle, { color: theme.colors.text, fontSize: 22, fontWeight: '800' }]}>Hikayeler</Text>
+                <Text style={[styles.headerTitle, { color: theme.colors.text, fontSize: 18, fontWeight: '900', letterSpacing: 0.5 }]}>Hikayeler</Text>
             </View>
 
             <View style={[styles.storiesContainer, { borderBottomWidth: 1, borderBottomColor: theme.colors.glassBorder }]}>
@@ -392,9 +392,6 @@ export default function ExploreScreen({ navigation, route }) {
             <View style={styles.featuredContainer}>
                 <View style={styles.sectionHeader}>
                     <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Günün Favorileri 🔥</Text>
-                    <TouchableOpacity>
-                        <Text style={[styles.seeAll, { color: theme.colors.primary }]}>Hepsini Gör</Text>
-                    </TouchableOpacity>
                 </View>
                 <FlatList
                     horizontal
@@ -413,11 +410,11 @@ export default function ExploreScreen({ navigation, route }) {
                             onPress={() => navigation.navigate('OperatorProfile', { operator: item, user })}
                         >
                             <LinearGradient
-                                colors={['rgba(139, 92, 246, 0.2)', 'transparent']}
+                                colors={['rgba(139, 92, 246, 0.2)', 'rgba(217, 70, 239, 0.05)']}
                                 style={StyleSheet.absoluteFill}
                             />
                             <View style={styles.featuredAvatarWrapper}>
-                                <VipFrame level={item.level} avatar={item.avatar} size={70} isStatic={true} />
+                                <VipFrame level={item.level} avatar={item.avatar} size={55} isStatic={true} />
                             </View>
                             <Text style={[styles.featuredName, { color: theme.colors.text }]}>{item.name}</Text>
                             <View style={styles.featuredCategoryBadge}>
@@ -700,8 +697,8 @@ const styles = StyleSheet.create({
         justifyContent: 'space-between',
         alignItems: 'center',
         paddingHorizontal: 20,
-        paddingTop: 50,
-        paddingBottom: 5, // Boşluk azaltıldı
+        paddingTop: 40,
+        paddingBottom: 2, // Boşluk azaltıldı
     },
     headerTitle: {
         fontSize: 28,
@@ -725,14 +722,14 @@ const styles = StyleSheet.create({
         paddingTop: 0,
     },
     feedList: {
-        paddingBottom: 100,
+        paddingBottom: 130,
     },
     storiesContainer: {
         borderBottomWidth: 1,
     },
     storiesList: {
         paddingHorizontal: 15,
-        paddingVertical: 10, // Boşluk azaltıldı
+        paddingVertical: 5, // Boşluk azaltıldı
     },
     storyContainer: {
         alignItems: 'center',
@@ -1046,19 +1043,19 @@ const styles = StyleSheet.create({
         borderColor: 'rgba(255,255,255,0.2)',
     },
     featuredContainer: {
-        marginVertical: 15,
+        marginVertical: 10,
     },
     sectionHeader: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
         paddingHorizontal: 20,
-        marginBottom: 15,
+        marginBottom: 10,
     },
     sectionTitle: {
-        fontSize: 18,
+        fontSize: 16,
         fontWeight: '900',
-        letterSpacing: 0.5,
+        letterSpacing: 0.8,
     },
     seeAll: {
         fontSize: 12,
@@ -1069,37 +1066,43 @@ const styles = StyleSheet.create({
         paddingHorizontal: 15,
     },
     featuredCard: {
-        width: 140,
-        borderRadius: 24,
-        padding: 15,
+        width: 105, // Much more compact
+        borderRadius: 20,
+        padding: 10,
         alignItems: 'center',
-        marginHorizontal: 8,
+        marginHorizontal: 6,
         borderWidth: 1,
+        borderColor: 'rgba(139, 92, 246, 0.15)',
         overflow: 'hidden',
+        backgroundColor: 'rgba(30, 27, 75, 0.5)', 
     },
     featuredAvatarWrapper: {
-        shadowColor: '#8b5cf6',
-        shadowOffset: { width: 0, height: 8 },
-        shadowOpacity: 0.4,
-        shadowRadius: 12,
-        elevation: 10,
+        shadowColor: '#d946ef',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 8,
+        elevation: 6,
+        padding: 5, // Add space for the frame to breathe
     },
     featuredCategoryBadge: {
-        backgroundColor: 'rgba(139, 92, 246, 0.15)',
+        backgroundColor: 'rgba(217, 70, 239, 0.1)',
         paddingHorizontal: 8,
         paddingVertical: 2,
         borderRadius: 8,
-        marginTop: 6,
+        marginTop: 5,
+        borderWidth: 0.5,
+        borderColor: 'rgba(217, 70, 239, 0.2)',
     },
     featuredCategoryText: {
-        color: '#8b5cf6',
-        fontSize: 10,
+        color: '#f472b6',
+        fontSize: 8,
         fontWeight: '900',
         textTransform: 'uppercase',
+        letterSpacing: 0.5,
     },
     featuredName: {
-        marginTop: 10,
-        fontSize: 14,
+        marginTop: 6,
+        fontSize: 12,
         fontWeight: '800',
     },
     featuredCategory: {

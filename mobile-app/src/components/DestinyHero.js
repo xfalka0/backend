@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { View, Text, StyleSheet, Pressable, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, Pressable, Dimensions, Platform, Image } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import GlassCard from './ui/GlassCard';
@@ -103,29 +103,19 @@ const DestinyHero = ({ onPress }) => {
             style={{ alignItems: 'center', justifyContent: 'center' }}
         >
             <Animated.View style={[styles.container, animatedContainerStyle]}>
-                {/* Outer Glow / Pulse Layer */}
-                <Animated.View style={[styles.glowLayer, animatedGlowStyle]} pointerEvents="none">
-                    <LinearGradient
-                        colors={['#ec4899', '#8b5cf6', '#3b82f6']}
-                        style={styles.gradient}
-                        start={{ x: 0, y: 0 }}
-                        end={{ x: 1, y: 1 }}
+                {/* Main Card Container */}
+                <View style={styles.card}>
+                    <Image 
+                        source={{ uri: 'https://images.pexels.com/photos/1024960/pexels-photo-1024960.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1' }} 
+                        style={StyleSheet.absoluteFill}
+                        resizeMode="cover"
                     />
-                </Animated.View>
-
-                {/* Main Card */}
-                <GlassCard style={styles.card} intensity={60} tint="dark">
                     <LinearGradient
-                        colors={['rgba(46, 16, 101, 0.8)', 'rgba(30, 27, 75, 0.8)']}
+                        colors={['rgba(88, 28, 135, 0.5)', 'rgba(30, 27, 75, 0.9)']}
                         start={{ x: 0, y: 0 }}
-                        end={{ x: 0.8, y: 1 }}
+                        end={{ x: 1, y: 0 }}
                         style={StyleSheet.absoluteFill}
                     />
-
-                    {/* Background Decorative Ring */}
-                    <Animated.View style={[styles.ringContainer, animatedRingStyle]} pointerEvents="none">
-                        <View style={styles.ring} />
-                    </Animated.View>
 
                     {/* Content */}
                     <View style={styles.content}>
@@ -134,20 +124,22 @@ const DestinyHero = ({ onPress }) => {
                                 colors={['#ec4899', '#8b5cf6']}
                                 style={styles.iconGradient}
                             >
-                                <Ionicons name="infinite" size={29} color="white" />
+                                <Ionicons name="infinite" size={20} color="white" />
                             </LinearGradient>
                         </Animated.View>
 
-                        <Text style={styles.mainText} adjustsFontSizeToFit numberOfLines={2}>
-                            Kaderindeki kişiyi{'\n'}keşfet
-                        </Text>
-
-                        <View style={styles.bottomBadge}>
-                            <Text style={styles.bottomText} adjustsFontSizeToFit numberOfLines={1}>Dokun ve eşleşmeni başlat</Text>
-                            <Ionicons name="sparkles" size={12} color="#ec4899" style={{ marginLeft: 6 }} />
+                        <View style={styles.textColumn}>
+                            <Text style={styles.mainText} adjustsFontSizeToFit numberOfLines={1}>
+                                Kaderindeki kişiyi keşfet
+                            </Text>
+                            <View style={styles.bottomBadge}>
+                                <Text style={styles.bottomText} adjustsFontSizeToFit numberOfLines={1}>Dokun ve eşleşmeni başlat</Text>
+                                <Ionicons name="sparkles" size={10} color="#ec4899" style={{ marginLeft: 4 }} />
+                            </View>
                         </View>
+                        <Ionicons name="chevron-forward" size={24} color="rgba(255,255,255,0.4)" style={{ position: 'absolute', right: 0 }} />
                     </View>
-                </GlassCard>
+                </View>
             </Animated.View>
         </Pressable>
     );
@@ -156,104 +148,78 @@ const DestinyHero = ({ onPress }) => {
 
 const styles = StyleSheet.create({
     container: {
-        width: width * 0.9,
-        maxWidth: 400,
-        height: 135, // Reduced from 170
+        width: '100%',
+        height: 75,
         alignSelf: 'center',
-        marginVertical: 5, // Reduced from 7
+        marginVertical: 5,
         justifyContent: 'center',
         alignItems: 'center',
-    },
-    glowLayer: {
-        position: 'absolute',
-        width: '100%',
-        height: '100%',
-        borderRadius: 10, // Adjusted
-        opacity: 0.4,
-        transform: [{ scale: 1.03 }], // Slightly smaller scale
-    },
-    gradient: {
-        flex: 1,
-        borderRadius: 25,
     },
     card: {
         width: '100%',
         height: '100%',
-        borderRadius: 28,
+        borderRadius: 24,
         overflow: 'hidden',
         borderWidth: 1,
         borderColor: 'rgba(255,255,255,0.2)',
-        elevation: 15,
+        elevation: Platform.OS === 'android' ? 0 : 15,
         shadowColor: '#ec4899',
         shadowOffset: { width: 0, height: 10 },
         shadowOpacity: 0.5,
         shadowRadius: 20,
-        padding: 15, // Reduced from 20
-        alignItems: 'center',
+        paddingHorizontal: 15,
+        paddingVertical: 10,
         justifyContent: 'center',
-    },
-    ringContainer: {
-        position: 'absolute',
-        width: 400,
-        height: 400,
-        justifyContent: 'center',
-        alignItems: 'center',
-        opacity: 0.15,
-    },
-    ring: {
-        width: 320,
-        height: 320,
-        borderRadius: 160,
-        borderWidth: 50,
-        borderColor: '#ec4899',
-        borderStyle: 'dashed',
     },
     content: {
+        flexDirection: 'row',
         alignItems: 'center',
         zIndex: 10,
-        justifyContent: 'center',
         flex: 1,
     },
     centerIconContainer: {
-        marginBottom: 8, // Reduced from 12
+        marginRight: 12,
         shadowColor: '#ec4899',
         shadowOffset: { width: 0, height: 0 },
         shadowOpacity: 0.8,
-        shadowRadius: 25,
-        elevation: 12,
+        shadowRadius: 15,
+        elevation: Platform.OS === 'android' ? 0 : 12,
     },
     iconGradient: {
-        width: 50, // Reduced from 60
-        height: 50, // Reduced from 60
-        borderRadius: 25,
+        width: 40,
+        height: 40,
+        borderRadius: 20,
         alignItems: 'center',
         justifyContent: 'center',
-        borderWidth: 2,
+        borderWidth: 1.5,
         borderColor: 'rgba(255,255,255,0.8)',
+    },
+    textColumn: {
+        flex: 1,
+        justifyContent: 'center',
     },
     mainText: {
         color: 'white',
-        fontSize: 18, // Reduced from 20
+        fontSize: 15,
         fontWeight: '900',
-        textAlign: 'center',
-        marginBottom: 8, // Reduced from 10
-        lineHeight: 22, // Reduced from 26
-        letterSpacing: -0.5,
+        marginBottom: 2,
+        letterSpacing: -0.2,
     },
     bottomBadge: {
         flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: 'rgba(255, 255, 255, 0.15)',
-        paddingHorizontal: 12, // Reduced from 16
-        paddingVertical: 6, // Reduced from 8
-        borderRadius: 20,
-        borderWidth: 1,
+        backgroundColor: 'rgba(255, 255, 255, 0.1)',
+        paddingHorizontal: 8,
+        paddingVertical: 4,
+        borderRadius: 12,
+        alignSelf: 'flex-start',
+        borderWidth: 0.5,
         borderColor: 'rgba(255, 255, 255, 0.2)',
     },
     bottomText: {
         color: 'white',
-        fontSize: 10, // Reduced from 11
-        fontWeight: '800',
+        fontSize: 9,
+        fontWeight: '700',
     }
 });
 

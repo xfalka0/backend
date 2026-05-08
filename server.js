@@ -1323,6 +1323,22 @@ app.put('/api/users/:id/profile', async (req, res) => {
 
 // --- END DATABASE INITIALIZATION ---
 
+// EMERGENCY: Clear user photo by email (For ghost photos after rejection)
+app.get('/api/admin/emergency-clear-user', async (req, res) => {
+    const { email } = req.query;
+    if (!email) return res.status(400).json({ error: 'Email gerekli.' });
+
+    try {
+        const result = await db.query("UPDATE users SET avatar_url = NULL, photos = '{}' WHERE email = $1 RETURNING id", [email]);
+        if (result.rows.length === 0) {
+            return res.status(404).json({ error: 'Kullanıcı bulunamadı.', searched_email: email });
+        }
+        res.json({ success: true, message: `Kullanıcı (${email}) fotoğrafı temizlendi.`, userId: result.rows[0].id });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // Health Check
 // Serve static files from the React app
 app.use(express.static(path.join(__dirname, 'web-admin', 'dist')));
@@ -3334,6 +3350,7 @@ app.post('/api/moderation/reject', authenticateToken, authorizeRole('admin', 'su
         res.json({ success: true });
     } catch (err) {
         res.status(500).json({ error: err.message });
+    }
     }
 });
 

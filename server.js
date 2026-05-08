@@ -3862,6 +3862,8 @@ io.on('connection', (socket) => {
             const userRole = (socket.user.role || '').toLowerCase();
             const isManagement = ['admin', 'super_admin', 'moderator', 'staff', 'operator'].includes(userRole);
             
+            let commissionDataToRunLater = null;
+            
             if (!isManagement) {
                 cost = 10; // Default text
                 if (type === 'gift' && giftId) {
@@ -3898,20 +3900,14 @@ io.on('connection', (socket) => {
 
                 const updateRes = await client.query('UPDATE users SET balance = balance - $2 WHERE id = $1 RETURNING balance', [senderId, cost]);
                 userBalance = parseFloat(updateRes.rows[0].balance);
-                console.log(`[PAYOUT-DEBUG] Balance updated for ${senderId}. New balance: ${userBalance}`);
-
-                // Real-time update for Admin Panel
                 io.emit('admin_balance_update', { userId: senderId, newBalance: userBalance });
 
-            let commissionDataToRunLater = null;
-
-            if (type === 'gift') {
-                const chatRes = await client.query('SELECT operator_id FROM chats WHERE id = $1', [chatId]);
-                if (chatRes.rows.length > 0) {
-                    commissionDataToRunLater = { chatId, senderId: null, cost, type: 'gift' };
+                if (type === 'gift') {
+                    const chatRes = await client.query('SELECT operator_id FROM chats WHERE id = $1', [chatId]);
+                    if (chatRes.rows.length > 0) {
+                        commissionDataToRunLater = { chatId, senderId: null, cost, type: 'gift' };
+                    }
                 }
-            }
-            // CLOSE THE if (!isManagement) BLOCK
             } else {
                 // STAFF EARNS ON RESPONSE - But ONLY if they are NOT the "user" side of the chat
                 const chatCheck = await client.query('SELECT user_id FROM chats WHERE id = $1', [chatId]);
@@ -4434,6 +4430,7 @@ async function runMessageScheduler() {
             FROM message_schedules s
             JOIN users u ON s.operator_id = u.id
             WHERE s.is_active = true 
+            AND u.gender != 'coin_bayisi'
             AND s.send_at_hour = $1 
             AND s.send_at_minute = $2
             AND $3 = ANY(s.days_of_week)
@@ -4448,7 +4445,7 @@ async function runMessageScheduler() {
             let userQuery = `
                 SELECT id FROM users 
                 WHERE role = 'user' 
-                AND (gender = $1 OR gender = 'coin_bayisi')
+                AND gender = $1
                 AND id NOT IN (SELECT id FROM users WHERE role != 'user')
             `;
             
@@ -4580,6 +4577,19 @@ app.post('/api/messages/send-hi', async (req, res) => {
         await db.query('UPDATE chats SET last_message_at = NOW() WHERE id = $1', [chatId]);
 
         await db.query('COMMIT');
+
+        // Trigger push notification (non-blocking)
+        try {
+            const senderRes = await db.query('SELECT display_name FROM users WHERE id = $1', [finalSenderId]);
+            const senderName = senderRes.rows[0]?.display_name || 'Bir kullanıcı';
+            await sendPushNotification(finalReceiverId, {
+                title: 'Yeni Mesaj!',
+                body: `${senderName}: ${finalContent}`,
+                data: { chatId: chatId.toString(), type: 'message' }
+            });
+        } catch (pushErr) {
+            console.error('[HI_PUSH_ERROR]', pushErr.message);
+        }
 
         res.json({
             success: true,

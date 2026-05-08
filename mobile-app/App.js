@@ -19,6 +19,7 @@ SplashScreenNative.preventAutoHideAsync().catch(() => {
 import { ThemeProvider, useTheme } from './src/contexts/ThemeContext';
 import { AlertProvider } from './src/contexts/AlertContext';
 import { PurchaseService } from './src/services/purchaseService';
+import { NotificationService } from './src/services/notificationService';
 
 // Screens
 import HomeScreen from './src/screens/HomeScreen';
@@ -154,8 +155,16 @@ export default function App() {
                 const user = userData ? JSON.parse(userData) : null;
                 const appUserID = user?.id ? String(user.id) : null;
                 await PurchaseService.init(appUserID);
+                
+                // --- PUSH NOTIFICATIONS SETUP ---
+                if (appUserID) {
+                    const token = await NotificationService.registerForPushNotificationsAsync();
+                    if (token) {
+                        await NotificationService.updateServerToken(appUserID, token);
+                    }
+                }
             } catch (err) {
-                console.warn('[App] Purchase setup failed:', err);
+                console.warn('[App] Setup failed:', err);
             }
         };
         setupPurchases();

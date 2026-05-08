@@ -30,6 +30,7 @@ import axios from 'axios';
 import { GoogleSignin, statusCodes } from '@react-native-google-signin/google-signin';
 
 import { API_URL } from '../config';
+import { NotificationService } from '../services/notificationService';
 import { COLORS } from '../theme';
 import AuthBackground from '../components/animated/AuthBackground';
 import GlassInput from '../components/ui/GlassInput';
@@ -109,9 +110,13 @@ export default function AuthScreen({ navigation, route }) {
                 await AsyncStorage.setItem('user', JSON.stringify(user));
 
                 if (user.onboarding_completed) {
-                    navigation.replace('Main', { user: { ...user, token } });
+                    // Register notifications after login
+                    const token = await NotificationService.registerForPushNotificationsAsync();
+                    if (token) await NotificationService.updateServerToken(user.id, token);
+                    
+                    navigation.replace('Main', { user: { ...user, token: res.data.token } });
                 } else {
-                    navigation.replace('Onboarding', { userId: user.id, token });
+                    navigation.replace('Onboarding', { userId: user.id, token: res.data.token });
                 }
             }
         } catch (error) {
@@ -165,6 +170,10 @@ export default function AuthScreen({ navigation, route }) {
                 await AsyncStorage.setItem('user', JSON.stringify(user));
 
                 if (user.onboarding_completed) {
+                    // Register notifications after login
+                    const tokenResult = await NotificationService.registerForPushNotificationsAsync();
+                    if (tokenResult) await NotificationService.updateServerToken(user.id, tokenResult);
+                    
                     navigation.replace('Main', { user: { ...user, token } });
                 } else {
                     navigation.replace('Onboarding', { userId: user.id, token });
@@ -195,6 +204,10 @@ export default function AuthScreen({ navigation, route }) {
                 await AsyncStorage.setItem('user', JSON.stringify(user));
 
                 if (user.onboarding_completed) {
+                    // Register notifications after login
+                    const tokenResult = await NotificationService.registerForPushNotificationsAsync();
+                    if (tokenResult) await NotificationService.updateServerToken(user.id, tokenResult);
+                    
                     navigation.replace('Main', { user: { ...user, token } });
                 } else {
                     navigation.replace('Onboarding', { userId: user.id, token });
@@ -229,6 +242,11 @@ export default function AuthScreen({ navigation, route }) {
                 const { user, token } = res.data;
                 await AsyncStorage.setItem('token', token);
                 await AsyncStorage.setItem('user', JSON.stringify(user));
+                
+                // Register notifications after login
+                const tokenResult = await NotificationService.registerForPushNotificationsAsync();
+                if (tokenResult) await NotificationService.updateServerToken(user.id, tokenResult);
+
                 navigation.replace('Main', { user: { ...user, token } });
             }
         } catch (error) {

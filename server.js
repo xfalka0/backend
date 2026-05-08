@@ -3351,7 +3351,6 @@ app.post('/api/moderation/reject', authenticateToken, authorizeRole('admin', 'su
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
-    }
 });
 
 // --- MAINTENANCE & OPTIMIZATION API ---

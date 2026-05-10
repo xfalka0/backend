@@ -151,6 +151,17 @@ router.get('/:userId/unread-count', async (req, res) => {
     }
 });
 
+// USER BALANCE (CURRENT USER) - must be BEFORE /:userId/balance to avoid route conflict
+router.get('/balance', authenticateToken, async (req, res) => {
+    try {
+        const result = await db.query('SELECT balance FROM users WHERE id = $1', [req.user.id]);
+        if (result.rows.length === 0) return res.status(404).json({ error: 'User not found' });
+        res.json({ balance: result.rows[0].balance || 0 });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // USER BALANCE BY ID
 router.get('/:userId/balance', async (req, res) => {
     const { userId } = req.params;
@@ -163,16 +174,6 @@ router.get('/:userId/balance', async (req, res) => {
     }
 });
 
-// USER BALANCE (CURRENT USER)
-router.get('/balance', authenticateToken, async (req, res) => {
-    try {
-        const result = await db.query('SELECT balance FROM users WHERE id = $1', [req.user.id]);
-        if (result.rows.length === 0) return res.status(404).json({ error: 'User not found' });
-        res.json({ balance: result.rows[0].balance || 0 });
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
-});
 
 // UPDATE PUSH TOKEN
 router.post('/push-token', authenticateToken, async (req, res) => {

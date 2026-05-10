@@ -263,6 +263,12 @@ export default function MessagesScreen({ navigation, route }) {
                 <View style={{ paddingTop: 40 }}>
                     {[...Array(5)].map((_, i) => <SkeletonCard key={i} />)}
                 </View>
+            )}
+
+            {loading ? (
+                <View style={{ paddingTop: 40 }}>
+                    {[...Array(5)].map((_, i) => <SkeletonCard key={i} />)}
+                </View>
             ) : (
                 <FlatList
                     data={filteredChats}
@@ -278,20 +284,24 @@ export default function MessagesScreen({ navigation, route }) {
                                 onExplorePress={() => navigation.navigate('Keşfet')}
                                 onResellerPress={() => navigation.navigate('PurchaseInfo', { user })}
                             />
-                            <View style={[styles.headerContainer, { zIndex: 100, backgroundColor: 'rgba(0,255,0,0.1)' }]}>
+                            
+                            <View style={[styles.headerContainer, { zIndex: 100 }]}>
                                 <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
-                                    <View style={{ 
-                                        backgroundColor: '#fbbf24', 
-                                        paddingHorizontal: 8, 
-                                        paddingVertical: 4, 
-                                        borderRadius: 12,
-                                        marginRight: 8,
-                                        borderWidth: 2,
-                                        borderColor: 'red' // Very visible for debugging
-                                    }}>
-                                        <Text style={{ color: 'white', fontWeight: 'bold' }}>{balance || 0} 🪙</Text>
-                                    </View>
                                     <Text style={[styles.title, { color: theme.colors.text }]} numberOfLines={1}>Sohbetler</Text>
+                                    <TouchableOpacity 
+                                        style={[styles.coinBadge, { zIndex: 101 }]}
+                                        onPress={() => navigation.navigate('Shop')}
+                                    >
+                                        <LinearGradient
+                                            colors={['#fbbf24', '#d97706']}
+                                            start={{ x: 0, y: 0 }}
+                                            end={{ x: 1, y: 1 }}
+                                            style={styles.coinGradient}
+                                        >
+                                            <Ionicons name="sparkles" size={14} color="#fff" style={{ marginRight: 4 }} />
+                                            <Text style={styles.coinText}>{balance || 0}</Text>
+                                        </LinearGradient>
+                                    </TouchableOpacity>
                                 </View>
                                 <TouchableOpacity
                                     onPress={() => setShowSearch(!showSearch)}

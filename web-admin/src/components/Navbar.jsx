@@ -4,10 +4,32 @@ import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 
 export default function Navbar() {
-    const { user, logout } = useAuth();
+    const { user, logout, token } = useAuth();
     const navigate = useNavigate();
     const [isMenuOpen, setIsMenuOpen] = useState(false);
+    const [balance, setBalance] = useState(null);
     const menuRef = useRef(null);
+
+    const fetchBalance = async () => {
+        if (!token) return;
+        try {
+            const res = await fetch('/api/users/balance', {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            const data = await res.json();
+            if (data.balance !== undefined) {
+                setBalance(data.balance);
+            }
+        } catch (err) {
+            console.error("Admin balance fetch failed:", err);
+        }
+    };
+
+    useEffect(() => {
+        fetchBalance();
+        const interval = setInterval(fetchBalance, 30000); // Update every 30s
+        return () => clearInterval(interval);
+    }, [token]);
 
     // Close menu when clicking outside
     useEffect(() => {
@@ -40,6 +62,19 @@ export default function Navbar() {
             </div>
 
             <div className="flex items-center gap-6">
+                {/* Coin Balance Display */}
+                <div className="hidden lg:flex items-center gap-2 px-4 py-2 bg-gradient-to-br from-amber-400/10 to-orange-500/5 border border-amber-500/20 rounded-2xl group transition-all hover:border-amber-500/40">
+                    <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-amber-400 to-orange-600 flex items-center justify-center shadow-lg shadow-orange-500/20 group-hover:scale-110 transition-transform">
+                        <span className="text-white text-xs font-black">🪙</span>
+                    </div>
+                    <div className="flex flex-col">
+                        <span className="text-[10px] font-black text-amber-500/80 uppercase tracking-widest leading-none">Bakiye</span>
+                        <span className="text-sm font-black text-white leading-none mt-1">
+                            {balance !== null ? balance.toLocaleString() : '...'} <span className="text-amber-500/60 text-[10px]">COIN</span>
+                        </span>
+                    </div>
+                </div>
+
                 <button className="flex items-center gap-2 px-5 py-3 bg-gradient-to-br from-blue-600 to-indigo-700 hover:from-blue-500 hover:to-indigo-600 text-white text-[11px] font-black uppercase tracking-widest rounded-2xl transition-all shadow-xl shadow-blue-900/10 hover:shadow-blue-600/20 active:scale-95">
                     <Plus size={16} />
                     <span>Hızlı Ekle</span>

@@ -89,9 +89,12 @@ export default function ProfileScreen({ route, navigation }) {
             
             if (!userId) userId = TEST_USER_ID;
 
+            const token = await AsyncStorage.getItem('token');
             const url = `${API_URL}/favorites/stats/${userId}`;
             console.log('[DEBUG] Fetching stats from:', url);
-            const res = await axios.get(url);
+            const res = await axios.get(url, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
             setStats(prev => ({ ...prev, ...res.data }));
         } catch (err) {
             console.log('Fetch stats err', err.message, err.config?.url);
@@ -197,6 +200,7 @@ export default function ProfileScreen({ route, navigation }) {
         if (isEditingInfo || isEditingBio) {
             // Save to backend
             try {
+                const token = await AsyncStorage.getItem('token');
                 const response = await axios.put(`${API_URL}/users/${user.id}/profile`, {
                     name: info.name,
                     display_name: info.name,
@@ -209,6 +213,8 @@ export default function ProfileScreen({ route, navigation }) {
                     boy: info.boy,
                     kilo: info.kilo,
                     interests: JSON.stringify(userInterests)
+                }, {
+                    headers: { Authorization: `Bearer ${token}` }
                 });
 
                 if (response.data) {
@@ -272,8 +278,11 @@ export default function ProfileScreen({ route, navigation }) {
             
             setUserInterests(newInterests);
             try {
+                const token = await AsyncStorage.getItem('token');
                 await axios.put(`${API_URL}/users/${user.id}/profile`, {
                     interests: JSON.stringify(newInterests)
+                }, {
+                    headers: { Authorization: `Bearer ${token}` }
                 });
                 Haptics.selectionAsync();
             } catch (e) {
@@ -298,8 +307,11 @@ export default function ProfileScreen({ route, navigation }) {
         setTempInterest('');
         
         try {
+            const token = await AsyncStorage.getItem('token');
             await axios.put(`${API_URL}/users/${user.id}/profile`, {
                 interests: JSON.stringify(newInterests)
+            }, {
+                headers: { Authorization: `Bearer ${token}` }
             });
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         } catch (e) {
@@ -312,8 +324,11 @@ export default function ProfileScreen({ route, navigation }) {
         setUserInterests(newInterests);
         
         try {
+            const token = await AsyncStorage.getItem('token');
             await axios.put(`${API_URL}/users/${user.id}/profile`, {
                 interests: JSON.stringify(newInterests)
+            }, {
+                headers: { Authorization: `Bearer ${token}` }
             });
             Haptics.selectionAsync();
         } catch (e) {
@@ -372,8 +387,11 @@ export default function ProfileScreen({ route, navigation }) {
         useCallback(() => {
             if (user?.id) {
                 // Fetch basic user data
-                axios.get(`${API_URL}/users/${user.id}`)
-                    .then(async (res) => {
+                AsyncStorage.getItem('token').then(token => {
+                    axios.get(`${API_URL}/users/${user.id}`, {
+                        headers: { Authorization: `Bearer ${token}` }
+                    })
+                        .then(async (res) => {
                         const updatedData = res.data;
                         if (updatedData.balance !== undefined) setBalance(updatedData.balance);
                         if (updatedData.vip_level !== undefined) setVipLevel(updatedData.vip_level);
@@ -398,7 +416,9 @@ export default function ProfileScreen({ route, navigation }) {
                         }
 
                         // Also fetch album specifically if not in user object
-                        axios.get(`${API_URL}/users/${user.id}/album`)
+                        axios.get(`${API_URL}/users/${user.id}/album`, {
+                            headers: { Authorization: `Bearer ${token}` }
+                        })
                             .then(albumRes => {
                                 if (albumRes.data) setAlbum(albumRes.data);
                             })
@@ -420,25 +440,30 @@ export default function ProfileScreen({ route, navigation }) {
                     .catch(err => console.log('Fetch user error:', err));
 
                 // Fetch agency info
-                axios.get(`${API_URL}/users/${user.id}/agency`)
+                axios.get(`${API_URL}/users/${user.id}/agency`, {
+                    headers: { Authorization: `Bearer ${token}` }
+                })
                     .then(res => {
                         if (res.data && res.data.name) {
                             setAgencyName(res.data.name);
                         }
                     })
                     .catch(err => {
-                        // If 404 or no agency, it's fine
                         setAgencyName(null);
                     });
+                });
             }
         }, [user?.id, user?.role, profileAvatar])
     );
 
     const handleSaveProfile = async () => {
         try {
+            const token = await AsyncStorage.getItem('token');
             const response = await axios.put(`${API_URL}/users/${user.id || TEST_USER_ID}`, {
                 name: editName,
                 bio: editBio
+            }, {
+                headers: { Authorization: `Bearer ${token}` }
             });
             if (response.data) {
                 setInfo({ ...info, name: editName });
@@ -460,7 +485,10 @@ export default function ProfileScreen({ route, navigation }) {
 
         setIsJoiningAgency(true);
         try {
-            const res = await axios.post(`${API_URL}/agencies/join`, { agencyId: agencyCode.trim() });
+            const token = await AsyncStorage.getItem('token');
+            const res = await axios.post(`${API_URL}/agencies/join`, { agencyId: agencyCode.trim() }, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
             if (res.data.success) {
                 setAgencyName(res.data.agencyName);
                 setShowAgencyModal(false);
@@ -499,7 +527,10 @@ export default function ProfileScreen({ route, navigation }) {
         }
 
         try {
-            const res = await axios.post(`${API_URL}/boosts/${user.id}`, { durationMinutes: 1440, cost: 1000 });
+            const token = await AsyncStorage.getItem('token');
+            const res = await axios.post(`${API_URL}/boosts/${user.id}`, { durationMinutes: 1440, cost: 1000 }, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
             setBalance(res.data.newBalance);
             setIsBoosted(true);
             setBoostEndTime(res.data.endTime);
@@ -523,8 +554,12 @@ export default function ProfileScreen({ route, navigation }) {
             name: 'upload.jpg',
         });
 
+        const token = await AsyncStorage.getItem('token');
         const res = await axios.post(`${API_URL}/upload`, formData, {
-            headers: { 'Content-Type': 'multipart/form-data' },
+            headers: { 
+                'Content-Type': 'multipart/form-data',
+                'Authorization': `Bearer ${token}`
+            },
         });
 
         return res.data.url;
@@ -555,10 +590,13 @@ export default function ProfileScreen({ route, navigation }) {
                 const serverUrl = await uploadImage(uri);
 
                 // 2. Submit for moderation
+                const token = await AsyncStorage.getItem('token');
                 const response = await axios.post(`${API_URL}/moderation/submit`, {
                     userId: user.id || TEST_USER_ID,
                     type: 'avatar',
                     url: serverUrl
+                }, {
+                    headers: { Authorization: `Bearer ${token}` }
                 });
                 if (response.data.url) {
                     setAlert({ visible: true, title: 'Başarılı', message: 'Profil fotoğrafınız moderasyon onayına gönderildi.', type: 'success' });
@@ -600,10 +638,13 @@ export default function ProfileScreen({ route, navigation }) {
                 const serverUrl = await uploadImage(uri);
 
                 // 2. Submit for moderation
+                const token = await AsyncStorage.getItem('token');
                 const response = await axios.post(`${API_URL}/moderation/submit`, {
                     userId: user.id || TEST_USER_ID,
                     type: 'album',
                     url: serverUrl
+                }, {
+                    headers: { Authorization: `Bearer ${token}` }
                 });
                 if (response.data.url) {
                     setAlert({ visible: true, title: 'Başarılı', message: 'Albüm fotoğrafınız moderasyon onayına gönderildi.', type: 'success' });

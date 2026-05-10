@@ -29,9 +29,9 @@ async function seed() {
 
         for (const op of ops) {
             const res = await db.query(`
-        INSERT INTO users (username, email, password_hash, role, avatar_url)
-        VALUES ($1, $2, 'pass123', 'operator', $3)
-        ON CONFLICT (email) DO UPDATE SET avatar_url = $3
+        INSERT INTO users (username, email, password_hash, role, avatar_url, gender)
+        VALUES ($1, $2, 'pass123', 'operator', $3, 'kadin')
+        ON CONFLICT (email) DO UPDATE SET avatar_url = $3, gender = 'kadin'
         RETURNING id;
       `, [op.name, op.email, op.img]);
 

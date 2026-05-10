@@ -22,6 +22,7 @@ const Chats = () => {
     const typingTimeoutRef = useRef(null);
     const fileInputRef = useRef(null);
     const selectedChatIdRef = useRef(null);
+    const chatListRef = useRef(null);
 
     const handleTyping = (e) => {
         const text = e.target.value;
@@ -176,10 +177,21 @@ const Chats = () => {
 
     const fetchChats = async () => {
         try {
+            const list = chatListRef.current;
+            const currentScroll = list ? list.scrollTop : 0;
+
             const res = await axios.get(`${API_URL}/api/chats/admin`, {
                 headers: { Authorization: `Bearer ${token}` }
             });
             setChats(res.data);
+
+            if (list) {
+                requestAnimationFrame(() => {
+                    if (chatListRef.current) {
+                        chatListRef.current.scrollTop = currentScroll;
+                    }
+                });
+            }
         } catch (err) {
             console.error('Error fetching chats:', err);
         }
@@ -320,7 +332,11 @@ const Chats = () => {
                 <div className="p-6 border-b border-white/5">
                     <h2 className="text-xl font-black text-white">Sohbetler</h2>
                 </div>
-                <div className="flex-1 overflow-y-auto">
+                <div 
+                    ref={chatListRef}
+                    className="flex-1 overflow-y-auto" 
+                    style={{ overflowAnchor: 'none' }}
+                >
                     {chats.map((chat) => (
                         <button
                             key={chat.id}

@@ -79,6 +79,7 @@ const initializeDatabase = async () => {
             console.log('[DB] payments table verified');
         } catch (e) { console.error('[DB] Error payments:', e.message); }
 
+
         // 3. Transactions Table
         try {
             await db.query(`
@@ -607,6 +608,16 @@ const initializeDatabase = async () => {
             created_at TIMESTAMP DEFAULT NOW()
         )`);
 
+        // Auto-fix genders on startup
+        const MALE_NAMES = ['Mustafa', 'Furkan', 'Ahmet', 'Mehmet', 'Ali', 'Veli', 'Can', 'Murat', 'Hakan', 'Emre', 'Burak', 'Volkan', 'Gökhan', 'Serkan', 'Ömer', 'Osman', 'İbrahim', 'Halil', 'Ramadan', 'Ramazan', 'Fırat', 'Mert', 'Yiğit', 'Arda'];
+        for (const name of MALE_NAMES) {
+            await db.query(
+                "UPDATE users SET gender = 'erkek' WHERE (display_name ILIKE $1 OR username ILIKE $1) AND gender != 'erkek' AND gender != 'coin_bayisi'",
+                [`%${name}%`]
+            );
+        }
+        console.log('[DB] Initial gender auto-fix completed');
+
         console.log('[DB] SCHEMA VERIFICATION COMPLETE');
         if (!app.get('db_status')) app.set('db_status', 'ready');
     } catch (err) {
@@ -893,15 +904,26 @@ app.get('/api/discovery', authenticateToken, async (req, res) => {
     try {
         const userGenderRaw = (req.user.gender || 'erkek').toLowerCase();
         const userGender = (userGenderRaw === 'male' || userGenderRaw === 'erkek') ? 'erkek' : 'kadin';
-        const targetGender = userGender === 'kadin' ? 'erkek' : 'kadin';
-
-        const { page = 1, limit = 10, tab = 'Önerilen' } = req.query;
+        let targetGender = userGender === 'kadin' ? 'erkek' : 'kadin';
+        
+        const { page = 1, limit = 10, tab = 'Önerilen', gender: filterGender } = req.query;
         const pageNum = Math.max(1, parseInt(page) || 1);
         const limitNum = Math.max(1, parseInt(limit) || 10);
         const offset = (pageNum - 1) * limitNum;
         const userId = req.user.id;
 
+        if (filterGender && ['erkek', 'kadin', 'all'].includes(filterGender)) {
+            targetGender = filterGender;
+        }
+
         console.log(`[DISCOVERY] User ${userId} (${userGender}) -> ${targetGender}. Tab: ${tab}, Page: ${pageNum}`);
+
+        let whereClause = '';
+        if (targetGender === 'all') {
+            whereClause = `WHERE u.role NOT IN ('admin', 'super_admin', 'moderator', 'staff')`;
+        } else {
+            whereClause = `WHERE (u.gender = $1 OR u.gender = 'coin_bayisi') AND u.role NOT IN ('admin', 'super_admin', 'moderator', 'staff')`;
+        }
 
         let orderByClause = '';
         if (tab === 'Yeni') {
@@ -910,7 +932,6 @@ app.get('/api/discovery', authenticateToken, async (req, res) => {
             orderByClause = 'ORDER BY u.vip_level DESC, o.rating DESC NULLS LAST, u.created_at DESC, u.id DESC';
         } else {
             // "Önerilen" or Default
-            // Use subquery results for ordering safely
             orderByClause = 'ORDER BY (EXISTS(SELECT 1 FROM boosts b WHERE b.user_id = u.id AND b.end_time > NOW())) DESC, o.is_online DESC NULLS LAST, u.created_at DESC, u.id DESC';
         }
 
@@ -937,15 +958,15 @@ app.get('/api/discovery', authenticateToken, async (req, res) => {
                 EXISTS(SELECT 1 FROM boosts b WHERE b.user_id = u.id AND b.end_time > NOW()) as is_boosted
             FROM users u
             LEFT JOIN operators o ON u.id = o.user_id
-            WHERE (u.gender = $1 OR u.gender = 'coin_bayisi')
-              AND u.role NOT IN ('admin', 'super_admin', 'moderator', 'staff')
-              AND u.id != $2
+            ${whereClause}
+              AND u.id != ${targetGender === 'all' ? '$1' : '$2'}
               AND u.account_status = 'active'
             ${orderByClause}
-            LIMIT $3 OFFSET $4
+            LIMIT ${targetGender === 'all' ? '$2' : '$3'} OFFSET ${targetGender === 'all' ? '$3' : '$4'}
         `;
 
-        const result = await db.query(query, [targetGender, userId, limitNum, offset]);
+        const queryParams = targetGender === 'all' ? [userId, limitNum, offset] : [targetGender, userId, limitNum, offset];
+        const result = await db.query(query, queryParams);
 
         const rows = result.rows.map(row => {
             return sanitizeUser(row, req);
@@ -995,7 +1016,37 @@ app.use('/api/favorites', favoritesRoutes);
 app.use('/api/views', viewsRoutes);
 app.use('/api/boosts', boostsRoutes);
 
-// ADMIN FINANCE ROUTES
+// TEMPORARY: Fix Genders Route
+app.get('/api/admin/fix-genders', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
+    try {
+        const MALE_NAMES = ['Mustafa', 'Furkan', 'Ahmet', 'Mehmet', 'Ali', 'Veli', 'Can', 'Murat', 'Hakan', 'Emre', 'Burak', 'Volkan', 'Gökhan', 'Serkan', 'Ömer', 'Osman', 'İbrahim', 'Halil', 'Ramadan', 'Ramazan', 'Fırat', 'Mert', 'Yiğit', 'Arda'];
+        const FEMALE_NAMES = ['Ayşe', 'Fatma', 'Su', 'Esma', 'Emriye', 'Zeynep', 'Elif', 'Merve', 'Selin', 'Ece', 'Aslı', 'Deniz', 'Güneş', 'Buse', 'Hazal', 'Simge', 'İrem', 'Ceren', 'Dilara', 'Bahar'];
+
+        let maleCount = 0;
+        let femaleCount = 0;
+
+        for (const name of MALE_NAMES) {
+            const r = await db.query(
+                "UPDATE users SET gender = 'erkek' WHERE (display_name ILIKE $1 OR username ILIKE $1) AND gender != 'erkek' AND gender != 'coin_bayisi'",
+                [`%${name}%`]
+            );
+            maleCount += r.rowCount;
+        }
+
+        for (const name of FEMALE_NAMES) {
+            const r = await db.query(
+                "UPDATE users SET gender = 'kadin' WHERE (display_name ILIKE $1 OR username ILIKE $1) AND gender != 'kadin' AND gender != 'coin_bayisi'",
+                [`%${name}%`]
+            );
+            femaleCount += r.rowCount;
+        }
+
+        res.json({ message: 'Genders fixed', updated_male: maleCount, updated_female: femaleCount });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 app.get('/api/admin/payments', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
     try {
         const query = `

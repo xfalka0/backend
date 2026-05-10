@@ -20,23 +20,21 @@ const CoinPackageCard = ({ pack, index, handlePurchase, theme, themeMode }) => {
     const isBestValue = product.identifier.includes('popular') || coinAmount === '1200';
 
     return (
-        <Motion.SlideUp delay={index * 100}>
+        <Motion.SlideUp delay={index * 50}>
             <TouchableOpacity
                 style={[styles.cardContainer, isBestValue && styles.bestValueContainer]}
                 onPress={() => handlePurchase(pack)}
                 activeOpacity={0.8}
             >
                 <LinearGradient
-                    colors={isBestValue ? (themeMode === 'dark' ? ['#451a03', '#2e1f08'] : ['#fef3c7', '#fffbeb']) : (themeMode === 'dark' ? ['rgba(255,255,255,0.08)', 'rgba(255,255,255,0.01)'] : [theme.colors.card, theme.colors.card])}
+                    colors={isBestValue ? (themeMode === 'dark' ? ['#4c1d95', '#2e1065'] : ['#fef3c7', '#fffbeb']) : (themeMode === 'dark' ? ['rgba(255, 255, 255, 0.08)', 'rgba(255, 255, 255, 0.03)'] : ['#ffffff', '#f8fafc'])}
                     style={[styles.card, isBestValue && styles.bestValueCard]}
                 >
                     {isBestValue && (
                         <View style={styles.ribbonContainer}>
-                            <View>
-                                <LinearGradient colors={['#fbbf24', '#f59e0b']} style={styles.ribbon}>
-                                    <Text style={styles.ribbonText}>POPÜLER</Text>
-                                </LinearGradient>
-                            </View>
+                            <LinearGradient colors={['#fbbf24', '#f59e0b']} style={styles.ribbon}>
+                                <Text style={styles.ribbonText}>POPÜLER</Text>
+                            </LinearGradient>
                         </View>
                     )}
 
@@ -48,22 +46,22 @@ const CoinPackageCard = ({ pack, index, handlePurchase, theme, themeMode }) => {
                         />
                     </View>
 
-                    <Text style={[styles.coinCount, { color: isBestValue ? '#fbbf24' : theme.colors.text }]} numberOfLines={1} adjustsFontSizeToFit>
-                        {coinAmount}
-                    </Text>
-                    <Text style={[styles.coinLabel, { color: theme.colors.textSecondary }]} numberOfLines={1}>
-                        Coin
-                    </Text>
-
-                    <View style={{ width: '100%', alignItems: 'center' }}>
-                        <LinearGradient
-                            colors={isBestValue ? ['#fbbf24', '#f59e0b'] : ['#ec4899', '#e11d48']}
-                            start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
-                            style={styles.priceButton}
-                        >
-                            <Text style={styles.priceButtonText} numberOfLines={1} adjustsFontSizeToFit>{product.priceString}</Text>
-                        </LinearGradient>
+                    <View style={styles.packageInfo}>
+                        <Text style={[styles.coinCount, { color: isBestValue ? '#fbbf24' : theme.colors.text }]}>
+                            {coinAmount}
+                        </Text>
+                        <Text style={[styles.coinLabel, { color: theme.colors.textSecondary }]}>
+                            COIN
+                        </Text>
                     </View>
+
+                    <LinearGradient
+                        colors={isBestValue ? ['#fbbf24', '#f59e0b'] : ['#ec4899', '#e11d48']}
+                        start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+                        style={styles.priceButton}
+                    >
+                        <Text style={styles.priceButtonText}>{product.priceString}</Text>
+                    </LinearGradient>
                 </LinearGradient>
             </TouchableOpacity>
         </Motion.SlideUp>
@@ -133,22 +131,26 @@ export default function ShopScreen({ navigation, route }) {
         React.useCallback(() => {
             console.log('[Shop] Focus triggered, currentUserId:', currentUserId);
             if (currentUserId) {
-                axios.get(`${API_URL}/users/${currentUserId}`)
-                    .then(res => {
-                        console.log('[Shop] Balance fetch success:', res.data.balance);
-                        if (res.data && res.data.balance !== undefined) {
-                            setBalance(res.data.balance);
-                            // Also update stored user for consistency
-                            AsyncStorage.getItem('user').then(storedUser => {
-                                if (storedUser) {
-                                    const parsed = JSON.parse(storedUser);
-                                    parsed.balance = res.data.balance;
-                                    AsyncStorage.setItem('user', JSON.stringify(parsed));
-                                }
-                            });
-                        }
+                AsyncStorage.getItem('token').then(token => {
+                    axios.get(`${API_URL}/users/${currentUserId}`, {
+                        headers: { Authorization: `Bearer ${token}` }
                     })
-                    .catch(err => console.log('[Shop] Balance sync error:', err.message));
+                        .then(res => {
+                            console.log('[Shop] Balance fetch success:', res.data.balance);
+                            if (res.data && res.data.balance !== undefined) {
+                                setBalance(res.data.balance);
+                                // Also update stored user for consistency
+                                AsyncStorage.getItem('user').then(storedUser => {
+                                    if (storedUser) {
+                                        const parsed = JSON.parse(storedUser);
+                                        parsed.balance = res.data.balance;
+                                        AsyncStorage.setItem('user', JSON.stringify(parsed));
+                                    }
+                                });
+                            }
+                        })
+                        .catch(err => console.log('[Shop] Balance sync error:', err.message));
+                });
             }
         }, [currentUserId])
     );
@@ -184,7 +186,10 @@ export default function ShopScreen({ navigation, route }) {
                     });
                     setOfferings(sortedPackages);
                 } else {
-                    const res = await axios.get(`${API_URL}/offerings`);
+                    const token = await AsyncStorage.getItem('token');
+                    const res = await axios.get(`${API_URL}/offerings`, {
+                        headers: { Authorization: `Bearer ${token}` }
+                    });
                     const transformed = res.data.map(pkg => ({
                         isLocal: true,
                         product: {
@@ -200,7 +205,10 @@ export default function ShopScreen({ navigation, route }) {
                 }
 
                 // Fetch Dealer Profile (gender: coin_bayisi)
-                const opRes = await axios.get(`${API_URL}/operators?limit=50`);
+                const token = await AsyncStorage.getItem('token');
+                const opRes = await axios.get(`${API_URL}/operators?limit=50`, {
+                    headers: { Authorization: `Bearer ${token}` }
+                });
                 const coinDealer = opRes.data.find(op => op.gender === 'coin_bayisi');
                 if (coinDealer) {
                     setDealer(coinDealer);
@@ -327,22 +335,15 @@ export default function ShopScreen({ navigation, route }) {
         }
     };
 
-    const coinPackages = [
-        { coins: 100, price: '49,99 ₺', icon: 'cube-outline', color: ['#60a5fa', '#3b82f6'] },
-        { coins: 200, price: '89,99 ₺', icon: 'flash', bestValue: true, color: ['#fbbf24', '#f59e0b'] },
-        { coins: 400, price: '159,99 ₺', icon: 'diamond-outline', color: ['#e879f9', '#d946ef'] },
-        { coins: 700, price: '299,99 ₺', icon: 'diamond', color: ['#8b5cf6', '#7c3aed'] },
-        { coins: 1200, price: '549,99 ₺', icon: 'rocket-outline', color: ['#2dd4bf', '#0d9488'] },
-        { coins: 2500, price: '1149,99 ₺', icon: 'rocket', color: ['#fb7185', '#e11d48'] },
-        { coins: 5000, price: '2099,99 ₺', icon: 'trophy', color: ['#fcd34d', '#b45309'] },
-    ];
-
-
-
     return (
         <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
             <StatusBar barStyle={themeMode === 'dark' ? "light-content" : "dark-content"} />
-            <LinearGradient colors={themeMode === 'dark' ? ['#030712', '#0f172a'] : [theme.colors.background, theme.colors.backgroundSecondary]} style={StyleSheet.absoluteFill} />
+            <LinearGradient 
+                colors={themeMode === 'dark' ? ['#0f172a', '#1e1b4b', '#4c1d95'] : ['#fdf2f8', '#fae8ff', '#f3e8ff']} 
+                style={StyleSheet.absoluteFill} 
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+            />
 
             <SafeAreaView style={styles.safeArea}>
                 <View style={styles.header}>
@@ -403,11 +404,11 @@ export default function ShopScreen({ navigation, route }) {
                             style={styles.dealerPromoContainer}
                         >
                             <LinearGradient
-                                colors={themeMode === 'dark' ? ['rgba(251, 191, 36, 0.15)', 'rgba(217, 119, 6, 0.05)'] : ['#FFFBEB', '#FEF3C7']}
+                                colors={themeMode === 'dark' ? ['rgba(139, 92, 246, 0.2)', 'rgba(217, 70, 239, 0.1)'] : ['#F5F3FF', '#FDF2F8']}
                                 style={styles.dealerPromo}
                             >
                                 <View style={styles.dealerPromoIcon}>
-                                    <Ionicons name="diamond" size={28} color="#FBBF24" />
+                                    <Ionicons name="diamond" size={28} color="#d946ef" />
                                 </View>
                                 <View style={styles.dealerPromoInfo}>
                                     <Text style={[styles.dealerPromoTitle, { color: theme.colors.text }]}>Avantajlı Paketler?</Text>
@@ -487,7 +488,8 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'space-between',
         paddingHorizontal: 20,
-        height: 60,
+        height: 70,
+        marginTop: Platform.OS === 'ios' ? 0 : 25, // Extra margin for Android status bar
     },
     backBtn: {
         width: 44,
@@ -501,17 +503,17 @@ const styles = StyleSheet.create({
         fontWeight: '800',
     },
     scroll: {
-        padding: 20,
+        padding: 16,
         paddingBottom: 40,
     },
     balanceCard: {
-        height: 120,
-        borderRadius: 30,
-        padding: 25,
+        height: 100,
+        borderRadius: 24,
+        padding: 20,
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        marginBottom: 30,
+        marginBottom: 16,
         overflow: 'hidden',
         elevation: 10,
         shadowColor: '#8b5cf6',
@@ -524,159 +526,153 @@ const styles = StyleSheet.create({
     },
     balanceLabel: {
         color: 'rgba(255,255,255,0.8)',
-        fontSize: 14,
+        fontSize: 12,
         fontWeight: '600',
-        marginBottom: 4,
+        marginBottom: 2,
     },
     balanceValue: {
-        fontSize: 36,
+        fontSize: 32,
         fontWeight: '900',
     },
     shimmerLayer: {
         position: 'absolute',
         top: -150,
-        left: -150, // Start well behind the left edge
+        left: -150,
         height: 500,
-        width: 140, // Increased width
+        width: 140,
         zIndex: 1,
     },
     balanceIconWrapper: {
-        width: 70,
-        height: 70,
+        width: 60,
+        height: 60,
         alignItems: 'center',
         justifyContent: 'center',
         zIndex: 2,
     },
     sectionTitle: {
-        fontSize: 22,
+        fontSize: 18,
         fontWeight: '800',
-        marginBottom: 8,
+        marginBottom: 4,
     },
     sectionSub: {
-        fontSize: 14,
-        marginBottom: 25,
+        fontSize: 12,
+        marginBottom: 16,
     },
     packagesGrid: {
         flexDirection: 'row',
         flexWrap: 'wrap',
         justifyContent: 'space-between',
-        rowGap: 18,
-        paddingHorizontal: 0,
+        rowGap: 10,
     },
     cardContainer: {
-        width: (width - 64) / 3, // Absolute pixels fix for Animated.View wrapping bug
-        overflow: 'visible',
+        width: (width - 52) / 3,
+        marginBottom: 4,
     },
     bestValueContainer: {
-        transform: [{ scale: 1.05 }],
+        transform: [{ scale: 1.02 }],
         zIndex: 5,
     },
     card: {
         alignItems: 'center',
-        paddingVertical: 14,
+        paddingVertical: 10,
         paddingHorizontal: 4,
-        borderRadius: 20,
+        borderRadius: 14,
         borderWidth: 1,
-        borderColor: 'rgba(255,255,255,0.08)', // Slightly brighter border for glass effect
-        minHeight: 160,
+        borderColor: 'rgba(255,255,255,0.05)',
+        minHeight: 130,
         justifyContent: 'space-between',
     },
     bestValueCard: {
         borderColor: '#fbbf24',
-        borderWidth: 2,
+        borderWidth: 1.2,
     },
     ribbonContainer: {
         position: 'absolute',
-        top: -12,
+        top: -8,
         alignItems: 'center',
         width: '100%',
         zIndex: 10,
     },
     ribbon: {
-        paddingHorizontal: 10,
-        paddingVertical: 4,
-        borderRadius: 8,
-        minWidth: 80, // Prevent text squish
+        paddingHorizontal: 6,
+        paddingVertical: 2,
+        borderRadius: 5,
         alignItems: 'center'
     },
     ribbonText: {
         color: '#fff',
-        fontSize: 10,
+        fontSize: 7,
         fontWeight: '900',
         letterSpacing: 0.5,
     },
     coinImageContainer: {
-        height: 50,
+        height: 30,
         justifyContent: 'center',
         alignItems: 'center',
-        marginTop: 10,
-        marginBottom: 8,
+        marginTop: 2,
     },
     coinImage: {
-        width: 50,
-        height: 50,
+        width: 30,
+        height: 30,
+    },
+    packageInfo: {
+        alignItems: 'center',
+        marginVertical: 2,
     },
     coinCount: {
-        fontSize: 22, // Slightly larger font
+        fontSize: 16,
         fontWeight: '900',
-        marginBottom: -2,
+        lineHeight: 20,
     },
     coinLabel: {
-        fontSize: 11,
-        textTransform: 'uppercase',
-        fontWeight: 'bold',
-        marginBottom: 12,
-        letterSpacing: 0.5,
+        fontSize: 8,
+        fontWeight: '700',
+        opacity: 0.6,
+        letterSpacing: 1,
     },
     priceButton: {
-        paddingVertical: 10,
-        paddingHorizontal: 8,
-        borderRadius: 20, // Fully rounded pill shape
-        width: '95%',
+        paddingVertical: 5,
+        paddingHorizontal: 4,
+        borderRadius: 10,
+        width: '85%',
         alignItems: 'center',
-        elevation: 4, // More pronounced shadow for depth
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.25,
-        shadowRadius: 3.84,
     },
     priceButtonText: {
         color: 'white',
-        fontSize: 15, // Slightly larger
-        fontWeight: '900', // Extra bold
-        letterSpacing: 0.5, // Better readability
+        fontSize: 11,
+        fontWeight: '800',
     },
     dealerPromoContainer: {
-        marginTop: 10,
-        marginBottom: 30,
+        marginTop: 0,
+        marginBottom: 16,
     },
     dealerPromo: {
         flexDirection: 'row',
         alignItems: 'center',
-        padding: 20,
-        borderRadius: 24,
+        padding: 12,
+        borderRadius: 18,
         borderWidth: 1,
-        borderColor: 'rgba(251, 191, 36, 0.3)',
+        borderColor: 'rgba(139, 92, 246, 0.3)',
     },
     dealerPromoIcon: {
-        width: 50,
-        height: 50,
-        borderRadius: 15,
-        backgroundColor: 'rgba(251, 191, 36, 0.1)',
+        width: 36,
+        height: 36,
+        borderRadius: 10,
+        backgroundColor: 'rgba(139, 92, 246, 0.1)',
         justifyContent: 'center',
         alignItems: 'center',
-        marginRight: 15,
+        marginRight: 12,
     },
     dealerPromoInfo: {
         flex: 1,
     },
     dealerPromoTitle: {
-        fontSize: 16,
+        fontSize: 14,
         fontWeight: '800',
-        marginBottom: 2,
+        marginBottom: 1,
     },
     dealerPromoDesc: {
-        fontSize: 13,
+        fontSize: 11,
         opacity: 0.7,
     },
 });

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, Modal, TouchableOpacity, TextInput, ActivityIndicator } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAlert } from '../contexts/AlertContext';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -28,10 +29,13 @@ export default function ReportModal({ visible, onClose, reporterId, reportedId, 
 
         setLoading(true);
         try {
+            const token = await AsyncStorage.getItem('token');
             await axios.post(`${API_URL}/reports`, {
                 reportedUserId: reportedId,
                 reason: selectedReason,
                 details
+            }, {
+                headers: { Authorization: `Bearer ${token}` }
             });
             showAlert({
                 title: 'Şikayet Alındı',

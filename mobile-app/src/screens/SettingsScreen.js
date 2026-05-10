@@ -33,7 +33,10 @@ export default function SettingsScreen({ navigation, route }) {
     // Sync settings with backend on change
     const updateSetting = async (key, value) => {
         try {
-            await axios.patch(`${API_URL}/users/${user.id}`, { [key]: value });
+            const token = await AsyncStorage.getItem('token');
+            await axios.patch(`${API_URL}/users/${user.id}`, { [key]: value }, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
         } catch (err) {
             console.log(`Update ${key} error:`, err);
             setAlert({ visible: true, title: 'Hata', message: 'Ayar güncellenirken bir sorun oluştu.', type: 'error' });
@@ -83,7 +86,10 @@ export default function SettingsScreen({ navigation, route }) {
             onConfirm: async () => {
                 try {
                     setLoading(true);
-                    await axios.delete(`${API_URL}/users/${user.id}`);
+                    const token = await AsyncStorage.getItem('token');
+                    await axios.delete(`${API_URL}/users/${user.id}`, {
+                        headers: { Authorization: `Bearer ${token}` }
+                    });
                     setLoading(false);
                     await AsyncStorage.clear();
                     navigation.replace('Welcome');

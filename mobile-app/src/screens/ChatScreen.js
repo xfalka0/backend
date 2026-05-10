@@ -594,9 +594,12 @@ export default function ChatScreen({ route, navigation }) {
 
     const handleBlock = async () => {
         try {
+            const token = await AsyncStorage.getItem('token');
             await axios.post(`${API_URL}/block`, {
                 blockerId: user.id,
                 blockedId: operatorId
+            }, {
+                headers: { Authorization: `Bearer ${token}` }
             });
             setShowOptions(false);
             navigation.goBack();

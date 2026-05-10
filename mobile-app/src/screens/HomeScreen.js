@@ -371,10 +371,15 @@ export default function HomeScreen({ navigation, route }) {
 
             let res;
             if (!token) {
-                res = await axios.get(`${API_URL}/operators?gender=kadin&page=${currentPage}&limit=${LIMIT}&tab=${encodeURIComponent(overrideTab)}`);
+                res = await axios.get(`${API_URL}/operators?gender=${filterOptions.gender}&page=${currentPage}&limit=${LIMIT}&tab=${encodeURIComponent(overrideTab)}`);
             } else {
                 res = await axios.get(`${API_URL}/discovery`, {
-                    params: { page: currentPage, limit: LIMIT, tab: overrideTab },
+                    params: { 
+                        page: currentPage, 
+                        limit: LIMIT, 
+                        tab: overrideTab,
+                        gender: filterOptions.gender 
+                    },
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
             }
@@ -430,7 +435,12 @@ export default function HomeScreen({ navigation, route }) {
         } finally {
             isFetchingRef.current = false;
         }
-    }, [page, hasMore, activeTab, user, navigation]);
+    }, [page, hasMore, activeTab, user, navigation, filterOptions]);
+
+    // Trigger re-fetch when filters or tab changes
+    useEffect(() => {
+        fetchOperators(true);
+    }, [filterOptions, activeTab]);
 
     const handleLoadMore = React.useCallback(() => {
         if (!loading && !isFetchingRef.current && hasMore) {
@@ -880,28 +890,71 @@ export default function HomeScreen({ navigation, route }) {
             {showMatchModal && <DestinyMatchModal visible={showMatchModal} onClose={() => setShowMatchModal(false)} operators={operators} navigation={navigation} user={user} />}
             <Modal visible={showFilterModal} transparent animationType="slide" onRequestClose={() => setShowFilterModal(false)}>
                 <View style={styles.modalOverlay}>
-                    <GlassCard style={styles.modalContent} intensity={80} tint="dark">
+                    <GlassCard style={styles.modalContent} intensity={95} tint="dark">
                         <View style={styles.modalHeader}>
-                            <Text style={styles.modalTitle}>Kriterlerini Belirle</Text>
-                            <TouchableOpacity onPress={() => setShowFilterModal(false)} style={styles.closeButton}><Ionicons name="close" size={24} color="white" /></TouchableOpacity>
-                        </View>
-                        <View style={styles.filterSection}>
-                            <Text style={styles.filterLabel}>Cinsiyet</Text>
-                            <View style={styles.filterOptions}>
-                                {['all', 'female', 'male'].map((g) => (
-                                    <TouchableOpacity key={g} style={[styles.filterChip, filterOptions.gender === g && styles.filterChipActive]} onPress={() => setFilterOptions(prev => ({ ...prev, gender: g }))}>
-                                        <Text style={[styles.filterChipText, filterOptions.gender === g && styles.filterChipTextActive]}>{g === 'all' ? 'Hepsi' : g === 'female' ? 'Kadın' : 'Erkek'}</Text>
-                                    </TouchableOpacity>
-                                ))}
+                            <View>
+                                <Text style={[styles.modalTitle, { color: theme.colors.text }]}>Filtrele</Text>
+                                <Text style={{ color: theme.colors.textSecondary, fontSize: 13, marginTop: 4 }}>Size en uygun kişileri bulun</Text>
                             </View>
-                        </View>
-                        <View style={styles.filterSection}>
-                            <Text style={styles.filterLabel}>Durum</Text>
-                            <TouchableOpacity style={[styles.filterChip, filterOptions.online && styles.filterChipActive]} onPress={() => setFilterOptions(prev => ({ ...prev, online: !prev.online }))}>
-                                <Ionicons name={filterOptions.online ? "radio-button-on" : "radio-button-off"} size={16} color={filterOptions.online ? "white" : "#64748b"} style={{ marginRight: 8 }} />
-                                <Text style={[styles.filterChipText, filterOptions.online && styles.filterChipTextActive]}>Sadece Online</Text>
+                            <TouchableOpacity onPress={() => setShowFilterModal(false)} style={styles.closeButton}>
+                                <Ionicons name="close" size={24} color="white" />
                             </TouchableOpacity>
                         </View>
+
+                        <View style={styles.filterSection}>
+                            <Text style={[styles.filterLabel, { color: theme.colors.text }]}>CİNSİYET</Text>
+                            <View style={styles.filterOptions}>
+                                {['all', 'female', 'male'].map((g) => {
+                                    const isActive = filterOptions.gender === g;
+                                    const icon = g === 'all' ? 'people' : g === 'female' ? 'woman' : 'man';
+                                    const label = g === 'all' ? 'Hepsi' : g === 'female' ? 'Kadın' : 'Erkek';
+                                    
+                                    return (
+                                        <TouchableOpacity 
+                                            key={g} 
+                                            activeOpacity={0.8}
+                                            style={{ flex: 1 }}
+                                            onPress={() => setFilterOptions(prev => ({ ...prev, gender: g }))}
+                                        >
+                                            {isActive ? (
+                                                <LinearGradient
+                                                    colors={['#8b5cf6', '#d946ef']}
+                                                    start={{ x: 0, y: 0 }}
+                                                    end={{ x: 1, y: 1 }}
+                                                    style={styles.filterChipActiveModern}
+                                                >
+                                                    <Ionicons name={icon} size={18} color="white" style={{ marginBottom: 4 }} />
+                                                    <Text style={styles.filterChipTextActiveModern}>{label}</Text>
+                                                </LinearGradient>
+                                            ) : (
+                                                <View style={[styles.filterChipModern, { backgroundColor: 'rgba(255,255,255,0.05)', borderColor: 'rgba(255,255,255,0.1)' }]}>
+                                                    <Ionicons name={icon} size={18} color="rgba(255,255,255,0.4)" style={{ marginBottom: 4 }} />
+                                                    <Text style={[styles.filterChipTextModern, { color: 'rgba(255,255,255,0.6)' }]}>{label}</Text>
+                                                </View>
+                                            )}
+                                        </TouchableOpacity>
+                                    );
+                                })}
+                            </View>
+                        </View>
+
+                        <View style={styles.filterSection}>
+                            <Text style={[styles.filterLabel, { color: theme.colors.text }]}>DURUM</Text>
+                            <TouchableOpacity 
+                                activeOpacity={0.8}
+                                style={[styles.onlineToggle, { backgroundColor: 'rgba(255,255,255,0.05)', borderColor: filterOptions.online ? '#d946ef' : 'rgba(255,255,255,0.1)' }]} 
+                                onPress={() => setFilterOptions(prev => ({ ...prev, online: !prev.online }))}
+                            >
+                                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                                    <View style={[styles.onlineIndicator, { backgroundColor: filterOptions.online ? '#10b981' : '#64748b' }]} />
+                                    <Text style={[styles.onlineToggleText, { color: filterOptions.online ? 'white' : 'rgba(255,255,255,0.6)' }]}>Sadece Online Üyeleri Göster</Text>
+                                </View>
+                                <View style={[styles.toggleSwitch, { backgroundColor: filterOptions.online ? '#d946ef' : 'rgba(255,255,255,0.1)' }]}>
+                                    <View style={[styles.toggleCircle, { transform: [{ translateX: filterOptions.online ? 20 : 0 }] }]} />
+                                </View>
+                            </TouchableOpacity>
+                        </View>
+
                         <TouchableOpacity style={styles.applyButton} onPress={() => setShowFilterModal(false)}>
                             <LinearGradient colors={['#8b5cf6', '#ec4899']} style={styles.applyButtonGradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}>
                                 <Text style={styles.applyButtonText}>Filtreleri Uygula</Text>
@@ -1262,5 +1315,71 @@ const styles = StyleSheet.create({
         color: 'white',
         fontSize: 16,
         fontWeight: '800',
+    },
+    // New Modern Filter Styles
+    filterChipModern: {
+        height: 80,
+        borderRadius: 20,
+        borderWidth: 1,
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: 10,
+    },
+    filterChipActiveModern: {
+        height: 80,
+        borderRadius: 20,
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: 10,
+        elevation: 4,
+        shadowColor: '#d946ef',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 8,
+    },
+    filterChipTextModern: {
+        fontSize: 12,
+        fontWeight: '700',
+    },
+    filterChipTextActiveModern: {
+        color: 'white',
+        fontSize: 12,
+        fontWeight: '800',
+    },
+    onlineToggle: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        paddingHorizontal: 20,
+        paddingVertical: 18,
+        borderRadius: 24,
+        borderWidth: 1,
+    },
+    onlineIndicator: {
+        width: 10,
+        height: 10,
+        borderRadius: 5,
+        marginRight: 12,
+    },
+    onlineToggleText: {
+        fontSize: 14,
+        fontWeight: '600',
+    },
+    toggleSwitch: {
+        width: 44,
+        height: 24,
+        borderRadius: 12,
+        padding: 2,
+    },
+    toggleCircle: {
+        width: 20,
+        height: 20,
+        borderRadius: 10,
+        backgroundColor: 'white',
+        elevation: 2,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.2,
+        shadowRadius: 2,
     },
 });

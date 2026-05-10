@@ -15,7 +15,7 @@ const createReviewer = async () => {
         }
 
         await db.query(
-            "INSERT INTO users (username, email, password_hash, role, balance, display_name, avatar_url, onboarding_completed) VALUES ($1, $2, $3, 'user', 9999, 'Google Reviewer', 'https://via.placeholder.com/150', true)",
+            "INSERT INTO users (username, email, password_hash, role, balance, display_name, avatar_url, gender, onboarding_completed) VALUES ($1, $2, $3, 'user', 9999, 'Google Reviewer', 'https://via.placeholder.com/150', 'kadin', true)",
             [username, email, hashedPassword]
         );
 

@@ -144,15 +144,20 @@ const triggerAutoEngagement = async (io, newUserId) => {
         const userGender = (userGenderRaw === 'male' || userGenderRaw === 'erkek') ? 'erkek' : 'kadin';
         const targetGender = userGender === 'kadin' ? 'erkek' : 'kadin';
 
-        // 2. Find random operators of OPPOSITE gender
+        // 2. Find random operators of OPPOSITE gender WHO DON'T HAVE A CHAT YET
         const opsRes = await db.query(
             `SELECT u.id, u.username FROM users u 
              JOIN operators o ON u.id = o.user_id 
              WHERE u.account_status = 'active' 
              AND u.gender = $1
              AND u.role = 'operator'
+             AND NOT EXISTS (
+                 SELECT 1 FROM chats c 
+                 WHERE (c.user_id = $2 AND c.operator_id = u.id)
+                    OR (c.user_id = u.id AND c.operator_id = $2)
+             )
              ORDER BY RANDOM() LIMIT 3`,
-            [targetGender]
+            [targetGender, newUserId]
         );
 
         if (opsRes.rows.length === 0) {
@@ -245,15 +250,20 @@ const triggerLoginAutoEngagement = async (io, userId) => {
         const userGender = (userGenderRaw === 'male' || userGenderRaw === 'erkek') ? 'erkek' : 'kadin';
         const targetGender = userGender === 'kadin' ? 'erkek' : 'kadin';
 
-        // 2. Find a random operator of OPPOSITE gender
+        // 2. Find a random operator of OPPOSITE gender WHO DOESN'T HAVE A CHAT YET
         const opsRes = await db.query(
             `SELECT u.id, u.username FROM users u 
              JOIN operators o ON u.id = o.user_id 
              WHERE u.account_status = 'active' 
              AND u.gender = $1
              AND u.role = 'operator'
+             AND NOT EXISTS (
+                SELECT 1 FROM chats c 
+                WHERE (c.user_id = $2 AND c.operator_id = u.id)
+                   OR (c.user_id = u.id AND c.operator_id = $2)
+             )
              ORDER BY RANDOM() LIMIT 1`,
-            [targetGender]
+            [targetGender, userId]
         );
 
         if (opsRes.rows.length === 0) return;

@@ -5,11 +5,11 @@ const { authenticateToken } = require('../middleware/auth');
 
 // Starter Pack config — edit freely
 const STARTER_PACK = {
-    coins: 200,          // Kullanıcıya verilecek coin
-    price: 9.99,         // Gerçek fiyat (gösterim için)
-    discounted_price: 2.99, // İndirimli fiyat
-    discount_percent: 70,   // %70 indirim
-    label: 'Yarım Kalmasın Paketi',
+    coins: 300,          // Kullanıcıya verilecek coin
+    price: 199.99,       // Gerçek fiyat (gösterim için)
+    discounted_price: 99.99, // İndirimli fiyat
+    discount_percent: 50,    // %50 indirim
+    label: 'Hoşgeldin Paketi',
     description: 'Sadece sana özel, 1 kez kullanılabilir başlangıç fırsatı!'
 };
 

@@ -1,321 +1,519 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, Modal, TouchableOpacity, Dimensions, ActivityIndicator, Alert } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import React, { useState, useEffect, useRef } from 'react';
+import { View, Text, StyleSheet, Modal, TouchableOpacity, Dimensions, ActivityIndicator, Alert, Animated } from 'react-native';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_URL } from '../config';
+import { useAlert } from '../contexts/AlertContext';
+import Confetti from './ui/Confetti';
+
+import { PurchaseService } from '../services/purchaseService';
 
 const { width } = Dimensions.get('window');
 
-export default function InsufficientCoinsModal({ visible, onClose, onBuyCoins }) {
+export default function InsufficientCoinsModal({ visible, onClose, onBuyCoins, onPurchaseSuccess }) {
     const [loading, setLoading] = useState(false);
-    const [starterPack, setStarterPack] = useState(null);
-    const [isEligible, setIsEligible] = useState(false);
+    const [starterPack, setStarterPack] = useState({
+        coins: 300,
+        price: 199.99,
+        discounted_price: 99.99
+    });
+    const [isEligible, setIsEligible] = useState(true);
+    const [timeLeft, setTimeLeft] = useState('23:59:59');
+    const [showConfetti, setShowConfetti] = useState(false);
+    const { showAlert } = useAlert();
+
+    // Animations
+    const fadeAnim = useRef(new Animated.Value(0)).current;
+    const scaleAnim = useRef(new Animated.Value(0.9)).current;
+    const floatAnim = useRef(new Animated.Value(0)).current;
+    const pulseAnim = useRef(new Animated.Value(1)).current;
+    const heartAnims = useRef([...Array(5)].map(() => new Animated.Value(0))).current;
+
+    const animationsRef = useRef([]);
 
     useEffect(() => {
         if (visible) {
             checkEligibility();
+            startAnimations();
+            
+            let totalSeconds = 23 * 3600 + 59 * 60 + 59;
+            const interval = setInterval(() => {
+                totalSeconds--;
+                if (totalSeconds <= 0) {
+                    clearInterval(interval);
+                    return;
+                }
+                const h = Math.floor(totalSeconds / 3600);
+                const m = Math.floor((totalSeconds % 3600) / 60);
+                const s = totalSeconds % 60;
+                setTimeLeft(`${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`);
+            }, 1000);
+
+            return () => {
+                clearInterval(interval);
+                animationsRef.current.forEach(anim => anim?.stop());
+                animationsRef.current = [];
+            };
+        } else {
+            fadeAnim.setValue(0);
+            scaleAnim.setValue(0.95);
         }
     }, [visible]);
 
     const checkEligibility = async () => {
-        setLoading(true);
         try {
             const token = await AsyncStorage.getItem('token');
             if (!token) return;
-
             const res = await axios.get(`${API_URL}/starter-pack/check`, {
-                headers: { Authorization: `Bearer ${token}` }
+                headers: { Authorization: `Bearer ${token}` },
+                timeout: 3000
             });
-
+            setIsEligible(true); 
             if (res.data.eligible) {
                 setStarterPack(res.data.pack);
-                setIsEligible(true);
-            } else {
-                setIsEligible(false);
             }
         } catch (error) {
-            console.error('[StarterPack] Eligibility check failed:', error);
-            setIsEligible(false);
-        } finally {
-            setLoading(false);
+            setIsEligible(true); 
         }
+    };
+
+    const startAnimations = () => {
+        const mainAnims = Animated.parallel([
+            Animated.timing(fadeAnim, { toValue: 1, duration: 500, useNativeDriver: true }),
+            Animated.spring(scaleAnim, { toValue: 1, friction: 8, tension: 40, useNativeDriver: true }),
+            Animated.loop(
+                Animated.sequence([
+                    Animated.timing(floatAnim, { toValue: 1, duration: 2500, useNativeDriver: true }),
+                    Animated.timing(floatAnim, { toValue: 0, duration: 2500, useNativeDriver: true })
+                ])
+            ),
+            Animated.loop(
+                Animated.sequence([
+                    Animated.timing(pulseAnim, { toValue: 1.06, duration: 800, useNativeDriver: true }),
+                    Animated.timing(pulseAnim, { toValue: 1, duration: 800, useNativeDriver: true })
+                ])
+            )
+        ]);
+
+        mainAnims.start();
+        animationsRef.current.push(mainAnims);
+
+        heartAnims.forEach((anim, i) => {
+            anim.setValue(0);
+            const heartLoop = Animated.loop(
+                Animated.sequence([
+                    Animated.delay(i * 400),
+                    Animated.timing(anim, { toValue: 1, duration: 3000, useNativeDriver: true })
+                ])
+            );
+            heartLoop.start();
+            animationsRef.current.push(heartLoop);
+        });
     };
 
     const handleStarterPurchase = async () => {
         setLoading(true);
         try {
-            const token = await AsyncStorage.getItem('token');
-            // Note: In a real app, this would trigger the actual IAP flow (RevenueCat/Apple/Google)
-            // For now, we simulate the backend purchase update
-            const res = await axios.post(`${API_URL}/starter-pack/purchase`, {
-                transactionId: `starter_${Date.now()}`
-            }, {
-                headers: { Authorization: `Bearer ${token}` }
+            // 1. Fetch available packages from RevenueCat
+            const packages = await PurchaseService.getOfferings();
+            
+            if (!packages || packages.length === 0) {
+                showAlert({
+                    title: "Hata",
+                    message: "Satın alma seçenekleri şu an yüklenemedi.",
+                    type: "error"
+                });
+                setLoading(false);
+                return;
+            }
+
+            // Find our starter package (searching for 'starter' and '300' in identifier)
+            console.log('[Store] Available IDs:', packages.map(p => p.product.identifier));
+            
+            const starterPackage = packages.find(p => {
+                const id = p.product.identifier.toLowerCase();
+                // Match common starter pack naming patterns
+                return id === 'starter300' ||
+                       id.includes('starter:starter300') ||
+                       (id.includes('starter') && id.includes('300')) || 
+                       (id.includes('baslangic') && id.includes('300')) ||
+                       id === 'starter_pack' || id === '300_coins_starter';
             });
 
-            if (res.data.success) {
-                Alert.alert("Başarılı!", res.data.message);
-                onClose();
+            if (!starterPackage) {
+                console.warn('[Store] Starter package not found. Matching criteria failed.');
+                showAlert({
+                    title: "Hata",
+                    message: "Özel teklif paketi mağazada bulunamadı. Lütfen teknik destek ile iletişime geçin.",
+                    type: "error"
+                });
+                setLoading(false);
+                return;
+            }
+
+            // 2. Trigger Real Purchase
+            const result = await PurchaseService.purchasePackage(starterPackage);
+            
+            if (result.success) {
+                const token = await AsyncStorage.getItem('token');
+                const backendRes = await axios.post(`${API_URL}/starter-pack/purchase`, {
+                    transactionId: result.transactionId || `rc_${Date.now()}`
+                }, {
+                    headers: { Authorization: `Bearer ${token}` }
+                });
+
+                if (backendRes.data.success) {
+                    setShowConfetti(true);
+                    showAlert({
+                        title: "Başarılı!",
+                        message: "300 Coin hesabınıza eklendi. Keyifli sohbetler!",
+                        type: "success",
+                        onConfirm: () => {
+                            if (onPurchaseSuccess) {
+                                onPurchaseSuccess();
+                            } else {
+                                onClose();
+                            }
+                        }
+                    });
+                } else {
+                    showAlert({
+                        title: "Bilgi",
+                        message: "Ödeme başarılı ancak bakiye güncellenirken bir sorun oluştu.",
+                        type: "warning"
+                    });
+                }
+            } else if (!result.cancelled) {
+                showAlert({
+                    title: "Hata",
+                    message: result.error || "Satın alma işlemi tamamlanamadı.",
+                    type: "error"
+                });
             }
         } catch (error) {
-            Alert.alert("Hata", "Satın alma işlemi sırasında bir hata oluştu.");
+            console.error('[Purchase] Error:', error);
+            showAlert({
+                title: "Hata",
+                message: "Bir sorun oluştu: " + error.message,
+                type: "error"
+            });
         } finally {
             setLoading(false);
         }
     };
 
     const renderStarterPack = () => (
-        <LinearGradient
-            colors={['#4c1d95', '#1e1b4b']}
-            style={styles.gradient}
-        >
-            <View style={styles.specialBadge}>
-                <Text style={styles.specialBadgeText}>%80 İNDİRİM</Text>
-            </View>
-
-            <View style={styles.iconContainerSpecial}>
-                <Ionicons name="flash" size={40} color="#fcd34d" />
-            </View>
-
-            <Text style={styles.titleSpecial}>Yarım Kalmasın!</Text>
-            <Text style={styles.messageSpecial}>
-                Sohbetin en heyecanlı yerinde durma! Sadece senin için hazırladığımız bu özel paketi kaçırma.
-            </Text>
-
-            <View style={styles.priceContainer}>
-                <Text style={styles.oldPrice}>9.99 TL</Text>
-                <Text style={styles.newPrice}>2.99 TL</Text>
-            </View>
-
-            <View style={styles.coinCountContainer}>
-                <Ionicons name="heart" size={24} color="#f43f5e" />
-                <Text style={styles.coinCountText}>{starterPack?.coins || 200} Coin</Text>
-            </View>
-
-            <TouchableOpacity 
-                onPress={handleStarterPurchase} 
-                style={{ width: '100%' }}
-                disabled={loading}
+        <Animated.View style={[styles.modalContainer, { opacity: fadeAnim, transform: [{ scale: scaleAnim }] }]}>
+            <LinearGradient
+                colors={['#1a103d', '#0c071e']}
+                style={styles.card}
             >
-                <LinearGradient
-                    colors={['#f59e0b', '#d97706']}
-                    style={styles.buyBtn}
+                {/* BACKGROUND DECORATION */}
+                <View style={styles.bgDecoration}>
+                    {heartAnims.map((anim, i) => (
+                        <Animated.View 
+                            key={i}
+                            style={[
+                                styles.floatingHeart, 
+                                { 
+                                    left: (i * 20) + '%',
+                                    opacity: anim.interpolate({ inputRange: [0, 0.5, 1], outputRange: [0, 0.2, 0] }),
+                                    transform: [
+                                        { translateY: anim.interpolate({ inputRange: [0, 1], outputRange: [200, -200] }) },
+                                        { scale: anim.interpolate({ inputRange: [0, 1], outputRange: [0.5, 1.5] }) }
+                                    ]
+                                }
+                            ]}
+                        >
+                            <Ionicons name="heart" size={24} color="#ec4899" />
+                        </Animated.View>
+                    ))}
+                    <Animated.View style={[styles.glowBall, { opacity: 0.15, transform: [{ translateY: floatAnim.interpolate({ inputRange: [0, 1], outputRange: [0, 30] }) }] }]} />
+                </View>
+
+                {/* CLOSE BUTTON */}
+                <TouchableOpacity 
+                    style={styles.closeButton} 
+                    onPress={onClose}
+                    activeOpacity={0.7}
                 >
-                    {loading ? (
-                        <ActivityIndicator color="white" />
-                    ) : (
-                        <>
-                            <Ionicons name="rocket" size={20} color="white" style={{ marginRight: 8 }} />
-                            <Text style={styles.buyBtnText}>Fırsatı Yakala</Text>
-                        </>
-                    )}
-                </LinearGradient>
-            </TouchableOpacity>
+                    <Ionicons name="close" size={22} color="rgba(255,255,255,0.4)" />
+                </TouchableOpacity>
 
-            <Text style={styles.limitText}>* Teklif sadece 24 saat geçerlidir ve 1 kez alınabilir.</Text>
-
-            <TouchableOpacity onPress={onClose} style={styles.cancelBtn}>
-                <Text style={styles.cancelBtnText}>Daha sonra</Text>
-            </TouchableOpacity>
-        </LinearGradient>
-    );
-
-    const renderNormalInsufficient = () => (
-        <LinearGradient
-            colors={['#1e293b', '#0f172a']}
-            style={styles.gradient}
-        >
-            <View style={styles.iconContainer}>
-                <Ionicons name="alert-circle" size={50} color="#f59e0b" />
-            </View>
-
-            <Text style={styles.title}>Yetersiz Bakiye</Text>
-            <Text style={styles.message}>
-                Mesaj göndermek için yeterli coininiz bulunmamaktadır. Sohbet etmeye devam etmek için lütfen yükleme yapın.
-            </Text>
-
-            <TouchableOpacity onPress={onBuyCoins} style={{ width: '100%' }}>
+                {/* TOP BADGE */}
                 <LinearGradient
-                    colors={['#f59e0b', '#d97706']}
-                    style={styles.buyBtn}
+                    colors={['#ec4899', '#8b5cf6']}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 0 }}
+                    style={styles.specialBadge}
                 >
-                    <Ionicons name="cart" size={20} color="white" style={{ marginRight: 8 }} />
-                    <Text style={styles.buyBtnText}>Coin Yükle</Text>
+                    <Text style={styles.specialBadgeText}>%80 İNDİRİM</Text>
                 </LinearGradient>
-            </TouchableOpacity>
 
-            <TouchableOpacity onPress={onClose} style={styles.cancelBtn}>
-                <Text style={styles.cancelBtnText}>Vazgeç</Text>
-            </TouchableOpacity>
-        </LinearGradient>
+                {/* HEADER */}
+                <Text style={styles.topLabel}>ÖZEL TEKLİF</Text>
+                <Text style={[styles.titleSpecial, { marginTop: 5 }]}>Sohbet Yarım Kalmasın 💜</Text>
+                <Text style={styles.messageSpecial}>
+                    Ona söyleyeceklerin bitmedi, değil mi? Sohbetin devam etmesi için özel fırsatı kaçırma.
+                </Text>
+
+                {/* PRICE SECTION */}
+                <View style={styles.priceSection}>
+                    <Text style={styles.oldPrice}>199.99 TL</Text>
+                    <Text style={styles.newPrice}>99.99 TL</Text>
+                </View>
+
+                {/* PRODUCT PILL */}
+                <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
+                    <MaterialCommunityIcons name="lightning-bolt" size={16} color="#fcd34d" />
+                    <Text style={{ color: '#fcd34d', fontSize: 13, fontWeight: '900', marginLeft: 4 }}>200 Coin + 100 Bonus</Text>
+                </View>
+
+                {/* CTA BUTTON */}
+                <Animated.View style={[styles.ctaButtonWrapper, { transform: [{ scale: pulseAnim }] }]}>
+                    <TouchableOpacity 
+                        onPress={handleStarterPurchase} 
+                        activeOpacity={0.8}
+                        disabled={loading}
+                        style={{ width: '100%' }}
+                    >
+                        <LinearGradient
+                            colors={['#f59e0b', '#ea580c']}
+                            start={{ x: 0, y: 0 }}
+                            end={{ x: 1, y: 0 }}
+                            style={styles.ctaButton}
+                        >
+                            {loading ? (
+                                <ActivityIndicator color="white" />
+                            ) : (
+                                <Text style={styles.ctaButtonText}>Şimdi Aç 🔥</Text>
+                            )}
+                        </LinearGradient>
+                    </TouchableOpacity>
+                </Animated.View>
+
+                {/* COUNTDOWN */}
+                <View style={styles.footer}>
+                    <Text style={styles.timerText}>Teklif {timeLeft} içinde bitiyor</Text>
+                </View>
+            </LinearGradient>
+        </Animated.View>
     );
 
     return (
-        <Modal
-            visible={visible}
-            transparent
-            animationType="fade"
-            onRequestClose={onClose}
-        >
-            <View style={styles.overlay}>
-                <View style={[styles.container, isEligible && styles.containerSpecial]}>
-                    {loading && !starterPack ? (
-                        <View style={[styles.gradient, { minHeight: 200, justifyContent: 'center' }]}>
-                            <ActivityIndicator size="large" color="#f59e0b" />
-                        </View>
-                    ) : (
-                        isEligible ? renderStarterPack() : renderNormalInsufficient()
-                    )}
+        <>
+            <Modal
+                visible={visible}
+                transparent
+                animationType="none"
+                onRequestClose={onClose}
+            >
+                <View style={styles.overlay}>
+                    {renderStarterPack()}
                 </View>
-            </View>
-        </Modal>
+            </Modal>
+            {showConfetti && <Confetti onFinish={() => setShowConfetti(false)} />}
+        </>
     );
 }
 
 const styles = StyleSheet.create({
     overlay: {
         flex: 1,
-        backgroundColor: 'rgba(0,0,0,0.8)',
+        backgroundColor: 'rgba(0,0,0,0.5)',
         justifyContent: 'center',
         alignItems: 'center',
-        padding: 20
     },
-    container: {
-        width: width * 0.85,
-        borderRadius: 24,
+    modalContainer: {
+        width: width * 0.72,
+        borderRadius: 20,
         overflow: 'hidden',
+        elevation: 10,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 8 },
+        shadowOpacity: 0.4,
+        shadowRadius: 12,
+    },
+    card: {
+        width: '100%',
+        paddingVertical: 18,
+        paddingHorizontal: 16,
+        alignItems: 'center',
+        borderRadius: 20,
         borderWidth: 1,
-        borderColor: 'rgba(255,255,255,0.1)'
+        borderColor: 'rgba(255,255,255,0.15)',
     },
-    containerSpecial: {
-        borderColor: '#f59e0b',
-        borderWidth: 2,
+    bgDecoration: {
+        ...StyleSheet.absoluteFillObject,
+        overflow: 'hidden',
     },
-    gradient: {
-        padding: 24,
-        alignItems: 'center'
+    floatingHeart: {
+        position: 'absolute',
     },
-    iconContainer: {
-        width: 80,
-        height: 80,
-        borderRadius: 40,
-        backgroundColor: 'rgba(245, 158, 11, 0.1)',
-        justifyContent: 'center',
-        alignItems: 'center',
-        marginBottom: 16
+    glowBall: {
+        position: 'absolute',
+        width: 100,
+        height: 100,
+        borderRadius: 50,
+        backgroundColor: '#8b5cf6',
+        top: -30,
+        right: -30,
     },
-    iconContainerSpecial: {
-        width: 80,
-        height: 80,
-        borderRadius: 40,
-        backgroundColor: 'rgba(252, 211, 77, 0.2)',
-        justifyContent: 'center',
-        alignItems: 'center',
-        marginBottom: 16,
-        borderWidth: 2,
-        borderColor: '#fcd34d'
-    },
-    title: {
-        color: 'white',
-        fontSize: 20,
-        fontWeight: 'bold',
-        marginBottom: 10
-    },
-    titleSpecial: {
-        color: 'white',
-        fontSize: 24,
-        fontWeight: '900',
-        marginBottom: 10,
-        textAlign: 'center'
-    },
-    message: {
-        color: '#94a3b8',
-        textAlign: 'center',
-        marginBottom: 24,
-        lineHeight: 22
-    },
-    messageSpecial: {
-        color: '#e2e8f0',
-        textAlign: 'center',
-        marginBottom: 16,
-        lineHeight: 20,
-        fontSize: 14
+    closeButton: {
+        position: 'absolute',
+        top: 12,
+        right: 12,
+        zIndex: 20,
+        padding: 5,
     },
     specialBadge: {
+        paddingHorizontal: 8,
+        paddingVertical: 3,
+        borderRadius: 6,
         position: 'absolute',
-        top: 15,
-        right: -30,
-        backgroundColor: '#ef4444',
-        paddingHorizontal: 40,
-        paddingVertical: 5,
-        transform: [{ rotate: '45deg' }],
-        zIndex: 10
+        top: 12,
+        left: 12,
+        zIndex: 10,
     },
     specialBadgeText: {
-        color: 'white',
+        color: '#fff',
+        fontSize: 8,
         fontWeight: '900',
-        fontSize: 10
+        letterSpacing: 0.5,
     },
-    priceContainer: {
+    iconContainerMain: {
+        marginTop: 0,
+        marginBottom: 8,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    mainGlow: {
+        position: 'absolute',
+        width: 60,
+        height: 60,
+        borderRadius: 30,
+        backgroundColor: '#8b5cf6',
+        opacity: 0.2,
+    },
+    iconCircle: {
+        width: 56,
+        height: 56,
+        borderRadius: 28,
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderWidth: 1.5,
+        borderColor: 'rgba(255,255,255,0.25)',
+    },
+    activeDot: {
+        position: 'absolute',
+        top: 2,
+        right: 2,
+        width: 10,
+        height: 10,
+        borderRadius: 5,
+        backgroundColor: '#22c55e',
+        borderWidth: 1.5,
+        borderColor: '#1a103d',
+    },
+    socialProof: {
         flexDirection: 'row',
         alignItems: 'center',
-        marginBottom: 15,
-        gap: 10
+        backgroundColor: 'rgba(255,255,255,0.08)',
+        paddingHorizontal: 8,
+        paddingVertical: 3,
+        borderRadius: 8,
+        marginBottom: 10,
+    },
+    socialProofText: {
+        color: '#fff',
+        fontSize: 10,
+        fontWeight: '700',
+    },
+    pulseDot: {
+        width: 4,
+        height: 4,
+        borderRadius: 2,
+        backgroundColor: '#22c55e',
+        marginRight: 5,
+    },
+    topLabel: {
+        color: '#ec4899',
+        fontSize: 12,
+        fontWeight: '900',
+        letterSpacing: 4,
+        marginTop: -5,
+        textTransform: 'uppercase',
+    },
+    titleSpecial: {
+        color: '#fff',
+        fontSize: 17,
+        fontWeight: '900',
+        textAlign: 'center',
+        marginBottom: 6,
+    },
+    messageSpecial: {
+        color: 'rgba(255,255,255,0.75)',
+        fontSize: 11,
+        textAlign: 'center',
+        lineHeight: 15,
+        marginBottom: 12,
+        paddingHorizontal: 5,
+    },
+    priceSection: {
+        alignItems: 'center',
+        marginBottom: 10,
     },
     oldPrice: {
-        color: '#94a3b8',
+        color: 'rgba(255,255,255,0.4)',
+        fontSize: 14,
         textDecorationLine: 'line-through',
-        fontSize: 18
+        marginBottom: -2,
     },
     newPrice: {
-        color: '#fcd34d',
-        fontSize: 28,
-        fontWeight: '900'
+        color: '#fff',
+        fontSize: 38,
+        fontWeight: '900',
+        letterSpacing: -1,
+        textShadowColor: 'rgba(139, 92, 246, 0.6)',
+        textShadowOffset: { width: 0, height: 4 },
+        textShadowRadius: 10,
     },
-    coinCountContainer: {
-        flexDirection: 'row',
+    ctaButtonWrapper: {
+        width: '100%',
+        shadowColor: '#ea580c',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.35,
+        shadowRadius: 8,
+    },
+    ctaButton: {
+        width: '100%',
+        height: 44,
+        borderRadius: 14,
         alignItems: 'center',
-        backgroundColor: 'rgba(255,255,255,0.1)',
-        paddingHorizontal: 20,
-        paddingVertical: 10,
-        borderRadius: 20,
-        marginBottom: 20,
-        gap: 8
-    },
-    coinCountText: {
-        color: 'white',
-        fontSize: 18,
-        fontWeight: 'bold'
-    },
-    buyBtn: {
-        flexDirection: 'row',
-        paddingVertical: 14,
-        borderRadius: 16,
         justifyContent: 'center',
-        alignItems: 'center',
-        marginBottom: 12,
-        width: '100%'
     },
-    buyBtnText: {
-        color: 'white',
+    ctaButtonText: {
+        color: '#fff',
         fontSize: 16,
-        fontWeight: 'bold'
+        fontWeight: '900',
     },
-    cancelBtn: {
-        paddingVertical: 10
+    footer: {
+        marginTop: 12,
+        alignItems: 'center',
     },
-    cancelBtnText: {
-        color: '#64748b',
-        fontSize: 14,
-        fontWeight: '600'
-    },
-    limitText: {
-        color: '#64748b',
+    timerText: {
+        color: '#ec4899',
         fontSize: 10,
-        textAlign: 'center',
-        fontStyle: 'italic',
-        marginBottom: 5
+        fontWeight: '900',
+        textTransform: 'uppercase',
+        letterSpacing: 0.5,
+        marginBottom: 6,
+    },
+    dismissBtnText: {
+        color: 'rgba(255,255,255,0.45)',
+        fontSize: 11,
+        fontWeight: '700',
     }
 });

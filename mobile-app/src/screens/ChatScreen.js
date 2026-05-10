@@ -6,7 +6,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import io from 'socket.io-client';
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import axios from 'axios';
 import * as ImagePicker from 'expo-image-picker';
 import { Audio } from 'expo-av'; // Import Audio
@@ -17,6 +17,7 @@ import ChatBackground from '../components/animated/ChatBackground';
 import VipFrame from '../components/ui/VipFrame';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAlert } from '../contexts/AlertContext';
+import { useStarterPack } from '../contexts/StarterPackContext';
 import { GIFTS } from '../constants/gifts';
 import GlassCard from '../components/ui/GlassCard';
 import ModernAlert from '../components/ui/ModernAlert';
@@ -51,8 +52,8 @@ export default function ChatScreen({ route, navigation }) {
     // UI Toggles
     const [showOptions, setShowOptions] = useState(false);
     const [showReportModal, setShowReportModal] = useState(false);
-    const [showCoinModal, setShowCoinModal] = useState(false);
     const [showGiftModal, setShowGiftModal] = useState(false);
+    const { openStarterPack } = useStarterPack();
 
     // Track Balance for Gift Modal (Initial from route, updated via socket)
     const [currentBalance, setCurrentBalance] = useState(user.balance || 0);
@@ -63,21 +64,21 @@ export default function ChatScreen({ route, navigation }) {
     const flatListRef = useRef(null);
     const typingTimeoutRef = useRef(null);
     const giftAnim = useRef(new Animated.Value(0)).current;
+    const offerPulseAnim = useRef(new Animated.Value(1)).current;
 
-    // Gift Floating Animation
+    // Gift Floating & Offer Pulse Animations
     useEffect(() => {
         Animated.loop(
             Animated.sequence([
-                Animated.timing(giftAnim, {
-                    toValue: 1,
-                    duration: 1500,
-                    useNativeDriver: true,
-                }),
-                Animated.timing(giftAnim, {
-                    toValue: 0,
-                    duration: 1500,
-                    useNativeDriver: true,
-                }),
+                Animated.timing(giftAnim, { toValue: 1, duration: 1500, useNativeDriver: true }),
+                Animated.timing(giftAnim, { toValue: 0, duration: 1500, useNativeDriver: true }),
+            ])
+        ).start();
+
+        Animated.loop(
+            Animated.sequence([
+                Animated.timing(offerPulseAnim, { toValue: 1.1, duration: 1000, useNativeDriver: true }),
+                Animated.timing(offerPulseAnim, { toValue: 1, duration: 1000, useNativeDriver: true }),
             ])
         ).start();
     }, []);
@@ -401,7 +402,15 @@ export default function ChatScreen({ route, navigation }) {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
         // Check Balance
         if (currentBalance < 10 && vip_level < 1) { 
-            setShowCoinModal(true);
+            showAlert({
+                title: "Yetersiz Bakiye",
+                message: "Mesaj göndermek için bakiyeniz yetersizdir. Sohbetin yarım kalmaması için harika bir teklifimiz var!",
+                type: 'warning',
+                confirmText: "TEKLİFİ GÖR",
+                onConfirm: () => {
+                    openStarterPack();
+                }
+            });
             return;
         }
 
@@ -413,7 +422,7 @@ export default function ChatScreen({ route, navigation }) {
         if (nextBalance <= 0 && vip_level < 1) {
             setTimeout(() => {
                 setShowCoinModal(true);
-            }, 800); 
+            }, 2000); 
         }
 
         const tempId = Date.now().toString();
@@ -918,15 +927,6 @@ export default function ChatScreen({ route, navigation }) {
                 userBalance={currentBalance}
             />
 
-            {/* COIN WARNING MODAL */}
-            <InsufficientCoinsModal
-                visible={showCoinModal}
-                onClose={() => setShowCoinModal(false)}
-                onBuyCoins={() => {
-                    setShowCoinModal(false);
-                    navigation.navigate('Shop', { user });
-                }}
-            />
             {/* GIFT ANIMATION OVERLAY */}
             <GiftOverlay
                 gift={activeGift}

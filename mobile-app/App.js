@@ -18,6 +18,7 @@ SplashScreenNative.preventAutoHideAsync().catch(() => {
 // Theme & Context
 import { ThemeProvider, useTheme } from './src/contexts/ThemeContext';
 import { AlertProvider } from './src/contexts/AlertContext';
+import { StarterPackProvider } from './src/contexts/StarterPackContext';
 import { PurchaseService } from './src/services/purchaseService';
 import { NotificationService } from './src/services/notificationService';
 
@@ -100,41 +101,43 @@ function AppContent() {
 
     return (
         <NavigationContainer>
-            <StatusBar style={themeMode === 'dark' ? 'light' : 'dark'} translucent backgroundColor="transparent" />
-            <Stack.Navigator
-                initialRouteName="Splash"
-                screenOptions={{
-                    headerShown: false,
-                    animation: 'none',
-                    contentStyle: { backgroundColor: theme.colors.background }
-                }}
-            >
-                <Stack.Screen name="Main" component={MainTabs} />
-                <Stack.Screen name="OperatorProfile" component={OperatorProfileScreen} />
-                <Stack.Screen name="Chat" component={ChatScreen} />
-                <Stack.Screen name="Settings" component={SettingsScreen} />
-                <Stack.Screen name="Vip" component={VipScreen} />
-                <Stack.Screen name="VipDetails" component={VipDetailsScreen} />
-                <Stack.Screen name="Shop" component={ShopScreen} />
-                <Stack.Screen name="Favorites" component={FavoritesScreen} />
-                <Stack.Screen name="WhoFavoritedMe" component={WhoFavoritedMeScreen} />
-                <Stack.Screen name="ProfileVisitors" component={ProfileVisitorsScreen} />
-                <Stack.Screen name="Notifications" component={NotificationsScreen} />
-                <Stack.Screen name="Legal" component={LegalScreen} />
-                <Stack.Screen name="VipProgression" component={VipProgressionScreen} />
-                <Stack.Screen name="VipFrameDemo" component={VipFrameDemoScreen} />
-                <Stack.Screen name="ThemeSelection" component={ThemeSelectionScreen} />
-                <Stack.Screen name="Story" component={StoryScreen} />
-                <Stack.Screen name="VoiceCall" component={VoiceCallScreen} />
-                <Stack.Screen name="VideoCall" component={VideoCallScreen} />
-                <Stack.Screen name="CreatePost" component={CreatePostScreen} />
-                <Stack.Screen name="Auth" component={AuthScreen} />
-                <Stack.Screen name="Splash" component={SplashScreen} />
-                <Stack.Screen name="Welcome" component={WelcomeScreen} />
-                <Stack.Screen name="Onboarding" component={OnboardingScreen} />
-                <Stack.Screen name="PurchaseInfo" component={PurchaseInfoScreen} />
-                <Stack.Screen name="Leaderboard" component={LeaderboardScreen} />
-            </Stack.Navigator>
+            <StarterPackProvider>
+                <StatusBar style={themeMode === 'dark' ? 'light' : 'dark'} translucent backgroundColor="transparent" />
+                <Stack.Navigator
+                    initialRouteName="Splash"
+                    screenOptions={{
+                        headerShown: false,
+                        animation: 'none',
+                        contentStyle: { backgroundColor: theme.colors.background }
+                    }}
+                >
+                    <Stack.Screen name="Main" component={MainTabs} />
+                    <Stack.Screen name="OperatorProfile" component={OperatorProfileScreen} />
+                    <Stack.Screen name="Chat" component={ChatScreen} />
+                    <Stack.Screen name="Settings" component={SettingsScreen} />
+                    <Stack.Screen name="Vip" component={VipScreen} />
+                    <Stack.Screen name="VipDetails" component={VipDetailsScreen} />
+                    <Stack.Screen name="Shop" component={ShopScreen} />
+                    <Stack.Screen name="Favorites" component={FavoritesScreen} />
+                    <Stack.Screen name="WhoFavoritedMe" component={WhoFavoritedMeScreen} />
+                    <Stack.Screen name="ProfileVisitors" component={ProfileVisitorsScreen} />
+                    <Stack.Screen name="Notifications" component={NotificationsScreen} />
+                    <Stack.Screen name="Legal" component={LegalScreen} />
+                    <Stack.Screen name="VipProgression" component={VipProgressionScreen} />
+                    <Stack.Screen name="VipFrameDemo" component={VipFrameDemoScreen} />
+                    <Stack.Screen name="ThemeSelection" component={ThemeSelectionScreen} />
+                    <Stack.Screen name="Story" component={StoryScreen} />
+                    <Stack.Screen name="VoiceCall" component={VoiceCallScreen} />
+                    <Stack.Screen name="VideoCall" component={VideoCallScreen} />
+                    <Stack.Screen name="CreatePost" component={CreatePostScreen} />
+                    <Stack.Screen name="Auth" component={AuthScreen} />
+                    <Stack.Screen name="Splash" component={SplashScreen} />
+                    <Stack.Screen name="Welcome" component={WelcomeScreen} />
+                    <Stack.Screen name="Onboarding" component={OnboardingScreen} />
+                    <Stack.Screen name="PurchaseInfo" component={PurchaseInfoScreen} />
+                    <Stack.Screen name="Leaderboard" component={LeaderboardScreen} />
+                </Stack.Navigator>
+            </StarterPackProvider>
         </NavigationContainer>
     );
 }

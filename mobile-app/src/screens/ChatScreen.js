@@ -429,7 +429,7 @@ export default function ChatScreen({ route, navigation }) {
     };
 
     const sendMessage = (textToSend = input) => {
-        if (textToSend.trim() === '' || !chatId) return;
+        if (!textToSend || typeof textToSend !== 'string' || textToSend.trim() === '' || !chatId) return;
         
         // SOCKET CHECK
         if (!socketRef.current || !socketRef.current.connected) {

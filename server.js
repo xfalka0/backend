@@ -282,6 +282,11 @@ const initializeDatabase = async () => {
             await db.query('ALTER TABLE users ADD COLUMN onboarding_completed BOOLEAN DEFAULT false');
         }
 
+        if (!columnNames.includes('last_auto_message_at')) {
+            console.log('[DB] Adding missing column: last_auto_message_at');
+            await db.query('ALTER TABLE users ADD COLUMN last_auto_message_at TIMESTAMP');
+        }
+
         // Fix pending_photos schema if it exists with wrong ID type or missing default
         const photoCols = await db.query("SELECT column_name, data_type, column_default FROM information_schema.columns WHERE table_name = 'pending_photos'");
         const photoColNames = photoCols.rows.map(c => c.column_name);
@@ -1687,6 +1692,20 @@ app.get('/api/admin/stats', authenticateToken, authorizeRole('admin', 'super_adm
         `;
         const registrationChart = await db.query(registrationChartQuery);
 
+        const newUsersLists = {
+            today: await db.query("SELECT id, username, display_name, email, gender, created_at, avatar_url FROM users WHERE role = 'user' AND created_at >= date_trunc('day', NOW()) ORDER BY created_at DESC LIMIT 10"),
+            week: await db.query("SELECT id, username, display_name, email, gender, created_at, avatar_url FROM users WHERE role = 'user' AND created_at >= date_trunc('week', NOW()) ORDER BY created_at DESC LIMIT 10"),
+            month: await db.query("SELECT id, username, display_name, email, gender, created_at, avatar_url FROM users WHERE role = 'user' AND created_at >= date_trunc('month', NOW()) ORDER BY created_at DESC LIMIT 10")
+        };
+
+        const newUsersCounts = await db.query(`
+            SELECT 
+                COUNT(*) FILTER (WHERE created_at >= date_trunc('day', NOW())) as today,
+                COUNT(*) FILTER (WHERE created_at >= NOW() - interval '7 days') as week,
+                COUNT(*) FILTER (WHERE created_at >= NOW() - interval '30 days') as month
+            FROM users WHERE role = 'user'
+        `);
+
         res.json({
             revenue: parseFloat(totalRevenue).toFixed(2),
             activeUsers: parseInt(activeUsers),
@@ -1695,6 +1714,18 @@ app.get('/api/admin/stats', authenticateToken, authorizeRole('admin', 'super_adm
             charts: {
                 revenue: revenueChart.rows,
                 registrations: registrationChart.rows
+            },
+            newUsers: {
+                counts: {
+                    today: parseInt(newUsersCounts.rows[0].today || 0),
+                    week: parseInt(newUsersCounts.rows[0].week || 0),
+                    month: parseInt(newUsersCounts.rows[0].month || 0)
+                },
+                lists: {
+                    today: newUsersLists.today.rows,
+                    week: newUsersLists.week.rows,
+                    month: newUsersLists.month.rows
+                }
             }
         });
     } catch (err) {

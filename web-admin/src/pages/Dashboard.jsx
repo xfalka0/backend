@@ -13,6 +13,7 @@ const SOCKET_URL = (window.location.hostname === 'localhost' || window.location.
 export default function Dashboard() {
     const { user } = useAuth();
     const isOperator = user?.role === 'operator';
+    const [newUserTab, setNewUserTab] = useState('today');
 
     const [stats, setStats] = useState({
         revenue: 0,
@@ -181,6 +182,70 @@ export default function Dashboard() {
                     </div>
                 )}
             </div>
+
+            {/* New Users Section */}
+            {!isOperator && stats?.newUsers && (
+                <div className="premium-card p-8 animate-fade-up">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-8 gap-4">
+                        <h3 className="text-xl font-black text-white uppercase tracking-tighter italic flex items-center gap-3">
+                            <Users className="text-fuchsia-500" size={24} /> Yeni Kayıt Olanlar
+                        </h3>
+                        
+                        <div className="flex bg-slate-800/50 p-1.5 rounded-2xl border border-white/5 w-fit">
+                            {[
+                                { id: 'today', label: 'Bugün', count: stats.newUsers.counts.today },
+                                { id: 'week', label: 'Bu Hafta', count: stats.newUsers.counts.week },
+                                { id: 'month', label: 'Bu Ay', count: stats.newUsers.counts.month }
+                            ].map(tab => (
+                                <button
+                                    key={tab.id}
+                                    onClick={() => setNewUserTab(tab.id)}
+                                    className={`px-5 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all flex items-center gap-2 ${
+                                        newUserTab === tab.id 
+                                            ? 'bg-fuchsia-600 text-white shadow-lg shadow-fuchsia-600/30' 
+                                            : 'text-slate-400 hover:text-white hover:bg-white/5'
+                                    }`}
+                                >
+                                    {tab.label}
+                                    <span className={`px-2 py-0.5 rounded-full text-[10px] ${
+                                        newUserTab === tab.id ? 'bg-white/20' : 'bg-slate-700'
+                                    }`}>
+                                        {tab.count}
+                                    </span>
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
+                        {stats.newUsers.lists[newUserTab]?.length > 0 ? (
+                            stats.newUsers.lists[newUserTab].map(u => (
+                                <div key={u.id} className="bg-slate-800/40 border border-white/5 rounded-2xl p-4 flex items-center gap-4 hover:bg-slate-800/80 transition-colors group">
+                                    <img 
+                                        src={u.avatar_url || 'https://via.placeholder.com/150'} 
+                                        alt={u.username}
+                                        className="w-12 h-12 rounded-full object-cover border border-white/10 group-hover:border-fuchsia-500/50 transition-colors"
+                                    />
+                                    <div className="flex-1 min-w-0">
+                                        <p className="text-sm font-bold text-white truncate">{u.display_name || u.username}</p>
+                                        <p className="text-xs text-slate-400 truncate">@{u.username}</p>
+                                        <div className="flex items-center gap-2 mt-1">
+                                            <span className={`w-2 h-2 rounded-full ${u.gender === 'kadin' ? 'bg-pink-500' : 'bg-blue-500'}`} />
+                                            <span className="text-[10px] text-slate-500 font-medium">
+                                                {new Date(u.created_at).toLocaleDateString('tr-TR', { day: 'numeric', month: 'short' })}
+                                            </span>
+                                        </div>
+                                    </div>
+                                </div>
+                            ))
+                        ) : (
+                            <div className="col-span-full py-8 text-center text-slate-500 font-medium text-sm">
+                                Bu periyotta henüz yeni kayıt bulunmuyor.
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
 
             {/* Bottom Section */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">

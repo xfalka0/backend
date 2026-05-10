@@ -231,9 +231,94 @@ const triggerAutoEngagement = async (io, newUserId) => {
     }
 };
 
+// Auto-Engagement: Send a single message from an operator when user logs in / opens app
+const triggerLoginAutoEngagement = async (io, userId) => {
+    try {
+        console.log(`[LOGIN-ENGAGEMENT] Triggered for user: ${userId}`);
+
+        // 1. Fetch user gender
+        const userRes = await db.query("SELECT gender, username, role FROM users WHERE id = $1 AND role = 'user'", [userId]);
+        if (userRes.rows.length === 0) return;
+
+        const userGenderRaw = userRes.rows[0].gender || 'erkek';
+        const userGender = (userGenderRaw === 'male' || userGenderRaw === 'erkek') ? 'erkek' : 'kadin';
+        const targetGender = userGender === 'kadin' ? 'erkek' : 'kadin';
+
+        // 2. Find a random operator of OPPOSITE gender
+        const opsRes = await db.query(
+            `SELECT u.id, u.username FROM users u 
+             JOIN operators o ON u.id = o.user_id 
+             WHERE u.account_status = 'active' 
+             AND (u.gender = $1 OR u.gender = 'coin_bayisi')
+             ORDER BY RANDOM() LIMIT 1`,
+            [targetGender]
+        );
+
+        if (opsRes.rows.length === 0) return;
+
+        const op = opsRes.rows[0];
+        const messages = [
+            "Selam, tekrar hoş geldin! Nasılsın? 😊",
+            "Gözüm yollarda kaldı, nasılsın bugün?",
+            "Hey! Seni buralarda görmek ne güzel ✨",
+            "Selamlar, günün nasıl geçiyor?",
+            "Hoş geldin! Sohbet etmek istersen buradayım.",
+            "Merhaba, bugün nasılsın? Konuşalım mı?"
+        ];
+        const msgText = messages[Math.floor(Math.random() * messages.length)];
+
+        // Delay 15 to 45 seconds to make it look natural
+        const delay = Math.floor(Math.random() * 30000) + 15000;
+
+        setTimeout(async () => {
+            try {
+                let chatRes = await db.query(
+                    'SELECT id FROM chats WHERE (user_id = $1 AND operator_id = $2) OR (user_id = $2 AND operator_id = $1)',
+                    [userId, op.id]
+                );
+
+                let chatId;
+                if (chatRes.rows.length === 0) {
+                    const newChat = await db.query(
+                        'INSERT INTO chats (user_id, operator_id, last_message, last_message_at) VALUES ($1, $2, $3, NOW()) RETURNING id',
+                        [userId, op.id, msgText]
+                    );
+                    chatId = newChat.rows[0].id;
+                } else {
+                    chatId = chatRes.rows[0].id;
+                }
+
+                const msgResult = await db.query(
+                    'INSERT INTO messages (chat_id, sender_id, content, content_type) VALUES ($1, $2, $3, $4) RETURNING *',
+                    [chatId, op.id, msgText, 'text']
+                );
+                const savedMsg = msgResult.rows[0];
+
+                await db.query('UPDATE chats SET last_message = $1, last_message_at = NOW() WHERE id = $2', [msgText, chatId]);
+
+                if (io) {
+                    const roomName = chatId.toString();
+                    const msgToEmit = {
+                        ...savedMsg,
+                        chat_id: roomName,
+                        sender_username: op.username
+                    };
+                    io.to(roomName).emit('receive_message', msgToEmit);
+                    io.emit('admin_notification', msgToEmit);
+                }
+            } catch (err) {
+                console.error("[LOGIN-ENGAGEMENT ERROR] Failed to send message:", err.message);
+            }
+        }, delay);
+    } catch (err) {
+        console.error("[LOGIN-ENGAGEMENT ERROR]:", err.message);
+    }
+};
+
 module.exports = {
     sanitizeUser,
     logActivity,
     assignFakeInteractions,
-    triggerAutoEngagement
+    triggerAutoEngagement,
+    triggerLoginAutoEngagement
 };

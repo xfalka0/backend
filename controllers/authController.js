@@ -2,7 +2,7 @@ const db = require('../db');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const { OAuth2Client } = require('google-auth-library');
-const { sanitizeUser, logActivity, assignFakeInteractions, triggerAutoEngagement } = require('../utils/helpers');
+const { sanitizeUser, logActivity, assignFakeInteractions, triggerAutoEngagement, triggerLoginAutoEngagement } = require('../utils/helpers');
 
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || '46669084263-drv76chuoahgvfitcdmctvvqm3cbudl7.apps.googleusercontent.com';
 const googleClient = new OAuth2Client(GOOGLE_CLIENT_ID);
@@ -168,14 +168,34 @@ exports.loginEmail = async (req, res) => {
 };
 
 // Me (Token Verification)
-exports.getMe = (req, res) => {
-    res.json({
-        id: req.user.id,
-        username: req.user.username,
-        email: req.user.email,
-        role: req.user.role,
-        avatar_url: req.user.avatar_url,
-        display_name: req.user.display_name,
-        onboarding_completed: req.user.onboarding_completed
-    });
+exports.getMe = async (req, res) => {
+    const io = req.app.get('io');
+    try {
+        const userRes = await db.query('SELECT * FROM users WHERE id = $1', [req.user.id]);
+        if (userRes.rows.length === 0) return res.status(404).json({ error: 'Kullanıcı bulunamadı.' });
+        
+        const user = userRes.rows[0];
+
+        if (user.role === 'user') {
+            const twelveHoursAgo = Date.now() - 12 * 60 * 60 * 1000;
+            const lastAuto = user.last_auto_message_at ? new Date(user.last_auto_message_at).getTime() : 0;
+
+            if (lastAuto < twelveHoursAgo) {
+                await db.query('UPDATE users SET last_auto_message_at = NOW() WHERE id = $1', [user.id]);
+                triggerLoginAutoEngagement(io, user.id);
+            }
+        }
+
+        res.json({
+            id: user.id,
+            username: user.username,
+            email: user.email,
+            role: user.role,
+            avatar_url: user.avatar_url,
+            display_name: user.display_name,
+            onboarding_completed: user.onboarding_completed
+        });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 };

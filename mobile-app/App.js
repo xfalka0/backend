@@ -18,6 +18,7 @@ SplashScreenNative.preventAutoHideAsync().catch(() => {
 // Theme & Context
 import { ThemeProvider, useTheme } from './src/contexts/ThemeContext';
 import { AlertProvider } from './src/contexts/AlertContext';
+import { InAppNotificationProvider } from './src/contexts/InAppNotificationContext';
 import { StarterPackProvider } from './src/contexts/StarterPackContext';
 import { PurchaseService } from './src/services/purchaseService';
 import { NotificationService } from './src/services/notificationService';
@@ -186,9 +187,11 @@ export default function App() {
             <SafeAreaProvider>
                 <ThemeProvider>
                     <AlertProvider>
-                        <ChatProvider>
-                            <AppContent />
-                        </ChatProvider>
+                        <InAppNotificationProvider>
+                            <ChatProvider>
+                                <AppContent />
+                            </ChatProvider>
+                        </InAppNotificationProvider>
                     </AlertProvider>
                 </ThemeProvider>
             </SafeAreaProvider>

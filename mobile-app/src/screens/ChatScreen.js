@@ -30,13 +30,23 @@ import ReportModal from '../components/ReportModal';
 import InsufficientCoinsModal from '../components/InsufficientCoinsModal';
 import GiftPickerModal from '../components/GiftPickerModal';
 import GiftOverlay from '../components/animated/GiftOverlay';
+import ImageLightbox from '../components/ui/ImageLightbox';
 
 import { useChat } from '../contexts/ChatContext';
 
 export default function ChatScreen({ route, navigation }) {
     const insets = useSafeAreaInsets();
-    const { fetchUnreadCount } = useChat();
+    const { fetchUnreadCount, setActiveChatId } = useChat();
     const { showAlert } = useAlert();
+
+    useEffect(() => {
+        if (chatId) {
+            setActiveChatId(chatId);
+        }
+        return () => {
+            setActiveChatId(null);
+        };
+    }, [chatId]);
     const { theme, themeMode } = useTheme();
     const { operatorId, chatId: existingChatId, name, job, user: routeUser = {}, avatar_url, is_online, vip_level = 0, gender } = route.params;
 
@@ -327,6 +337,13 @@ export default function ChatScreen({ route, navigation }) {
                 }
             });
 
+            socketRef.current.on('message_reaction', (data) => {
+                console.log('[SOCKET] Reaction received:', data);
+                setMessages(prev => prev.map(m => 
+                    m.id === data.messageId ? { ...m, reaction: data.reaction } : m
+                ));
+            });
+
             socketRef.current.on('display_typing', (data) => {
                 console.log('[SOCKET] display_typing received on Mobile:', data, 'Current realChatId:', realChatId);
                 const incomingChatId = data.chatId ? data.chatId.toString() : '';
@@ -428,7 +445,8 @@ export default function ChatScreen({ route, navigation }) {
         );
     };
 
-    const sendMessage = (textToSend = input) => {
+    const sendMessage = (textOrEvent) => {
+        const textToSend = typeof textOrEvent === 'string' ? textOrEvent : input;
         if (!textToSend || typeof textToSend !== 'string' || textToSend.trim() === '' || !chatId) return;
         
         // SOCKET CHECK
@@ -444,7 +462,8 @@ export default function ChatScreen({ route, navigation }) {
 
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
         // Check Balance
-        if (currentBalance < 10 && vip_level < 1) { 
+        if (currentBalance < 10 && (user.vip_level || 0) < 1) { 
+            console.log('[ChatScreen] Insufficient balance detected! Current:', currentBalance, 'User VIP:', user.vip_level);
             handleInsufficientCoins();
             return;
         }
@@ -454,7 +473,7 @@ export default function ChatScreen({ route, navigation }) {
         setCurrentBalance(nextBalance);
 
         // If balance reached 0, trigger the centralized flow
-        if (nextBalance <= 0 && vip_level < 1) {
+        if (nextBalance <= 0 && (user.vip_level || 0) < 1) {
             setTimeout(() => {
                 handleInsufficientCoins();
             }, 1000); 
@@ -559,7 +578,7 @@ export default function ChatScreen({ route, navigation }) {
 
     // --- MEDIA SHARING LOGIC ---
     const handleSendImage = async () => {
-        if (currentBalance < 50) {
+        if (currentBalance < 50 && (user.vip_level || 0) < 1) {
             handleInsufficientCoins();
             return;
         }
@@ -626,7 +645,7 @@ export default function ChatScreen({ route, navigation }) {
 
     // --- VOICE MESSAGE LOGIC ---
     const startRecording = async () => {
-        if (currentBalance < 30) {
+        if (currentBalance < 30 && (user.vip_level || 0) < 1) {
             handleInsufficientCoins();
             return;
         }
@@ -739,7 +758,16 @@ export default function ChatScreen({ route, navigation }) {
 
             return (
                 <View style={[styles.giftBubbleContainer, isUser ? { alignSelf: 'flex-end' } : { alignSelf: 'flex-start' }]}>
-                    <MessageBubble isMine={isUser} index={index} isRead={item.is_read}>
+                    <MessageBubble 
+                        isMine={isUser} 
+                        index={index} 
+                        isRead={item.is_read}
+                        reaction={item.reaction}
+                        onReaction={(type) => {
+                            socketRef.current?.emit('message_reaction', { messageId: item.id, reaction: type, chatId });
+                            setMessages(prev => prev.map(m => m.id === item.id ? { ...m, reaction: type } : m));
+                        }}
+                    >
                         <View style={styles.giftMessageContent}>
                             <Image
                                 source={gift.image || require('../assets/gift_icon.webp')}
@@ -808,6 +836,11 @@ export default function ChatScreen({ route, navigation }) {
                 avatar={resolveImageUrl(isUser ? user.avatar : avatar_url)}
                 vipLevel={isUser ? user.vip_level : vip_level}
                 timestamp={item.created_at}
+                reaction={item.reaction}
+                onReaction={(type) => {
+                    socketRef.current?.emit('message_reaction', { messageId: item.id, reaction: type, chatId });
+                    setMessages(prev => prev.map(m => m.id === item.id ? { ...m, reaction: type } : m));
+                }}
             >
                 {content}
             </MessageBubble>
@@ -986,25 +1019,11 @@ export default function ChatScreen({ route, navigation }) {
             }
 
             {/* LIGHTBOX MODAL */}
-            {selectedImage && (
-                <View style={StyleSheet.absoluteFill}>
-                    <BlurView intensity={95} tint="dark" style={StyleSheet.absoluteFill}>
-                        <TouchableOpacity 
-                            style={styles.lightboxClose}
-                            onPress={() => setSelectedImage(null)}
-                        >
-                            <Ionicons name="close-circle" size={36} color="#fff" />
-                        </TouchableOpacity>
-                        <View style={styles.lightboxContent}>
-                            <Image 
-                                source={{ uri: resolveImageUrl(selectedImage) }} 
-                                style={styles.fullImage} 
-                                resizeMode="contain"
-                            />
-                        </View>
-                    </BlurView>
-                </View>
-            )}
+            <ImageLightbox 
+                visible={!!selectedImage}
+                imageUri={resolveImageUrl(selectedImage)}
+                onClose={() => setSelectedImage(null)}
+            />
 
             {/* REPORT MODAL */}
             <ReportModal

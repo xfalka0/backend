@@ -64,7 +64,7 @@ const OnlinePulse = ({ themeMode, theme }) => {
 import { useChat } from '../contexts/ChatContext';
 
 export default function MessagesScreen({ navigation, route }) {
-    const { fetchUnreadCount } = useChat();
+    const { fetchUnreadCount, balance, fetchBalance } = useChat();
     const insets = useSafeAreaInsets();
     const { theme, themeMode } = useTheme();
     const { user } = route.params || {};
@@ -78,6 +78,7 @@ export default function MessagesScreen({ navigation, route }) {
             if (user?.id) {
                 fetchChats();
                 fetchUnreadCount(user.id);
+                fetchBalance(user.id);
             } else {
                 setLoading(false);
             }
@@ -273,7 +274,23 @@ export default function MessagesScreen({ navigation, route }) {
                                 onResellerPress={() => navigation.navigate('PurchaseInfo', { user })}
                             />
                             <View style={styles.headerContainer}>
-                                <Text style={[styles.title, { color: theme.colors.text }]}>Sohbetler</Text>
+                                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                                    <Text style={[styles.title, { color: theme.colors.text }]}>Sohbetler</Text>
+                                    <TouchableOpacity 
+                                        style={styles.coinBadge}
+                                        onPress={() => navigation.navigate('Shop')}
+                                    >
+                                        <LinearGradient
+                                            colors={['#fbbf24', '#d97706']}
+                                            start={{ x: 0, y: 0 }}
+                                            end={{ x: 1, y: 1 }}
+                                            style={styles.coinGradient}
+                                        >
+                                            <Ionicons name="sparkles" size={12} color="#fff" style={{ marginRight: 4 }} />
+                                            <Text style={styles.coinText}>{balance || 0}</Text>
+                                        </LinearGradient>
+                                    </TouchableOpacity>
+                                </View>
                                 <TouchableOpacity
                                     onPress={() => setShowSearch(!showSearch)}
                                     style={{
@@ -450,6 +467,27 @@ const styles = StyleSheet.create({
         fontSize: 10, // Reduced from 12
         marginBottom: 6, // Space between time and badge
         fontWeight: '600',
+    },
+    coinBadge: {
+        marginLeft: 12,
+        borderRadius: 20,
+        overflow: 'hidden',
+        elevation: 4,
+        shadowColor: '#fbbf24',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.3,
+        shadowRadius: 4,
+    },
+    coinGradient: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 10,
+        paddingVertical: 4,
+    },
+    coinText: {
+        color: 'white',
+        fontSize: 14,
+        fontWeight: '900',
     },
     loadingContainer: {
         flex: 1,

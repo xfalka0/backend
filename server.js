@@ -4017,6 +4017,7 @@ io.on('connection', (socket) => {
                 const updateRes = await client.query('UPDATE users SET balance = balance - $2 WHERE id = $1 RETURNING balance', [senderId, cost]);
                 userBalance = parseFloat(updateRes.rows[0].balance);
                 io.emit('admin_balance_update', { userId: senderId, newBalance: userBalance });
+                socket.emit('balance_update', { userId: senderId, newBalance: userBalance });
 
                 if (type === 'gift') {
                     const chatRes = await client.query('SELECT operator_id FROM chats WHERE id = $1', [chatId]);
@@ -4182,6 +4183,16 @@ io.on('connection', (socket) => {
             if (client) {
                 client.release();
             }
+        }
+    });
+
+    socket.on('message_reaction', async (data) => {
+        const { messageId, reaction, chatId } = data;
+        try {
+            await db.query('UPDATE messages SET reaction = $1 WHERE id = $2', [reaction, messageId]);
+            io.to(chatId.toString()).emit('message_reaction', { messageId, reaction, chatId });
+        } catch (err) {
+            console.error('[SOCKET] reaction error:', err.message);
         }
     });
 

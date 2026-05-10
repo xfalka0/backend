@@ -3,6 +3,9 @@ import { View, StyleSheet, TouchableOpacity, Text, Animated, Easing } from 'reac
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import InsufficientCoinsModal from '../components/InsufficientCoinsModal';
+import axios from 'axios';
+import { API_URL } from '../config';
+import { useAlert } from './AlertContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useNavigation } from '@react-navigation/native';
 
@@ -13,21 +16,40 @@ export const useStarterPack = () => useContext(StarterPackContext);
 export const StarterPackProvider = ({ children }) => {
     const [showModal, setShowModal] = useState(false);
     const [showBubble, setShowBubble] = useState(false);
+    const [isEligible, setIsEligible] = useState(true);
     const pulseAnim = useRef(new Animated.Value(1)).current;
+    const { showAlert } = useAlert();
+    const navigation = useNavigation();
 
-    // Load persisted state on mount
+    // Load persisted state and check eligibility on mount
     useEffect(() => {
-        const loadState = async () => {
+        const loadStateAndCheck = async () => {
             try {
+                // 1. Check bubble visibility
                 const saved = await AsyncStorage.getItem('starter_pack_bubble_visible');
                 if (saved === 'true') {
                     setShowBubble(true);
                 }
+
+                // 2. Check eligibility from backend
+                const token = await AsyncStorage.getItem('token');
+                if (token) {
+                    const res = await axios.get(`${API_URL}/starter-pack/check`, {
+                        headers: { Authorization: `Bearer ${token}` }
+                    });
+                    setIsEligible(res.data.eligible);
+                    
+                    // If not eligible anymore, hide bubble
+                    if (!res.data.eligible) {
+                        setShowBubble(false);
+                        await AsyncStorage.setItem('starter_pack_bubble_visible', 'false');
+                    }
+                }
             } catch (e) {
-                console.error('[StarterPack] Error loading state:', e);
+                console.error('[StarterPack] Error loading state/eligibility:', e);
             }
         };
-        loadState();
+        loadStateAndCheck();
     }, []);
 
     // Save state whenever showBubble changes
@@ -68,10 +90,42 @@ export const StarterPackProvider = ({ children }) => {
     const completeStarterPack = () => {
         setShowModal(false);
         setShowBubble(false);
+        setIsEligible(false);
+    };
+
+    const handleInsufficientCoins = () => {
+        if (isEligible) {
+            showAlert({
+                title: "Yetersiz Bakiye",
+                message: "Mesaj göndermek için bakiyeniz yetersizdir. Sohbetin yarım kalmaması için harika bir teklifimiz var!",
+                type: 'warning',
+                confirmText: "TEKLİFİ GÖR",
+                onConfirm: () => {
+                    openStarterPack();
+                }
+            });
+        } else {
+            showAlert({
+                title: "Yetersiz Bakiye",
+                message: "Mesaj göndermek için bakiyeniz yetersizdir. Yeni coin almak için mağazaya göz atın!",
+                type: 'warning',
+                confirmText: "MAĞAZAYA GİT",
+                onConfirm: () => {
+                    navigation.navigate('Shop');
+                }
+            });
+        }
     };
 
     return (
-        <StarterPackContext.Provider value={{ openStarterPack, closeStarterPack, completeStarterPack, setShowBubble }}>
+        <StarterPackContext.Provider value={{ 
+            openStarterPack, 
+            closeStarterPack, 
+            completeStarterPack, 
+            setShowBubble, 
+            isEligible, 
+            handleInsufficientCoins 
+        }}>
             {children}
             
             {/* GLOBAL BUBBLE */}

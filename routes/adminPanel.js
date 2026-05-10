@@ -62,8 +62,16 @@ router.get('/stats', authenticateToken, authorizeRole('admin', 'super_admin', 'm
 router.get('/payments', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
     try {
         const result = await db.query(`
-            SELECT t.*, u.username as user_name, u.email FROM transactions t
-            LEFT JOIN users u ON t.user_id = u.id ORDER BY t.created_at DESC LIMIT 100
+            SELECT 
+                p.*, 
+                u.username as user_name, 
+                u.email,
+                cp.name as package_name
+            FROM payments p
+            LEFT JOIN users u ON p.user_id = u.id 
+            LEFT JOIN coin_packages cp ON p.package_id = cp.id
+            ORDER BY p.created_at DESC 
+            LIMIT 100
         `);
         res.json(result.rows);
     } catch (err) {

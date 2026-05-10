@@ -1,12 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, TextInput, FlatList, StyleSheet, KeyboardAvoidingView, Platform, TouchableOpacity, Image, RefreshControl, Animated, Alert } from 'react-native';
+import { View, Text, TextInput, FlatList, StyleSheet, KeyboardAvoidingView, Platform, TouchableOpacity, Image, RefreshControl, Animated, Alert, ScrollView } from 'react-native';
 import { BlurView } from 'expo-blur';
 import * as Haptics from 'expo-haptics';
 import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import io from 'socket.io-client';
-import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { Ionicons, MaterialCommunityIcons, FontAwesome5 } from '@expo/vector-icons';
 import axios from 'axios';
 import * as ImagePicker from 'expo-image-picker';
 import { Audio } from 'expo-av'; // Import Audio
@@ -48,17 +48,58 @@ export default function ChatScreen({ route, navigation }) {
     const [isTyping, setIsTyping] = useState(false);
     const [input, setInput] = useState('');
     const [chatId, setChatId] = useState(existingChatId || null);
+    const [selectedImage, setSelectedImage] = useState(null);
+    const [recordTime, setRecordTime] = useState('00:00');
+    const recordInterval = useRef(null);
+    const waveAnim = useRef(new Animated.Value(0)).current;
+
+    useEffect(() => {
+        if (isRecording) {
+            let seconds = 0;
+            recordInterval.current = setInterval(() => {
+                seconds++;
+                const mins = Math.floor(seconds / 60);
+                const secs = seconds % 60;
+                setRecordTime(`${mins < 10 ? '0' : ''}${mins}:${secs < 10 ? '0' : ''}${secs}`);
+            }, 1000);
+
+            Animated.loop(
+                Animated.sequence([
+                    Animated.timing(waveAnim, { toValue: 1, duration: 400, useNativeDriver: true }),
+                    Animated.timing(waveAnim, { toValue: 0, duration: 400, useNativeDriver: true })
+                ])
+            ).start();
+        } else {
+            clearInterval(recordInterval.current);
+            setRecordTime('00:00');
+            waveAnim.setValue(0);
+        }
+    }, [isRecording]);
+    const [isLoading, setIsLoading] = useState(true);
 
     // UI Toggles
     const [showOptions, setShowOptions] = useState(false);
     const [showReportModal, setShowReportModal] = useState(false);
     const [showGiftModal, setShowGiftModal] = useState(false);
-    const { openStarterPack } = useStarterPack();
+    const { openStarterPack, handleInsufficientCoins } = useStarterPack();
+    const [showCoinModal, setShowCoinModal] = useState(false);
 
     // Track Balance for Gift Modal (Initial from route, updated via socket)
     const [currentBalance, setCurrentBalance] = useState(user.balance || 0);
     const [recording, setRecording] = useState(null);
     const [activeGift, setActiveGift] = useState(null);
+    const [isRecording, setIsRecording] = useState(false);
+    const [audioLevel, setAudioLevel] = useState(0);
+
+    const [showIcebreakers, setShowIcebreakers] = useState(false);
+
+    const ICEBREAKERS = [
+        "Selam, nasılsın? 😊",
+        "Seninle tanışmak istiyorum ✨",
+        "Profilin çok etkileyici 💜",
+        "Harika bir enerjin var! 🔥",
+        "Sohbet etmek ister misin? 💬"
+    ];
 
     const socketRef = useRef(null);
     const flatListRef = useRef(null);
@@ -194,6 +235,7 @@ export default function ChatScreen({ route, navigation }) {
                 setCurrentBalance(balanceRes.data.balance);
             }
             setMessages(historyRes.data);
+            setIsLoading(false);
 
             // 3. Connect Socket (Keep this at the end)
             if (socketRef.current) socketRef.current.disconnect();
@@ -307,8 +349,9 @@ export default function ChatScreen({ route, navigation }) {
                 }
             });
 
-        } catch (error) {
-            console.error('Chat Initialization Error:', error);
+        } catch (err) {
+            console.error('[ChatScreen] Init Error:', err);
+            setIsLoading(false);
         }
     };
 
@@ -385,8 +428,8 @@ export default function ChatScreen({ route, navigation }) {
         );
     };
 
-    const sendMessage = () => {
-        if (input.trim() === '' || !chatId) return;
+    const sendMessage = (textToSend = input) => {
+        if (textToSend.trim() === '' || !chatId) return;
         
         // SOCKET CHECK
         if (!socketRef.current || !socketRef.current.connected) {
@@ -402,15 +445,7 @@ export default function ChatScreen({ route, navigation }) {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
         // Check Balance
         if (currentBalance < 10 && vip_level < 1) { 
-            showAlert({
-                title: "Yetersiz Bakiye",
-                message: "Mesaj göndermek için bakiyeniz yetersizdir. Sohbetin yarım kalmaması için harika bir teklifimiz var!",
-                type: 'warning',
-                confirmText: "TEKLİFİ GÖR",
-                onConfirm: () => {
-                    openStarterPack();
-                }
-            });
+            handleInsufficientCoins();
             return;
         }
 
@@ -418,11 +453,11 @@ export default function ChatScreen({ route, navigation }) {
         const nextBalance = Math.max(0, currentBalance - 10);
         setCurrentBalance(nextBalance);
 
-        // If balance reached 0, show the special offer modal after a short delay
+        // If balance reached 0, trigger the centralized flow
         if (nextBalance <= 0 && vip_level < 1) {
             setTimeout(() => {
-                setShowCoinModal(true);
-            }, 2000); 
+                handleInsufficientCoins();
+            }, 1000); 
         }
 
         const tempId = Date.now().toString();
@@ -430,20 +465,19 @@ export default function ChatScreen({ route, navigation }) {
             id: tempId,
             chat_id: chatId,
             sender_id: user.id,
-            content: input,
+            content: textToSend,
             type: 'text',
             created_at: new Date().toISOString(),
             is_optimistic: true
         };
 
         setMessages(prev => [...prev, optimisticMsg]);
-        const originalInput = input;
         setInput('');
 
         const msgData = {
             chatId: chatId,
             senderId: user.id,
-            content: originalInput,
+            content: textToSend,
             type: 'text',
             tempId: tempId
         };
@@ -455,6 +489,34 @@ export default function ChatScreen({ route, navigation }) {
         if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
     };
 
+    const renderIcebreakers = () => {
+        // Only show in empty chats AND when input is empty
+        if ((messages && messages.length > 0) || input.length > 0) return null;
+
+        return (
+            <View style={styles.icebreakerContainer}>
+                <ScrollView 
+                    horizontal 
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={styles.icebreakerScroll}
+                >
+                    {ICEBREAKERS.map((text, index) => (
+                        <TouchableOpacity
+                            key={index}
+                            style={[styles.icebreakerPill, { backgroundColor: 'rgba(255,255,255,0.12)' }]}
+                            onPress={() => {
+                                sendMessage(text);
+                                setShowIcebreakers(false);
+                            }}
+                        >
+                            <Text style={styles.icebreakerText}>{text}</Text>
+                        </TouchableOpacity>
+                    ))}
+                </ScrollView>
+            </View>
+        );
+    };
+
 
 
     const handleSendGift = (gift) => {
@@ -462,7 +524,7 @@ export default function ChatScreen({ route, navigation }) {
 
         if (currentBalance < gift.price) {
             setShowGiftModal(false);
-            setShowCoinModal(true);
+            handleInsufficientCoins();
             return;
         }
 
@@ -498,7 +560,7 @@ export default function ChatScreen({ route, navigation }) {
     // --- MEDIA SHARING LOGIC ---
     const handleSendImage = async () => {
         if (currentBalance < 50) {
-            setShowCoinModal(true);
+            handleInsufficientCoins();
             return;
         }
 
@@ -565,7 +627,7 @@ export default function ChatScreen({ route, navigation }) {
     // --- VOICE MESSAGE LOGIC ---
     const startRecording = async () => {
         if (currentBalance < 30) {
-            setShowCoinModal(true);
+            handleInsufficientCoins();
             return;
         }
 
@@ -707,7 +769,7 @@ export default function ChatScreen({ route, navigation }) {
                         if (isLocked) {
                             confirmUnlock(item);
                         } else {
-                            /* View full screen logic optional */ 
+                            setSelectedImage(item.content);
                         }
                     }}
                 >
@@ -752,40 +814,6 @@ export default function ChatScreen({ route, navigation }) {
         );
     };
 
-    // Pagination State
-    const [refreshing, setRefreshing] = useState(false);
-
-    const loadPreviousMessages = async () => {
-        if (!chatId || refreshing) return;
-        setRefreshing(true);
-        try {
-            const limit = 50;
-            const offset = messages.length;
-            const res = await axios.get(`${API_URL}/messages/${chatId}?limit=${limit}&offset=${offset}`);
-
-            if (res.data.length > 0) {
-                // For inverted list, new (older) messages are added to the END of array (which is top visual)
-                // But since we reverse the array in render, we actually need to append them to state as usual
-                setMessages(prev => [...prev, ...res.data]);
-                // Wait, if messages = [Oldest, ..., Newest]
-                // Reversed = [Newest, ..., Oldest]
-                // FlatList Inverted: Bottom is Index 0 (Newest). Top is Last Index (Oldest).
-                // When we load more (older), we want them to appear at the Top.
-                // So they should be at the END of the Reversed array, which means they should be at the START of the original array?
-                // Original: [Msg1, Msg2] (Msg1 is older). Visual Top: Msg1.
-                // Load More: [Msg0, Msg1, Msg2]. Visual Top: Msg0.
-                // So we should PREPEND to state.
-                setMessages(prev => [...res.data, ...prev]);
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-            }
-        } catch (error) {
-            console.error('Load Previous Messages Error:', error);
-        } finally {
-            setRefreshing(false);
-            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        }
-    };
-
     return (
         <View style={styles.container}>
             <StatusBar style="light" translucent backgroundColor="transparent" />
@@ -809,31 +837,80 @@ export default function ChatScreen({ route, navigation }) {
                 {isTyping && <TypingIndicator />}
 
                 <View style={[styles.modernInputWrapper, { paddingBottom: Math.max(insets.bottom + 10, Platform.OS === 'ios' ? 20 : 15) }]}>
+                    {renderIcebreakers()}
                     <GlassCard intensity={40} tint="dark" style={styles.glassInputContainer}>
                         <View style={styles.inputRow}>
-                            <TextInput
-                                style={[styles.input, { color: theme.colors.text }]}
-                                value={input}
-                                onChangeText={handleTyping}
-                                placeholder="Mesaj yaz..."
-                                placeholderTextColor="rgba(255,255,255,0.4)"
-                                multiline
-                                maxHeight={100}
-                                cursorColor={theme.colors.primary}
-                            />
+                             <TouchableOpacity 
+                                 style={styles.quickMsgToggle} 
+                                 activeOpacity={0.7}
+                                 onPressIn={() => {
+                                     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                                     startRecording();
+                                 }}
+                                 onPressOut={stopRecording}
+                             >
+                                 <Ionicons 
+                                     name="mic" 
+                                     size={18} 
+                                     color={isRecording ? "#ec4899" : "rgba(255,255,255,0.4)"} 
+                                 />
+                                 {isRecording && (
+                                     <Animated.View style={[styles.recordingRipple, {
+                                         transform: [{ scale: waveAnim.interpolate({ inputRange: [0, 1], outputRange: [1, 1.6] }) }],
+                                         opacity: waveAnim.interpolate({ inputRange: [0, 1], outputRange: [0.5, 0] })
+                                     }]} />
+                                 )}
+                             </TouchableOpacity>
+                             
+                             <View style={styles.inputFlexContainer}>
+                                 {isRecording ? (
+                                     <View style={styles.recordingRow}>
+                                         <View style={styles.waveformContainer}>
+                                             {[1, 2, 3, 4, 5, 6, 7, 8].map((i) => (
+                                                 <Animated.View 
+                                                     key={i}
+                                                     style={[
+                                                         styles.waveBar,
+                                                         {
+                                                             height: waveAnim.interpolate({
+                                                                 inputRange: [0, 1],
+                                                                 outputRange: [8, 12 + (i % 4) * 6]
+                                                             })
+                                                         }
+                                                     ]}
+                                                 />
+                                             ))}
+                                         </View>
+                                         <Text style={styles.recordTimerText}>{recordTime}</Text>
+                                     </View>
+                                 ) : (
+                                     <TextInput
+                                         style={[styles.input, { color: theme.colors.text }]}
+                                         value={input}
+                                         onChangeText={handleTyping}
+                                         placeholder="Mesaj yaz..."
+                                         placeholderTextColor="rgba(255,255,255,0.4)"
+                                         multiline
+                                         maxHeight={100}
+                                         cursorColor={theme.colors.primary}
+                                     />
+                                 )}
+                             </View>
 
-                            <TouchableOpacity onPress={sendMessage} style={styles.sendButton} activeOpacity={0.7}>
-                                <LinearGradient colors={theme.gradients.primary} style={styles.sendGradient}>
-                                    <Ionicons name="send" size={20} color="white" />
-                                </LinearGradient>
-                            </TouchableOpacity>
+                             {!isRecording && (
+                                 <TouchableOpacity onPress={sendMessage} style={styles.sendButton} activeOpacity={0.7}>
+                                     <LinearGradient colors={theme.gradients.primary} style={styles.sendGradient}>
+                                         <Ionicons name="send" size={20} color="white" />
+                                     </LinearGradient>
+                                 </TouchableOpacity>
+                             )}
                         </View>
 
                         {/* Bottom Action Bar */}
                         <View style={styles.actionBar}>
                             <TouchableOpacity style={styles.modernActionBtn} onPress={() => {
                                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                                navigation.navigate('VideoCall', { name, avatar_url });
+                                navigation.navigate('VideoCall', { receiver: userData });
                             }}>
                                 <BlurView intensity={20} tint="light" style={styles.btnBlur}>
                                     <Ionicons name="videocam" size={22} color="rgba(255,255,255,0.8)" />
@@ -842,10 +919,10 @@ export default function ChatScreen({ route, navigation }) {
 
                             <TouchableOpacity style={styles.modernActionBtn} onPress={() => {
                                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                                navigation.navigate('VoiceCall', { name, avatar_url });
+                                navigation.navigate('VoiceCall', { receiver: userData });
                             }}>
                                 <BlurView intensity={20} tint="light" style={styles.btnBlur}>
-                                    <Ionicons name="call" size={20} color="rgba(255,255,255,0.8)" />
+                                    <Ionicons name="call" size={22} color="rgba(255,255,255,0.8)" />
                                 </BlurView>
                             </TouchableOpacity>
 
@@ -869,11 +946,12 @@ export default function ChatScreen({ route, navigation }) {
                                 </Animated.View>
                             </TouchableOpacity>
 
-
-                            <TouchableOpacity style={styles.modernActionBtn} onPress={recording ? stopRecording : startRecording}>
-
-                                <BlurView intensity={20} tint={recording ? "default" : "light"} style={[styles.btnBlur, recording && { backgroundColor: 'rgba(239, 68, 68, 0.2)' }]}>
-                                    <Ionicons name={recording ? "stop" : "mic"} size={22} color={recording ? "#ef4444" : "rgba(255,255,255,0.8)"} />
+                            <TouchableOpacity style={styles.modernActionBtn} onPress={() => {
+                                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                                setShowIcebreakers(!showIcebreakers);
+                            }}>
+                                <BlurView intensity={20} tint="light" style={[styles.btnBlur, showIcebreakers && { backgroundColor: 'rgba(236, 72, 153, 0.2)' }]}>
+                                    <Ionicons name="flash" size={22} color={showIcebreakers ? "#ec4899" : "rgba(255,255,255,0.8)"} />
                                 </BlurView>
                             </TouchableOpacity>
 
@@ -906,6 +984,27 @@ export default function ChatScreen({ route, navigation }) {
                     </View>
                 )
             }
+
+            {/* LIGHTBOX MODAL */}
+            {selectedImage && (
+                <View style={StyleSheet.absoluteFill}>
+                    <BlurView intensity={95} tint="dark" style={StyleSheet.absoluteFill}>
+                        <TouchableOpacity 
+                            style={styles.lightboxClose}
+                            onPress={() => setSelectedImage(null)}
+                        >
+                            <Ionicons name="close-circle" size={36} color="#fff" />
+                        </TouchableOpacity>
+                        <View style={styles.lightboxContent}>
+                            <Image 
+                                source={{ uri: resolveImageUrl(selectedImage) }} 
+                                style={styles.fullImage} 
+                                resizeMode="contain"
+                            />
+                        </View>
+                    </BlurView>
+                </View>
+            )}
 
             {/* REPORT MODAL */}
             <ReportModal
@@ -976,10 +1075,9 @@ const styles = StyleSheet.create({
     },
     inputRow: {
         flexDirection: 'row',
-        alignItems: 'flex-end',
-        paddingHorizontal: 16,
-        paddingTop: 12,
-        paddingBottom: 8,
+        alignItems: 'center',
+        paddingHorizontal: 12,
+        paddingVertical: 10,
     },
     modernInputWrapper: {
         paddingBottom: Platform.OS === 'ios' ? 20 : 10,
@@ -1020,7 +1118,7 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        paddingHorizontal: 20,
+        paddingHorizontal: 28,
         paddingBottom: 16,
         paddingTop: 4,
     },
@@ -1087,6 +1185,100 @@ const styles = StyleSheet.create({
         marginLeft: 12,
         fontSize: 14,
         fontWeight: '600',
+    },
+    quickMsgToggle: {
+        width: 44,
+        height: 44,
+        borderRadius: 22,
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginRight: 10,
+        marginLeft: 8,
+        backgroundColor: 'rgba(255,255,255,0.08)',
+        zIndex: 10,
+    },
+    recordingRipple: {
+        position: 'absolute',
+        width: 44,
+        height: 44,
+        borderRadius: 22,
+        backgroundColor: '#ec4899',
+        zIndex: -1,
+    },
+    inputFlexContainer: {
+        flex: 1,
+        height: 44,
+        justifyContent: 'center',
+    },
+    recordingRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        paddingHorizontal: 15,
+        backgroundColor: 'rgba(236, 72, 153, 0.1)',
+        borderRadius: 22,
+        height: '100%',
+    },
+    waveformContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        height: '100%',
+    },
+    waveBar: {
+        width: 3,
+        backgroundColor: '#ec4899',
+        marginHorizontal: 1.5,
+        borderRadius: 1.5,
+    },
+    recordTimerText: {
+        color: '#ec4899',
+        fontSize: 14,
+        fontWeight: '700',
+        fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+    },
+    lightboxClose: {
+        position: 'absolute',
+        top: 50,
+        right: 25,
+        zIndex: 100,
+        padding: 10,
+    },
+    lightboxContent: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    fullImage: {
+        width: '100%',
+        height: '80%',
+    },
+    typingText: {
+        fontSize: 12,
+        fontStyle: 'italic',
+    },
+    icebreakerContainer: {
+        marginBottom: 12,
+    },
+    icebreakerScroll: {
+        paddingHorizontal: 15,
+    },
+    icebreakerPill: {
+        paddingHorizontal: 12,
+        paddingVertical: 7,
+        borderRadius: 18,
+        marginRight: 8,
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.12)',
+        backgroundColor: 'rgba(255,255,255,0.06)',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.05,
+        shadowRadius: 2,
+    },
+    icebreakerText: {
+        fontSize: 12,
+        fontWeight: '700',
+        color: '#fff',
     },
     divider: {
         height: 1,

@@ -95,7 +95,10 @@ router.post('/purchase', authenticateToken, async (req, res) => {
         await db.query('COMMIT');
 
         const io = req.app.get('io');
-        if (io) io.emit('balance_update', { userId, newBalance });
+        if (io) {
+            io.emit('balance_update', { userId, newBalance });
+            io.emit('admin_balance_update', { userId, newBalance });
+        }
 
         res.json({ success: true, balance: newBalance, hearts: newBalance, vip_level: newVipLevel, coins_added: coinsToAdd });
     } catch (err) {

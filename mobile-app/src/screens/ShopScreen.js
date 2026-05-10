@@ -184,7 +184,14 @@ export default function ShopScreen({ navigation, route }) {
                         const amountB = parseInt(b.product.title.split(' ')[0], 10) || 0;
                         return amountA - amountB;
                     });
-                    setOfferings(sortedPackages);
+                    
+                    // Filter out Starter Packs from regular store
+                    const filteredPackages = sortedPackages.filter(p => 
+                        !p.product.identifier.toLowerCase().includes('starter') &&
+                        !p.product.title.toLowerCase().includes('başlangıç')
+                    );
+
+                    setOfferings(filteredPackages);
                 } else {
                     const token = await AsyncStorage.getItem('token');
                     const res = await axios.get(`${API_URL}/offerings`, {
@@ -441,7 +448,7 @@ export default function ShopScreen({ navigation, route }) {
                         ) : (
                             // Absolute Fallback if even API fails
                             [
-                                { coins: 100, price: '49,99 ₺', name: 'Başlangıç Paketi' },
+                                { coins: 100, price: '49,99 ₺', name: 'Küçük Paket' },
                                 { coins: 250, price: '109,99 ₺', name: 'Gümüş Paket' },
                                 { coins: 500, price: '199,99 ₺', name: 'Altın Paket' },
                                 { coins: 1000, price: '359,99 ₺', name: 'VIP Paket' },

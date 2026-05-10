@@ -113,17 +113,19 @@ const MessageBubble = ({ children, isMine, index, isRead, avatar, vipLevel = 0, 
                                 noBorder={false}
                             >
                                 <LinearGradient
-                                    colors={['rgba(139, 92, 246, 0.6)', 'rgba(217, 70, 239, 0.8)']}
+                                    colors={['rgba(139, 92, 246, 0.45)', 'rgba(217, 70, 239, 0.6)']}
                                     start={{ x: 0, y: 0 }}
                                     end={{ x: 1, y: 1 }}
                                     style={StyleSheet.absoluteFill}
                                 />
+                                <View style={[StyleSheet.absoluteFill, { borderWidth: 0.5, borderColor: 'rgba(255,255,255,0.3)', borderRadius: 18, borderBottomRightRadius: 4 }]} />
                                 <View style={{ position: 'relative', zIndex: 1 }}>
                                     {renderContent()}
                                 </View>
                             </GlassCard>
                         ) : (
-                            <GlassCard intensity={30} tint={themeMode === 'dark' ? 'dark' : 'light'} style={[styles.bubble, styles.theirs]}>
+                             <GlassCard intensity={25} tint={themeMode === 'dark' ? 'dark' : 'light'} style={[styles.bubble, styles.theirs]}>
+                                <View style={[StyleSheet.absoluteFill, { borderWidth: 0.5, borderColor: 'rgba(255,255,255,0.15)', borderRadius: 18, borderTopLeftRadius: 20, borderTopRightRadius: 20, borderBottomRightRadius: 20, borderBottomLeftRadius: 4 }]} />
                                 <View style={{ position: 'relative', zIndex: 1 }}>
                                     {renderContent()}
                                 </View>

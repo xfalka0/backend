@@ -110,7 +110,10 @@ router.post('/users/:id/balance', authenticateToken, authorizeRole('admin', 'sup
             [amount, id]
         );
         const io = req.app.get('io');
-        if (io) io.emit('balance_update', { userId: id, newBalance: result.rows[0].balance });
+        if (io) {
+            io.emit('balance_update', { userId: id, newBalance: result.rows[0].balance });
+            io.emit('admin_balance_update', { userId: id, newBalance: result.rows[0].balance });
+        }
         res.json({ success: true, newBalance: result.rows[0].balance });
     } catch (err) {
         res.status(500).json({ error: err.message });

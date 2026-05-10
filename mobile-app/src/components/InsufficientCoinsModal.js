@@ -7,6 +7,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_URL } from '../config';
 import { useAlert } from '../contexts/AlertContext';
 import Confetti from './ui/Confetti';
+import { useStarterPack } from '../contexts/StarterPackContext';
 
 import { PurchaseService } from '../services/purchaseService';
 
@@ -23,6 +24,7 @@ export default function InsufficientCoinsModal({ visible, onClose, onBuyCoins, o
     const [timeLeft, setTimeLeft] = useState('23:59:59');
     const [showConfetti, setShowConfetti] = useState(false);
     const { showAlert } = useAlert();
+    const { completeStarterPack } = useStarterPack();
 
     // Animations
     const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -171,6 +173,7 @@ export default function InsufficientCoinsModal({ visible, onClose, onBuyCoins, o
                         message: "300 Coin hesabınıza eklendi. Keyifli sohbetler!",
                         type: "success",
                         onConfirm: () => {
+                            completeStarterPack();
                             if (onPurchaseSuccess) {
                                 onPurchaseSuccess();
                             } else {
@@ -194,11 +197,27 @@ export default function InsufficientCoinsModal({ visible, onClose, onBuyCoins, o
             }
         } catch (error) {
             console.error('[Purchase] Error:', error);
-            showAlert({
-                title: "Hata",
-                message: "Bir sorun oluştu: " + error.message,
-                type: "error"
-            });
+            
+            const serverMsg = error.response?.data?.error;
+            const isAlreadyBought = serverMsg?.includes('daha önce') || error.response?.status === 400;
+
+            if (isAlreadyBought) {
+                showAlert({
+                    title: "Bilgi",
+                    message: "Bu paketi zaten satın almışsınız. Bakiyeniz güncel değilse lütfen uygulamayı kapatıp açın.",
+                    type: "info",
+                    onConfirm: () => {
+                        completeStarterPack();
+                        onClose();
+                    }
+                });
+            } else {
+                showAlert({
+                    title: "Hata",
+                    message: serverMsg || "Bir sorun oluştu: " + error.message,
+                    type: "error"
+                });
+            }
         } finally {
             setLoading(false);
         }

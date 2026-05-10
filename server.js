@@ -836,16 +836,14 @@ app.post('/api/auth/verify-otp', async (req, res) => {
     }
 });
 
-app.get('/api/me', authenticateToken, (req, res) => {
-    res.json({
-        id: req.user.id,
-        username: req.user.username,
-        email: req.user.email,
-        role: req.user.role,
-        avatar_url: req.user.avatar_url,
-        display_name: req.user.display_name,
-        onboarding_completed: req.user.onboarding_completed
-    });
+app.get('/api/me', authenticateToken, async (req, res) => {
+    try {
+        const result = await db.query('SELECT id, username, email, role, avatar_url, display_name, onboarding_completed, balance FROM users WHERE id = $1', [req.user.id]);
+        if (result.rows.length === 0) return res.status(404).json({ error: 'User not found' });
+        res.json(result.rows[0]);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 });
 
 app.get('/api/operators', async (req, res) => {

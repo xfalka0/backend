@@ -360,8 +360,7 @@ export default function ExploreScreen({ navigation, route }) {
         return shuffled.slice(0, 5).map(op => ({
             ...op,
             level: op.gender === 'coin_bayisi' ? 'dealer' : (op.vip_level || 1),
-            avatar: op.avatar_url,
-            category: (op.category && !/flirt/i.test(op.category)) ? op.category : 'Popüler'
+            avatar: op.avatar_url
         }));
     }, [operators]);
 
@@ -417,9 +416,7 @@ export default function ExploreScreen({ navigation, route }) {
                                 <VipFrame level={item.level} avatar={item.avatar} size={55} isStatic={true} />
                             </View>
                             <Text style={[styles.featuredName, { color: theme.colors.text }]}>{item.name}</Text>
-                            <View style={styles.featuredCategoryBadge}>
-                                <Text style={styles.featuredCategoryText}>{item.category}</Text>
-                            </View>
+
                         </TouchableOpacity>
                     )}
                     keyExtractor={item => item.id}
@@ -477,9 +474,6 @@ export default function ExploreScreen({ navigation, route }) {
                     </View>
 
                     <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                        <Text style={[styles.postJobTitle, { color: theme.colors.textSecondary, fontSize: 12, marginRight: 8 }]}>
-                            {item.jobTitle || item.job || 'Üye'}
-                        </Text>
 
                         {(item.age || item.gender) && (
                             <View style={[

@@ -325,9 +325,7 @@ export default function OperatorProfileScreen({ route, navigation }) {
                                             </LinearGradient>
                                         )}
                                     </View>
-                                    <Text style={[styles.category, { marginBottom: 6 }]}>
-                                        {operator.job || (operator.is_operator ? 'Öğrenci' : 'Kullanıcı')}
-                                    </Text>
+
                                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
                                         {operator.is_online && (
                                             <View style={[styles.onlineBadge, { alignSelf: 'flex-start' }]}>

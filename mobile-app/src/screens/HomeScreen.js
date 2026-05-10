@@ -27,6 +27,7 @@ import PromotedProfiles from '../components/home/PromotedProfiles';
 import ModernAlert from '../components/ui/ModernAlert';
 import FloatingParticles from '../components/hero/FloatingParticles';
 import { resolveImageUrl } from '../utils/imageUtils';
+import InsufficientCoinsModal from '../components/InsufficientCoinsModal';
 
 import Animated, {
     useSharedValue,
@@ -450,6 +451,7 @@ export default function HomeScreen({ navigation, route }) {
     }, [loading, isMoreLoading, hasMore, page]);
 
     const [showMatchModal, setShowMatchModal] = useState(false);
+    const [showCoinModal, setShowCoinModal] = useState(false);
 
     const getDestinyColors = () => {
         if (themeMode === 'dark') return {
@@ -631,7 +633,7 @@ export default function HomeScreen({ navigation, route }) {
         } catch (e) {
             console.error('[HomeScreen] Hi message err', e);
             if (e.response?.data?.insufficientFunds) {
-                Alert.alert("Bakiye Yetersiz", e.response.data.error);
+                setShowCoinModal(true);
             } else if (e.response?.data?.error) {
                 Alert.alert("Mesaj Hatası", e.response.data.error);
             } else {
@@ -888,6 +890,14 @@ export default function HomeScreen({ navigation, route }) {
                 }
             />
             {showMatchModal && <DestinyMatchModal visible={showMatchModal} onClose={() => setShowMatchModal(false)} operators={operators} navigation={navigation} user={user} />}
+            <InsufficientCoinsModal
+                visible={showCoinModal}
+                onClose={() => setShowCoinModal(false)}
+                onBuyCoins={() => {
+                    setShowCoinModal(false);
+                    navigation.navigate('Shop', { user });
+                }}
+            />
             <Modal visible={showFilterModal} transparent animationType="slide" onRequestClose={() => setShowFilterModal(false)}>
                 <View style={styles.modalOverlay}>
                     <GlassCard style={styles.modalContent} intensity={95} tint="dark">

@@ -406,7 +406,15 @@ export default function ChatScreen({ route, navigation }) {
         }
 
         // Optimistic Balance Update
-        setCurrentBalance(prev => Math.max(0, prev - 10));
+        const nextBalance = Math.max(0, currentBalance - 10);
+        setCurrentBalance(nextBalance);
+
+        // If balance reached 0, show the special offer modal after a short delay
+        if (nextBalance <= 0 && vip_level < 1) {
+            setTimeout(() => {
+                setShowCoinModal(true);
+            }, 800); 
+        }
 
         const tempId = Date.now().toString();
         const optimisticMsg = {

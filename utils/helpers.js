@@ -99,7 +99,7 @@ const assignFakeInteractions = async (newUserId) => {
         // Find random active users of OPPOSITE gender
         const limitCount = Math.floor(Math.random() * 6) + 3;
         const randomUsers = await db.query(
-            "SELECT id FROM users WHERE id != $1 AND account_status = 'active' AND (gender = $2 OR gender = 'coin_bayisi') ORDER BY RANDOM() LIMIT $3",
+            "SELECT id FROM users WHERE id != $1 AND account_status = 'active' AND gender = $2 AND role = 'user' ORDER BY RANDOM() LIMIT $3",
             [newUserId, targetGender, limitCount]
         );
 
@@ -149,7 +149,8 @@ const triggerAutoEngagement = async (io, newUserId) => {
             `SELECT u.id, u.username FROM users u 
              JOIN operators o ON u.id = o.user_id 
              WHERE u.account_status = 'active' 
-             AND (u.gender = $1 OR u.gender = 'coin_bayisi')
+             AND u.gender = $1
+             AND u.role = 'operator'
              ORDER BY RANDOM() LIMIT 3`,
             [targetGender]
         );
@@ -249,7 +250,8 @@ const triggerLoginAutoEngagement = async (io, userId) => {
             `SELECT u.id, u.username FROM users u 
              JOIN operators o ON u.id = o.user_id 
              WHERE u.account_status = 'active' 
-             AND (u.gender = $1 OR u.gender = 'coin_bayisi')
+             AND u.gender = $1
+             AND u.role = 'operator'
              ORDER BY RANDOM() LIMIT 1`,
             [targetGender]
         );

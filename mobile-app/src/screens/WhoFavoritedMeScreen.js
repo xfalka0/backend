@@ -102,7 +102,7 @@ export default function WhoFavoritedMeScreen({ navigation, route }) {
                                         )}
                                     </View>
                                     <Text style={[styles.lastMsg, { color: theme.colors.textSecondary }]} numberOfLines={1}>
-                                        {item.is_blurred ? 'Seni favoriledi' : (item.gender === 'erkek' ? 'Erkek' : 'Kadın')}
+                                        {item.is_blurred ? 'Seni favoriledi' : ((item.gender === 'erkek' || item.gender === 'male') ? 'Erkek' : 'Kadın')}
                                     </Text>
                                 </View>
                                 <View style={styles.metaContainer}>

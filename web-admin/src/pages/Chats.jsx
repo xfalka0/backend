@@ -17,6 +17,8 @@ const Chats = () => {
     const [isTyping, setIsTyping] = useState(false);
     const [input, setInput] = useState('');
     const [uploading, setUploading] = useState(false);
+    const [isLockedImage, setIsLockedImage] = useState(false);
+    const [lockedImageCost, setLockedImageCost] = useState(50);
     const socketRef = useRef(null);
     const messagesEndRef = useRef(null);
     const typingTimeoutRef = useRef(null);
@@ -298,7 +300,8 @@ const Chats = () => {
                 chatId: selectedChat.id,
                 senderId: selectedChat.operator_id,
                 content: imageUrl,
-                type: 'image',
+                type: isLockedImage ? 'locked_image' : 'image',
+                unlockCost: isLockedImage ? Number(lockedImageCost) : 0,
                 tempId: tempId
             };
 
@@ -309,7 +312,9 @@ const Chats = () => {
                 id: tempId,
                 sender_id: selectedChat.operator_id,
                 content: imageUrl,
-                content_type: 'image',
+                content_type: isLockedImage ? 'locked_image' : 'image',
+                unlock_cost: isLockedImage ? Number(lockedImageCost) : 0,
+                is_unlocked: true, // admin can always see their own
                 chat_id: selectedChat.id,
                 created_at: new Date().toISOString(),
                 is_optimistic: true,
@@ -481,14 +486,19 @@ const Chats = () => {
                                                     : 'bg-slate-800 text-slate-200 rounded-bl-none border border-slate-700'
                                                     }`}
                                             >
-                                                {msg.content_type === 'image' || msg.type === 'image' ? (
+                                                {msg.content_type === 'image' || msg.content_type === 'locked_image' || msg.type === 'image' || msg.type === 'locked_image' ? (
                                                     <div className="relative group/img">
                                                         <img
                                                             src={msg.content}
-                                                            className="max-w-full rounded-lg shadow-2xl border border-white/10 cursor-zoom-in"
+                                                            className={`max-w-full rounded-lg shadow-2xl border border-white/10 cursor-zoom-in ${msg.content_type === 'locked_image' && !msg.is_unlocked && msg.sender_id !== selectedChat.operator_id ? 'blur-md' : ''}`}
                                                             alt="Resim"
                                                             onClick={() => window.open(msg.content, '_blank')}
                                                         />
+                                                        {msg.content_type === 'locked_image' && (
+                                                            <div className="absolute top-2 right-2 bg-black/60 text-white text-[10px] px-2 py-1 rounded-full flex items-center gap-1 font-bold">
+                                                                <span className="text-yellow-400">🔒</span> {msg.unlock_cost || 50} Coin
+                                                            </div>
+                                                        )}
                                                         <div className="absolute inset-0 bg-black/0 group-hover/img:bg-black/20 transition-all rounded-lg flex items-center justify-center pointer-events-none group-hover/img:pointer-events-auto">
                                                             <svg className="w-8 h-8 text-white opacity-0 group-hover/img:opacity-100 transition-all" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v3m0 0v3m0-3h3m-3 0H7" />
@@ -529,16 +539,37 @@ const Chats = () => {
                                 accept="image/*"
                                 onChange={handleImageUpload}
                             />
-                            <button
-                                type="button"
-                                onClick={() => fileInputRef.current?.click()}
-                                disabled={uploading}
-                                className={`p-3 rounded-xl border border-white/10 transition-all hover:bg-white/5 active:scale-95 ${uploading ? 'animate-pulse opacity-50' : ''}`}
-                            >
-                                <svg className="w-6 h-6 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                                </svg>
-                            </button>
+                            <div className="flex flex-col items-center justify-center gap-1">
+                                <button
+                                    type="button"
+                                    onClick={() => fileInputRef.current?.click()}
+                                    disabled={uploading}
+                                    className={`p-3 rounded-xl border border-white/10 transition-all hover:bg-white/5 active:scale-95 ${uploading ? 'animate-pulse opacity-50' : ''} ${isLockedImage ? 'border-yellow-500/50 bg-yellow-500/10 text-yellow-500' : 'text-slate-400'}`}
+                                >
+                                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                    </svg>
+                                </button>
+                                <div className="flex items-center gap-1">
+                                    <label className="flex items-center gap-1 cursor-pointer group">
+                                        <input 
+                                            type="checkbox" 
+                                            checked={isLockedImage}
+                                            onChange={(e) => setIsLockedImage(e.target.checked)}
+                                            className="w-3 h-3 rounded bg-slate-800 border-white/20 text-yellow-500 focus:ring-yellow-500/50 cursor-pointer"
+                                        />
+                                        <span className="text-[9px] font-black uppercase text-slate-500 group-hover:text-yellow-500 transition-colors">Ücretli</span>
+                                    </label>
+                                    {isLockedImage && (
+                                        <input
+                                            type="number"
+                                            value={lockedImageCost}
+                                            onChange={(e) => setLockedImageCost(e.target.value)}
+                                            className="w-10 bg-slate-800 text-[10px] text-yellow-500 border border-yellow-500/30 rounded text-center py-0.5 outline-none focus:border-yellow-500"
+                                        />
+                                    )}
+                                </div>
+                            </div>
                             <input
                                 type="text"
                                 value={input}

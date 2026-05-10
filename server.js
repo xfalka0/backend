@@ -439,6 +439,8 @@ const initializeDatabase = async () => {
         // Migration logic
         // Messages table enhancements
         await db.query('ALTER TABLE messages ADD COLUMN IF NOT EXISTS gift_id INT');
+        await db.query('ALTER TABLE messages ADD COLUMN IF NOT EXISTS unlock_cost INTEGER DEFAULT 0');
+        await db.query('ALTER TABLE messages ADD COLUMN IF NOT EXISTS is_unlocked BOOLEAN DEFAULT false');
 
         // Users & Chats table enhancements
         await db.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS device_id VARCHAR(255)');
@@ -618,6 +620,14 @@ const initializeDatabase = async () => {
         for (const name of MALE_NAMES) {
             await db.query(
                 "UPDATE users SET gender = 'erkek' WHERE (display_name ILIKE $1 OR username ILIKE $1) AND gender != 'erkek' AND gender != 'coin_bayisi'",
+                [`%${name}%`]
+            );
+        }
+        
+        const FEMALE_NAMES = ['Ayşe', 'Fatma', 'Su', 'Esma', 'Emriye', 'Zeynep', 'Elif', 'Merve', 'Selin', 'Ece', 'Aslı', 'Deniz', 'Güneş', 'Buse', 'Hazal', 'Simge', 'İrem', 'Ceren', 'Ada', 'Dilan', 'Berfin', 'Seda', 'Ceyda'];
+        for (const name of FEMALE_NAMES) {
+            await db.query(
+                "UPDATE users SET gender = 'kadin' WHERE (display_name ILIKE $1 OR username ILIKE $1) AND gender != 'kadin' AND gender != 'coin_bayisi'",
                 [`%${name}%`]
             );
         }
@@ -3905,7 +3915,7 @@ io.on('connection', (socket) => {
     // Send Message
     socket.on('send_message', async (data) => {
         console.log('[SOCKET] send_message received:', JSON.stringify(data, null, 2));
-        const { chatId, content, type, giftId, tempId } = data;
+        const { chatId, content, type, giftId, tempId, unlockCost } = data;
         const senderId = socket.user.id;
 
         console.log(`[DEBUG-SEND] chatId: ${chatId} (${typeof chatId}), senderId: ${senderId} (${typeof senderId}), type: ${type}`);
@@ -4032,14 +4042,15 @@ io.on('connection', (socket) => {
 
             // --- 3. SAVE MESSAGE ---
             const res = await client.query(
-                'INSERT INTO messages (chat_id, sender_id, content, content_type, gift_id) VALUES ($1, $2, $3, $4, $5) RETURNING *',
-                [chatId, finalSenderId, content, type || 'text', giftId || null]
+                'INSERT INTO messages (chat_id, sender_id, content, content_type, gift_id, unlock_cost, is_unlocked) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *',
+                [chatId, finalSenderId, content, type || 'text', giftId || null, type === 'locked_image' ? (unlockCost || 50) : 0, type === 'locked_image' ? false : true]
             );
             const savedMsg = res.rows[0];
 
             let lastMsgPreview = content;
             if (type === 'gift') lastMsgPreview = '🎁 Hediye Gönderildi';
             else if (type === 'image') lastMsgPreview = '📷 Resim';
+            else if (type === 'locked_image') lastMsgPreview = '🔒 Kilitli Resim';
             else if (type === 'audio') lastMsgPreview = '🎤 Ses Kaydı';
 
             await client.query('UPDATE chats SET last_message_at = NOW(), last_message = $2 WHERE id = $1', [chatId, lastMsgPreview]);

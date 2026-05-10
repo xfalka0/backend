@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, TextInput, FlatList, StyleSheet, KeyboardAvoidingView, Platform, TouchableOpacity, Image, RefreshControl, Animated } from 'react-native';
+import { View, Text, TextInput, FlatList, StyleSheet, KeyboardAvoidingView, Platform, TouchableOpacity, Image, RefreshControl, Animated, Alert } from 'react-native';
 import { BlurView } from 'expo-blur';
 import * as Haptics from 'expo-haptics';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -343,6 +343,47 @@ export default function ChatScreen({ route, navigation }) {
         }
     };
 
+    const handleUnlockImage = async (msg) => {
+        const cost = msg.unlock_cost || 50;
+        if (currentBalance < cost) {
+            setShowCoinModal(true);
+            return;
+        }
+
+        try {
+            const token = await AsyncStorage.getItem('token');
+            const res = await axios.post(`${API_URL}/messages/unlock`, {
+                messageId: msg.id
+            }, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+
+            if (res.data.success) {
+                setMessages(prev => prev.map(m => m.id === msg.id ? { ...m, is_unlocked: true } : m));
+                setCurrentBalance(prev => prev - cost);
+                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            }
+        } catch (error) {
+            if (error.response?.data?.code === 'INSUFFICIENT_FUNDS') {
+                setShowCoinModal(true);
+            } else {
+                showAlert({ title: 'Hata', message: 'Fotoğraf açılamadı.', type: 'error' });
+            }
+        }
+    };
+
+    const confirmUnlock = (msg) => {
+        const cost = msg.unlock_cost || 50;
+        Alert.alert(
+            "Kilitli Fotoğraf",
+            `Bu fotoğrafı görmek için ${cost} Coin ödemek istiyor musunuz?`,
+            [
+                { text: "İptal", style: "cancel" },
+                { text: "Aç", onPress: () => handleUnlockImage(msg) }
+            ]
+        );
+    };
+
     const sendMessage = () => {
         if (input.trim() === '' || !chatId) return;
         
@@ -640,14 +681,35 @@ export default function ChatScreen({ route, navigation }) {
 
         let content = <Text style={[styles.messageText, { color: theme.colors.text }]}>{item.content}</Text>;
 
-        if (item.content_type === 'image' || item.type === 'image') {
+        if (item.content_type === 'image' || item.type === 'image' || item.content_type === 'locked_image' || item.type === 'locked_image') {
+            const isLocked = (item.content_type === 'locked_image' || item.type === 'locked_image') && !item.is_unlocked && !isUser;
             content = (
-                <TouchableOpacity activeOpacity={0.9} onPress={() => { /* View full screen logic optional */ }}>
-                    <Image
-                        source={{ uri: resolveImageUrl(item.content) }}
-                        style={{ width: 220, height: 220, borderRadius: 16, backgroundColor: '#cbd5e1' }}
-                        resizeMode="cover"
-                    />
+                <TouchableOpacity 
+                    activeOpacity={0.9} 
+                    onPress={() => { 
+                        if (isLocked) {
+                            confirmUnlock(item);
+                        } else {
+                            /* View full screen logic optional */ 
+                        }
+                    }}
+                >
+                    <View style={{ position: 'relative' }}>
+                        <Image
+                            source={{ uri: resolveImageUrl(item.content) }}
+                            style={{ width: 220, height: 220, borderRadius: 16, backgroundColor: '#cbd5e1' }}
+                            resizeMode="cover"
+                            blurRadius={isLocked ? 30 : 0}
+                        />
+                        {isLocked && (
+                            <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.3)', borderRadius: 16 }}>
+                                <View style={{ backgroundColor: 'rgba(0,0,0,0.5)', padding: 12, borderRadius: 50, alignItems: 'center' }}>
+                                    <Ionicons name="lock-closed" size={32} color="#fbbf24" />
+                                    <Text style={{ color: '#fbbf24', fontWeight: '900', marginTop: 4, fontSize: 12 }}>{item.unlock_cost || 50} COIN</Text>
+                                </View>
+                            </View>
+                        )}
+                    </View>
                 </TouchableOpacity>
             );
         } else if (item.content_type === 'audio') {

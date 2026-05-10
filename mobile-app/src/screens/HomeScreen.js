@@ -120,8 +120,8 @@ const OperatorItem = React.memo(({ item, navigation, user, theme, themeMode, bal
                         <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 2 }}>
                             <Text style={[styles.jobText, { color: theme.colors.textSecondary }]} numberOfLines={1}>{item.job || 'Öğrenci'}</Text>
                             {item.age && (
-                                <View style={[styles.ageBadge, { backgroundColor: item.gender === 'erkek' ? '#3b82f6' : '#f472b6' }]}>
-                                    <Ionicons name={item.gender === 'erkek' ? "male" : "female"} size={10} color="white" />
+                                <View style={[styles.ageBadge, { backgroundColor: (item.gender === 'erkek' || item.gender === 'male') ? '#3b82f6' : '#f472b6' }]}>
+                                    <Ionicons name={(item.gender === 'erkek' || item.gender === 'male') ? "male" : "female"} size={10} color="white" />
                                     <Text style={styles.ageBadgeText}>{item.age}</Text>
                                 </View>
                             )}

@@ -300,9 +300,9 @@ export default function OperatorProfileScreen({ route, navigation }) {
                                         {operator.age && (
                                             <View style={[
                                                 styles.ageBadge,
-                                                { backgroundColor: operator.gender === 'erkek' ? '#3b82f6' : '#f472b6' }
+                                                { backgroundColor: (operator.gender === 'erkek' || operator.gender === 'male') ? '#3b82f6' : '#f472b6' }
                                             ]}>
-                                                <Ionicons name={operator.gender === 'erkek' ? "male" : "female"} size={10} color="white" />
+                                                <Ionicons name={(operator.gender === 'erkek' || operator.gender === 'male') ? "male" : "female"} size={10} color="white" />
                                                 <Text style={styles.ageBadgeText}>{operator.age}</Text>
                                             </View>
                                         )}

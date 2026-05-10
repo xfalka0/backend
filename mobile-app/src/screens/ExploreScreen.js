@@ -484,18 +484,18 @@ export default function ExploreScreen({ navigation, route }) {
                         {(item.age || item.gender) && (
                             <View style={[
                                 styles.genderAgeBadge,
-                                { backgroundColor: (item.gender === 'female' || item.gender === 'kadin') ? 'rgba(236, 72, 153, 0.15)' : 'rgba(59, 130, 246, 0.15)' }
+                                { backgroundColor: (item.gender === 'male' || item.gender === 'erkek') ? 'rgba(59, 130, 246, 0.15)' : 'rgba(236, 72, 153, 0.15)' }
                             ]}>
                                 <Ionicons
-                                    name={(item.gender === 'female' || item.gender === 'kadin') ? "female" : "male"}
+                                    name={(item.gender === 'male' || item.gender === 'erkek') ? "male" : "female"}
                                     size={10}
-                                    color={(item.gender === 'female' || item.gender === 'kadin') ? "#ec4899" : "#3b82f6"}
+                                    color={(item.gender === 'male' || item.gender === 'erkek') ? "#3b82f6" : "#ec4899"}
                                     style={{ marginRight: item.age ? 3 : 0 }}
                                 />
                                 {item.age && (
                                     <Text style={[
                                         styles.genderAgeText,
-                                        { color: (item.gender === 'female' || item.gender === 'kadin') ? "#ec4899" : "#3b82f6" }
+                                        { color: (item.gender === 'male' || item.gender === 'erkek') ? "#3b82f6" : "#ec4899" }
                                     ]}>
                                         {item.age}
                                     </Text>

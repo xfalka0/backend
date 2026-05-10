@@ -45,7 +45,7 @@ export default function SocialPage() {
 
             const [opsRes, socialRes] = await Promise.all([
                 axios.get(`${API_URL}/api/operators`, { headers }),
-                axios.get(`${API_URL}/social/explore`)
+                axios.get(`${API_URL}/api/social/explore`)
             ]);
 
             addLog(`Fetched ${opsRes.data.length} operators`, 'success');
@@ -111,7 +111,7 @@ export default function SocialPage() {
         try {
             setUploading(true);
             const token = localStorage.getItem('token');
-            const endpoint = activeTab === 'stories' ? '/admin/social/story' : '/admin/social/post';
+            const endpoint = activeTab === 'stories' ? '/api/admin/social/story' : '/api/admin/social/post';
             const fullUrl = `${API_URL}${endpoint}`;
 
             addLog(`Request URL: ${fullUrl}`, 'info');
@@ -149,7 +149,7 @@ export default function SocialPage() {
 
         try {
             const token = localStorage.getItem('token');
-            await axios.delete(`${API_URL}/admin/social/${type}/${id}`, {
+            await axios.delete(`${API_URL}/api/admin/social/${type}/${id}`, {
                 headers: { Authorization: `Bearer ${token}` }
             });
             fetchData();

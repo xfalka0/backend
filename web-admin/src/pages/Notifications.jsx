@@ -19,7 +19,7 @@ export default function Notifications() {
     const fetchHistory = async () => {
         setLoadingHistory(true);
         try {
-            const res = await fetch(`${API_URL}/admin/notifications/history`, {
+            const res = await fetch(`${API_URL}/api/admin/notifications/history`, {
                 headers: { Authorization: `Bearer ${token}` }
             });
             if (res.ok) setHistory(await res.json());
@@ -32,7 +32,7 @@ export default function Notifications() {
         setSending(true);
         setResult(null);
         try {
-            const res = await fetch(`${API_URL}/admin/notifications/send`, {
+            const res = await fetch(`${API_URL}/api/admin/notifications/send`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
                 body: JSON.stringify({ title, body, target })

@@ -4371,9 +4371,9 @@ app.post('/api/admin/notifications/send', authenticateToken, authorizeRole('admi
     const { title, body, target } = req.body;
     try {
         let userQuery = 'SELECT id FROM users WHERE role = \'user\'';
-        if (target === 'kadin') userQuery += " AND gender = 'female'";
-        else if (target === 'erkek') userQuery += " AND gender = 'male'";
-        else if (target === 'inactive') userQuery += " AND last_login < NOW() - interval '7 days'";
+        if (target === 'kadin') userQuery += " AND gender = 'kadin'";
+        else if (target === 'erkek') userQuery += " AND gender = 'erkek'";
+        else if (target === 'inactive') userQuery += " AND last_login_at < NOW() - interval '7 days'";
 
         const usersRes = await db.query(userQuery);
         const userIds = usersRes.rows.map(r => r.id);

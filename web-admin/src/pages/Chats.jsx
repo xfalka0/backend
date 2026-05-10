@@ -428,9 +428,21 @@ const Chats = () => {
                                     </div>
                                 </div>
                                 <div>
-                                    <h3 className="font-black text-white">
-                                        {selectedChat.user_name} - <span className="text-fuchsia-400 uppercase">{selectedChat.operator_name}</span>
-                                    </h3>
+                                    <div className="flex items-center gap-3">
+                                        <h3 className="font-black text-white">
+                                            {selectedChat.user_name} - <span className="text-fuchsia-400 uppercase">{selectedChat.operator_name}</span>
+                                        </h3>
+                                        {/* User Coin Balance Badge */}
+                                        <div className="flex items-center gap-1.5 px-3 py-1 bg-gradient-to-r from-amber-500/20 to-orange-500/10 border border-amber-500/30 rounded-full">
+                                            <span className="text-sm">🪙</span>
+                                            <span className="text-amber-400 font-black text-xs">
+                                                {selectedChat.user_balance !== undefined && selectedChat.user_balance !== null
+                                                    ? Number(selectedChat.user_balance).toLocaleString()
+                                                    : '0'}
+                                            </span>
+                                            <span className="text-amber-600 text-[9px] font-black uppercase">coin</span>
+                                        </div>
+                                    </div>
                                     <p className="text-[10px] text-green-500 font-black uppercase tracking-widest">Çevrimiçi</p>
                                 </div>
                             </div>

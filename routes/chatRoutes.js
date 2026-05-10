@@ -10,7 +10,7 @@ router.get('/admin', authenticateToken, authorizeRole('admin', 'super_admin', 'o
         let query = `
             SELECT c.*, 
                 COALESCE(u.display_name, u.username, 'Bilinmeyen') as user_name, u.avatar_url as user_avatar,
-                u.vip_level, u.age, u.gender, u.job,
+                u.vip_level, u.age, u.gender, u.job, u.balance as user_balance,
                 COALESCE(op.display_name, op.username, 'Bilinmeyen') as operator_name, op.avatar_url as operator_avatar,
                 op.managed_by as managed_by_id,
                 (SELECT content FROM messages WHERE chat_id = c.id ORDER BY created_at DESC LIMIT 1) as last_message,

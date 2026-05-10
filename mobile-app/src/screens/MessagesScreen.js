@@ -64,10 +64,14 @@ const OnlinePulse = ({ themeMode, theme }) => {
 import { useChat } from '../contexts/ChatContext';
 
 export default function MessagesScreen({ navigation, route }) {
-    const { fetchUnreadCount, balance, fetchBalance } = useChat();
+    const { fetchUnreadCount, balance, fetchBalance, user: contextUser } = useChat();
+    const user = contextUser || route.params?.user || {};
+    
+    console.log('[MessagesScreen] Current balance:', balance);
+    console.log('[MessagesScreen] User ID:', user?.id);
+
     const insets = useSafeAreaInsets();
     const { theme, themeMode } = useTheme();
-    const { user } = route.params || {};
     const [searchText, setSearchText] = useState('');
     const [showSearch, setShowSearch] = useState(false);
     const [chats, setChats] = useState([]);
@@ -80,9 +84,10 @@ export default function MessagesScreen({ navigation, route }) {
                 fetchUnreadCount(user.id);
                 fetchBalance(user.id);
             } else {
+                // If context user is not loaded yet, wait for it
                 setLoading(false);
             }
-        }, [user])
+        }, [user?.id])
     );
 
     const fetchChats = async () => {
@@ -273,23 +278,20 @@ export default function MessagesScreen({ navigation, route }) {
                                 onExplorePress={() => navigation.navigate('Keşfet')}
                                 onResellerPress={() => navigation.navigate('PurchaseInfo', { user })}
                             />
-                            <View style={styles.headerContainer}>
-                                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                                    <Text style={[styles.title, { color: theme.colors.text }]}>Sohbetler</Text>
-                                    <TouchableOpacity 
-                                        style={styles.coinBadge}
-                                        onPress={() => navigation.navigate('Shop')}
-                                    >
-                                        <LinearGradient
-                                            colors={['#fbbf24', '#d97706']}
-                                            start={{ x: 0, y: 0 }}
-                                            end={{ x: 1, y: 1 }}
-                                            style={styles.coinGradient}
-                                        >
-                                            <Ionicons name="sparkles" size={12} color="#fff" style={{ marginRight: 4 }} />
-                                            <Text style={styles.coinText}>{balance || 0}</Text>
-                                        </LinearGradient>
-                                    </TouchableOpacity>
+                            <View style={[styles.headerContainer, { zIndex: 100, backgroundColor: 'rgba(0,255,0,0.1)' }]}>
+                                <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+                                    <View style={{ 
+                                        backgroundColor: '#fbbf24', 
+                                        paddingHorizontal: 8, 
+                                        paddingVertical: 4, 
+                                        borderRadius: 12,
+                                        marginRight: 8,
+                                        borderWidth: 2,
+                                        borderColor: 'red' // Very visible for debugging
+                                    }}>
+                                        <Text style={{ color: 'white', fontWeight: 'bold' }}>{balance || 0} 🪙</Text>
+                                    </View>
+                                    <Text style={[styles.title, { color: theme.colors.text }]} numberOfLines={1}>Sohbetler</Text>
                                 </View>
                                 <TouchableOpacity
                                     onPress={() => setShowSearch(!showSearch)}

@@ -254,11 +254,15 @@ export default function HomeScreen({ navigation, route }) {
                 fakeMsgTriggered.current = true;
 
                 // Persist to backend so it stays in chat history
-                axios.post(`${API_URL}/messages/internal-fake`, {
-                    userId: user.id,
-                    operatorId: randomOp.id,
-                    content: randomMsg
-                }).catch(err => console.error('[HomeScreen] Fake message persistence error:', err));
+                AsyncStorage.getItem('token').then(token => {
+                    axios.post(`${API_URL}/messages/internal-fake`, {
+                        userId: user.id,
+                        operatorId: randomOp.id,
+                        content: randomMsg
+                    }, {
+                        headers: { Authorization: `Bearer ${token}` }
+                    }).catch(err => console.error('[HomeScreen] Fake message persistence error:', err));
+                });
 
                 // Slide down
                 fakeMessageAnimY.value = withTiming(insets.top + 10, { duration: 600 });
@@ -612,10 +616,13 @@ export default function HomeScreen({ navigation, route }) {
 
     const handleHiPress = React.useCallback(async (item) => {
         try {
+            const token = await AsyncStorage.getItem('token');
             const res = await axios.post(`${API_URL}/messages/send-hi`, {
                 userId: user.id,
                 operatorId: item.id,
                 content: 'Merhaba 👋'
+            }, {
+                headers: { Authorization: `Bearer ${token}` }
             });
 
             if (res.data.success) {

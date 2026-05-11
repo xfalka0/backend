@@ -220,23 +220,25 @@ export default function ChatScreen({ route, navigation }) {
         try {
             let realChatId = chatId;
 
+            const token = await AsyncStorage.getItem('token');
+            const authHeader = { headers: { Authorization: `Bearer ${token}` } };
+
             // 1. Get or Create Chat UUID if missing
             if (!realChatId) {
                 const chatRes = await axios.post(`${API_URL}/chats`, {
                     userId: user.id,
                     operatorId: operatorId
-                });
+                }, authHeader);
                 realChatId = chatRes.data.id;
                 setChatId(realChatId);
                 console.log('[ChatScreen] Created/Fetched chatId:', realChatId);
             }
 
             // 2. Parallelize: Balance, History and Read Status
-            // We can do these in parallel now that we have realChatId
             const [balanceRes, historyRes] = await Promise.all([
-                axios.get(`${API_URL}/users/${user.id}`),
-                axios.get(`${API_URL}/messages/${realChatId}`),
-                axios.put(`${API_URL}/chats/${realChatId}/read`, { userId: user.id })
+                axios.get(`${API_URL}/users/${user.id}`, authHeader),
+                axios.get(`${API_URL}/messages/${realChatId}`, authHeader),
+                axios.put(`${API_URL}/chats/${realChatId}/read`, { userId: user.id }, authHeader)
             ]);
 
             fetchUnreadCount(user.id);
@@ -609,8 +611,12 @@ export default function ChatScreen({ route, navigation }) {
                 name: 'chat_upload.jpg',
             });
 
+            const token = await AsyncStorage.getItem('token');
             const res = await axios.post(`${API_URL}/upload`, formData, {
-                headers: { 'Content-Type': 'multipart/form-data' },
+                headers: { 
+                    'Content-Type': 'multipart/form-data',
+                    'Authorization': `Bearer ${token}`
+                },
             });
 
             const imageUrl = res.data.url || `${API_URL}${res.data.relativePath}`; // Handle both formats if flexible
@@ -688,8 +694,12 @@ export default function ChatScreen({ route, navigation }) {
                 name: 'voice_message.m4a',
             });
 
+            const token = await AsyncStorage.getItem('token');
             const res = await axios.post(`${API_URL}/upload`, formData, {
-                headers: { 'Content-Type': 'multipart/form-data' },
+                headers: { 
+                    'Content-Type': 'multipart/form-data',
+                    'Authorization': `Bearer ${token}`
+                },
             });
 
             const audioUrl = res.data.url || `${API_URL}${res.data.relativePath}`;

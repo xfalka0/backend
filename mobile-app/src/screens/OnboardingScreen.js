@@ -118,7 +118,10 @@ export default function OnboardingScreen({ navigation, route }) {
                     type: 'image/jpeg',
                 });
                 const uploadRes = await axios.post(`${API_URL}/upload`, formData, {
-                    headers: { 'Content-Type': 'multipart/form-data' }
+                    headers: { 
+                        'Content-Type': 'multipart/form-data',
+                        'Authorization': `Bearer ${token}`
+                    }
                 });
                 photoUrl = uploadRes.data.url;
 
@@ -126,6 +129,8 @@ export default function OnboardingScreen({ navigation, route }) {
                     userId,
                     type: 'avatar',
                     url: photoUrl
+                }, {
+                    headers: { 'Authorization': `Bearer ${token}` }
                 });
             }
 
@@ -137,6 +142,8 @@ export default function OnboardingScreen({ navigation, route }) {
                 interests: JSON.stringify(interests),
                 onboarding_completed: true,
                 avatar_url: photoUrl || undefined
+            }, {
+                headers: { 'Authorization': `Bearer ${token}` }
             });
 
             const updatedUser = updateRes.data;

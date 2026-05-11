@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { View, Text, TextInput, StyleSheet, Image, KeyboardAvoidingView, Platform, TouchableOpacity, ActivityIndicator } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LinearGradient } from 'expo-linear-gradient';
 import axios from 'axios';
 import { API_URL } from '../config';
@@ -26,12 +27,16 @@ export default function SignupScreen({ navigation }) {
         try {
             const res = await axios.post(`${API_URL}/register`, { email, password });
             if (res.data.user) {
+                const { user, token } = res.data;
+                await AsyncStorage.setItem('token', token);
+                await AsyncStorage.setItem('user', JSON.stringify(user));
+
                 setAlert({
                     visible: true,
                     title: 'Başarılı',
                     message: 'Hesabınız oluşturuldu! Şimdi kurulum yapabilirsiniz.',
                     type: 'success',
-                    onClose: () => navigation.replace('Onboarding', { userId: res.data.user.id, token: res.data.token })
+                    onClose: () => navigation.replace('Onboarding', { userId: user.id, token: token })
                 });
             }
         } catch (error) {

@@ -1325,7 +1325,7 @@ app.put('/api/users/:id', async (req, res) => {
 // UPDATE USER PROFILE (LEGACY / ONBOARDING)
 app.put('/api/users/:id/profile', async (req, res) => {
     const { id } = req.params;
-    const { display_name, name, bio, avatar_url, gender, interests, onboarding_completed, relationship, zodiac, age } = req.body;
+    const { display_name, name, bio, avatar_url, gender, interests, onboarding_completed, relationship, zodiac, age, push_token } = req.body;
 
     // Synchronize
     const finalDisplayName = req.body.display_name || req.body.name;
@@ -1364,8 +1364,9 @@ app.put('/api/users/:id/profile', async (req, res) => {
                 job = COALESCE($11, job),
                 edu = COALESCE($12, edu),
                 boy = COALESCE($13, boy),
-                kilo = COALESCE($14, kilo)
-             WHERE id = $15 RETURNING *`,
+                kilo = COALESCE($14, kilo),
+                push_token = COALESCE($15, push_token)
+             WHERE id = $16 RETURNING *`,
             [
                 req.body.display_name || null,
                 req.body.name || null,
@@ -1381,6 +1382,7 @@ app.put('/api/users/:id/profile', async (req, res) => {
                 req.body.edu || null,
                 req.body.boy || null,
                 req.body.kilo || null,
+                req.body.push_token || null,
                 id
             ]
         );

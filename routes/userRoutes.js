@@ -49,6 +49,7 @@ router.put('/:id', async (req, res) => {
     }
 });
 
+/*
 // UPDATE USER PROFILE (Detailed / Onboarding)
 router.put('/:id/profile', authenticateToken, async (req, res) => {
     const { id } = req.params;
@@ -95,6 +96,7 @@ router.put('/:id/profile', authenticateToken, async (req, res) => {
         res.status(500).json({ error: err.message });
     }
 });
+*/
 
 // DELETE USER (Self or Admin)
 router.delete('/:id', authenticateToken, async (req, res) => {

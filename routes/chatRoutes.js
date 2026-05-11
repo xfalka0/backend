@@ -6,6 +6,9 @@ const { sanitizeUser } = require('../utils/helpers');
 
 // GET ALL CHATS (Admin)
 router.get('/admin', authenticateToken, authorizeRole('admin', 'super_admin', 'operator', 'moderator', 'staff'), async (req, res) => {
+    const limit = parseInt(req.query.limit) || 100;
+    const offset = parseInt(req.query.offset) || 0;
+
     try {
         let query = `
             SELECT c.*, 
@@ -24,9 +27,13 @@ router.get('/admin', authenticateToken, authorizeRole('admin', 'super_admin', 'o
             query += ` WHERE op.managed_by = $1 `;
             params.push(req.user.id);
         } else {
-            query += ` WHERE EXISTS (SELECT 1 FROM messages m WHERE m.chat_id = c.id) `;
+            // Admin/Super Admin should only see chats where the "operator_id" belongs to a management role
+            // to prevent private user-to-user chats from showing up in the panel.
+            query += ` WHERE EXISTS (SELECT 1 FROM messages m WHERE m.chat_id = c.id) 
+                       AND op.role IN ('operator', 'staff', 'moderator', 'admin', 'super_admin') `;
         }
-        query += ` ORDER BY c.last_message_at DESC `;
+        query += ` ORDER BY c.last_message_at DESC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
+        params.push(limit, offset);
 
         const result = await db.query(query, params);
         const sanitizedRows = result.rows.map(row => {

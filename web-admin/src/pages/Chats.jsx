@@ -177,17 +177,27 @@ const Chats = () => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     };
 
-    const fetchChats = async () => {
+    const fetchChats = async (offsetVal = 0, isLoadMore = false) => {
         try {
             const list = chatListRef.current;
             const currentScroll = list ? list.scrollTop : 0;
 
-            const res = await axios.get(`${API_URL}/api/chats/admin`, {
+            const limit = 50;
+            const res = await axios.get(`${API_URL}/api/chats/admin?limit=${limit}&offset=${offsetVal}`, {
                 headers: { Authorization: `Bearer ${token}` }
             });
-            setChats(res.data);
+            
+            if (isLoadMore) {
+                setChats(prev => {
+                    const existingIds = new Set(prev.map(c => c.id));
+                    const newChats = res.data.filter(c => !existingIds.has(c.id));
+                    return [...prev, ...newChats];
+                });
+            } else {
+                setChats(res.data);
+            }
 
-            if (list) {
+            if (list && !isLoadMore) {
                 requestAnimationFrame(() => {
                     if (chatListRef.current) {
                         chatListRef.current.scrollTop = currentScroll;
@@ -398,6 +408,16 @@ const Chats = () => {
                             </div>
                         </button>
                     ))}
+                    {chats.length >= 50 && (
+                        <div className="p-4 flex justify-center">
+                            <button
+                                onClick={() => fetchChats(chats.length, true)}
+                                className="text-xs font-bold text-slate-400 hover:text-white bg-slate-800/50 hover:bg-slate-700 px-4 py-2 rounded-full transition-colors w-full border border-white/5 shadow-lg"
+                            >
+                                Daha Fazla Sohbet Yükle
+                            </button>
+                        </div>
+                    )}
                 </div>
             </div>
 

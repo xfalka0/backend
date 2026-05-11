@@ -3,6 +3,7 @@ import * as Notifications from 'expo-notifications';
 import * as Device from 'expo-device';
 import { Platform } from 'react-native';
 import axios from 'axios';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_URL } from '../config';
 
 // Configure how notifications are handled when the app is in foreground
@@ -62,13 +63,21 @@ export const NotificationService = {
     if (!userId || !token) return;
 
     try {
+      const authToken = await AsyncStorage.getItem('token');
+      if (!authToken) {
+        console.warn('[NOTIFY] No auth token found, skipping server update.');
+        return;
+      }
+
       console.log(`[NOTIFY] Updating token on server for user ${userId}...`);
-      await axios.put(`${API_URL}/users/${userId}/profile`, {
-        push_token: token
+      await axios.post(`${API_URL}/users/push-token`, {
+        pushToken: token
+      }, {
+        headers: { Authorization: `Bearer ${authToken}` }
       });
       console.log('[NOTIFY] Server token updated successfully.');
     } catch (err) {
-      console.error('[NOTIFY] Error updating server token:', err.message);
+      console.error('[NOTIFY] Error updating server token:', err.response?.status === 401 ? 'Unauthorized (401)' : err.message);
     }
   }
 };

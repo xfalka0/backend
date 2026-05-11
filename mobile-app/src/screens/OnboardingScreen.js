@@ -109,6 +109,26 @@ export default function OnboardingScreen({ navigation, route }) {
     const handleComplete = async () => {
         setLoading(true);
         try {
+            // --- TOKEN FALLBACK SYSTEM ---
+            let activeToken = token;
+            let activeUserId = userId;
+
+            if (!activeToken || !activeUserId) {
+                console.log('[Onboarding] Missing params, checking AsyncStorage...');
+                const storedToken = await AsyncStorage.getItem('token');
+                const storedUserJson = await AsyncStorage.getItem('user');
+                if (storedToken) activeToken = storedToken;
+                if (storedUserJson) {
+                    const parsed = JSON.parse(storedUserJson);
+                    if (parsed.id) activeUserId = parsed.id;
+                }
+            }
+
+            if (!activeToken) {
+                throw new Error('Oturum anahtarı bulunamadı. Lütfen tekrar giriş yapın.');
+            }
+            // -----------------------------
+
             let photoUrl = '';
             if (photo) {
                 const formData = new FormData();
@@ -120,22 +140,22 @@ export default function OnboardingScreen({ navigation, route }) {
                 const uploadRes = await axios.post(`${API_URL}/upload`, formData, {
                     headers: { 
                         'Content-Type': 'multipart/form-data',
-                        'Authorization': `Bearer ${token}`
+                        'Authorization': `Bearer ${activeToken}`
                     }
                 });
                 photoUrl = uploadRes.data.url;
 
                 await axios.post(`${API_URL}/moderation/submit`, {
-                    userId,
+                    userId: activeUserId,
                     type: 'avatar',
                     url: photoUrl
                 }, {
-                    headers: { 'Authorization': `Bearer ${token}` }
+                    headers: { 'Authorization': `Bearer ${activeToken}` }
                 });
             }
 
             // Update user profile
-            const updateRes = await axios.put(`${API_URL}/users/${userId}/profile`, {
+            const updateRes = await axios.put(`${API_URL}/users/${activeUserId}/profile`, {
                 display_name: name,
                 name: name,
                 gender,
@@ -143,7 +163,7 @@ export default function OnboardingScreen({ navigation, route }) {
                 onboarding_completed: true,
                 avatar_url: photoUrl || undefined
             }, {
-                headers: { 'Authorization': `Bearer ${token}` }
+                headers: { 'Authorization': `Bearer ${activeToken}` }
             });
 
             const updatedUser = updateRes.data;
@@ -161,7 +181,7 @@ export default function OnboardingScreen({ navigation, route }) {
                 type: 'success',
                 onClose: () => {
                     setTimeout(() => {
-                        navigation.replace('Main', { user: { ...updatedUser, token: token } });
+                        navigation.replace('Main', { user: { ...updatedUser, token: activeToken } });
                     }, 300);
                 }
             });

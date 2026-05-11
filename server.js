@@ -4447,10 +4447,12 @@ app.get('/api/admin/notifications/history', authenticateToken, authorizeRole('ad
 app.post('/api/admin/notifications/send', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
     const { title, body, target } = req.body;
     try {
-        let userQuery = 'SELECT id FROM users WHERE role = \'user\'';
-        if (target === 'kadin') userQuery += " AND gender = 'kadin'";
-        else if (target === 'erkek') userQuery += " AND gender = 'erkek'";
-        else if (target === 'inactive') userQuery += " AND last_login_at < NOW() - interval '7 days'";
+        let userQuery = 'SELECT id FROM users';
+        if (target === 'kadin') userQuery += " WHERE gender = 'kadin' AND role = 'user'";
+        else if (target === 'erkek') userQuery += " WHERE gender = 'erkek' AND role = 'user'";
+        else if (target === 'inactive') userQuery += " WHERE last_login_at < NOW() - interval '7 days' AND role = 'user'";
+        else if (target === 'user_only') userQuery += " WHERE role = 'user'";
+        // Default (all) includes all roles now for testing purposes
 
         const usersRes = await db.query(userQuery);
         const userIds = usersRes.rows.map(r => r.id);

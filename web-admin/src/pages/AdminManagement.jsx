@@ -75,6 +75,8 @@ export default function AdminManagement() {
         } catch (err) {
             alert('Silme başarısız: ' + err.message);
         }
+    };
+
     const handleUpdateCode = async (id, currentCode) => {
         const newCode = prompt('Yeni referans kodunu girin:', currentCode);
         if (!newCode || newCode === currentCode) return;

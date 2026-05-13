@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Users, DollarSign, TrendingUp, Link as LinkIcon, ExternalLink, Calendar, UserPlus, Wallet, Copy, Check } from 'lucide-react';
+import { Users, DollarSign, TrendingUp, Link as LinkIcon, ExternalLink, Calendar, UserPlus, Wallet, Copy, Check, AlertCircle } from 'lucide-react';
 import axios from 'axios';
 
 const API_URL = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
@@ -250,4 +250,3 @@ function StatCard({ title, value, icon, color, subText }) {
     );
 }
 
-import { AlertCircle } from 'lucide-react';

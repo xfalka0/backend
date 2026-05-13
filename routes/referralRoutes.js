@@ -10,11 +10,19 @@ router.get('/r/:code', async (req, res) => {
     const userAgent = req.headers['user-agent'];
 
     try {
-        // Log the click
-        await db.query(
-            'INSERT INTO referral_clicks (code, ip, user_agent) VALUES ($1, $2, $3)',
-            [code.toUpperCase(), ip, userAgent]
-        );
+        // BOT FILTERING: Ignore clicks from bots/crawlers
+        const botKeywords = ['bot', 'spider', 'crawler', 'whatsapp', 'facebookexternalhit', 'facebot', 'twitterbot', 'linkedinbot', 'slackbot', 'telegrambot'];
+        const isBot = userAgent && botKeywords.some(keyword => userAgent.toLowerCase().includes(keyword));
+
+        if (!isBot) {
+            // Only log the click if it's NOT a bot
+            await db.query(
+                'INSERT INTO referral_clicks (code, ip, user_agent) VALUES ($1, $2, $3)',
+                [code.toUpperCase(), ip, userAgent]
+            );
+        } else {
+            console.log(`[REFERRAL_DEBUG] Bot ignored: ${userAgent}`);
+        }
 
         // Redirect to App Store / Play Store (Official Fiva URL)
         const androidUrl = 'https://play.google.com/store/apps/details?id=com.fivachat.app'; 

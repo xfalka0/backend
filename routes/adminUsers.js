@@ -346,23 +346,14 @@ router.get('/affiliate-stats', authenticateToken, async (req, res) => {
         const userCodeRes = await db.query("SELECT referral_code FROM users WHERE id = $1", [userId]);
         const myCode = userCodeRes.rows[0]?.referral_code;
 
-        // 1. Total Referrals (Actual signups)
-        const referrals = await db.query(
-            "SELECT COUNT(*) as total, COUNT(*) FILTER (WHERE created_at >= CURRENT_DATE) as today FROM users WHERE referred_by::text = $1::text",
-            [userId]
-        );
-
-        // 1.5. Total Clicks (Raw link clicks)
-        let totalClicks = 0;
-        let todayClicks = 0;
-        if (myCode) {
-            const clicksRes = await db.query(
-                "SELECT COUNT(*) as total, COUNT(*) FILTER (WHERE created_at >= CURRENT_DATE) as today FROM referral_clicks WHERE code = $1",
-                [myCode]
-            );
-            totalClicks = parseInt(clicksRes.rows[0].total);
-            todayClicks = parseInt(clicksRes.rows[0].today);
-        }
+        // 1. Stats with string casting for IDs
+        const statsQuery = `
+            SELECT 
+                (SELECT COUNT(*)::int FROM users WHERE referred_by::text = $1::text) as "totalReferrals",
+                (SELECT COUNT(*)::int FROM users WHERE referred_by::text = $1::text AND created_at > NOW() - INTERVAL '24 hours') as "todayReferrals",
+                (SELECT COUNT(*)::int FROM referral_clicks WHERE code = $2) as "linkClicks"
+        `;
+        const stats = await db.query(statsQuery, [userId.toString(), myCode]);
 
         // 2. Earnings (20% of transactions)
         const earnings = await db.query(`

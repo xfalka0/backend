@@ -23,6 +23,57 @@ router.get('/users', authenticateToken, authorizeRole('admin', 'super_admin'), a
     }
 });
 
+// GET ALL STAFF (Admins, Moderators, Staff, Affiliaters)
+router.get('/staff', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
+    try {
+        const result = await db.query(`
+            SELECT id, username, email, role, referral_code, created_at 
+            FROM users 
+            WHERE role IN ('admin', 'super_admin', 'moderator', 'staff', 'affiliater')
+            ORDER BY created_at DESC
+        `);
+        res.json(result.rows);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// CREATE STAFF
+router.post('/staff', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
+    const { username, email, password, role } = req.body;
+    if (!['admin', 'moderator', 'staff', 'affiliater'].includes(role)) {
+        return res.status(400).json({ error: 'Geçersiz personel rolü.' });
+    }
+
+    try {
+        const passwordHash = await bcrypt.hash(password, 10);
+        const referralCode = Math.random().toString(36).substring(2, 10).toUpperCase();
+
+        const result = await db.query(
+            "INSERT INTO users (username, email, password_hash, role, referral_code, account_status) VALUES ($1, $2, $3, $4, $5, 'active') RETURNING id, username, role, referral_code",
+            [username, email, passwordHash, role, referralCode]
+        );
+        res.status(201).json(result.rows[0]);
+    } catch (err) {
+        if (err.code === '23505') {
+            return res.status(400).json({ error: 'Bu kullanıcı adı veya e-posta zaten kullanımda.' });
+        }
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// DELETE STAFF
+router.delete('/staff/:id', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
+    const { id } = req.params;
+    if (req.user.id === id) return res.status(400).json({ error: 'Kendinizi silemezsiniz.' });
+    try {
+        await db.query("DELETE FROM users WHERE id = $1", [id]);
+        res.json({ success: true, message: 'Personel silindi.' });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // CREATE USER (Admin)
 router.post('/users', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
     const { username, email, password, role } = req.body;

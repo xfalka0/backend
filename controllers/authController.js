@@ -36,11 +36,26 @@ exports.googleAuth = async (req, res) => {
 
             // Handle Referral Code
             let referredBy = null;
-            if (referralCode) {
-                const referrerRes = await db.query('SELECT id FROM users WHERE referral_code = $1', [referralCode.toUpperCase()]);
+            let finalReferralCode = referralCode;
+
+            // If no code provided, try IP matching
+            if (!finalReferralCode) {
+                const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+                const matchRes = await db.query(
+                    "SELECT code FROM referral_clicks WHERE ip = $1 AND created_at > NOW() - INTERVAL '24 hours' ORDER BY created_at DESC LIMIT 1",
+                    [ip]
+                );
+                if (matchRes.rows.length > 0) {
+                    finalReferralCode = matchRes.rows[0].code;
+                    console.log(`[REFERRAL] Auto-matched via IP: ${ip} -> ${finalReferralCode}`);
+                }
+            }
+
+            if (finalReferralCode) {
+                const referrerRes = await db.query('SELECT id FROM users WHERE referral_code = $1', [finalReferralCode.toUpperCase()]);
                 if (referrerRes.rows.length > 0) {
                     referredBy = referrerRes.rows[0].id;
-                    console.log(`[REFERRAL] User referred by: ${referralCode} (${referredBy})`);
+                    console.log(`[REFERRAL] User referred by: ${finalReferralCode} (${referredBy})`);
                 }
             }
 
@@ -109,11 +124,26 @@ exports.registerEmail = async (req, res) => {
 
         const { referralCode } = req.body;
         let referredBy = null;
-        if (referralCode) {
-            const referrerRes = await db.query('SELECT id FROM users WHERE referral_code = $1', [referralCode.toUpperCase()]);
+        let finalReferralCode = referralCode;
+
+        // If no code provided, try IP matching
+        if (!finalReferralCode) {
+            const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+            const matchRes = await db.query(
+                "SELECT code FROM referral_clicks WHERE ip = $1 AND created_at > NOW() - INTERVAL '24 hours' ORDER BY created_at DESC LIMIT 1",
+                [ip]
+            );
+            if (matchRes.rows.length > 0) {
+                finalReferralCode = matchRes.rows[0].code;
+                console.log(`[REFERRAL] Auto-matched via IP: ${ip} -> ${finalReferralCode}`);
+            }
+        }
+
+        if (finalReferralCode) {
+            const referrerRes = await db.query('SELECT id FROM users WHERE referral_code = $1', [finalReferralCode.toUpperCase()]);
             if (referrerRes.rows.length > 0) {
                 referredBy = referrerRes.rows[0].id;
-                console.log(`[REFERRAL] User referred by: ${referralCode} (${referredBy})`);
+                console.log(`[REFERRAL] User referred by: ${finalReferralCode} (${referredBy})`);
             }
         }
 

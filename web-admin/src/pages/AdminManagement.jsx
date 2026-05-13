@@ -28,7 +28,7 @@ export default function AdminManagement() {
             if (Array.isArray(data)) {
                 // Show ONLY Admins, Moderators, and STAFF (Human Workers)
                 // This HIDES the virtual profiles (operator) from this list
-                setUsers(data.filter(u => ['admin', 'moderator', 'staff'].includes(u.role)));
+                setUsers(data.filter(u => ['admin', 'moderator', 'staff', 'affiliater'].includes(u.role)));
             }
         } catch (err) {
             console.error("Fetch admins error:", err);
@@ -113,10 +113,12 @@ export default function AdminManagement() {
                                 <td className="p-4">
                                     <span className={`px-2 py-1 rounded text-xs font-bold uppercase ${user.role === 'admin' ? 'bg-purple-500/20 text-purple-400' :
                                         user.role === 'moderator' ? 'bg-blue-500/20 text-blue-400' :
-                                            (user.role === 'operator' || user.role === 'staff') ? 'bg-orange-500/20 text-orange-400' :
-                                                'bg-gray-500/20 text-gray-400'
+                                            user.role === 'affiliater' ? 'bg-emerald-500/20 text-emerald-400' :
+                                                (user.role === 'operator' || user.role === 'staff') ? 'bg-orange-500/20 text-orange-400' :
+                                                    'bg-gray-500/20 text-gray-400'
                                         }`}>
-                                        {(user.role === 'operator' || user.role === 'staff') ? 'Personel' : user.role}
+                                        {(user.role === 'operator' || user.role === 'staff') ? 'Personel' : 
+                                         (user.role === 'affiliater') ? 'Affiliater' : user.role}
                                     </span>
                                 </td>
                                 <td className="p-4 text-right">
@@ -187,6 +189,7 @@ export default function AdminManagement() {
                                     <option value="staff">Personel (Operatör)</option>
                                     <option value="moderator">Moderatör</option>
                                     <option value="admin">Yönetici</option>
+                                    <option value="affiliater">Affiliater (İş Ortağı)</option>
                                 </select>
                             </div>
 

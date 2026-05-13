@@ -7,7 +7,7 @@ const { sanitizeUser, logActivity } = require('../utils/helpers');
 // GET USER PROFILE
 router.get('/:id', async (req, res) => {
     try {
-        const result = await db.query('SELECT * FROM users WHERE id = $1', [req.params.id]);
+        const result = await db.query('SELECT * FROM users WHERE id::text = $1::text', [req.params.id]);
         if (result.rows.length === 0) return res.status(404).json({ error: 'User not found' });
         res.json(sanitizeUser(result.rows[0], req));
     } catch (err) {
@@ -19,7 +19,7 @@ router.get('/:id', async (req, res) => {
 router.get('/:id/album', async (req, res) => {
     try {
         const { id } = req.params;
-        const result = await db.query('SELECT photos FROM users WHERE id = $1', [id]);
+        const result = await db.query('SELECT photos FROM users WHERE id::text = $1::text', [id]);
         if (result.rows.length === 0) return res.status(404).json({ error: 'Kullanıcı bulunamadı.' });
         const photos = result.rows[0].photos || [];
         const sanitized = sanitizeUser({ photos }, req);
@@ -39,7 +39,7 @@ router.put('/:id', async (req, res) => {
         const result = await db.query(
             `UPDATE users SET display_name = COALESCE($1, display_name), name = COALESCE($2, name),
              age = COALESCE($3::INTEGER, age), gender = COALESCE($4, gender), bio = COALESCE($5, bio),
-             job = COALESCE($6, job), edu = COALESCE($7, edu) WHERE id = $8 RETURNING *`,
+             job = COALESCE($6, job), edu = COALESCE($7, edu) WHERE id::text = $8::text RETURNING *`,
             [finalDisplayName || null, finalName || null, age ? parseInt(age) : null, gender || null, bio || null, job || null, edu || null, id]
         );
         if (result.rows.length === 0) return res.status(404).json({ error: 'User not found' });
@@ -156,7 +156,7 @@ router.get('/:userId/unread-count', async (req, res) => {
 // USER BALANCE (CURRENT USER) - must be BEFORE /:userId/balance to avoid route conflict
 router.get('/balance', authenticateToken, async (req, res) => {
     try {
-        const result = await db.query('SELECT balance FROM users WHERE id = $1', [req.user.id]);
+        const result = await db.query('SELECT balance FROM users WHERE id::text = $1::text', [req.user.id]);
         if (result.rows.length === 0) return res.status(404).json({ error: 'User not found' });
         res.json({ balance: result.rows[0].balance || 0 });
     } catch (err) {
@@ -168,10 +168,71 @@ router.get('/balance', authenticateToken, async (req, res) => {
 router.get('/:userId/balance', async (req, res) => {
     const { userId } = req.params;
     try {
-        const result = await db.query('SELECT balance FROM users WHERE id = $1', [userId]);
+        const result = await db.query('SELECT balance FROM users WHERE id::text = $1::text', [userId]);
         if (result.rows.length === 0) return res.status(404).json({ error: 'User not found' });
         res.json({ balance: result.rows[0].balance || 0 });
     } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// GET USER PENDING PHOTOS (IN MODERATION)
+router.get('/:userId/pending-photos', async (req, res) => {
+    const { userId } = req.params;
+    try {
+        const result = await db.query(
+            'SELECT * FROM pending_photos WHERE user_id::text = $1::text AND status = \'pending\' AND type = \'album\'',
+            [userId]
+        );
+        res.json(result.rows);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// REMOVE ALBUM PHOTO
+router.post('/:userId/remove-photo', authenticateToken, async (req, res) => {
+    const { userId } = req.params;
+    const { url, isPending, photoId } = req.body;
+
+    if (req.user.id.toString() !== userId.toString() && req.user.role !== 'admin') {
+        return res.status(403).json({ error: 'Yetkisiz işlem.' });
+    }
+
+    try {
+        console.log(`[REMOVE_PHOTO] User: ${userId}, Pending: ${isPending}, PhotoId: ${photoId}, URL: ${url}`);
+        
+        if (isPending && photoId) {
+            const result = await db.query('UPDATE pending_photos SET status = \'cancelled\' WHERE id = $1 RETURNING *', [photoId]);
+            console.log(`[REMOVE_PHOTO] Pending photo update result: ${result.rowCount} rows`);
+            if (result.rowCount === 0) {
+                return res.status(404).json({ error: 'İncelemedeki fotoğraf bulunamadı.' });
+            }
+        } else {
+            // Remove from array in users and operators
+            const userRes = await db.query(
+                'UPDATE users SET photos = array_remove(photos, $1) WHERE id::text = $2::text RETURNING photos',
+                [url, userId]
+            );
+            console.log(`[REMOVE_PHOTO] Users table update result: ${userRes.rowCount} rows`);
+            
+            const opRes = await db.query(
+                'UPDATE operators SET photos = array_remove(photos, $1) WHERE user_id::text = $2::text RETURNING photos',
+                [url, userId]
+            );
+            console.log(`[REMOVE_PHOTO] Operators table update result: ${opRes.rowCount} rows`);
+
+            // Return success even if 0 rows updated (idempotent)
+            // This handles cases where photos might be stuck in state but missing from DB
+            res.json({ success: true, warning: userRes.rowCount === 0 ? 'Photo not found in DB' : undefined });
+        }
+    } catch (err) {
+        console.error('[REMOVE_PHOTO] Error:', err.message);
+        try {
+            const fs = require('fs');
+            const logPath = require('path').join(__dirname, '../scratch/remove_photo_error.log');
+            fs.appendFileSync(logPath, `${new Date().toISOString()} - Error: ${err.message}\nStack: ${err.stack}\nData: ${JSON.stringify({ userId, url, isPending, photoId })}\n\n`);
+        } catch (e) {}
         res.status(500).json({ error: err.message });
     }
 });

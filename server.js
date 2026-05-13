@@ -12,6 +12,7 @@ const { recordOperatorCommission } = require('./utils/commissionUtils');
 const jwt = require('jsonwebtoken');
 const socialRoutes = require('./routes/socialRoutes');
 const authRoutes = require('./routes/authRoutes');
+const referralRoutes = require('./routes/referralRoutes');
 const favoritesRoutes = require('./routes/favorites');
 const viewsRoutes = require('./routes/views');
 const boostsRoutes = require('./routes/boosts');
@@ -1035,7 +1036,7 @@ app.use('/api', socialRoutes);
 app.use('/api/auth', authRoutes);
 
 app.use('/api', authRoutes); // Proxy for /api/me /api/login etc
-app.use('/api', webhooksRoutes); // Public Webhooks
+app.use('/api', referralRoutes);
 app.use('/api/favorites', favoritesRoutes);
 app.use('/api/views', viewsRoutes);
 app.use('/api/boosts', boostsRoutes);
@@ -1234,10 +1235,20 @@ app.get('/admin/*', (req, res) => {
 // GET USER PROFILE
 app.get('/api/users/:id', async (req, res) => {
     try {
-        const result = await db.query('SELECT * FROM users WHERE id = $1', [req.params.id]);
+        const query = `
+            SELECT u.*, 
+                (SELECT COUNT(*)::int FROM favorites WHERE target_user_id = u.id) as followers_count,
+                (SELECT COUNT(*)::int FROM favorites WHERE user_id = u.id) as following_count,
+                (SELECT COUNT(*)::int FROM messages WHERE (receiver_id = u.id OR (chat_id IN (SELECT id FROM chats WHERE user_id = u.id) AND sender_id != u.id)) AND gift_id IS NOT NULL) as gifts_count,
+                EXISTS(SELECT 1 FROM boosts WHERE user_id = u.id AND end_time > CURRENT_TIMESTAMP) as is_boosted
+            FROM users u 
+            WHERE u.id = $1
+        `;
+        const result = await db.query(query, [req.params.id]);
         if (result.rows.length === 0) return res.status(404).json({ error: 'User not found' });
         res.json(sanitizeUser(result.rows[0], req));
     } catch (err) {
+        console.error('[GET_USER_PROFILE_ERROR]:', err);
         res.status(500).json({ error: err.message });
     }
 });
@@ -2515,7 +2526,7 @@ app.post('/api/block', authenticateToken, async (req, res) => {
 app.get('/api/users/balance', authenticateToken, async (req, res) => {
     try {
         const userId = req.user.id;
-        const result = await db.query('SELECT balance FROM users WHERE id = $1', [userId]);
+        const result = await db.query('SELECT balance FROM users WHERE id::text = $1::text', [userId]);
         if (result.rows.length === 0) return res.status(404).json({ error: 'User not found' });
         res.json({ balance: result.rows[0].balance || 0 });
     } catch (err) {
@@ -4738,7 +4749,7 @@ app.post('/api/messages/send-hi', async (req, res) => {
 // 1.5 Get Fresh User Balance
 app.get('/api/users/balance', authenticateToken, async (req, res) => {
     try {
-        const result = await db.query('SELECT balance FROM users WHERE id = $1', [req.user.id]);
+        const result = await db.query('SELECT balance FROM users WHERE id::text = $1::text', [req.user.id]);
         if (result.rows.length === 0) return res.status(404).json({ error: 'User not found' });
         res.json({ balance: result.rows[0].balance });
     } catch (err) {

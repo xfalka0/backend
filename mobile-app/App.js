@@ -1,6 +1,6 @@
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import React, { useEffect } from 'react';
-import { View, StyleSheet, Dimensions } from 'react-native';
+import { View, StyleSheet, Dimensions, Platform } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
@@ -9,6 +9,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFonts, Outfit_800ExtraBold, Outfit_500Medium, Outfit_400Regular } from '@expo-google-fonts/outfit';
 import { StatusBar } from 'expo-status-bar';
 import * as SplashScreenNative from 'expo-splash-screen';
+import axios from 'axios';
+import { API_URL } from './src/config';
 
 // Keep the splash screen visible while we fetch resources
 SplashScreenNative.preventAutoHideAsync().catch(() => {
@@ -52,9 +54,9 @@ import WelcomeScreen from './src/screens/WelcomeScreen';
 import OnboardingScreen from './src/screens/OnboardingScreen';
 import PurchaseInfoScreen from './src/screens/PurchaseInfoScreen';
 import LeaderboardScreen from './src/screens/LeaderboardScreen';
-
-
 import AnimatedTabBar from './src/components/animated/AnimatedTabBar';
+import { trackPurchase } from './src/utils/analytics';
+import { Settings } from 'react-native-fbsdk-next';
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -153,11 +155,43 @@ export default function App() {
     });
 
     useEffect(() => {
-        const setupPurchases = async () => {
+        const setupServices = async () => {
+            // 1. Initialize Facebook SDK (Isolated)
             try {
+                const { Settings } = require('react-native-fbsdk-next');
+                Settings.setAppID('1399067395595701');
+                Settings.setClientToken('a6b6d6519806ed05c61e7b0aedf05787');
+                Settings.initializeSDK();
+                
+                if (Platform.OS === 'ios') {
+                    await Settings.setAdvertiserTrackingEnabled(true);
+                }
+                console.log('[App] Facebook SDK Initialized');
+            } catch (fbErr) {
+                console.warn('[App] Facebook SDK initialization failed (Normal in Expo Go):', fbErr.message);
+            }
+
+            // 2. Initialize Other Services
+            try {
+                // Frictionless Referral Matching
+                const storedRef = await AsyncStorage.getItem('referralCode');
+                if (!storedRef) {
+                    try {
+                        const matchRes = await axios.post(`${API_URL}/match`);
+                        if (matchRes.data.match) {
+                            await AsyncStorage.setItem('referralCode', matchRes.data.code);
+                            console.log('[App] Referral Matched Automatically:', matchRes.data.code);
+                        }
+                    } catch (refErr) {
+                        console.warn('[App] Referral match failed:', refErr.message);
+                    }
+                }
+
                 const userData = await AsyncStorage.getItem('user');
                 const user = userData ? JSON.parse(userData) : null;
                 const appUserID = user?.id ? String(user.id) : null;
+                
+                // Initialize RevenueCat
                 await PurchaseService.init(appUserID);
                 
                 // --- PUSH NOTIFICATIONS SETUP ---
@@ -168,10 +202,10 @@ export default function App() {
                     }
                 }
             } catch (err) {
-                console.warn('[App] Setup failed:', err);
+                console.warn('[App] Services setup failed:', err);
             }
         };
-        setupPurchases();
+        setupServices();
     }, []);
 
     useEffect(() => {

@@ -55,11 +55,11 @@ const styles = StyleSheet.create({
     card: {
         width: width - 32,
         marginHorizontal: 16,
-        marginVertical: 12,
-        borderRadius: 36,
+        marginVertical: 8,
+        borderRadius: 28,
         overflow: 'hidden',
-        shadowRadius: 16,
-        elevation: 8,
+        shadowRadius: 12,
+        elevation: 6,
     },
     content: {
         padding: 0, // Remove internal padding to allow image to breathe or adjust child padding

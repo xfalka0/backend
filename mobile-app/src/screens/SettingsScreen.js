@@ -227,6 +227,28 @@ export default function SettingsScreen({ navigation, route }) {
                         onPress={() => navigation.navigate('Legal', { type: 'privacy' })}
                     />
                     <SettingItem
+                        icon="mail-outline"
+                        label="E-posta Destek"
+                        sublabel="falkasoft@gmail.com"
+                        onPress={() => {
+                            Linking.openURL('mailto:falkasoft@gmail.com').catch(() => {
+                                setAlert({ visible: true, title: 'Hata', message: 'E-posta uygulaması bulunamadı.', type: 'error' });
+                            });
+                        }}
+                        iconColor="#3b82f6"
+                    />
+                    <SettingItem
+                        icon="logo-whatsapp"
+                        label="WhatsApp Destek"
+                        sublabel="+90 541 473 87 00"
+                        onPress={() => {
+                            Linking.openURL('https://wa.me/905414738700').catch(() => {
+                                setAlert({ visible: true, title: 'Hata', message: 'WhatsApp uygulaması bulunamadı.', type: 'error' });
+                            });
+                        }}
+                        iconColor="#10b981"
+                    />
+                    <SettingItem
                         icon="trash-outline"
                         label="Önbelleği Temizle"
                         onPress={handleClearCache}

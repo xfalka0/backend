@@ -41,7 +41,7 @@ export default function Sidebar() {
         {
             title: 'ANA MENÜ',
             items: [
-                { path: '/', icon: <LayoutDashboard size={18} />, label: 'Genel Bakış', roles: ['admin', 'super_admin', 'moderator', 'staff', 'operator'] },
+                { path: '/', icon: <LayoutDashboard size={18} />, label: 'Genel Bakış', roles: ['admin', 'super_admin', 'moderator', 'staff', 'operator', 'affiliater'] },
                 { path: '/chats', icon: <MessageSquare size={18} />, label: 'Sohbetler', roles: ['admin', 'super_admin', 'moderator', 'operator', 'staff'] },
                 { path: '/users', icon: <Users size={18} />, label: 'Kullanıcılar', roles: ['admin', 'super_admin'] },
                 { path: '/profiles', icon: <UserSquare2 size={18} />, label: 'Profiller', roles: ['admin', 'super_admin'] },
@@ -70,7 +70,7 @@ export default function Sidebar() {
             title: 'SİSTEM & YÖNETİM',
             items: [
                 { path: '/moderation', icon: <ShieldCheck size={18} />, label: 'Fotoğraf Onayı', roles: ['admin', 'super_admin'] },
-                { path: '/reports', icon: <ShieldCheck size={18} />, label: 'Destek / Raporlar', roles: ['admin', 'super_admin', 'moderator', 'staff'] },
+                { path: '/reports', icon: <ShieldCheck size={18} />, label: 'Destek / Raporlar', roles: ['admin', 'super_admin', 'moderator', 'staff', 'affiliater'] },
                 { path: '/social', icon: <Video size={18} />, label: 'Keşfet Yönetimi', roles: ['admin', 'super_admin'] },
                 { path: '/notifications', icon: <BellRing size={18} />, label: 'Bildirimler', roles: ['admin', 'super_admin'] },
                 { path: '/campaigns', icon: <Tag size={18} />, label: 'Kampanyalar', roles: ['admin', 'super_admin'] },

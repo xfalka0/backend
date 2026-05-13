@@ -28,6 +28,7 @@ import AgencyPayoutsPage from './pages/AgencyPayouts';
 import StaffDashboard from './pages/StaffDashboard';
 import StaffActivity from './pages/StaffActivity';
 import ReferralsPage from './pages/Referrals';
+import AffiliateDashboard from './pages/AffiliateDashboard';
 import SplashIntro from './components/SplashIntro';
 
 // Placeholder Pages
@@ -42,6 +43,9 @@ const Home = () => {
     const { user } = useAuth();
     if (user?.role === 'admin' || user?.role === 'super_admin' || user?.role === 'moderator') {
         return <Dashboard />;
+    }
+    if (user?.role === 'affiliater') {
+        return <AffiliateDashboard />;
     }
     return <StaffDashboard />;
 };
@@ -125,7 +129,7 @@ function App() {
                             </Route>
 
                             {/* Moderator & Admin Routes */}
-                            <Route element={<ProtectedRoute allowedRoles={['admin', 'super_admin', 'moderator', 'operator', 'staff']} />}>
+                            <Route element={<ProtectedRoute allowedRoles={['admin', 'super_admin', 'moderator', 'operator', 'staff', 'affiliater']} />}>
                                 <Route path="/formatted-chats" element={<ChatsPage />} />
                                 <Route path="/chats" element={<ChatsPage />} />
                                 <Route path="/reports" element={<ReportsPage />} />

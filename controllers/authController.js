@@ -10,7 +10,7 @@ const SECRET_KEY = process.env.JWT_SECRET || 'falka_super_secret_2024_key_change
 
 // Google Auth
 exports.googleAuth = async (req, res) => {
-    const { idToken, deviceId } = req.body;
+    const { idToken, deviceId, referralCode } = req.body;
     const io = req.app.get('io');
     if (!idToken) return res.status(400).json({ error: 'Token gerekli.' });
 
@@ -34,12 +34,22 @@ exports.googleAuth = async (req, res) => {
                 }
             }
 
+            // Handle Referral Code
+            let referredBy = null;
+            if (referralCode) {
+                const referrerRes = await db.query('SELECT id FROM users WHERE referral_code = $1', [referralCode.toUpperCase()]);
+                if (referrerRes.rows.length > 0) {
+                    referredBy = referrerRes.rows[0].id;
+                    console.log(`[REFERRAL] User referred by: ${referralCode} (${referredBy})`);
+                }
+            }
+
             const username = email.split('@')[0] + '_' + Math.floor(Math.random() * 10000);
             const result = await db.query(
-                `INSERT INTO users (username, email, display_name, avatar_url, role, balance, device_id) 
-                 VALUES ($1, $2, $3, $4, 'user', 100, $5) 
+                `INSERT INTO users (username, email, display_name, avatar_url, role, balance, device_id, referred_by) 
+                 VALUES ($1, $2, $3, $4, 'user', 100, $5, $6) 
                  RETURNING *`,
-                [username, email, name, picture || 'https://via.placeholder.com/150', deviceId || null]
+                [username, email, name, picture || 'https://via.placeholder.com/150', deviceId || null, referredBy]
             );
             user = result.rows[0];
             await assignFakeInteractions(user.id);
@@ -97,12 +107,22 @@ exports.registerEmail = async (req, res) => {
             }
         }
 
+        const { referralCode } = req.body;
+        let referredBy = null;
+        if (referralCode) {
+            const referrerRes = await db.query('SELECT id FROM users WHERE referral_code = $1', [referralCode.toUpperCase()]);
+            if (referrerRes.rows.length > 0) {
+                referredBy = referrerRes.rows[0].id;
+                console.log(`[REFERRAL] User referred by: ${referralCode} (${referredBy})`);
+            }
+        }
+
         const hashedPassword = await bcrypt.hash(password, 10);
         const finalUsername = username || email.split('@')[0] + '_' + Math.floor(Math.random() * 1000);
 
         const result = await db.query(
-            "INSERT INTO users (username, email, password_hash, role, balance, display_name, avatar_url, device_id) VALUES ($1, $2, $3, 'user', 100, $4, 'https://via.placeholder.com/150', $5) RETURNING *",
-            [finalUsername, email, hashedPassword, display_name || finalUsername, deviceId || null]
+            "INSERT INTO users (username, email, password_hash, role, balance, display_name, avatar_url, device_id, referred_by) VALUES ($1, $2, $3, 'user', 100, $4, 'https://via.placeholder.com/150', $5, $6) RETURNING *",
+            [finalUsername, email, hashedPassword, display_name || finalUsername, deviceId || null, referredBy]
         );
 
         const user = result.rows[0];

@@ -9,10 +9,13 @@ const { sanitizeUser, logActivity } = require('../utils/helpers');
 router.get('/users', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
     try {
         const result = await db.query(`
-            SELECT id, username, email, role, account_status, balance, 
-                   is_vip, created_at, last_login_at, ban_expires_at, avatar_url 
-            FROM users 
-            ORDER BY created_at DESC
+            SELECT u.id, u.username, u.email, u.role, u.account_status, u.balance, 
+                   u.is_vip, u.created_at, u.last_login_at, u.ban_expires_at, u.avatar_url,
+                   u.referral_code,
+                   r.username as referred_by_username
+            FROM users u
+            LEFT JOIN users r ON u.referred_by = r.id
+            ORDER BY u.created_at DESC
         `);
         res.json(result.rows);
     } catch (err) {
@@ -23,7 +26,7 @@ router.get('/users', authenticateToken, authorizeRole('admin', 'super_admin'), a
 // CREATE USER (Admin)
 router.post('/users', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
     const { username, email, password, role } = req.body;
-    if (!['admin', 'moderator', 'operator', 'user', 'staff'].includes(role)) {
+    if (!['admin', 'moderator', 'operator', 'user', 'staff', 'affiliater'].includes(role)) {
         return res.status(400).json({ error: 'Geçersiz rol.' });
     }
     try {
@@ -43,7 +46,7 @@ router.post('/users', authenticateToken, authorizeRole('admin', 'super_admin'), 
 router.put('/users/:id/role', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
     const { id } = req.params;
     const { role } = req.body;
-    if (!['admin', 'moderator', 'operator', 'user', 'staff'].includes(role)) {
+    if (!['admin', 'moderator', 'operator', 'user', 'staff', 'affiliater'].includes(role)) {
         return res.status(400).json({ error: 'Geçersiz rol.' });
     }
     try {
@@ -147,7 +150,7 @@ router.post('/users/:userId/assign-agency', authenticateToken, authorizeRole('ad
 // GET ALL STAFF
 router.get('/staff', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
     try {
-        const result = await db.query("SELECT id, username, email, role, created_at FROM users WHERE role IN ('admin', 'moderator', 'operator', 'staff') ORDER BY created_at DESC");
+        const result = await db.query("SELECT id, username, email, role, created_at FROM users WHERE role IN ('admin', 'moderator', 'operator', 'staff', 'affiliater') ORDER BY created_at DESC");
         res.json(result.rows);
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -157,7 +160,7 @@ router.get('/staff', authenticateToken, authorizeRole('admin', 'super_admin'), a
 // CREATE STAFF
 router.post('/staff', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
     const { username, email, password, role } = req.body;
-    if (!['admin', 'moderator', 'operator', 'staff'].includes(role)) {
+    if (!['admin', 'moderator', 'operator', 'staff', 'affiliater'].includes(role)) {
         return res.status(400).json({ error: 'Geçersiz rol.' });
     }
     try {
@@ -250,6 +253,52 @@ router.get('/staff-activity', authenticateToken, authorizeRole('admin', 'super_a
             ORDER BY messages_today DESC
         `);
         res.json(result.rows);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// AFFILIATE STATS
+router.get('/affiliate-stats', authenticateToken, async (req, res) => {
+    try {
+        const userId = req.user.id;
+        const role = req.user.role;
+
+        if (role !== 'affiliater' && role !== 'admin' && role !== 'super_admin') {
+            return res.status(403).json({ error: 'Yetkiniz yok.' });
+        }
+
+        // 1. Total Referrals
+        const referrals = await db.query(
+            "SELECT COUNT(*) as total, COUNT(*) FILTER (WHERE created_at >= CURRENT_DATE) as today FROM users WHERE referred_by = $1",
+            [userId]
+        );
+
+        // 2. Earnings (10% of transactions)
+        const earnings = await db.query(`
+            SELECT 
+                COALESCE(SUM(t.amount * 0.1), 0) as total_earnings,
+                COALESCE(SUM(CASE WHEN t.created_at >= CURRENT_DATE THEN t.amount * 0.1 ELSE 0 END), 0) as earnings_today
+            FROM transactions t
+            JOIN users u ON t.user_id = u.id
+            WHERE u.referred_by = $1 AND t.status = 'completed'
+        `, [userId]);
+
+        // 3. Last 10 Referrals
+        const lastReferrals = await db.query(
+            "SELECT username, display_name, created_at, avatar_url FROM users WHERE referred_by = $1 ORDER BY created_at DESC LIMIT 10",
+            [userId]
+        );
+
+        res.json({
+            stats: {
+                totalReferrals: parseInt(referrals.rows[0].total),
+                todayReferrals: parseInt(referrals.rows[0].today),
+                totalEarnings: parseFloat(earnings.rows[0].total_earnings).toFixed(2),
+                todayEarnings: parseFloat(earnings.rows[0].earnings_today).toFixed(2)
+            },
+            referrals: lastReferrals.rows
+        });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }

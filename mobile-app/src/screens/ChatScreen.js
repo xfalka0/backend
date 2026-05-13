@@ -252,7 +252,6 @@ export default function ChatScreen({ route, navigation }) {
             // 3. Connect Socket (Keep this at the end)
             if (socketRef.current) socketRef.current.disconnect();
 
-            const token = await AsyncStorage.getItem('token');
             console.log('[ChatScreen] Connecting to socket with token:', token ? 'Exists' : 'Missing', 'Local user.id:', user.id);
 
             socketRef.current = io(SOCKET_URL, {

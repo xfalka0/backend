@@ -2,4 +2,7 @@
   <string name="app_name">Fiva</string>
   <string name="expo_splash_screen_resize_mode" translatable="false">contain</string>
   <string name="expo_splash_screen_status_bar_translucent" translatable="false">false</string>
+  <string name="facebook_app_id">1399067395595701</string>
+  <string name="fb_login_protocol_scheme">fb1399067395595701</string>
+  <string name="facebook_client_token">a6b6d6519806ed05c61e7b0aedf05787</string>
 </resources>

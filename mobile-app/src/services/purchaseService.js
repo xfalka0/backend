@@ -51,6 +51,18 @@ export const PurchaseService = {
 
             // For consumable coin packages, the fact that we reached here means the store accepted the payment.
             // We return success so the app can sync with our backend.
+
+            // Meta Ads Tracking
+            try {
+                const { trackPurchase } = require('../utils/analytics');
+                const price = pack.product.price;
+                const currency = pack.product.currencyCode || 'TRY';
+                const packageName = pack.product.identifier;
+                trackPurchase(price, currency, packageName);
+            } catch (trackErr) {
+                console.error('[META_ADS] Purchase tracking error:', trackErr);
+            }
+
             return { success: true, customerInfo };
         } catch (e) {
             if (!e.userCancelled) {

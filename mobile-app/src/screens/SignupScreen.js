@@ -25,11 +25,20 @@ export default function SignupScreen({ navigation }) {
 
         setLoading(true);
         try {
-            const res = await axios.post(`${API_URL}/register`, { email, password });
+            const autoReferralCode = await AsyncStorage.getItem('referralCode');
+            const res = await axios.post(`${API_URL}/register`, { 
+                email, 
+                password,
+                referralCode: autoReferralCode 
+            });
             if (res.data.user) {
                 const { user, token } = res.data;
                 await AsyncStorage.setItem('token', token);
                 await AsyncStorage.setItem('user', JSON.stringify(user));
+
+                // Meta Ads Tracking
+                const { trackRegistration } = require('../utils/analytics');
+                trackRegistration('email');
 
                 setAlert({
                     visible: true,

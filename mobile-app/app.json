@@ -30,6 +30,11 @@
     "web": {
       "favicon": "./assets/favicon.png"
     },
+    "facebookAppId": "1399067395595701",
+    "facebookDisplayName": "Fiva",
+    "facebookScheme": "fb1399067395595701",
+    "facebookAutoLogAppEventsEnabled": true,
+    "facebookAdvertiserIDCollectionEnabled": true,
     "plugins": [
       [
         "expo-build-properties",
@@ -43,7 +48,17 @@
       ],
       "@react-native-google-signin/google-signin",
       "expo-font",
-      "expo-notifications"
+      "expo-notifications",
+      [
+        "react-native-fbsdk-next",
+        {
+          "appID": "1399067395595701",
+          "displayName": "Fiva",
+          "scheme": "fb1399067395595701",
+          "autoLogAppEventsEnabled": true,
+          "advertiserIDCollectionEnabled": true
+        }
+      ]
     ]
   }
 }

@@ -297,49 +297,55 @@ export default function ExploreScreen({ navigation, route }) {
         if (item.id === 'add') {
             const hasStory = !!user?.hasStory;
             return (
-                <View style={styles.storyContainer}>
+                <View style={[styles.storyContainer, { height: 95, justifyContent: 'center' }]}>
                     <TouchableOpacity
                         style={styles.addStoryContainer}
                         onPress={handleStoryCreation}
                     >
-                        <StoryRing hasNewStory={hasStory} size={68}>
-                            <View style={styles.storyAvatarWrapper}>
-                                <VipFrame
-                                    level={(user?.gender === 'coin_bayisi') ? 'dealer' : (user?.vip_level || 0)}
-                                    avatar={user?.avatar_url || user?.avatar}
-                                    size={64}
-                                    isStatic={true}
-                                />
-                                {!hasStory && (
-                                    <LinearGradient
-                                        colors={['#3b82f6', '#2563eb']}
-                                        style={styles.instagramAddBadge}
-                                    >
-                                        <Ionicons name="add" size={14} color="white" />
-                                    </LinearGradient>
-                                )}
-                            </View>
-                        </StoryRing>
+                        <View style={{ width: 80, height: 80, alignItems: 'center', justifyContent: 'center' }}>
+                            <VipFrame
+                                level={(user?.gender === 'coin_bayisi') ? 'dealer' : (user?.vip_level || user?.level || 0)}
+                                avatar={user?.avatar_url || user?.avatar}
+                                size={76}
+                                isStatic={true}
+                            />
+                            {hasStory && (
+                                <View style={{ position: 'absolute', pointerEvents: 'none' }}>
+                                    <StoryRing hasNewStory={true} size={62} />
+                                </View>
+                            )}
+                            {!hasStory && (
+                                <LinearGradient
+                                    colors={['#3b82f6', '#2563eb']}
+                                    style={styles.instagramAddBadge}
+                                >
+                                    <Ionicons name="add" size={14} color="white" />
+                                </LinearGradient>
+                            )}
+                        </View>
                     </TouchableOpacity>
-                    <Text style={[styles.storyName, { color: theme.colors.textSecondary }]}>Sen</Text>
                 </View>
             );
         }
         return (
-            <TouchableOpacity
-                style={styles.storyContainer}
-                onPress={() => navigation.navigate('Story', { story: item })}
-            >
-                <StoryRing hasNewStory={true} size={68}>
-                    <VipFrame
-                        level={(item.gender === 'coin_bayisi') ? 'dealer' : (item.level || 0)}
-                        avatar={item.avatar}
-                        size={64}
-                        isStatic={true}
-                    />
-                </StoryRing>
-                <Text style={[styles.storyName, { color: theme.colors.textSecondary }]} numberOfLines={1}>{item.name}</Text>
-            </TouchableOpacity>
+            <View style={[styles.storyContainer, { height: 95, justifyContent: 'center' }]}>
+                <TouchableOpacity
+                    style={styles.addStoryContainer}
+                    onPress={() => navigation.navigate('Story', { story: item })}
+                >
+                    <View style={{ width: 80, height: 80, alignItems: 'center', justifyContent: 'center' }}>
+                        <VipFrame
+                            level={(item.gender === 'coin_bayisi') ? 'dealer' : (item.level || 0)}
+                            avatar={item.avatar}
+                            size={item.level >= 5 ? 76 : 66}
+                            isStatic={true}
+                        />
+                        <View style={{ position: 'absolute', pointerEvents: 'none' }}>
+                            <StoryRing hasNewStory={true} size={60} />
+                        </View>
+                    </View>
+                </TouchableOpacity>
+            </View>
         );
     };
 
@@ -370,13 +376,17 @@ export default function ExploreScreen({ navigation, route }) {
         },
     });
 
+    const getVipColor = (level) => {
+        if (level >= 5) return ['#9333ea', '#6b21a8']; // Purple/Glitch
+        if (level >= 4) return ['#3b82f6', '#1d4ed8']; // Blue
+        if (level >= 3) return ['#eab308', '#a16207']; // Gold
+        if (level >= 2) return ['#94a3b8', '#475569']; // Silver
+        return ['#fbbf24', '#d97706']; // Bronze/Yellow default
+    };
+
     const renderHeader = () => (
         <View>
-            <View style={styles.header}>
-                <Text style={[styles.headerTitle, { color: theme.colors.text, fontSize: 18, fontWeight: '900', letterSpacing: 0.5 }]}>Hikayeler</Text>
-            </View>
-
-            <View style={[styles.storiesContainer, { borderBottomWidth: 1, borderBottomColor: theme.colors.glassBorder }]}>
+            <View style={[styles.storiesContainer, { borderBottomWidth: 0, marginTop: 10 }]}>
                 <FlatList
                     horizontal
                     data={[{ id: 'add', online: false }, ...stories]}
@@ -386,6 +396,8 @@ export default function ExploreScreen({ navigation, route }) {
                     contentContainerStyle={styles.storiesList}
                 />
             </View>
+
+            <View style={{ height: 1, backgroundColor: 'rgba(255,255,255,0.08)', marginHorizontal: 20, marginTop: 5 }} />
 
             {/* Featured Section */}
             <View style={styles.featuredContainer}>
@@ -423,129 +435,124 @@ export default function ExploreScreen({ navigation, route }) {
                     contentContainerStyle={styles.featuredList}
                 />
             </View>
+
+            <View style={{ height: 1, backgroundColor: 'rgba(255,255,255,0.08)', marginHorizontal: 20, marginTop: 15, marginBottom: 10 }} />
         </View>
     );
 
+    const [isLightboxVisible, setIsLightboxVisible] = useState(false);
+    const [selectedImage, setSelectedImage] = useState(null);
+
+    const handleImagePress = (imageUrl) => {
+        setSelectedImage(imageUrl);
+        setIsLightboxVisible(true);
+    };
+
     const renderPost = ({ item, index }) => (
         <AnimatedPostCard index={index} scrollY={scrollY}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', padding: 12 }}>
-                <View style={{ marginRight: 15, marginLeft: -5 }}>
-                    <StoryRing hasNewStory={!!item.hasStory} size={68} onPress={() => {
-                        if (item.hasStory) {
-                            const foundStory = stories.find(s => s.operator_id === item.operator_id);
-                            if (foundStory) navigation.navigate('Story', { story: foundStory });
-                        } else {
-                            navigation.navigate('OperatorProfile', { operator: item, user });
-                        }
-                    }}>
-                        <VipFrame
-                            level={(item.gender === 'coin_bayisi') ? 'dealer' : (item.level || 0)}
-                            avatar={item.avatar}
-                            size={65}
-                            isStatic={true}
-                        />
-                    </StoryRing>
-                </View>
-                <View style={{ flex: 1, justifyContent: 'center' }}>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 2 }}>
-                        <Text style={[styles.postUserName, { color: theme.colors.text, fontSize: 16, fontWeight: '800', marginRight: 6 }]}>
-                            {item.userName}
-                        </Text>
+            <TouchableOpacity 
+                activeOpacity={0.9} 
+                onPress={() => handleImagePress(resolveImageUrl(item.image_url || item.image))}
+                style={styles.modernCardContainer}
+            >
+                {/* Main Post Image */}
+                <FallbackImage 
+                    url={resolveImageUrl(item.image_url || item.image)} 
+                    style={styles.modernImage} 
+                    theme={theme} 
+                />
+                
+                {/* Top Overlay Gradient */}
+                <LinearGradient
+                    colors={['rgba(0,0,0,0.6)', 'transparent']}
+                    style={styles.modernTopGradient}
+                />
 
-                        {item.level > 0 && (
-                            <LinearGradient
-                                colors={
-                                    item.level >= 6 ? ['#1a1a1b', '#000000'] :
-                                        item.level >= 5 ? ['#e879f9', '#d946ef'] :
-                                            (item.level >= 3 ? ['#fbbf24', '#d97706'] : ['#8b5cf6', '#6366f1'])
-                                }
-                                start={{ x: 0, y: 0 }}
-                                end={{ x: 1, y: 0 }}
-                                style={styles.vipBadgeContainer}
-                            >
-                                <Ionicons name="star" size={10} color="white" style={{ marginRight: 2 }} />
-                                <Text style={styles.vipBadgeText}>VIP {item.level}</Text>
-                            </LinearGradient>
-                        )}
-
-                        <View style={styles.verifiedBadge}>
-                            <Ionicons name="checkmark-circle" size={16} color="#3b82f6" />
+                {/* User Info Overlay (Top) */}
+                <View style={styles.modernHeader}>
+                    <TouchableOpacity 
+                        onPress={() => navigation.navigate('OperatorProfile', { operator: item, user })}
+                        style={styles.modernUserInfo}
+                    >
+                        <View style={{ width: 56, height: 56, alignItems: 'center', justifyContent: 'center' }}>
+                            <VipFrame
+                                level={(item.gender === 'coin_bayisi') ? 'dealer' : (item.level || 0)}
+                                avatar={item.avatar}
+                                size={56}
+                                isStatic={true}
+                            />
+                            {!!item.hasStory && (
+                                <View style={{ position: 'absolute', pointerEvents: 'none' }}>
+                                    <StoryRing hasNewStory={true} size={48} />
+                                </View>
+                            )}
                         </View>
-                    </View>
-
-                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-
-                        {(item.age || item.gender) && (
-                            <View style={[
-                                styles.genderAgeBadge,
-                                { backgroundColor: (item.gender === 'male' || item.gender === 'erkek') ? 'rgba(59, 130, 246, 0.15)' : 'rgba(236, 72, 153, 0.15)' }
-                            ]}>
-                                <Ionicons
-                                    name={(item.gender === 'male' || item.gender === 'erkek') ? "male" : "female"}
-                                    size={10}
-                                    color={(item.gender === 'male' || item.gender === 'erkek') ? "#3b82f6" : "#ec4899"}
-                                    style={{ marginRight: item.age ? 3 : 0 }}
-                                />
-                                {item.age && (
-                                    <Text style={[
-                                        styles.genderAgeText,
-                                        { color: (item.gender === 'male' || item.gender === 'erkek') ? "#3b82f6" : "#ec4899" }
-                                    ]}>
-                                        {item.age}
-                                    </Text>
+                        <View style={styles.modernNameContainer}>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', height: 24 }}>
+                                <Text style={[styles.modernUserName, { lineHeight: 24 }]} numberOfLines={1}>{item.userName}</Text>
+                                {item.is_verified && (
+                                    <Ionicons name="checkmark-circle" size={13} color="#3b82f6" style={{ marginLeft: 4 }} />
+                                )}
+                                {/* VIP Badge for Header */}
+                                {(item.level > 0 || item.gender === 'coin_bayisi') && (
+                                    <LinearGradient
+                                        colors={item.gender === 'coin_bayisi' ? ['#10b981', '#059669'] : getVipColor(item.level)}
+                                        style={[styles.modernVipTag, { marginLeft: 12, marginBottom: 0 }]}
+                                    >
+                                        <Ionicons name="star" size={8} color="white" />
+                                        <Text style={styles.modernVipText}>
+                                            {item.gender === 'coin_bayisi' ? 'BAYİ' : `VIP ${item.level}`}
+                                        </Text>
+                                    </LinearGradient>
                                 )}
                             </View>
-                        )}
+                            <View style={[styles.modernAgeBadge, { backgroundColor: (item.gender === 'male' || item.gender === 'erkek') ? 'rgba(59, 130, 246, 0.4)' : 'rgba(236, 72, 153, 0.4)' }]}>
+                                <Text style={styles.modernAgeText}>{item.age || '18'}</Text>
+                            </View>
+                        </View>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity onPress={() => handleOpenOptions(item)} style={styles.modernMenuButton}>
+                        <Ionicons name="ellipsis-horizontal" size={20} color="white" />
+                    </TouchableOpacity>
+                </View>
+
+                {/* Bottom Overlay Gradient */}
+                <LinearGradient
+                    colors={['transparent', 'rgba(0,0,0,0.3)', 'rgba(0,0,0,0.6)', 'rgba(0,0,0,0.9)']}
+                    style={styles.modernBottomGradient}
+                />
+
+                {/* Bottom Info & Actions */}
+                <View style={styles.modernFooter}>
+                    <View style={styles.modernCaptionSection}>
+                        <Text style={styles.modernCaption} numberOfLines={2}>
+                            {item.content || item.caption || "Merhaba! Beni takip etmeyi unutma! ✨"}
+                        </Text>
+                    </View>
+
+                    <View style={styles.modernActions}>
+                        <TouchableOpacity onPress={() => likePost(item.id)} style={styles.modernActionButton}>
+                            <Ionicons
+                                name={item.liked ? "heart" : "heart-outline"}
+                                size={24}
+                                color={item.liked ? "#f472b6" : "white"}
+                            />
+                            <Text style={styles.modernActionText}>{item.likes_count || 0}</Text>
+                        </TouchableOpacity>
+                        
+                        <TouchableOpacity onPress={() => fetchComments(item.id)} style={styles.modernActionButton}>
+                            <Ionicons name="chatbubble-outline" size={22} color="white" />
+                            <Text style={styles.modernActionText}>{item.comments_count || 0}</Text>
+                        </TouchableOpacity>
                     </View>
                 </View>
-                <TouchableOpacity
-                    onPress={() => {
-                        // console.log('3-dots pressed');
-                        handleOpenOptions(item);
-                    }}
-                    hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}
-                    style={{ position: 'absolute', top: 15, right: 15, zIndex: 999 }}
-                >
-                    <Ionicons name="ellipsis-horizontal" size={24} color={themeMode === 'dark' ? 'white' : theme.colors.text} />
-                </TouchableOpacity>
-            </View>
 
-            <View style={styles.postImageContainer}>
-                <FallbackImage url={resolveImageUrl(item.image_url || item.image)} style={styles.postImage} theme={theme} />
                 <LikeAnimation
                     onLike={() => handleDoubleTapLike(item.id)}
                     showIcon={false}
                 />
-            </View>
-
-            <View style={styles.postActions}>
-                <View style={styles.leftActions}>
-                    <TouchableOpacity onPress={() => likePost(item.id)} style={styles.actionItem}>
-                        <Ionicons
-                            name={item.liked ? "heart" : "heart-outline"}
-                            size={28}
-                            color={item.liked ? "#f472b6" : (themeMode === 'dark' ? "white" : theme.colors.text)}
-                        />
-                        <Text style={[styles.actionCount, { color: theme.colors.text }]}>{item.likes_count || 0}</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity onPress={() => fetchComments(item.id)} style={styles.actionItem}>
-                        <Ionicons name="chatbubble-outline" size={26} color={themeMode === 'dark' ? "white" : theme.colors.text} />
-                        <Text style={[styles.actionCount, { color: theme.colors.text }]}>{item.comments_count || 0}</Text>
-                    </TouchableOpacity>
-                </View>
-            </View>
-
-            <View style={styles.postInfo}>
-                <View style={styles.captionRow}>
-                    <Text style={[styles.captionUser, { color: theme.colors.text }]}>{item.userName}</Text>
-                    <Text style={[styles.captionText, { color: theme.colors.textSecondary }]}>{item.content || item.caption}</Text>
-                </View>
-                <TouchableOpacity onPress={() => fetchComments(item.id)}>
-                    <Text style={[styles.viewComments, { color: theme.colors.textSecondary }]}>
-                        {item.comments_count > 0 ? `${item.comments_count} yorumun tümünü gör...` : 'Yorum yaz...'}
-                    </Text>
-                </TouchableOpacity>
-            </View>
+            </TouchableOpacity>
         </AnimatedPostCard>
     );
 
@@ -568,6 +575,37 @@ export default function ExploreScreen({ navigation, route }) {
                 scrollEventThrottle={16}
                 ListHeaderComponent={renderHeader}
             />
+
+            {/* Lightbox Modal */}
+            <Modal
+                visible={isLightboxVisible}
+                transparent
+                animationType="fade"
+                onRequestClose={() => setIsLightboxVisible(false)}
+            >
+                <View style={styles.lightboxContainer}>
+                    <TouchableOpacity 
+                        style={StyleSheet.absoluteFill} 
+                        onPress={() => setIsLightboxVisible(false)}
+                    >
+                        <View style={styles.lightboxOverlay} />
+                    </TouchableOpacity>
+                    
+                    <View style={styles.lightboxContent}>
+                        <Image 
+                            source={{ uri: selectedImage }} 
+                            style={styles.lightboxImage} 
+                            resizeMode="contain"
+                        />
+                        <TouchableOpacity 
+                            style={styles.lightboxClose}
+                            onPress={() => setIsLightboxVisible(false)}
+                        >
+                            <Ionicons name="close-circle" size={40} color="white" />
+                        </TouchableOpacity>
+                    </View>
+                </View>
+            </Modal>
 
             {/* Floating Action Button for New Post */}
             <TouchableOpacity
@@ -1099,9 +1137,157 @@ const styles = StyleSheet.create({
         fontSize: 12,
         fontWeight: '800',
     },
-    featuredCategory: {
-        fontSize: 11,
+    // --- MODERN PREMIUM POST STYLES ---
+    modernCardContainer: {
+        height: 380,
+        borderRadius: 28,
+        overflow: 'hidden',
+        position: 'relative',
+    },
+    modernImage: {
+        width: '100%',
+        height: '100%',
+        borderRadius: 28,
+    },
+    modernTopGradient: {
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        height: 80,
+    },
+    modernBottomGradient: {
+        position: 'absolute',
+        bottom: 0,
+        left: 0,
+        right: 0,
+        height: 160,
+    },
+    modernHeader: {
+        position: 'absolute',
+        top: 12,
+        left: 12,
+        right: 12,
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+    },
+    modernUserInfo: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: 'rgba(0,0,0,0.3)',
+        padding: 4,
+        paddingRight: 12,
+        borderRadius: 30,
+        backdropFilter: 'blur(10px)',
+        borderWidth: 0.5,
+        borderColor: 'rgba(255,255,255,0.2)',
+    },
+    modernNameContainer: {
+        marginLeft: 8,
+    },
+    modernUserName: {
+        color: 'white',
+        fontSize: 13,
+        fontWeight: '800',
+    },
+    modernAgeBadge: {
+        paddingHorizontal: 6,
+        paddingVertical: 1,
+        borderRadius: 6,
+        marginTop: 1,
+        alignSelf: 'flex-start',
+    },
+    modernAgeText: {
+        color: 'white',
+        fontSize: 9,
+        fontWeight: '900',
+    },
+    modernMenuButton: {
+        width: 32,
+        height: 32,
+        borderRadius: 16,
+        backgroundColor: 'rgba(0,0,0,0.3)',
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderWidth: 0.5,
+        borderColor: 'rgba(255,255,255,0.2)',
+    },
+    modernFooter: {
+        position: 'absolute',
+        bottom: 12,
+        left: 15,
+        right: 15,
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'flex-end',
+    },
+    modernCaptionSection: {
+        flex: 1,
+        marginRight: 15,
+    },
+    modernVipTag: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 8,
+        paddingVertical: 3,
+        borderRadius: 8,
+    },
+    modernVipText: {
+        color: 'white',
+        fontSize: 8,
+        fontWeight: '900',
+        marginLeft: 2,
+    },
+    modernCaption: {
+        color: 'rgba(255,255,255,0.95)',
+        fontSize: 12,
         fontWeight: '600',
+        lineHeight: 16,
+    },
+    modernActions: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 12,
+    },
+    modernActionButton: {
+        alignItems: 'center',
+        backgroundColor: 'rgba(255,255,255,0.15)',
+        paddingHorizontal: 10,
+        paddingVertical: 6,
+        borderRadius: 15,
+        borderWidth: 0.5,
+        borderColor: 'rgba(255,255,255,0.2)',
+    },
+    modernActionText: {
+        color: 'white',
+        fontSize: 10,
+        fontWeight: '800',
         marginTop: 2,
+    },
+    // Lightbox Styles
+    lightboxContainer: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    lightboxOverlay: {
+        backgroundColor: 'rgba(0,0,0,0.9)',
+    },
+    lightboxContent: {
+        width: width,
+        height: height,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    lightboxImage: {
+        width: width,
+        height: height * 0.8,
+    },
+    lightboxClose: {
+        position: 'absolute',
+        top: 50,
+        right: 25,
+        zIndex: 100,
     },
 });

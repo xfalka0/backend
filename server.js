@@ -1047,6 +1047,12 @@ app.get('/api/health', async (req, res) => {
 });
 
 
+// --- STATIC FILE SERVING (Admin Panel) ---
+const adminPath = path.join(__dirname, 'public', 'admin');
+app.use(express.static(adminPath));
+// Explicitly serve assets folder
+app.use('/assets', express.static(path.join(adminPath, 'assets')));
+
 app.use('/api', socialRoutes);
 
 app.use('/api/auth', authRoutes);

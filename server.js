@@ -256,6 +256,12 @@ const initializeDatabase = async () => {
             await db.query('ALTER TABLE users ADD COLUMN referral_code VARCHAR(50) UNIQUE');
         }
 
+        // FORCE TYPE CHANGE FOR referred_by TO AVOID UUID/INT CONFLICTS
+        try {
+            await db.query('ALTER TABLE users ALTER COLUMN referred_by TYPE TEXT');
+            console.log('[DB] users.referred_by column altered to TEXT');
+        } catch (e) { /* already text or other error */ }
+
         if (!columnNames.includes('relationship')) {
             console.log('[DB] Adding missing column: relationship');
             await db.query('ALTER TABLE users ADD COLUMN relationship VARCHAR(50)');

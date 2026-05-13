@@ -71,6 +71,25 @@ router.put('/users/:id/role', authenticateToken, authorizeRole('admin', 'super_a
     }
 });
 
+// UPDATE STAFF REFERRAL CODE
+router.put('/staff/:id/code', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
+    const { id } = req.params;
+    const { code } = req.body;
+    if (!code || code.length < 3) return res.status(400).json({ error: 'Kod en az 3 karakter olmalıdır.' });
+    
+    try {
+        const result = await db.query(
+            'UPDATE users SET referral_code = $1 WHERE id = $2 RETURNING id, username, referral_code',
+            [code.toUpperCase(), id]
+        );
+        if (result.rows.length === 0) return res.status(404).json({ error: 'Kullanıcı bulunamadı.' });
+        res.json(result.rows[0]);
+    } catch (err) {
+        if (err.code === '23505') return res.status(400).json({ error: 'Bu kod zaten başka biri tarafından kullanılıyor.' });
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // BAN USER
 router.post('/users/:id/ban', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
     const { id } = req.params;
@@ -272,11 +291,27 @@ router.get('/affiliate-stats', authenticateToken, async (req, res) => {
             return res.status(403).json({ error: 'Yetkiniz yok.' });
         }
 
-        // 1. Total Referrals
+        // 0. Get user's referral code
+        const userCodeRes = await db.query("SELECT referral_code FROM users WHERE id = $1", [userId]);
+        const myCode = userCodeRes.rows[0]?.referral_code;
+
+        // 1. Total Referrals (Actual signups)
         const referrals = await db.query(
             "SELECT COUNT(*) as total, COUNT(*) FILTER (WHERE created_at >= CURRENT_DATE) as today FROM users WHERE referred_by::text = $1::text",
             [userId]
         );
+
+        // 1.5. Total Clicks (Raw link clicks)
+        let totalClicks = 0;
+        let todayClicks = 0;
+        if (myCode) {
+            const clicksRes = await db.query(
+                "SELECT COUNT(*) as total, COUNT(*) FILTER (WHERE created_at >= CURRENT_DATE) as today FROM referral_clicks WHERE code = $1",
+                [myCode]
+            );
+            totalClicks = parseInt(clicksRes.rows[0].total);
+            todayClicks = parseInt(clicksRes.rows[0].today);
+        }
 
         // 2. Earnings (20% of transactions)
         const earnings = await db.query(`
@@ -299,7 +334,9 @@ router.get('/affiliate-stats', authenticateToken, async (req, res) => {
                 totalReferrals: parseInt(referrals.rows[0].total),
                 todayReferrals: parseInt(referrals.rows[0].today),
                 totalEarnings: parseFloat(earnings.rows[0].total_earnings).toFixed(2),
-                todayEarnings: parseFloat(earnings.rows[0].earnings_today).toFixed(2)
+                todayEarnings: parseFloat(earnings.rows[0].earnings_today).toFixed(2),
+                totalClicks,
+                todayClicks
             },
             referrals: lastReferrals.rows
         });

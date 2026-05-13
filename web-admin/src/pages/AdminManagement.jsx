@@ -75,6 +75,25 @@ export default function AdminManagement() {
         } catch (err) {
             alert('Silme başarısız: ' + err.message);
         }
+    const handleUpdateCode = async (id, currentCode) => {
+        const newCode = prompt('Yeni referans kodunu girin:', currentCode);
+        if (!newCode || newCode === currentCode) return;
+
+        try {
+            const res = await fetch(`${API_URL}/api/admin/staff/${id}/code`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify({ code: newCode.toUpperCase() })
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'Güncelleme başarısız');
+            fetchUsers();
+        } catch (err) {
+            alert(err.message);
+        }
     };
 
     if (loading) return <div className="p-8">Yükleniyor...</div>;
@@ -122,7 +141,11 @@ export default function AdminManagement() {
                                          (user.role === 'affiliater') ? 'Affiliater' : user.role}
                                     </span>
                                 </td>
-                                <td className="p-4 text-center font-mono text-xs text-indigo-400">
+                                <td 
+                                    className="p-4 text-center font-mono text-xs text-indigo-400 cursor-pointer hover:text-indigo-300 hover:underline"
+                                    onClick={() => handleUpdateCode(user.id, user.referral_code)}
+                                    title="Düzenlemek için tıkla"
+                                >
                                     {user.referral_code || '-'}
                                 </td>
                                 <td className="p-4 text-right">

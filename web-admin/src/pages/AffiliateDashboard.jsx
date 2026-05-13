@@ -111,11 +111,11 @@ export default function AffiliateDashboard() {
                     subText="Harcanan Coin Üzerinden"
                 />
                 <StatCard 
-                    title="Hesap Durumu" 
-                    value="Aktif" 
-                    icon={<Check size={24} />} 
+                    title="Link Tıklanma" 
+                    value={data?.stats.totalClicks || 0} 
+                    icon={<ExternalLink size={24} />} 
                     color="sky" 
-                    subText="Ödemeler Talebe Göre"
+                    subText={`Bugün: +${data?.stats.todayClicks || 0}`}
                 />
             </div>
 

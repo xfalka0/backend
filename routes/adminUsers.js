@@ -14,7 +14,7 @@ router.get('/users', authenticateToken, authorizeRole('admin', 'super_admin'), a
                    u.referral_code,
                    r.username as referred_by_username
             FROM users u
-            LEFT JOIN users r ON u.referred_by = r.id
+            LEFT JOIN users r ON u.referred_by::text = r.id::text
             ORDER BY u.created_at DESC
         `);
         res.json(result.rows);
@@ -150,7 +150,7 @@ router.post('/users/:userId/assign-agency', authenticateToken, authorizeRole('ad
 // GET ALL STAFF
 router.get('/staff', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
     try {
-        const result = await db.query("SELECT id, username, email, role, created_at FROM users WHERE role IN ('admin', 'moderator', 'operator', 'staff', 'affiliater') ORDER BY created_at DESC");
+        const result = await db.query("SELECT id, username, email, role, referral_code, created_at FROM users WHERE role IN ('admin', 'moderator', 'operator', 'staff', 'affiliater') ORDER BY created_at DESC");
         res.json(result.rows);
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -165,9 +165,13 @@ router.post('/staff', authenticateToken, authorizeRole('admin', 'super_admin'), 
     }
     try {
         const hashedPassword = await bcrypt.hash(password, 10);
+        
+        // Generate random 8-character referral code
+        const referralCode = Math.random().toString(36).substring(2, 10).toUpperCase();
+
         const result = await db.query(
-            "INSERT INTO users (username, email, password, password_hash, role, balance, account_status) VALUES ($1, $2, $3, $3, $4, 0, 'active') RETURNING id, username, email, role",
-            [username, email, hashedPassword, role]
+            "INSERT INTO users (username, email, password, password_hash, role, balance, account_status, referral_code) VALUES ($1, $2, $3, $3, $4, 0, 'active', $5) RETURNING id, username, email, role, referral_code",
+            [username, email, hashedPassword, role, referralCode]
         );
         if (role === 'operator' || role === 'staff') {
             await db.query(
@@ -185,7 +189,7 @@ router.post('/staff', authenticateToken, authorizeRole('admin', 'super_admin'), 
 // DELETE STAFF
 router.delete('/staff/:id', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
     const { id } = req.params;
-    if (req.user.id === parseInt(id)) return res.status(400).json({ error: 'Kendinizi silemezsiniz.' });
+    if (req.user.id === id) return res.status(400).json({ error: 'Kendinizi silemezsiniz.' });
     try {
         await db.query("DELETE FROM users WHERE id = $1", [id]);
         res.json({ success: true, message: 'Personel tamamen silindi.' });
@@ -270,23 +274,23 @@ router.get('/affiliate-stats', authenticateToken, async (req, res) => {
 
         // 1. Total Referrals
         const referrals = await db.query(
-            "SELECT COUNT(*) as total, COUNT(*) FILTER (WHERE created_at >= CURRENT_DATE) as today FROM users WHERE referred_by = $1",
+            "SELECT COUNT(*) as total, COUNT(*) FILTER (WHERE created_at >= CURRENT_DATE) as today FROM users WHERE referred_by::text = $1::text",
             [userId]
         );
 
-        // 2. Earnings (10% of transactions)
+        // 2. Earnings (20% of transactions)
         const earnings = await db.query(`
             SELECT 
-                COALESCE(SUM(t.amount * 0.1), 0) as total_earnings,
-                COALESCE(SUM(CASE WHEN t.created_at >= CURRENT_DATE THEN t.amount * 0.1 ELSE 0 END), 0) as earnings_today
+                COALESCE(SUM(t.amount * 0.2), 0) as total_earnings,
+                COALESCE(SUM(CASE WHEN t.created_at >= CURRENT_DATE THEN t.amount * 0.2 ELSE 0 END), 0) as earnings_today
             FROM transactions t
             JOIN users u ON t.user_id = u.id
-            WHERE u.referred_by = $1 AND t.status = 'completed'
+            WHERE u.referred_by::text = $1::text AND t.status = 'completed'
         `, [userId]);
 
         // 3. Last 10 Referrals
         const lastReferrals = await db.query(
-            "SELECT username, display_name, created_at, avatar_url FROM users WHERE referred_by = $1 ORDER BY created_at DESC LIMIT 10",
+            "SELECT username, display_name, created_at, avatar_url FROM users WHERE referred_by::text = $1::text ORDER BY created_at DESC LIMIT 10",
             [userId]
         );
 

@@ -16,8 +16,8 @@ router.get('/r/:code', async (req, res) => {
             [code.toUpperCase(), ip, userAgent]
         );
 
-        // Redirect to App Store / Play Store (Update these URLs)
-        const androidUrl = 'https://play.google.com/store/apps/details?id=com.fiva.dating'; 
+        // Redirect to App Store / Play Store (Official Fiva URL)
+        const androidUrl = 'https://play.google.com/store/apps/details?id=com.fivachat.app'; 
         const iosUrl = 'https://apps.apple.com/app/fiva-dating';
         
         const isIos = /iPhone|iPad|iPod/i.test(userAgent);

@@ -102,6 +102,7 @@ export default function AdminManagement() {
                             <th className="p-4">Kullanıcı Adı</th>
                             <th className="p-4">E-posta</th>
                             <th className="p-4">Rol</th>
+                            <th className="p-4 text-center">Davet Kodu</th>
                             <th className="p-4 text-right">İşlemler</th>
                         </tr>
                     </thead>
@@ -120,6 +121,9 @@ export default function AdminManagement() {
                                         {(user.role === 'operator' || user.role === 'staff') ? 'Personel' : 
                                          (user.role === 'affiliater') ? 'Affiliater' : user.role}
                                     </span>
+                                </td>
+                                <td className="p-4 text-center font-mono text-xs text-indigo-400">
+                                    {user.referral_code || '-'}
                                 </td>
                                 <td className="p-4 text-right">
                                     <button

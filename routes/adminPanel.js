@@ -68,7 +68,7 @@ router.get('/payments', authenticateToken, authorizeRole('admin', 'super_admin')
                 u.email,
                 cp.name as package_name
             FROM payments p
-            LEFT JOIN users u ON p.user_id = u.id 
+            LEFT JOIN users u ON p.user_id::text = u.id::text 
             LEFT JOIN coin_packages cp ON p.package_id = cp.id
             ORDER BY p.created_at DESC 
             LIMIT 100
@@ -158,7 +158,7 @@ router.get('/referrals/stats', authenticateToken, async (req, res) => {
                 COUNT(r.id) as referral_count,
                 COALESCE(SUM(r.total_spent), 0) as referral_revenue
             FROM users u
-            LEFT JOIN users r ON r.referred_by = u.id
+            LEFT JOIN users r ON r.referred_by::text = u.id::text
             WHERE u.role IN ('staff', 'operator', 'admin', 'super_admin')
             GROUP BY u.id ORDER BY referral_count DESC
         `);
@@ -352,7 +352,7 @@ router.get('/reports', authenticateToken, authorizeRole('admin', 'super_admin', 
     try {
         const result = await db.query(`
             SELECT r.*, u1.username as reporter_name, u2.username as reported_name
-            FROM reports r LEFT JOIN users u1 ON r.reporter_id = u1.id LEFT JOIN users u2 ON r.reported_id = u2.id
+            FROM reports r LEFT JOIN users u1 ON r.reporter_id::text = u1.id::text LEFT JOIN users u2 ON r.reported_id::text = u2.id::text
             ORDER BY r.created_at DESC
         `);
         res.json(result.rows);

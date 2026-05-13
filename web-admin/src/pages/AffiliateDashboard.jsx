@@ -16,7 +16,21 @@ export default function AffiliateDashboard() {
         const userData = JSON.parse(localStorage.getItem('user') || '{}');
         setUser(userData);
         fetchStats();
+        fetchUserProfile();
     }, []);
+
+    const fetchUserProfile = async () => {
+        try {
+            const token = localStorage.getItem('token');
+            const res = await axios.get(`${API_URL}/api/auth/me`, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            setUser(res.data);
+            localStorage.setItem('user', JSON.stringify(res.data));
+        } catch (err) {
+            console.error("Profile fetch error:", err);
+        }
+    };
 
     const fetchStats = async () => {
         try {
@@ -33,7 +47,7 @@ export default function AffiliateDashboard() {
     };
 
     const copyLink = () => {
-        const link = `https://backend-kj17.onrender.com/api/r/${user?.referral_code}`;
+        const link = `https://falkasoft.com/api/r/${user?.referral_code}`;
         navigator.clipboard.writeText(link);
         setCopied(true);
         setTimeout(() => setCopied(false), 2000);
@@ -77,21 +91,21 @@ export default function AffiliateDashboard() {
             <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
                 <StatCard 
                     title="Toplam Kayıt" 
-                    value={data?.stats.totalReferrals} 
+                    value={data?.stats.totalReferrals || 0} 
                     icon={<Users size={24} />} 
                     color="indigo" 
-                    subText={`Bugün: +${data?.stats.todayReferrals}`}
+                    subText={`Bugün: +${data?.stats.todayReferrals || 0}`}
                 />
                 <StatCard 
                     title="Toplam Kazanç" 
-                    value={`${data?.stats.totalEarnings} TL`} 
+                    value={`${data?.stats.totalEarnings || '0.00'} TL`} 
                     icon={<DollarSign size={24} />} 
                     color="emerald" 
-                    subText={`Bugün: ${data?.stats.todayEarnings} TL`}
+                    subText={`Bugün: ${data?.stats.todayEarnings || '0.00'} TL`}
                 />
                 <StatCard 
                     title="Komisyon Oranı" 
-                    value="%10" 
+                    value="%20" 
                     icon={<Wallet size={24} />} 
                     color="amber" 
                     subText="Harcanan Coin Üzerinden"
@@ -101,7 +115,7 @@ export default function AffiliateDashboard() {
                     value="Aktif" 
                     icon={<Check size={24} />} 
                     color="sky" 
-                    subText="Ödemeler Haftalık"
+                    subText="Ödemeler Talebe Göre"
                 />
             </div>
 
@@ -168,11 +182,11 @@ export default function AffiliateDashboard() {
                         
                         <div className="relative z-10 space-y-6">
                             <h3 className="text-2xl font-black text-white leading-tight">Paylaş ve Kazanmaya Başla</h3>
-                            <p className="text-indigo-100/80 text-sm font-medium">Bu link üzerinden gelen kullanıcıların harcamalarından %10 komisyon kazanırsın.</p>
+                            <p className="text-indigo-100/80 text-sm font-medium">Bu link üzerinden gelen kullanıcıların harcamalarından %20 komisyon kazanırsın.</p>
                             
                             <div className="bg-black/20 p-4 rounded-2xl border border-white/10">
                                 <p className="text-[10px] font-black text-white/50 uppercase tracking-widest mb-2">SİZE ÖZEL TAKİP LİNKİ</p>
-                                <p className="text-xs text-white font-mono break-all line-clamp-1">{`https://fiva.app/join?ref=${user?.referral_code}`}</p>
+                                <p className="text-xs text-white font-mono break-all line-clamp-1">{`https://falkasoft.com/api/r/${user?.referral_code}`}</p>
                             </div>
 
                             <button 

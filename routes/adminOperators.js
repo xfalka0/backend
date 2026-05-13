@@ -19,7 +19,7 @@ router.get('/', async (req, res) => {
                 o.category, o.rating, o.is_online, COALESCE(o.bio, u.bio) as bio, o.photos,
                 EXISTS(SELECT 1 FROM stories s WHERE s.operator_id = u.id AND s.expires_at > NOW()) as has_active_story
             FROM users u
-            JOIN operators o ON u.id = o.user_id
+            JOIN operators o ON u.id::text = o.user_id::text
             WHERE u.account_status = 'active' AND u.role NOT IN ('admin', 'super_admin', 'moderator', 'staff')
         `;
 

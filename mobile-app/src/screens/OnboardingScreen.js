@@ -267,7 +267,6 @@ export default function OnboardingScreen({ navigation, route }) {
                                 placeholderTextColor="rgba(255,255,255,0.2)"
                                 value={name}
                                 onChangeText={setName}
-                                autoFocus
                                 textAlign="center"
                                 selectionColor="#8b5cf6"
                             />
@@ -389,8 +388,8 @@ export default function OnboardingScreen({ navigation, route }) {
                 </View>
 
                 <KeyboardAvoidingView
-                    behavior={Platform.OS === 'ios' ? 'padding' : 'padding'}
-                    keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
+                    behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+                    keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 40}
                     style={styles.content}
                 >
                     {renderStepContent()}

@@ -373,12 +373,12 @@ router.get('/affiliate-stats', authenticateToken, async (req, res) => {
 
         res.json({
             stats: {
-                totalReferrals: parseInt(referrals.rows[0].total),
-                todayReferrals: parseInt(referrals.rows[0].today),
+                totalReferrals: stats.rows[0].totalReferrals,
+                todayReferrals: stats.rows[0].todayReferrals,
                 totalEarnings: parseFloat(earnings.rows[0].total_earnings).toFixed(2),
                 todayEarnings: parseFloat(earnings.rows[0].earnings_today).toFixed(2),
-                totalClicks,
-                todayClicks
+                totalClicks: stats.rows[0].linkClicks,
+                todayClicks: 0 // Will refine this later if needed
             },
             referrals: lastReferrals.rows
         });

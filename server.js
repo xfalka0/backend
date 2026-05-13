@@ -144,6 +144,22 @@ const initializeDatabase = async () => {
             console.error('[DB] Error creating agencies table:', tableErr.message);
         }
 
+        // 6. Referral Clicks Table
+        try {
+            await db.query(`
+                CREATE TABLE IF NOT EXISTS referral_clicks (
+                    id SERIAL PRIMARY KEY,
+                    code VARCHAR(50) NOT NULL,
+                    ip VARCHAR(50),
+                    user_agent TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            `);
+            console.log('[DB] referral_clicks table verified');
+        } catch (tableErr) {
+            console.error('[DB] Error creating referral_clicks table:', tableErr.message);
+        }
+
         // Migration for existing table if types were wrong
         try {
             await db.query('ALTER TABLE commission_logs ALTER COLUMN operator_id TYPE TEXT');

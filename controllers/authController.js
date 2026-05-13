@@ -213,6 +213,7 @@ exports.getMe = async (req, res) => {
             role: user.role,
             avatar_url: user.avatar_url,
             display_name: user.display_name,
+            referral_code: user.referral_code,
             onboarding_completed: user.onboarding_completed
         });
     } catch (err) {

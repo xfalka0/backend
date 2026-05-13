@@ -4,7 +4,7 @@ import axios from 'axios';
 
 const API_URL = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
     ? ''
-    : '';
+    : 'https://backend-kj17.onrender.com';
 
 export default function AffiliateDashboard() {
     const [data, setData] = useState(null);
@@ -47,7 +47,8 @@ export default function AffiliateDashboard() {
     };
 
     const copyLink = () => {
-        const link = `https://falkasoft.com/api/r/${user?.referral_code}`;
+        const baseUrl = window.location.hostname === 'localhost' ? 'http://localhost:5000' : 'https://backend-kj17.onrender.com';
+        const link = `${baseUrl}/api/r/${user?.referral_code || ''}`;
         navigator.clipboard.writeText(link);
         setCopied(true);
         setTimeout(() => setCopied(false), 2000);
@@ -186,7 +187,7 @@ export default function AffiliateDashboard() {
                             
                             <div className="bg-black/20 p-4 rounded-2xl border border-white/10">
                                 <p className="text-[10px] font-black text-white/50 uppercase tracking-widest mb-2">SİZE ÖZEL TAKİP LİNKİ</p>
-                                <p className="text-xs text-white font-mono break-all line-clamp-1">{`https://falkasoft.com/api/r/${user?.referral_code}`}</p>
+                                <p className="text-xs text-white font-mono break-all line-clamp-1">{`${window.location.hostname === 'localhost' ? 'http://localhost:5000' : 'https://backend-kj17.onrender.com'}/api/r/${user?.referral_code || ''}`}</p>
                             </div>
 
                             <button 

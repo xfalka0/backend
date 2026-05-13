@@ -6,7 +6,7 @@ const db = require('../db');
 // Example: https://your-backend.com/api/r/ADMIN947
 router.get('/r/:code', async (req, res) => {
     const { code } = req.params;
-    const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+    const ip = req.headers['x-forwarded-for']?.split(',')[0].trim() || req.socket.remoteAddress;
     const userAgent = req.headers['user-agent'];
 
     try {

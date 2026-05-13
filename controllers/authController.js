@@ -11,6 +11,11 @@ const SECRET_KEY = process.env.JWT_SECRET || 'falka_super_secret_2024_key_change
 // Google Auth
 exports.googleAuth = async (req, res) => {
     const { idToken, deviceId, referralCode } = req.body;
+    const getClientIp = (req) => {
+        const forwarded = req.headers['x-forwarded-for'];
+        if (forwarded) return forwarded.split(',')[0].trim();
+        return req.socket.remoteAddress;
+    };
     const io = req.app.get('io');
     if (!idToken) return res.status(400).json({ error: 'Token gerekli.' });
 
@@ -40,7 +45,8 @@ exports.googleAuth = async (req, res) => {
 
             // If no code provided, try IP matching
             if (!finalReferralCode) {
-                const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+                const ip = getClientIp(req);
+                console.log(`[REFERRAL_DEBUG] Checking IP match for: ${ip}`);
                 const matchRes = await db.query(
                     "SELECT code FROM referral_clicks WHERE ip = $1 AND created_at > NOW() - INTERVAL '24 hours' ORDER BY created_at DESC LIMIT 1",
                     [ip]
@@ -48,6 +54,8 @@ exports.googleAuth = async (req, res) => {
                 if (matchRes.rows.length > 0) {
                     finalReferralCode = matchRes.rows[0].code;
                     console.log(`[REFERRAL] Auto-matched via IP: ${ip} -> ${finalReferralCode}`);
+                } else {
+                    console.log(`[REFERRAL_DEBUG] No recent click found for IP: ${ip}`);
                 }
             }
 
@@ -128,7 +136,8 @@ exports.registerEmail = async (req, res) => {
 
         // If no code provided, try IP matching
         if (!finalReferralCode) {
-            const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+            const ip = req.headers['x-forwarded-for']?.split(',')[0].trim() || req.socket.remoteAddress;
+            console.log(`[REFERRAL_DEBUG] Checking IP match (Email Reg) for: ${ip}`);
             const matchRes = await db.query(
                 "SELECT code FROM referral_clicks WHERE ip = $1 AND created_at > NOW() - INTERVAL '24 hours' ORDER BY created_at DESC LIMIT 1",
                 [ip]
@@ -136,6 +145,8 @@ exports.registerEmail = async (req, res) => {
             if (matchRes.rows.length > 0) {
                 finalReferralCode = matchRes.rows[0].code;
                 console.log(`[REFERRAL] Auto-matched via IP: ${ip} -> ${finalReferralCode}`);
+            } else {
+                console.log(`[REFERRAL_DEBUG] No click match found for IP: ${ip}`);
             }
         }
 

@@ -251,6 +251,11 @@ const initializeDatabase = async () => {
             await db.query('ALTER TABLE users ADD COLUMN interests TEXT');
         }
 
+        if (!columnNames.includes('referral_code')) {
+            console.log('[DB] Adding missing column: referral_code');
+            await db.query('ALTER TABLE users ADD COLUMN referral_code VARCHAR(50) UNIQUE');
+        }
+
         if (!columnNames.includes('relationship')) {
             console.log('[DB] Adding missing column: relationship');
             await db.query('ALTER TABLE users ADD COLUMN relationship VARCHAR(50)');

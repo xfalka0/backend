@@ -11,12 +11,14 @@ const SECRET_KEY = process.env.JWT_SECRET || 'falka_super_secret_2024_key_change
 // Google Auth
 exports.googleAuth = async (req, res) => {
     const { idToken, deviceId, referralCode } = req.body;
+    const io = req.app.get('io');
+
     const getClientIp = (req) => {
         const forwarded = req.headers['x-forwarded-for'];
         if (forwarded) return forwarded.split(',')[0].trim();
         return req.socket.remoteAddress;
     };
-    const io = req.app.get('io');
+
     if (!idToken) return res.status(400).json({ error: 'Token gerekli.' });
 
     try {

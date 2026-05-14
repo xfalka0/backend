@@ -65,17 +65,27 @@ const normalizeText = (value = '') => {
 };
 
 const MALE_NAME_HINTS = new Set([
-    'adabi', 'adem', 'affiliate', 'akin', 'ahmet', 'ali', 'arda', 'ayhan', 'baris',
-    'batuhan', 'berat', 'berk', 'berkay', 'bekir', 'bulent', 'burak', 'cafer',
-    'cagatay', 'cavit', 'cihan', 'cengiz', 'dogukan', 'dundar', 'emir', 'emircan',
-    'emrah', 'emre', 'enes', 'ercan', 'erhan', 'ersin', 'fatih', 'furkan', 'gokhan',
-    'gursel', 'hakan', 'halil', 'hamza', 'hasan', 'huseyin', 'ibrahim', 'ihsan',
-    'ismail', 'kadir', 'kamil', 'karadayi', 'kemal', 'kerem', 'koray', 'mehmet',
-    'mert', 'mertcan', 'mesut', 'metin', 'mgelvg', 'muhammet', 'murat', 'mustafa', 'nihat',
-    'nurullah', 'okan', 'okten', 'omer', 'onur', 'osman', 'ozan', 'ozgur', 'recep',
-    'ridvan', 'sedat', 'selcuk', 'selim', 'serdar', 'serhat', 'sinan', 'sultan',
-    'suleyman', 'taha', 'tamer', 'taner', 'tayyip', 'tekin', 'turan', 'ugur',
-    'umut', 'ummet', 'volkan', 'yasin', 'yavuz', 'yilmaz', 'yunus', 'yusuf', 'zafer'
+    'abdurrahman', 'abdullah', 'abdulkadir', 'abdulkerim', 'adabi', 'adem', 'adnan',
+    'afsin', 'affiliate', 'akin', 'ahmet', 'ali', 'alper', 'alperen', 'anil', 'arda',
+    'arif', 'atilla', 'ayhan', 'aykut', 'baris', 'batuhan', 'bayram', 'behcet',
+    'berat', 'berk', 'berkay', 'bekir', 'bora', 'bulent', 'burak', 'cafer',
+    'cagatay', 'cavit', 'celal', 'cem', 'cemal', 'cihan', 'cengiz', 'cumali',
+    'davut', 'dogan', 'dogukan', 'dundar', 'ekrem', 'emir', 'emircan', 'emrah',
+    'emre', 'enes', 'enver', 'eray', 'ercan', 'erdem', 'erdogan', 'eren', 'erhan',
+    'erol', 'ersin', 'faruk', 'fatih', 'ferhat', 'fikret', 'fuat', 'furkan',
+    'gencay', 'gokhan', 'gokay', 'goksel', 'gursel', 'hakan', 'halil', 'hamza',
+    'harun', 'hasan', 'haydar', 'hikmet', 'huseyin', 'ibrahim', 'ihsan', 'ilhan',
+    'isa', 'ismail', 'ismet', 'kadir', 'kaan', 'kamil', 'karadayi', 'kazim',
+    'kemal', 'kerem', 'kiziltas', 'koksal', 'koray', 'levent', 'lokman', 'mahmut',
+    'mehmet', 'mert', 'mertcan', 'mesut', 'metehan', 'metin', 'mgelvg', 'muhammed',
+    'muhammet', 'murat', 'mustafa', 'muzaffer', 'necati', 'necip', 'nihat', 'nuri',
+    'nurullah', 'okan', 'okten', 'omer', 'onur', 'orhan', 'osman', 'ozan', 'ozgur',
+    'polat', 'ramadan', 'ramazan', 'rasim', 'recep', 'ridvan', 'riza', 'sabri',
+    'sadik', 'sait', 'salih', 'sami', 'samet', 'savas', 'sedat', 'sefa', 'selcuk',
+    'selim', 'semih', 'serdar', 'serhat', 'sevket', 'sinan', 'suat', 'sultan',
+    'suleyman', 'taha', 'tamer', 'taner', 'tarik', 'tayyip', 'tekin', 'tolga',
+    'tuncay', 'turan', 'ugur', 'umut', 'ummet', 'veysel', 'volkan', 'yakup',
+    'yalcin', 'yasin', 'yavuz', 'yigit', 'yilmaz', 'yunus', 'yusuf', 'zafer', 'zeki'
 ]);
 
 const getGenderKey = (gender) => {

@@ -20,7 +20,7 @@ const webhooksRoutes = require('./routes/webhooks');
 const { sanitizeUser, logActivity } = require('./utils/helpers');
 const { sendPushNotification } = require('./utils/notificationUtils');
 
-const MALE_NAME_PATTERN = '(^|[^a-z])(adabi|adem|affiliate|akin|ahmet|ali|arda|ayhan|baris|batuhan|berat|berk|berkay|bekir|bulent|burak|cafer|cagatay|cavit|cihan|cengiz|dogukan|dundar|emir|emircan|emrah|emre|enes|ercan|erhan|ersin|fatih|furkan|gokhan|gursel|hakan|halil|hamza|hasan|huseyin|ibrahim|ihsan|ismail|kadir|kamil|karadayi|kemal|kerem|koray|mehmet|mert|mertcan|mesut|metin|mgelvg|muhammet|murat|mustafa|nihat|nurullah|okan|okten|omer|onur|osman|ozan|ozgur|recep|ridvan|sedat|selcuk|selim|serdar|serhat|sinan|sultan|suleyman|taha|tamer|taner|tayyip|tekin|turan|ugur|umut|ummet|volkan|yasin|yavuz|yilmaz|yunus|yusuf|zafer)[0-9]*([^a-z]|$)';
+const MALE_NAME_PATTERN = '(^|[^a-z])(abdurrahman|abdullah|abdulkadir|abdulkerim|adabi|adem|adnan|afsin|affiliate|akin|ahmet|ali|alper|alperen|anil|arda|arif|atilla|ayhan|aykut|baris|batuhan|bayram|behcet|berat|berk|berkay|bekir|bora|bulent|burak|cafer|cagatay|cavit|celal|cem|cemal|cihan|cengiz|cumali|davut|dogan|dogukan|dundar|ekrem|emir|emircan|emrah|emre|enes|enver|eray|ercan|erdem|erdogan|eren|erhan|erol|ersin|faruk|fatih|ferhat|fikret|fuat|furkan|gencay|gokhan|gokay|goksel|gursel|hakan|halil|hamza|harun|hasan|haydar|hikmet|huseyin|ibrahim|ihsan|ilhan|isa|ismail|ismet|kadir|kaan|kamil|karadayi|kazim|kemal|kerem|kiziltas|koksal|koray|levent|lokman|mahmut|mehmet|mert|mertcan|mesut|metehan|metin|mgelvg|muhammed|muhammet|murat|mustafa|muzaffer|necati|necip|nihat|nuri|nurullah|okan|okten|omer|onur|orhan|osman|ozan|ozgur|polat|ramadan|ramazan|rasim|recep|ridvan|riza|sabri|sadik|sait|salih|sami|samet|savas|sedat|sefa|selcuk|selim|semih|serdar|serhat|sevket|sinan|suat|sultan|suleyman|taha|tamer|taner|tarik|tayyip|tekin|tolga|tuncay|turan|ugur|umut|ummet|veysel|volkan|yakup|yalcin|yasin|yavuz|yigit|yilmaz|yunus|yusuf|zafer|zeki)[0-9]*([^a-z]|$)';
 
 // --- NEW MODULAR ROUTES ---
 const adminUsersRoutes = require('./routes/adminUsers');
@@ -665,7 +665,7 @@ const initializeDatabase = async () => {
              SET gender = 'erkek' 
              WHERE gender != 'erkek' 
                AND gender != 'coin_bayisi'
-               AND translate(LOWER(COALESCE(display_name, '') || ' ' || COALESCE(username, '')), 'çğıöşü', 'cgiosu') ~* $1`,
+               AND translate(LOWER(COALESCE(display_name, '') || ' ' || COALESCE(name, '') || ' ' || COALESCE(username, '')), 'çğıöşü', 'cgiosu') ~* $1`,
             [MALE_NAME_PATTERN]
         );
         const MALE_NAMES = ['Mustafa', 'Furkan', 'Ahmet', 'Mehmet', 'Ali', 'Veli', 'Can', 'Murat', 'Hakan', 'Emre', 'Burak', 'Volkan', 'Gökhan', 'Serkan', 'Ömer', 'Osman', 'İbrahim', 'Halil', 'Ramadan', 'Ramazan', 'Fırat', 'Mert', 'Yiğit', 'Arda', 'Hasan', 'İhsan', 'Fatih', 'Süleyman', 'Yusuf', 'Eren', 'Okan', 'Onur', 'Umut', 'Mertcan', 'Enes', 'Yunus', 'Emir', 'Kadir', 'Karadayı', 'Adabi', 'Zafer', 'Sultan', 'Turan', 'Yılmaz', 'Metin', 'Bekir', 'Kamil'];
@@ -928,7 +928,7 @@ app.get('/api/operators', async (req, res) => {
                 paramCount++;
 
                 if (normalizedGender === 'kadin') {
-                    query += ` AND NOT (translate(LOWER(COALESCE(u.display_name, '') || ' ' || COALESCE(u.username, '')), 'çğıöşü', 'cgiosu') ~* '${MALE_NAME_PATTERN}') `;
+                    query += ` AND NOT (translate(LOWER(COALESCE(u.display_name, '') || ' ' || COALESCE(u.name, '') || ' ' || COALESCE(u.username, '')), 'çğıöşü', 'cgiosu') ~* '${MALE_NAME_PATTERN}') `;
                 }
             }
         }
@@ -1010,7 +1010,7 @@ app.get('/api/discovery', authenticateToken, async (req, res) => {
         } else {
             whereClause = `WHERE (LOWER(u.gender) = $1 OR u.gender = 'coin_bayisi') AND u.role NOT IN ('admin', 'super_admin', 'moderator', 'staff')`;
             if (targetGender === 'kadin') {
-                whereClause += ` AND NOT (translate(LOWER(COALESCE(u.display_name, '') || ' ' || COALESCE(u.username, '')), 'çğıöşü', 'cgiosu') ~* '${MALE_NAME_PATTERN}')`;
+                whereClause += ` AND NOT (translate(LOWER(COALESCE(u.display_name, '') || ' ' || COALESCE(u.name, '') || ' ' || COALESCE(u.username, '')), 'çğıöşü', 'cgiosu') ~* '${MALE_NAME_PATTERN}')`;
             }
         }
 
@@ -1138,7 +1138,7 @@ app.get('/api/admin/fix-genders', authenticateToken, authorizeRole('admin', 'sup
              SET gender = 'erkek' 
              WHERE gender != 'erkek' 
                AND gender != 'coin_bayisi'
-               AND translate(LOWER(COALESCE(display_name, '') || ' ' || COALESCE(username, '')), 'çğıöşü', 'cgiosu') ~* $1`,
+               AND translate(LOWER(COALESCE(display_name, '') || ' ' || COALESCE(name, '') || ' ' || COALESCE(username, '')), 'çğıöşü', 'cgiosu') ~* $1`,
             [MALE_NAME_PATTERN]
         );
         maleCount += regexFix.rowCount;

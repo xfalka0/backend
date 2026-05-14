@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, TextInput, FlatList, StyleSheet, KeyboardAvoidingView, Platform, TouchableOpacity, Image, RefreshControl, Animated, Alert, ScrollView } from 'react-native';
+import { View, Text, TextInput, FlatList, StyleSheet, KeyboardAvoidingView, Platform, TouchableOpacity, Image, RefreshControl, Animated, ScrollView, Keyboard } from 'react-native';
 import { BlurView } from 'expo-blur';
 import * as Haptics from 'expo-haptics';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -33,6 +33,7 @@ import GiftOverlay from '../components/animated/GiftOverlay';
 import ImageLightbox from '../components/ui/ImageLightbox';
 
 import { useChat } from '../contexts/ChatContext';
+import QuickActionsModal from '../components/QuickActionsModal';
 
 export default function ChatScreen({ route, navigation }) {
     const insets = useSafeAreaInsets();
@@ -59,32 +60,6 @@ export default function ChatScreen({ route, navigation }) {
     const [input, setInput] = useState('');
     const [chatId, setChatId] = useState(existingChatId || null);
     const [selectedImage, setSelectedImage] = useState(null);
-    const [recordTime, setRecordTime] = useState('00:00');
-    const recordInterval = useRef(null);
-    const waveAnim = useRef(new Animated.Value(0)).current;
-
-    useEffect(() => {
-        if (isRecording) {
-            let seconds = 0;
-            recordInterval.current = setInterval(() => {
-                seconds++;
-                const mins = Math.floor(seconds / 60);
-                const secs = seconds % 60;
-                setRecordTime(`${mins < 10 ? '0' : ''}${mins}:${secs < 10 ? '0' : ''}${secs}`);
-            }, 1000);
-
-            Animated.loop(
-                Animated.sequence([
-                    Animated.timing(waveAnim, { toValue: 1, duration: 400, useNativeDriver: true }),
-                    Animated.timing(waveAnim, { toValue: 0, duration: 400, useNativeDriver: true })
-                ])
-            ).start();
-        } else {
-            clearInterval(recordInterval.current);
-            setRecordTime('00:00');
-            waveAnim.setValue(0);
-        }
-    }, [isRecording]);
     const [isLoading, setIsLoading] = useState(true);
 
     // UI Toggles
@@ -99,9 +74,21 @@ export default function ChatScreen({ route, navigation }) {
     const [recording, setRecording] = useState(null);
     const [activeGift, setActiveGift] = useState(null);
     const [isRecording, setIsRecording] = useState(false);
+    const [recordTime, setRecordTime] = useState('0:00');
     const [audioLevel, setAudioLevel] = useState(0);
+    const timerRef = useRef(null);
+    const waveAnim = useRef(new Animated.Value(0)).current;
+    const blinkAnim = useRef(new Animated.Value(1)).current;
+    const slideAnim = useRef(new Animated.Value(0)).current;
+    const [isCancelling, setIsCancelling] = useState(false);
+    const isCancellingRef = useRef(false);
+    const startTimeRef = useRef(0);
+    const startXRef = useRef(0);
 
     const [showIcebreakers, setShowIcebreakers] = useState(false);
+    const [showQuickActions, setShowQuickActions] = useState(false);
+    const [currentPlayingUri, setCurrentPlayingUri] = useState(null);
+    const [sound, setSound] = useState(null);
 
     const ICEBREAKERS = [
         "Selam, nasılsın? 😊",
@@ -663,10 +650,43 @@ export default function ChatScreen({ route, navigation }) {
                     allowsRecordingIOS: true,
                     playsInSilentModeIOS: true,
                 });
-                const { recording } = await Audio.Recording.createAsync(
+                const { recording: newRecording } = await Audio.Recording.createAsync(
                     Audio.RecordingOptionsPresets.HIGH_QUALITY
                 );
-                setRecording(recording);
+                setRecording(newRecording);
+                setIsRecording(true);
+                setIsCancelling(false);
+                isCancellingRef.current = false;
+                slideAnim.setValue(0);
+                startTimeRef.current = Date.now();
+                startXRef.current = 0;
+                
+                // Start Timer
+                let seconds = 0;
+                setRecordTime('0:00');
+                timerRef.current = setInterval(() => {
+                    seconds += 1;
+                    const mins = Math.floor(seconds / 60);
+                    const secs = seconds % 60;
+                    setRecordTime(`${mins}:${secs < 10 ? '0' : ''}${secs}`);
+                }, 1000);
+
+                // Start Blink Animation
+                Animated.loop(
+                    Animated.sequence([
+                        Animated.timing(blinkAnim, { toValue: 0.3, duration: 500, useNativeDriver: true }),
+                        Animated.timing(blinkAnim, { toValue: 1, duration: 500, useNativeDriver: true }),
+                    ])
+                ).start();
+
+                // Start Wave Animation
+                Animated.loop(
+                    Animated.sequence([
+                        Animated.timing(waveAnim, { toValue: 1, duration: 400, useNativeDriver: false }),
+                        Animated.timing(waveAnim, { toValue: 0, duration: 400, useNativeDriver: false }),
+                    ])
+                ).start();
+
             } else {
                 showAlert({ title: 'İzin Gerekli', message: 'Mikrofon izni vermelisiniz.', type: 'warning' });
             }
@@ -675,13 +695,72 @@ export default function ChatScreen({ route, navigation }) {
         }
     };
 
+    const handleRecordingMove = (event) => {
+        if (!isRecording) return;
+        const { pageX } = event.nativeEvent;
+        
+        if (startXRef.current === 0) {
+            startXRef.current = pageX;
+        }
+
+        // Use absolute pageX for cancellation for better reliability (button is on the left)
+        // If user slides right far enough (middle of screen or more)
+        if (pageX > 160) { 
+            if (!isCancellingRef.current) {
+                isCancellingRef.current = true;
+                setIsCancelling(true);
+                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+            }
+        } else if (pageX < 100) {
+            if (isCancellingRef.current) {
+                isCancellingRef.current = false;
+                setIsCancelling(false);
+            }
+        }
+        
+        // Visual slide effect (move right)
+        const diff = Math.max(0, pageX - startXRef.current);
+        slideAnim.setValue(diff);
+    };
+
     const stopRecording = async () => {
         if (!recording) return;
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        
+        const wasCancelling = isCancellingRef.current;
+        const duration = Date.now() - startTimeRef.current;
+        const toStop = recording;
+
+        // Clean up UI and state immediately
+        if (timerRef.current) clearInterval(timerRef.current);
+        blinkAnim.setValue(1);
+        waveAnim.setValue(0);
         setRecording(null);
-        await recording.stopAndUnloadAsync();
-        const uri = recording.getURI();
-        uploadAndSendAudio(uri);
+        setIsRecording(false);
+        setIsCancelling(false);
+        isCancellingRef.current = false;
+        slideAnim.setValue(0);
+        
+        try {
+            await toStop.stopAndUnloadAsync();
+            
+            if (wasCancelling) {
+                console.log('[Voice] Recording cancelled by user');
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                return; // DO NOT SEND
+            }
+
+            if (duration < 1000) {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                showAlert({ title: 'Kısa Kayıt', message: 'Ses çok kısa, en az 1 saniye olmalı.', type: 'warning' });
+                return; // Too short
+            }
+
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            const uri = toStop.getURI();
+            uploadAndSendAudio(uri);
+        } catch (err) {
+            console.error('Stop Recording Error:', err);
+        }
     };
 
     const uploadAndSendAudio = async (uri) => {
@@ -733,11 +812,42 @@ export default function ChatScreen({ route, navigation }) {
 
     const playAudio = async (uri) => {
         try {
-            const { sound } = await Audio.Sound.createAsync({ uri });
-            await sound.playAsync();
+            if (sound) {
+                await sound.unloadAsync();
+                if (currentPlayingUri === uri) {
+                    setSound(null);
+                    setCurrentPlayingUri(null);
+                    return;
+                }
+            }
+
+            const { sound: newSound } = await Audio.Sound.createAsync(
+                { uri: resolveImageUrl(uri) },
+                { shouldPlay: true }
+            );
+            
+            setSound(newSound);
+            setCurrentPlayingUri(uri);
+
+            newSound.setOnPlaybackStatusUpdate(async (status) => {
+                if (status.didJustFinish) {
+                    setCurrentPlayingUri(null);
+                    await newSound.unloadAsync();
+                }
+            });
         } catch (error) {
-            console.error('Play Audio Error:', error);
+            console.error('Playback Error:', error);
+            setCurrentPlayingUri(null);
         }
+    };
+
+    const handleSelectVoice = (voice) => {
+        // Here we would typically send a predefined audio message
+        // For now, let's just show an alert or send a placeholder if we had URLs
+        // Since we don't have real URLs for the quick voices yet, we'll just send a text for now
+        // or if the user wants real functionality, we'd need to upload these voices first.
+        sendMessage(`[Sesli Mesaj: ${voice.title}]`);
+        showAlert({ title: 'Hızlı Ses', message: 'Sesli mesaj gönderildi.', type: 'info' });
     };
 
     const handleBlock = async () => {
@@ -756,6 +866,13 @@ export default function ChatScreen({ route, navigation }) {
             console.error(error);
             showAlert({ title: 'Hata', message: 'Engelleme başarısız.', type: 'error' });
         }
+    };
+
+    const getStableWaveform = (seed) => {
+        const s = seed ? seed.toString().length : 10;
+        return Array.from({ length: 15 }, (_, i) => {
+            return Math.abs(Math.sin(s + i * 1.5));
+        });
     };
 
     const renderMessage = ({ item, index }) => {
@@ -828,12 +945,38 @@ export default function ChatScreen({ route, navigation }) {
                     </View>
                 </TouchableOpacity>
             );
-        } else if (item.content_type === 'audio') {
+        } else if (item.content_type === 'audio' || item.type === 'audio') {
+            const isPlaying = currentPlayingUri === item.content;
+            const duration = item.duration || '0:05';
+            const waveform = item.waveform || getStableWaveform(item.id || index);
+
             content = (
-                <TouchableOpacity onPress={() => playAudio(item.content)} style={{ flexDirection: 'row', alignItems: 'center' }}>
-                    <Ionicons name="play-circle" size={32} color="white" />
-                    <Text style={{ color: 'white', marginLeft: 8 }}>Ses Kaydı Oynat</Text>
-                </TouchableOpacity>
+                <View style={styles.voiceContent}>
+                    <TouchableOpacity 
+                        onPress={() => playAudio(item.content)}
+                        style={styles.voicePlayButton}
+                    >
+                        <Ionicons 
+                            name={isPlaying ? "pause" : "play"} 
+                            size={24} 
+                            color="white" 
+                        />
+                    </TouchableOpacity>
+                    
+                    <View style={styles.waveformContainer}>
+                        {waveform.map((val, i) => (
+                            <View 
+                                key={i} 
+                                style={[
+                                    styles.waveBar, 
+                                    { height: 10 + val * 20, backgroundColor: isPlaying ? '#facc15' : 'rgba(255,255,255,0.4)' }
+                                ]} 
+                            />
+                        ))}
+                    </View>
+                    
+                    <Text style={styles.voiceDurationText}>{duration}</Text>
+                </View>
             );
         }
 
@@ -861,6 +1004,13 @@ export default function ChatScreen({ route, navigation }) {
             <StatusBar style="light" translucent backgroundColor="transparent" />
             <ChatBackground themeMode={themeMode} />
 
+            <QuickActionsModal 
+                visible={showQuickActions}
+                onClose={() => setShowQuickActions(false)}
+                onSelectMessage={(msg) => sendMessage(msg)}
+                onSelectVoice={handleSelectVoice}
+            />
+
             <KeyboardAvoidingView
                 behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
                 keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 20}
@@ -879,63 +1029,69 @@ export default function ChatScreen({ route, navigation }) {
                 {isTyping && <TypingIndicator />}
 
                 <View style={[styles.modernInputWrapper, { paddingBottom: Math.max(insets.bottom + 10, Platform.OS === 'ios' ? 20 : 15) }]}>
-                    {renderIcebreakers()}
+                    {/* renderIcebreakers() is now handled by QuickActionsModal */}
                     <GlassCard intensity={40} tint="dark" style={styles.glassInputContainer}>
                         <View style={styles.inputRow}>
-                             <TouchableOpacity 
-                                 style={styles.quickMsgToggle} 
-                                 activeOpacity={0.7}
-                                 onPressIn={() => {
-                                     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                                     startRecording();
-                                 }}
-                                 onPressOut={stopRecording}
-                             >
-                                 <Ionicons 
-                                     name="mic" 
-                                     size={18} 
-                                     color={isRecording ? "#ec4899" : "rgba(255,255,255,0.4)"} 
-                                 />
-                                 {isRecording && (
-                                     <Animated.View style={[styles.recordingRipple, {
-                                         transform: [{ scale: waveAnim.interpolate({ inputRange: [0, 1], outputRange: [1, 1.6] }) }],
-                                         opacity: waveAnim.interpolate({ inputRange: [0, 1], outputRange: [0.5, 0] })
-                                     }]} />
-                                 )}
-                             </TouchableOpacity>
+                              <TouchableOpacity 
+                                  style={[styles.quickMsgToggle, { transform: [{ translateX: slideAnim }] }]} 
+                                  activeOpacity={0.7}
+                                  onPressIn={startRecording}
+                                  onPressOut={stopRecording}
+                                  onResponderMove={handleRecordingMove}
+                              >
+                                  <Ionicons 
+                                      name={isCancelling ? "trash" : "mic"} 
+                                      size={18} 
+                                      color={isRecording ? (isCancelling ? "#ef4444" : "#ec4899") : "rgba(255,255,255,0.4)"} 
+                                  />
+                                  {isRecording && (
+                                      <Animated.View style={[styles.recordingRipple, {
+                                          transform: [{ scale: waveAnim.interpolate({ inputRange: [0, 1], outputRange: [1, 1.6] }) }],
+                                          opacity: waveAnim.interpolate({ inputRange: [0, 1], outputRange: [0.5, 0] })
+                                      }]} />
+                                  )}
+                              </TouchableOpacity>
                              
                              <View style={styles.inputFlexContainer}>
                                  {isRecording ? (
                                      <View style={styles.recordingRow}>
-                                         <View style={styles.waveformContainer}>
-                                             {[1, 2, 3, 4, 5, 6, 7, 8].map((i) => (
-                                                 <Animated.View 
-                                                     key={i}
-                                                     style={[
-                                                         styles.waveBar,
-                                                         {
-                                                             height: waveAnim.interpolate({
-                                                                 inputRange: [0, 1],
-                                                                 outputRange: [8, 12 + (i % 4) * 6]
-                                                             })
-                                                         }
-                                                     ]}
-                                                 />
-                                             ))}
+                                         <View style={styles.recordingIndicator}>
+                                             <Animated.View style={[styles.recordingDot, { opacity: blinkAnim }]} />
+                                             <Text style={styles.recordTimerText}>{isCancelling ? 'İptal etmek için bırak' : recordTime}</Text>
                                          </View>
-                                         <Text style={styles.recordTimerText}>{recordTime}</Text>
+                                         {!isCancelling && (
+                                             <View style={styles.waveformContainer}>
+                                                 {[1, 2, 3, 4, 5, 6, 7, 8].map((i) => (
+                                                     <Animated.View 
+                                                         key={i}
+                                                         style={[
+                                                             styles.waveBar,
+                                                             {
+                                                                 height: waveAnim.interpolate({
+                                                                     inputRange: [0, 1],
+                                                                     outputRange: [8, 12 + (i % 4) * 6]
+                                                                 })
+                                                             }
+                                                         ]}
+                                                     />
+                                                 ))}
+                                             </View>
+                                         )}
+                                         {!isCancelling && <Text style={styles.slideHintText}>Sağa kaydır ›</Text>}
                                      </View>
                                  ) : (
-                                     <TextInput
-                                         style={[styles.input, { color: theme.colors.text }]}
-                                         value={input}
-                                         onChangeText={handleTyping}
-                                         placeholder="Mesaj yaz..."
-                                         placeholderTextColor="rgba(255,255,255,0.4)"
-                                         multiline
-                                         maxHeight={100}
-                                         cursorColor={theme.colors.primary}
-                                     />
+                                     <>
+                                      <TextInput
+                                          style={[styles.input, { color: theme.colors.text }]}
+                                          value={input}
+                                          onChangeText={handleTyping}
+                                          placeholder="Mesaj yaz..."
+                                          placeholderTextColor="rgba(255,255,255,0.4)"
+                                          multiline
+                                          maxHeight={100}
+                                          cursorColor={theme.colors.primary}
+                                      />
+                                     </>
                                  )}
                              </View>
 
@@ -952,7 +1108,7 @@ export default function ChatScreen({ route, navigation }) {
                         <View style={styles.actionBar}>
                             <TouchableOpacity style={styles.modernActionBtn} onPress={() => {
                                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                                navigation.navigate('VideoCall', { receiver: userData });
+                                navigation.navigate('VideoCall', { receiver: { id: operatorId, name, avatar_url } });
                             }}>
                                 <BlurView intensity={20} tint="light" style={styles.btnBlur}>
                                     <Ionicons name="videocam" size={22} color="rgba(255,255,255,0.8)" />
@@ -961,7 +1117,7 @@ export default function ChatScreen({ route, navigation }) {
 
                             <TouchableOpacity style={styles.modernActionBtn} onPress={() => {
                                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                                navigation.navigate('VoiceCall', { receiver: userData });
+                                navigation.navigate('VoiceCall', { receiver: { id: operatorId, name, avatar_url } });
                             }}>
                                 <BlurView intensity={20} tint="light" style={styles.btnBlur}>
                                     <Ionicons name="call" size={22} color="rgba(255,255,255,0.8)" />
@@ -987,13 +1143,14 @@ export default function ChatScreen({ route, navigation }) {
                                     />
                                 </Animated.View>
                             </TouchableOpacity>
-
+ 
                             <TouchableOpacity style={styles.modernActionBtn} onPress={() => {
+                                Keyboard.dismiss();
                                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                                setShowIcebreakers(!showIcebreakers);
+                                setShowQuickActions(true);
                             }}>
-                                <BlurView intensity={20} tint="light" style={[styles.btnBlur, showIcebreakers && { backgroundColor: 'rgba(236, 72, 153, 0.2)' }]}>
-                                    <Ionicons name="flash" size={22} color={showIcebreakers ? "#ec4899" : "rgba(255,255,255,0.8)"} />
+                                <BlurView intensity={20} tint="light" style={[styles.btnBlur, showQuickActions && { backgroundColor: 'rgba(250, 204, 21, 0.2)' }]}>
+                                    <Ionicons name="flash" size={22} color={showQuickActions ? "#facc15" : "rgba(255,255,255,0.8)"} />
                                 </BlurView>
                             </TouchableOpacity>
 
@@ -1124,10 +1281,10 @@ const styles = StyleSheet.create({
         borderRadius: 20,
         paddingHorizontal: 16,
         paddingVertical: 10,
-        minHeight: 44,
+        marginRight: 8,
         fontSize: 15,
-        borderWidth: 1,
-        borderColor: 'rgba(255, 255, 255, 0.1)',
+        minHeight: 44,
+        maxHeight: 100,
     },
     sendButton: {
         width: 44,
@@ -1250,19 +1407,54 @@ const styles = StyleSheet.create({
     waveformContainer: {
         flexDirection: 'row',
         alignItems: 'center',
-        height: '100%',
+        paddingHorizontal: 8,
     },
     waveBar: {
         width: 3,
-        backgroundColor: '#ec4899',
+        backgroundColor: 'rgba(255,255,255,0.4)',
         marginHorizontal: 1.5,
         borderRadius: 1.5,
     },
+    voiceContent: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingVertical: 6,
+    },
+    voicePlayButton: {
+        width: 36,
+        height: 36,
+        borderRadius: 18,
+        backgroundColor: 'rgba(255,255,255,0.15)',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    voiceDurationText: {
+        fontSize: 12,
+        color: 'white',
+        fontWeight: '600',
+        marginLeft: 8,
+    },
+    recordingIndicator: {
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+    recordingDot: {
+        width: 8,
+        height: 8,
+        borderRadius: 4,
+        backgroundColor: '#ef4444',
+        marginRight: 6,
+    },
     recordTimerText: {
-        color: '#ec4899',
+        color: 'white',
         fontSize: 14,
         fontWeight: '700',
         fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+    },
+    slideHintText: {
+        color: 'rgba(255,255,255,0.4)',
+        fontSize: 12,
+        marginLeft: 10,
     },
     lightboxClose: {
         position: 'absolute',

@@ -22,6 +22,11 @@ import { useAlert } from '../contexts/AlertContext';
 
 const { height, width } = Dimensions.get('window');
 
+const turkishToLower = (str) => {
+    if (!str) return '';
+    return str.replace(/İ/g, 'i').replace(/I/g, 'ı').toLowerCase();
+};
+
 const FallbackImage = ({ url, style, isAvatar = false, theme }) => {
     const [hasError, setHasError] = useState(false);
 
@@ -158,9 +163,55 @@ export default function ExploreScreen({ navigation, route }) {
                 }),
                 axios.get(`${API_URL}/operators?limit=100`)
             ]);
-            setPosts(exploreRes.data.posts);
-            setStories(exploreRes.data.stories);
-            setOperators(operatorsRes.data);
+            // Apply gender filtering to posts and stories
+            const userGenderRaw = user?.gender || 'erkek';
+            const userGender = (userGenderRaw === 'male' || userGenderRaw === 'erkek') ? 'erkek' : 'kadin';
+            const targetGenderPrefix = userGender === 'erkek' ? ['female', 'kadin'] : ['male', 'erkek'];
+
+
+            const maleNames = [
+                'hasan', 'ihsan', 'karadayi', 'adabi', 'affiliate', 'fatih', 'ahmet', 'mehmet', 'mustafa', 
+                'furkan', 'ali', 'veli', 'osman', 'ibrahim', 'halil', 'yusuf', 'zafer', 'sultan', 'turan', 
+                'yilmaz', 'metin', 'bekir', 'kamil', 'burak', 'emre', 'can', 'deniz', 'mert', 'baris', 
+                'murat', 'volkan', 'serkan', 'gokhan', 'hakan', 'ugur', 'selim', 'kerem', 'cengiz', 
+                'emrah', 'erhan', 'oguz', 'dogukan', 'berkay', 'arda', 'emircan', 'cagatay', 'serhat',
+                'onur', 'ozgur', 'ozan', 'mertcan', 'batuhan', 'berk', 'bugra', 'taha', 'yasin',
+                'gursel', 'dundar', 'ihsan', 'zafer', 'yusuf', 'hamza', 'omer', 'enes', 'yunus', 'berat',
+                'miraç', 'umut', 'ayhan', 'ercan', 'serdar', 'adem', 'mesut', 'sinan', 'kemal', 'bulent',
+                'ersin', 'ozkan', 'sedat', 'taner', 'tamer', 'yavuz', 'selçuk', 'ismail', 'recep', 'tayyip'
+            ];
+            
+            const filteredPosts = exploreRes.data.posts.filter(p => {
+                const isTarget = targetGenderPrefix.includes(p.gender?.toLowerCase());
+                const isDealerOrAdmin = p.gender === 'coin_bayisi' || p.role === 'admin';
+                if (userGender === 'erkek' && !isDealerOrAdmin) {
+                    const name = turkishToLower(p.display_name || p.username || '');
+                    if (maleNames.some(mn => name.includes(mn))) return false;
+                }
+                return isTarget || isDealerOrAdmin;
+            });
+            
+            const filteredStories = exploreRes.data.stories.filter(s => {
+                const isTarget = targetGenderPrefix.includes(s.gender?.toLowerCase());
+                const isDealerOrAdmin = s.gender === 'coin_bayisi' || s.role === 'admin';
+                if (userGender === 'erkek' && !isDealerOrAdmin) {
+                    const name = turkishToLower(s.display_name || s.username || '');
+                    if (maleNames.some(mn => name.includes(mn))) return false;
+                }
+                return isTarget || isDealerOrAdmin;
+            });
+
+            setPosts(filteredPosts);
+            setStories(filteredStories);
+            setOperators(operatorsRes.data.filter(op => {
+                const isTarget = targetGenderPrefix.includes(op.gender?.toLowerCase());
+                const isDealer = op.gender === 'coin_bayisi';
+                if (userGender === 'erkek' && !isDealer) {
+                    const name = turkishToLower(op.name || '');
+                    if (maleNames.some(mn => name.includes(mn))) return false;
+                }
+                return isTarget || isDealer;
+            }));
         } catch (err) {
             console.error('Fetch Explore Error:', err);
         } finally {

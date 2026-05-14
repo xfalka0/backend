@@ -46,6 +46,88 @@ const BANNER_SPACER = (width - BANNER_WIDTH) / 2;
 
 let lastProfileTap = 0;
 
+const turkishToLower = (str) => {
+    if (!str) return '';
+    return str.replace(/İ/g, 'i').replace(/I/g, 'ı').toLowerCase();
+};
+
+const normalizeText = (value = '') => {
+    return value
+        .toString()
+        .toLocaleLowerCase('tr-TR')
+        .replace(/\u0131/g, 'i')
+        .replace(/\u0130/g, 'i')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^a-z0-9\s]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+};
+
+const MALE_NAME_HINTS = new Set([
+    'adabi', 'adem', 'affiliate', 'akin', 'ahmet', 'ali', 'arda', 'ayhan', 'baris',
+    'batuhan', 'berat', 'berk', 'berkay', 'bekir', 'bulent', 'burak', 'cafer',
+    'cagatay', 'cavit', 'cihan', 'cengiz', 'dogukan', 'dundar', 'emir', 'emircan',
+    'emrah', 'emre', 'enes', 'ercan', 'erhan', 'ersin', 'fatih', 'furkan', 'gokhan',
+    'gursel', 'hakan', 'halil', 'hamza', 'hasan', 'huseyin', 'ibrahim', 'ihsan',
+    'ismail', 'kadir', 'kamil', 'karadayi', 'kemal', 'kerem', 'koray', 'mehmet',
+    'mert', 'mertcan', 'mesut', 'metin', 'mgelvg', 'muhammet', 'murat', 'mustafa', 'nihat',
+    'nurullah', 'okan', 'okten', 'omer', 'onur', 'osman', 'ozan', 'ozgur', 'recep',
+    'ridvan', 'sedat', 'selcuk', 'selim', 'serdar', 'serhat', 'sinan', 'sultan',
+    'suleyman', 'taha', 'tamer', 'taner', 'tayyip', 'tekin', 'turan', 'ugur',
+    'umut', 'ummet', 'volkan', 'yasin', 'yavuz', 'yilmaz', 'yunus', 'yusuf', 'zafer'
+]);
+
+const getGenderKey = (gender) => {
+    const raw = (gender || '').toString().trim().toLowerCase();
+    if (raw === 'coin_bayisi') return 'coin_bayisi';
+
+    const value = normalizeText(raw).replace(/\s+/g, '');
+    if (value === 'erkek' || value === 'male' || value === 'man') return 'erkek';
+    if (value === 'kadin' || value === 'female' || value === 'woman') return 'kadin';
+    return '';
+};
+
+const hasMaleNameHint = (profile = {}) => {
+    const text = normalizeText([profile.name, profile.display_name, profile.username].filter(Boolean).join(' '));
+    if (!text) return false;
+
+    return text.split(' ').some(part => {
+        const token = part.replace(/\d+$/g, '');
+        if (!token) return false;
+        return MALE_NAME_HINTS.has(token);
+    });
+};
+
+const getProfileGender = (profile = {}) => {
+    const rawGender = getGenderKey(profile.gender);
+    if (rawGender === 'coin_bayisi') return rawGender;
+    if (hasMaleNameHint(profile)) return 'erkek';
+    return rawGender;
+};
+
+const getAllowedGenderParam = (currentUser = {}, requestedGender = 'all') => {
+    const userGender = getProfileGender(currentUser) || 'erkek';
+    const opposite = userGender === 'kadin' ? 'male' : 'female';
+    return requestedGender === opposite ? requestedGender : opposite;
+};
+
+const filterProfilesForCurrentUser = (profiles = [], currentUser = {}, requestedGender = 'all') => {
+    const allowedGender = getAllowedGenderParam(currentUser, requestedGender);
+    const targetGender = allowedGender === 'male' ? 'erkek' : 'kadin';
+
+    return profiles.filter(profile => {
+        const profileGender = getProfileGender(profile);
+        const isDealerOrAdmin = profileGender === 'coin_bayisi' || profile.role === 'admin';
+        return profileGender === targetGender || isDealerOrAdmin;
+    });
+};
+
+const getFilterGenderOptions = (currentUser = {}) => {
+    const allowedGender = getAllowedGenderParam(currentUser, 'all');
+    return ['all', allowedGender];
+};
+
 const FallbackImage = ({ url, style, theme }) => {
     const [hasError, setHasError] = useState(false);
 
@@ -121,8 +203,8 @@ const OperatorItem = React.memo(({ item, navigation, user, theme, themeMode, bal
                         <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 2 }}>
                             <Text style={[styles.jobText, { color: theme.colors.textSecondary }]} numberOfLines={1}>{item.job || 'Öğrenci'}</Text>
                             {item.age && (
-                                <View style={[styles.ageBadge, { backgroundColor: (item.gender === 'erkek' || item.gender === 'male') ? '#3b82f6' : '#f472b6' }]}>
-                                    <Ionicons name={(item.gender === 'erkek' || item.gender === 'male') ? "male" : "female"} size={10} color="white" />
+                                <View style={[styles.ageBadge, { backgroundColor: getProfileGender(item) === 'erkek' ? '#3b82f6' : getProfileGender(item) === 'kadin' ? '#f472b6' : '#64748b' }]}>
+                                    <Ionicons name={getProfileGender(item) === 'erkek' ? "male" : getProfileGender(item) === 'kadin' ? "female" : "person"} size={10} color="white" />
                                     <Text style={styles.ageBadgeText}>{item.age}</Text>
                                 </View>
                             )}
@@ -193,7 +275,12 @@ export default function HomeScreen({ navigation, route }) {
     const [showFilterModal, setShowFilterModal] = useState(false);
     const [showWelcomeAlert, setShowWelcomeAlert] = useState(false);
     const [showLeaderboardAlert, setShowLeaderboardAlert] = useState(false);
-    const [filterOptions, setFilterOptions] = useState({ gender: 'all', online: false });
+    const [filterOptions, setFilterOptions] = useState(() => {
+        return { 
+            gender: getAllowedGenderParam(user, 'all'), 
+            online: false 
+        };
+    });
     const [page, setPage] = useState(1);
     const [hasMore, setHasMore] = useState(true);
     const [isMoreLoading, setIsMoreLoading] = useState(false);
@@ -234,12 +321,11 @@ export default function HomeScreen({ navigation, route }) {
 
             // Filter for operators of the opposite gender
             const availableOps = operators.filter(op => {
-                const userGenderRaw = user.gender || 'erkek';
-                const userGender = (userGenderRaw === 'male' || userGenderRaw === 'erkek') ? 'erkek' : 'kadin';
+                const userGender = getProfileGender(user) === 'kadin' ? 'kadin' : 'erkek';
                 const targetGender = userGender === 'kadin' ? 'erkek' : 'kadin';
                 
-                const opGender = (op.gender || '').toLowerCase();
-                const isTargetGender = opGender === targetGender || opGender === (targetGender === 'erkek' ? 'male' : 'female') || opGender === 'coin_bayisi';
+                const opGender = getProfileGender(op);
+                const isTargetGender = opGender === targetGender || opGender === 'coin_bayisi';
                 const isRealOperator = op.role === 'operator';
                 
                 return isTargetGender && isRealOperator && !sentFakeOperators.current.has(op.id);
@@ -373,28 +459,30 @@ export default function HomeScreen({ navigation, route }) {
 
             const currentPage = reset ? 1 : page;
             const token = user?.token || await AsyncStorage.getItem('token');
+            const requestGender = getAllowedGenderParam(user, filterOptions.gender);
 
             let res;
             if (!token) {
-                res = await axios.get(`${API_URL}/operators?gender=${filterOptions.gender}&page=${currentPage}&limit=${LIMIT}&tab=${encodeURIComponent(overrideTab)}`);
+                res = await axios.get(`${API_URL}/operators?gender=${requestGender}&page=${currentPage}&limit=${LIMIT}&tab=${encodeURIComponent(overrideTab)}`);
             } else {
                 res = await axios.get(`${API_URL}/discovery`, {
                     params: { 
                         page: currentPage, 
                         limit: LIMIT, 
                         tab: overrideTab,
-                        gender: filterOptions.gender 
+                        gender: requestGender 
                     },
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
             }
 
-            const newData = res.data?.data || res.data || [];
+            const newDataRaw = res.data?.data || res.data || [];
+            const newData = filterProfilesForCurrentUser(newDataRaw, user, filterOptions.gender);
 
             if (reset) {
                 setOperators(newData);
                 setPage(2);
-                setHasMore(newData.length === LIMIT);
+                setHasMore(newDataRaw.length === LIMIT);
 
                 // Generate promoted profiles (only on first load)
                 if (newData.length > 0) {
@@ -411,7 +499,7 @@ export default function HomeScreen({ navigation, route }) {
                     return [...prev, ...uniqueNewData];
                 });
                 setPage(prev => prev + 1);
-                setHasMore(newData.length === LIMIT);
+                setHasMore(newDataRaw.length === LIMIT);
                 setLoading(false);
                 setIsMoreLoading(false);
             }
@@ -428,8 +516,9 @@ export default function HomeScreen({ navigation, route }) {
 
             // Fallback
             try {
-                const res = await axios.get(`${API_URL}/operators`);
-                setOperators(res.data);
+                const fallbackGender = getAllowedGenderParam(user, filterOptions.gender);
+                const res = await axios.get(`${API_URL}/operators?gender=${fallbackGender}&limit=${LIMIT}`);
+                setOperators(filterProfilesForCurrentUser(res.data, user, filterOptions.gender));
                 setHasMore(false);
             } catch (inner) {
                 console.error("Fallback error:", inner);
@@ -582,9 +671,34 @@ export default function HomeScreen({ navigation, route }) {
         }
 
         // Advanced Filters
-        if (filterOptions.gender !== 'all') {
-            const targetGender = filterOptions.gender === 'female' ? ['kadin', 'female'] : ['erkek', 'male'];
-            result = result.filter(op => targetGender.includes(op.gender?.toLowerCase()));
+        let effectiveGender = getAllowedGenderParam(user, filterOptions.gender);
+
+        if (effectiveGender !== 'all') {
+            const targetGenderArray = effectiveGender === 'female' ? ['kadin', 'female'] : ['erkek', 'male'];
+            result = result.filter(op => {
+                const profileGender = getProfileGender(op);
+                const isTargetGender = targetGenderArray.includes(profileGender);
+                const isDealerOrAdmin = profileGender === 'coin_bayisi' || op.role === 'admin';
+                
+                // Extra fail-safe for incorrectly categorized profiles (as seen in reports)
+                if (effectiveGender === 'female' && !isDealerOrAdmin) {
+                    const nameNormalized = normalizeText(op.name);
+                    const maleNames = [
+                        'hasan', 'ihsan', 'karadayi', 'adabi', 'affiliate', 'fatih', 'ahmet', 'mehmet', 'mustafa', 
+                        'furkan', 'ali', 'veli', 'osman', 'ibrahim', 'halil', 'yusuf', 'zafer', 'sultan', 'turan', 
+                        'yilmaz', 'metin', 'bekir', 'kamil', 'burak', 'emre', 'can', 'deniz', 'mert', 'baris', 
+                        'murat', 'volkan', 'serkan', 'gokhan', 'hakan', 'ugur', 'selim', 'kerem', 'cengiz', 
+                        'emrah', 'erhan', 'oguz', 'dogukan', 'berkay', 'arda', 'emircan', 'cagatay', 'serhat',
+                        'onur', 'ozgur', 'ozan', 'mertcan', 'batuhan', 'berk', 'bugra', 'taha', 'yasin',
+                        'gursel', 'dundar', 'ihsan', 'zafer', 'yusuf', 'hamza', 'omer', 'enes', 'yunus', 'berat',
+                        'miraç', 'umut', 'ayhan', 'ercan', 'serdar', 'adem', 'mesut', 'sinan', 'kemal', 'bulent',
+                        'ersin', 'ozkan', 'sedat', 'taner', 'tamer', 'yavuz', 'selçuk', 'ismail', 'recep', 'tayyip'
+                    ];
+                    if (maleNames.some(mn => nameNormalized.includes(mn))) return false;
+                }
+                
+                return isTargetGender || isDealerOrAdmin;
+            });
         }
 
         if (filterOptions.online) {
@@ -592,7 +706,7 @@ export default function HomeScreen({ navigation, route }) {
         }
 
         return result;
-    }, [operators, searchText, filterOptions]);
+    }, [operators, searchText, filterOptions, user]);
 
     const handleTabPress = (tabName) => {
         if (activeTab === tabName) return;
@@ -921,7 +1035,7 @@ export default function HomeScreen({ navigation, route }) {
                         <View style={styles.filterSection}>
                             <Text style={[styles.filterLabel, { color: theme.colors.text }]}>CİNSİYET</Text>
                             <View style={styles.filterOptions}>
-                                {['all', 'female', 'male'].map((g) => {
+                                {getFilterGenderOptions(user).map((g) => {
                                     const isActive = filterOptions.gender === g;
                                     const icon = g === 'all' ? 'people' : g === 'female' ? 'woman' : 'man';
                                     const label = g === 'all' ? 'Hepsi' : g === 'female' ? 'Kadın' : 'Erkek';

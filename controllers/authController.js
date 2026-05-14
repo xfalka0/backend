@@ -102,7 +102,7 @@ exports.googleAuth = async (req, res) => {
         }
 
         const token = jwt.sign(
-            { id: user.id, username: user.username, role: user.role, display_name: user.display_name, avatar_url: user.avatar_url },
+            { id: user.id, username: user.username, role: user.role, display_name: user.display_name, avatar_url: user.avatar_url, gender: user.gender },
             SECRET_KEY,
             { expiresIn: '30d' }
         );
@@ -173,7 +173,7 @@ exports.registerEmail = async (req, res) => {
         await triggerAutoEngagement(io, user.id);
 
         const token = jwt.sign(
-            { id: user.id, username: user.username, role: user.role, display_name: user.display_name, avatar_url: user.avatar_url },
+            { id: user.id, username: user.username, role: user.role, display_name: user.display_name, avatar_url: user.avatar_url, gender: user.gender },
             SECRET_KEY,
             { expiresIn: '30d' }
         );
@@ -218,7 +218,7 @@ exports.loginEmail = async (req, res) => {
         }
 
         const token = jwt.sign(
-            { id: user.id, username: user.username, role: user.role, display_name: user.display_name, avatar_url: user.avatar_url },
+            { id: user.id, username: user.username, role: user.role, display_name: user.display_name, avatar_url: user.avatar_url, gender: user.gender },
             SECRET_KEY,
             { expiresIn: '30d' }
         );
@@ -255,6 +255,7 @@ exports.getMe = async (req, res) => {
             email: user.email,
             role: user.role,
             avatar_url: user.avatar_url,
+            gender: user.gender,
             display_name: user.display_name,
             referral_code: user.referral_code,
             onboarding_completed: user.onboarding_completed

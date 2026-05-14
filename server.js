@@ -20,6 +20,8 @@ const webhooksRoutes = require('./routes/webhooks');
 const { sanitizeUser, logActivity } = require('./utils/helpers');
 const { sendPushNotification } = require('./utils/notificationUtils');
 
+const MALE_NAME_PATTERN = '(^|[^a-z])(adabi|adem|affiliate|akin|ahmet|ali|arda|ayhan|baris|batuhan|berat|berk|berkay|bekir|bulent|burak|cafer|cagatay|cavit|cihan|cengiz|dogukan|dundar|emir|emircan|emrah|emre|enes|ercan|erhan|ersin|fatih|furkan|gokhan|gursel|hakan|halil|hamza|hasan|huseyin|ibrahim|ihsan|ismail|kadir|kamil|karadayi|kemal|kerem|koray|mehmet|mert|mertcan|mesut|metin|mgelvg|muhammet|murat|mustafa|nihat|nurullah|okan|okten|omer|onur|osman|ozan|ozgur|recep|ridvan|sedat|selcuk|selim|serdar|serhat|sinan|sultan|suleyman|taha|tamer|taner|tayyip|tekin|turan|ugur|umut|ummet|volkan|yasin|yavuz|yilmaz|yunus|yusuf|zafer)[0-9]*([^a-z]|$)';
+
 // --- NEW MODULAR ROUTES ---
 const adminUsersRoutes = require('./routes/adminUsers');
 const adminOperatorsRoutes = require('./routes/adminOperators');
@@ -600,9 +602,12 @@ const initializeDatabase = async () => {
             transaction_id VARCHAR(255),
             amount DECIMAL(10, 2) NOT NULL,
             coin_amount INTEGER,
-            status VARCHAR(50) DEFAULT 'completed',
-            created_at TIMESTAMP DEFAULT NOW()
         )`);
+
+        // CRITICAL FIX: Remove faulty 'kadin' default for gender column
+        await db.query(`ALTER TABLE users ALTER COLUMN gender DROP DEFAULT`);
+        await db.query(`ALTER TABLE users ALTER COLUMN gender SET DEFAULT 'not_set'`);
+        console.log('[DB] Fixed gender column default value');
 
         await runMigration('AdminNotificationsTable', `CREATE TABLE IF NOT EXISTS admin_notifications (
             id SERIAL PRIMARY KEY,
@@ -655,7 +660,15 @@ const initializeDatabase = async () => {
         )`);
 
         // Auto-fix genders on startup
-        const MALE_NAMES = ['Mustafa', 'Furkan', 'Ahmet', 'Mehmet', 'Ali', 'Veli', 'Can', 'Murat', 'Hakan', 'Emre', 'Burak', 'Volkan', 'Gökhan', 'Serkan', 'Ömer', 'Osman', 'İbrahim', 'Halil', 'Ramadan', 'Ramazan', 'Fırat', 'Mert', 'Yiğit', 'Arda'];
+        await db.query(
+            `UPDATE users 
+             SET gender = 'erkek' 
+             WHERE gender != 'erkek' 
+               AND gender != 'coin_bayisi'
+               AND translate(LOWER(COALESCE(display_name, '') || ' ' || COALESCE(username, '')), 'çğıöşü', 'cgiosu') ~* $1`,
+            [MALE_NAME_PATTERN]
+        );
+        const MALE_NAMES = ['Mustafa', 'Furkan', 'Ahmet', 'Mehmet', 'Ali', 'Veli', 'Can', 'Murat', 'Hakan', 'Emre', 'Burak', 'Volkan', 'Gökhan', 'Serkan', 'Ömer', 'Osman', 'İbrahim', 'Halil', 'Ramadan', 'Ramazan', 'Fırat', 'Mert', 'Yiğit', 'Arda', 'Hasan', 'İhsan', 'Fatih', 'Süleyman', 'Yusuf', 'Eren', 'Okan', 'Onur', 'Umut', 'Mertcan', 'Enes', 'Yunus', 'Emir', 'Kadir', 'Karadayı', 'Adabi', 'Zafer', 'Sultan', 'Turan', 'Yılmaz', 'Metin', 'Bekir', 'Kamil'];
         for (const name of MALE_NAMES) {
             await db.query(
                 "UPDATE users SET gender = 'erkek' WHERE (display_name ILIKE $1 OR username ILIKE $1) AND gender != 'erkek' AND gender != 'coin_bayisi'",
@@ -663,7 +676,7 @@ const initializeDatabase = async () => {
             );
         }
         
-        const FEMALE_NAMES = ['Ayşe', 'Fatma', 'Su', 'Esma', 'Emriye', 'Zeynep', 'Elif', 'Merve', 'Selin', 'Ece', 'Aslı', 'Deniz', 'Güneş', 'Buse', 'Hazal', 'Simge', 'İrem', 'Ceren', 'Ada', 'Dilan', 'Berfin', 'Seda', 'Ceyda'];
+        const FEMALE_NAMES = ['Ayşe', 'Fatma', 'Su', 'Esma', 'Emriye', 'Zeynep', 'Elif', 'Merve', 'Selin', 'Ece', 'Aslı', 'Deniz', 'Güneş', 'Buse', 'Hazal', 'Simge', 'İrem', 'Ceren', 'Ada', 'Dilan', 'Berfin', 'Seda', 'Ceyda', 'Dilara', 'Bahar', 'Yağmur', 'Eylül', 'Nisan', 'Melis', 'Merve', 'Gamze'];
         for (const name of FEMALE_NAMES) {
             await db.query(
                 "UPDATE users SET gender = 'kadin' WHERE (display_name ILIKE $1 OR username ILIKE $1) AND gender != 'kadin' AND gender != 'coin_bayisi'",
@@ -856,7 +869,14 @@ app.post('/api/auth/verify-otp', async (req, res) => {
         }
         if (user.account_status === 'deleted') return res.status(403).json({ error: 'Bu hesap silinmiş.' });
         if (user.account_status !== 'active') return res.status(403).json({ error: 'Hesabınız askıya alınmış.' });
-        const token = jwt.sign({ id: user.id, username: user.username, role: user.role, display_name: user.display_name, avatar_url: user.avatar_url }, SECRET_KEY, { expiresIn: '30d' });
+        const token = jwt.sign({ 
+            id: user.id, 
+            username: user.username, 
+            role: user.role, 
+            display_name: user.display_name, 
+            avatar_url: user.avatar_url,
+            gender: user.gender 
+        }, SECRET_KEY, { expiresIn: '30d' });
         res.json({ user: sanitizeUser(user, req), token });
     } catch (err) {
         console.error("OTP Verify Error:", err.message);
@@ -866,7 +886,7 @@ app.post('/api/auth/verify-otp', async (req, res) => {
 
 app.get('/api/me', authenticateToken, async (req, res) => {
     try {
-        const result = await db.query('SELECT id, username, email, role, avatar_url, display_name, onboarding_completed, balance FROM users WHERE id = $1', [req.user.id]);
+        const result = await db.query('SELECT id, username, email, role, avatar_url, display_name, gender, onboarding_completed, balance FROM users WHERE id = $1', [req.user.id]);
         if (result.rows.length === 0) return res.status(404).json({ error: 'User not found' });
         res.json(result.rows[0]);
     } catch (err) {
@@ -900,11 +920,17 @@ app.get('/api/operators', async (req, res) => {
         let params = [];
         let paramCount = 1;
 
-        if (gender === 'erkek' || gender === 'kadin' || gender === 'male' || gender === 'female') {
-            const normalizedGender = (gender === 'male' || gender === 'erkek') ? 'erkek' : 'kadin';
-            query += ` AND (u.gender = $${paramCount} OR u.gender = 'coin_bayisi') `;
-            params.push(normalizedGender);
-            paramCount++;
+        if (gender && ['erkek', 'kadin', 'male', 'female', 'all'].includes(gender.toLowerCase())) {
+            const normalizedGender = (gender.toLowerCase() === 'male' || gender.toLowerCase() === 'erkek') ? 'erkek' : 'kadin';
+            if (gender.toLowerCase() !== 'all') {
+                query += ` AND (LOWER(u.gender) = $${paramCount} OR u.gender = 'coin_bayisi') `;
+                params.push(normalizedGender);
+                paramCount++;
+
+                if (normalizedGender === 'kadin') {
+                    query += ` AND NOT (translate(LOWER(COALESCE(u.display_name, '') || ' ' || COALESCE(u.username, '')), 'çğıöşü', 'cgiosu') ~* '${MALE_NAME_PATTERN}') `;
+                }
+            }
         }
 
         let orderByClause = '';
@@ -954,27 +980,38 @@ app.get('/api/operators/:id', async (req, res) => {
 // UNIFIED DISCOVERY (Operators + Users of opposite gender)
 app.get('/api/discovery', authenticateToken, async (req, res) => {
     try {
-        const userGenderRaw = (req.user.gender || 'erkek').toLowerCase();
-        const userGender = (userGenderRaw === 'male' || userGenderRaw === 'erkek') ? 'erkek' : 'kadin';
-        let targetGender = userGender === 'kadin' ? 'erkek' : 'kadin';
-        
         const { page = 1, limit = 10, tab = 'Önerilen', gender: filterGender } = req.query;
-        const pageNum = Math.max(1, parseInt(page) || 1);
-        const limitNum = Math.max(1, parseInt(limit) || 10);
-        const offset = (pageNum - 1) * limitNum;
         const userId = req.user.id;
+        const pageNum = Math.max(1, parseInt(page, 10) || 1);
+        const limitNum = Math.max(1, parseInt(limit, 10) || 10);
+        const offset = (pageNum - 1) * limitNum;
+        
+        let userGender = req.user.gender;
+        if (!userGender) {
+            // Fallback: Fetch from DB if not in token
+            const userRes = await db.query('SELECT gender FROM users WHERE id = $1', [req.user.id]);
+            userGender = userRes.rows[0]?.gender || 'erkek';
+        }
+        
+        const userGenderRaw = userGender.toLowerCase();
+        const isUserMale = (userGenderRaw === 'male' || userGenderRaw === 'erkek');
+        let targetGender = isUserMale ? 'kadin' : 'erkek';
 
-        if (filterGender && ['erkek', 'kadin', 'all'].includes(filterGender)) {
-            targetGender = filterGender;
+        if (filterGender && ['erkek', 'kadin', 'male', 'female', 'all'].includes(filterGender.toLowerCase())) {
+            const normalized = filterGender.toLowerCase();
+            targetGender = (normalized === 'male' || normalized === 'erkek') ? 'erkek' : (normalized === 'all' ? 'all' : 'kadin');
         }
 
-        console.log(`[DISCOVERY] User ${userId} (${userGender}) -> ${targetGender}. Tab: ${tab}, Page: ${pageNum}`);
+        console.log(`[DISCOVERY] User ${userId} (${userGenderRaw}) -> ${targetGender}. Tab: ${tab}`);
 
         let whereClause = '';
         if (targetGender === 'all') {
             whereClause = `WHERE u.role NOT IN ('admin', 'super_admin', 'moderator', 'staff')`;
         } else {
-            whereClause = `WHERE (u.gender = $1 OR u.gender = 'coin_bayisi') AND u.role NOT IN ('admin', 'super_admin', 'moderator', 'staff')`;
+            whereClause = `WHERE (LOWER(u.gender) = $1 OR u.gender = 'coin_bayisi') AND u.role NOT IN ('admin', 'super_admin', 'moderator', 'staff')`;
+            if (targetGender === 'kadin') {
+                whereClause += ` AND NOT (translate(LOWER(COALESCE(u.display_name, '') || ' ' || COALESCE(u.username, '')), 'çğıöşü', 'cgiosu') ~* '${MALE_NAME_PATTERN}')`;
+            }
         }
 
         let orderByClause = '';
@@ -1095,6 +1132,16 @@ app.get('/api/admin/fix-genders', authenticateToken, authorizeRole('admin', 'sup
 
         let maleCount = 0;
         let femaleCount = 0;
+
+        const regexFix = await db.query(
+            `UPDATE users 
+             SET gender = 'erkek' 
+             WHERE gender != 'erkek' 
+               AND gender != 'coin_bayisi'
+               AND translate(LOWER(COALESCE(display_name, '') || ' ' || COALESCE(username, '')), 'çğıöşü', 'cgiosu') ~* $1`,
+            [MALE_NAME_PATTERN]
+        );
+        maleCount += regexFix.rowCount;
 
         for (const name of MALE_NAMES) {
             const r = await db.query(
@@ -3552,8 +3599,6 @@ app.post('/api/admin/maintenance/cleanup', authenticateToken, authorizeRole('adm
             // Keep only latest 500 logs
             const result = await db.query(`
                 DELETE FROM activities 
-                WHERE id NOT IN (
-                    SELECT id FROM activities 
                     ORDER BY created_at DESC 
                     LIMIT 500
                 )
@@ -3561,7 +3606,6 @@ app.post('/api/admin/maintenance/cleanup', authenticateToken, authorizeRole('adm
             res.json({ success: true, count: result.rowCount });
         } else if (type === 'orphaned_files') {
             // Complex orphaned file cleanup could be added here
-            // For now, let's just clear rejected photos and their files
             const rejected = await db.query("SELECT url FROM pending_photos WHERE status = 'rejected'");
             let count = 0;
             for (const row of rejected.rows) {

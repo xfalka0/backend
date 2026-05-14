@@ -3,7 +3,7 @@ const router = express.Router();
 const bcrypt = require('bcrypt');
 const db = require('../db');
 const { authenticateToken, authorizeRole } = require('../middleware/auth');
-const { sanitizeUser } = require('../utils/helpers');
+const { sanitizeUser, MALE_NAME_PATTERN } = require('../utils/helpers');
 
 // GET ALL OPERATORS (Public listing)
 router.get('/', async (req, res) => {
@@ -31,6 +31,13 @@ router.get('/', async (req, res) => {
             query += ` AND (u.gender = $${paramCount} OR u.gender = 'coin_bayisi') `;
             params.push(normalizedGender);
             paramCount++;
+
+            // Strict male name filtering if looking for women
+            if (normalizedGender === 'kadin') {
+                query += ` AND NOT (translate(LOWER(COALESCE(u.display_name, '') || ' ' || COALESCE(u.name, '') || ' ' || COALESCE(u.username, '')), 'çğıöşüİ', 'cgiosui') ~* $${paramCount})`;
+                params.push(MALE_NAME_PATTERN);
+                paramCount++;
+            }
         }
 
         let orderByClause = '';

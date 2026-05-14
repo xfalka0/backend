@@ -46,11 +46,14 @@ export const ChatProvider = ({ children }) => {
         }
     };
 
-    const setupSocket = (userId) => {
+    const setupSocket = async (userId) => {
         if (socketRef.current) socketRef.current.disconnect();
+
+        const token = await AsyncStorage.getItem('token');
 
         socketRef.current = io(SOCKET_URL, {
             transports: ['websocket', 'polling'],
+            auth: { token },
             query: { userId }
         });
 

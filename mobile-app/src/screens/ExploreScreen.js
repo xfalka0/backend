@@ -22,9 +22,69 @@ import { useAlert } from '../contexts/AlertContext';
 
 const { height, width } = Dimensions.get('window');
 
-const turkishToLower = (str) => {
-    if (!str) return '';
-    return str.replace(/İ/g, 'i').replace(/I/g, 'ı').toLowerCase();
+const normalizeText = (value = '') => {
+    if (!value) return '';
+    let text = value.toString();
+    
+    // Manual Turkish character replacement for maximum reliability
+    text = text.replace(/İ/g, 'i')
+               .replace(/I/g, 'ı')
+               .replace(/ı/g, 'i')
+               .replace(/Ş/g, 's')
+               .replace(/ş/g, 's')
+               .replace(/Ğ/g, 'g')
+               .replace(/ğ/g, 'g')
+               .replace(/Ü/g, 'u')
+               .replace(/ü/g, 'u')
+               .replace(/Ö/g, 'o')
+               .replace(/ö/g, 'o')
+               .replace(/Ç/g, 'c')
+               .replace(/ç/g, 'c');
+
+    return text.toLowerCase()
+               .normalize('NFD')
+               .replace(/[\u0300-\u036f]/g, '')
+               .replace(/[^a-z0-9\s]/g, ' ')
+               .replace(/\s+/g, ' ')
+               .trim();
+};
+
+const MALE_NAME_HINTS = new Set([
+    'abdurrahman', 'abdullah', 'abdulkadir', 'abdulkerim', 'adabi', 'adem', 'adnan',
+    'afsin', 'affiliate', 'akin', 'ahmet', 'ali', 'alper', 'alperen', 'anil', 'arda',
+    'arif', 'atilla', 'aziz', 'ayhan', 'aykut', 'baris', 'batuhan', 'bayram', 'behcet',
+    'berat', 'berk', 'berkay', 'bekir', 'bora', 'bulent', 'burak', 'cafer',
+    'cagatay', 'cavit', 'celal', 'cem', 'cemal', 'cevat', 'cihan', 'cengiz', 'cumali',
+    'davut', 'dogan', 'dogukan', 'dundar', 'ekrem', 'emir', 'emircan', 'emrah',
+    'emre', 'enes', 'enver', 'eray', 'ercan', 'erdem', 'erdogan', 'eren', 'erhan',
+    'erol', 'ersin', 'faruk', 'fatih', 'ferhat', 'fikret', 'fuat', 'furkan',
+    'gencay', 'gokhan', 'gokay', 'goksel', 'gursel', 'hakan', 'halil', 'hamza',
+    'harun', 'hasan', 'haydar', 'hikmet', 'huseyin', 'ibrahim', 'ihsan', 'ilhan',
+    'isa', 'ismail', 'ismet', 'kadir', 'kaan', 'kamil', 'karadayi', 'kazim',
+    'kemal', 'kerem', 'kiziltas', 'koksal', 'koray', 'levent', 'lokman', 'mahmut',
+    'mehmet', 'mert', 'mertcan', 'mesut', 'metehan', 'metin', 'mgelvg', 'muhammed',
+    'muhammet', 'murat', 'mustafa', 'muzaffer', 'necati', 'necip', 'nevzat', 'nihat',
+    'nuri', 'nusret', 'nurullah', 'okan', 'okten', 'omer', 'onur', 'orhan', 'osman',
+    'ozan', 'ozgur', 'polat', 'ramadan', 'ramazan', 'rasim', 'recep', 'ridvan',
+    'riza', 'sabri', 'sadik', 'sahin', 'sait', 'salih', 'sami', 'samet', 'savas',
+    'sedat', 'sefa', 'selcuk', 'selim', 'semih', 'serdar', 'serdal', 'serhat',
+    'sevket', 'sinan', 'suat', 'sultan', 'suleyman', 'taha', 'tamer', 'taner',
+    'tarik', 'tayyip', 'tekin', 'tolga', 'tuncay', 'turan', 'ugur', 'umut', 'ummet',
+    'veysel', 'volkan', 'yakup', 'yalcin', 'yasin', 'yasar', 'yavuz', 'yigit',
+    'yilmaz', 'yunus', 'yusuf', 'zafer', 'zeki'
+]);
+
+const getProfileGender = (profile = {}) => {
+    const raw = (profile.gender || '').toString().trim().toLowerCase();
+    if (raw === 'coin_bayisi') return 'coin_bayisi';
+
+    const text = normalizeText([profile.name, profile.display_name, profile.username].filter(Boolean).join(' '));
+    if (text.split(' ').some(part => MALE_NAME_HINTS.has(part.replace(/\d+$/g, '')))) return 'erkek';
+    
+    const value = normalizeText(raw).replace(/\s+/g, '');
+    if (value === 'erkek' || value === 'male' || value === 'man') return 'erkek';
+    if (value === 'kadin' || value === 'female' || value === 'woman') return 'kadin';
+    return '';
 };
 
 const FallbackImage = ({ url, style, isAvatar = false, theme }) => {
@@ -164,53 +224,27 @@ export default function ExploreScreen({ navigation, route }) {
                 axios.get(`${API_URL}/operators?limit=100`)
             ]);
             // Apply gender filtering to posts and stories
-            const userGenderRaw = user?.gender || 'erkek';
-            const userGender = (userGenderRaw === 'male' || userGenderRaw === 'erkek') ? 'erkek' : 'kadin';
-            const targetGenderPrefix = userGender === 'erkek' ? ['female', 'kadin'] : ['male', 'erkek'];
-
-
-            const maleNames = [
-                'hasan', 'ihsan', 'karadayi', 'adabi', 'affiliate', 'fatih', 'ahmet', 'mehmet', 'mustafa', 
-                'furkan', 'ali', 'veli', 'osman', 'ibrahim', 'halil', 'yusuf', 'zafer', 'sultan', 'turan', 
-                'yilmaz', 'metin', 'bekir', 'kamil', 'burak', 'emre', 'can', 'deniz', 'mert', 'baris', 
-                'murat', 'volkan', 'serkan', 'gokhan', 'hakan', 'ugur', 'selim', 'kerem', 'cengiz', 
-                'emrah', 'erhan', 'oguz', 'dogukan', 'berkay', 'arda', 'emircan', 'cagatay', 'serhat',
-                'onur', 'ozgur', 'ozan', 'mertcan', 'batuhan', 'berk', 'bugra', 'taha', 'yasin',
-                'gursel', 'dundar', 'ihsan', 'zafer', 'yusuf', 'hamza', 'omer', 'enes', 'yunus', 'berat',
-                'miraç', 'umut', 'ayhan', 'ercan', 'serdar', 'adem', 'mesut', 'sinan', 'kemal', 'bulent',
-                'ersin', 'ozkan', 'sedat', 'taner', 'tamer', 'yavuz', 'selçuk', 'ismail', 'recep', 'tayyip'
-            ];
+            const userGender = getProfileGender(user) === 'kadin' ? 'kadin' : 'erkek';
+            const targetGender = userGender === 'kadin' ? 'erkek' : 'kadin';
             
             const filteredPosts = exploreRes.data.posts.filter(p => {
-                const isTarget = targetGenderPrefix.includes(p.gender?.toLowerCase());
-                const isDealerOrAdmin = p.gender === 'coin_bayisi' || p.role === 'admin';
-                if (userGender === 'erkek' && !isDealerOrAdmin) {
-                    const name = turkishToLower(p.display_name || p.username || '');
-                    if (maleNames.some(mn => name.includes(mn))) return false;
-                }
-                return isTarget || isDealerOrAdmin;
+                const profileGender = getProfileGender(p);
+                const isDealerOrAdmin = profileGender === 'coin_bayisi' || p.role === 'admin';
+                return profileGender === targetGender || isDealerOrAdmin;
             });
             
             const filteredStories = exploreRes.data.stories.filter(s => {
-                const isTarget = targetGenderPrefix.includes(s.gender?.toLowerCase());
-                const isDealerOrAdmin = s.gender === 'coin_bayisi' || s.role === 'admin';
-                if (userGender === 'erkek' && !isDealerOrAdmin) {
-                    const name = turkishToLower(s.display_name || s.username || '');
-                    if (maleNames.some(mn => name.includes(mn))) return false;
-                }
-                return isTarget || isDealerOrAdmin;
+                const profileGender = getProfileGender(s);
+                const isDealerOrAdmin = profileGender === 'coin_bayisi' || s.role === 'admin';
+                return profileGender === targetGender || isDealerOrAdmin;
             });
 
             setPosts(filteredPosts);
             setStories(filteredStories);
             setOperators(operatorsRes.data.filter(op => {
-                const isTarget = targetGenderPrefix.includes(op.gender?.toLowerCase());
-                const isDealer = op.gender === 'coin_bayisi';
-                if (userGender === 'erkek' && !isDealer) {
-                    const name = turkishToLower(op.name || '');
-                    if (maleNames.some(mn => name.includes(mn))) return false;
-                }
-                return isTarget || isDealer;
+                const profileGender = getProfileGender(op);
+                const isDealer = profileGender === 'coin_bayisi';
+                return profileGender === targetGender || isDealer;
             }));
         } catch (err) {
             console.error('Fetch Explore Error:', err);

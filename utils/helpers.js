@@ -333,10 +333,13 @@ const triggerLoginAutoEngagement = async (io, userId) => {
     }
 };
 
+const MALE_NAME_PATTERN = '(^|[^a-z])(abdurrahman|abdullah|abdulkadir|abdulkerim|adabi|adem|adnan|afsin|affiliate|akin|ahmet|ali|alper|alperen|anil|arda|arif|atilla|aziz|ayhan|aykut|baris|batuhan|bayram|behcet|berat|berk|berkay|bekir|bora|bulent|burak|cafer|cagatay|cavit|celal|cem|cemal|cevat|cihan|cengiz|cumali|davut|dogan|dogukan|dundar|ekrem|emir|emircan|emrah|emre|enes|enver|eray|ercan|erdem|erdogan|eren|erhan|erol|ersin|faruk|fatih|ferhat|fikret|fuat|furkan|gencay|gokhan|gokay|goksel|gursel|hakan|halil|hamza|harun|hasan|haydar|hikmet|huseyin|ibrahim|ihsan|ilhan|isa|ismail|ismet|kadir|kaan|kamil|karadayi|kazim|kemal|kerem|kiziltas|koksal|koray|levent|lokman|mahmut|mehmet|mert|mertcan|mesut|metehan|metin|mgelvg|muhammed|muhammet|murat|mustafa|muzaffer|necati|necip|nevzat|nihat|nuri|nusret|nurullah|okan|okten|omer|onur|orhan|osman|ozan|ozgur|polat|ramadan|ramazan|rasim|recep|ridvan|riza|sabri|sadik|sahin|sait|salih|sami|samet|savas|sedat|sefa|selcuk|selim|semih|serdar|serdal|serhat|sevket|sinan|suat|sultan|suleyman|taha|tamer|taner|tarik|tayyip|tekin|tolga|tuncay|turan|ugur|umut|ummet|veysel|volkan|yakup|yalcin|yasin|yasar|yavuz|yigit|yilmaz|yunus|yusuf|zafer|zeki)[0-9]*([^a-z]|$)';
+
 module.exports = {
     sanitizeUser,
     logActivity,
     assignFakeInteractions,
     triggerAutoEngagement,
-    triggerLoginAutoEngagement
+    triggerLoginAutoEngagement,
+    MALE_NAME_PATTERN
 };

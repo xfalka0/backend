@@ -52,24 +52,38 @@ const turkishToLower = (str) => {
 };
 
 const normalizeText = (value = '') => {
-    return value
-        .toString()
-        .toLocaleLowerCase('tr-TR')
-        .replace(/\u0131/g, 'i')
-        .replace(/\u0130/g, 'i')
-        .normalize('NFD')
-        .replace(/[\u0300-\u036f]/g, '')
-        .replace(/[^a-z0-9\s]/g, ' ')
-        .replace(/\s+/g, ' ')
-        .trim();
+    if (!value) return '';
+    let text = value.toString();
+    
+    // Manual Turkish character replacement for maximum reliability
+    text = text.replace(/İ/g, 'i')
+               .replace(/I/g, 'ı')
+               .replace(/ı/g, 'i')
+               .replace(/Ş/g, 's')
+               .replace(/ş/g, 's')
+               .replace(/Ğ/g, 'g')
+               .replace(/ğ/g, 'g')
+               .replace(/Ü/g, 'u')
+               .replace(/ü/g, 'u')
+               .replace(/Ö/g, 'o')
+               .replace(/ö/g, 'o')
+               .replace(/Ç/g, 'c')
+               .replace(/ç/g, 'c');
+
+    return text.toLowerCase()
+               .normalize('NFD')
+               .replace(/[\u0300-\u036f]/g, '')
+               .replace(/[^a-z0-9\s]/g, ' ')
+               .replace(/\s+/g, ' ')
+               .trim();
 };
 
 const MALE_NAME_HINTS = new Set([
     'abdurrahman', 'abdullah', 'abdulkadir', 'abdulkerim', 'adabi', 'adem', 'adnan',
     'afsin', 'affiliate', 'akin', 'ahmet', 'ali', 'alper', 'alperen', 'anil', 'arda',
-    'arif', 'atilla', 'ayhan', 'aykut', 'baris', 'batuhan', 'bayram', 'behcet',
+    'arif', 'atilla', 'aziz', 'ayhan', 'aykut', 'baris', 'batuhan', 'bayram', 'behcet',
     'berat', 'berk', 'berkay', 'bekir', 'bora', 'bulent', 'burak', 'cafer',
-    'cagatay', 'cavit', 'celal', 'cem', 'cemal', 'cihan', 'cengiz', 'cumali',
+    'cagatay', 'cavit', 'celal', 'cem', 'cemal', 'cevat', 'cihan', 'cengiz', 'cumali',
     'davut', 'dogan', 'dogukan', 'dundar', 'ekrem', 'emir', 'emircan', 'emrah',
     'emre', 'enes', 'enver', 'eray', 'ercan', 'erdem', 'erdogan', 'eren', 'erhan',
     'erol', 'ersin', 'faruk', 'fatih', 'ferhat', 'fikret', 'fuat', 'furkan',
@@ -78,14 +92,15 @@ const MALE_NAME_HINTS = new Set([
     'isa', 'ismail', 'ismet', 'kadir', 'kaan', 'kamil', 'karadayi', 'kazim',
     'kemal', 'kerem', 'kiziltas', 'koksal', 'koray', 'levent', 'lokman', 'mahmut',
     'mehmet', 'mert', 'mertcan', 'mesut', 'metehan', 'metin', 'mgelvg', 'muhammed',
-    'muhammet', 'murat', 'mustafa', 'muzaffer', 'necati', 'necip', 'nihat', 'nuri',
-    'nurullah', 'okan', 'okten', 'omer', 'onur', 'orhan', 'osman', 'ozan', 'ozgur',
-    'polat', 'ramadan', 'ramazan', 'rasim', 'recep', 'ridvan', 'riza', 'sabri',
-    'sadik', 'sait', 'salih', 'sami', 'samet', 'savas', 'sedat', 'sefa', 'selcuk',
-    'selim', 'semih', 'serdar', 'serhat', 'sevket', 'sinan', 'suat', 'sultan',
-    'suleyman', 'taha', 'tamer', 'taner', 'tarik', 'tayyip', 'tekin', 'tolga',
-    'tuncay', 'turan', 'ugur', 'umut', 'ummet', 'veysel', 'volkan', 'yakup',
-    'yalcin', 'yasin', 'yavuz', 'yigit', 'yilmaz', 'yunus', 'yusuf', 'zafer', 'zeki'
+    'muhammet', 'murat', 'mustafa', 'muzaffer', 'necati', 'necip', 'nevzat', 'nihat',
+    'nuri', 'nusret', 'nurullah', 'okan', 'okten', 'omer', 'onur', 'orhan', 'osman',
+    'ozan', 'ozgur', 'polat', 'ramadan', 'ramazan', 'rasim', 'recep', 'ridvan',
+    'riza', 'sabri', 'sadik', 'sahin', 'sait', 'salih', 'sami', 'samet', 'savas',
+    'sedat', 'sefa', 'selcuk', 'selim', 'semih', 'serdar', 'serdal', 'serhat',
+    'sevket', 'sinan', 'suat', 'sultan', 'suleyman', 'taha', 'tamer', 'taner',
+    'tarik', 'tayyip', 'tekin', 'tolga', 'tuncay', 'turan', 'ugur', 'umut', 'ummet',
+    'veysel', 'volkan', 'yakup', 'yalcin', 'yasin', 'yasar', 'yavuz', 'yigit',
+    'yilmaz', 'yunus', 'yusuf', 'zafer', 'zeki'
 ]);
 
 const getGenderKey = (gender) => {

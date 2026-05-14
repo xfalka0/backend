@@ -707,7 +707,7 @@ const initializeDatabase = async () => {
         for (const name of MALE_NAMES) {
             await db.query(
                 "UPDATE users SET gender = 'erkek' WHERE (display_name ILIKE $1 OR username ILIKE $1) AND gender != 'erkek' AND gender != 'coin_bayisi'",
-                [`%${name}%`]
+                ["%" + name + "%"]
             );
         }
         
@@ -715,7 +715,7 @@ const initializeDatabase = async () => {
         for (const name of FEMALE_NAMES) {
             await db.query(
                 "UPDATE users SET gender = 'kadin' WHERE (display_name ILIKE $1 OR username ILIKE $1) AND gender != 'kadin' AND gender != 'coin_bayisi'",
-                [`%${name}%`]
+                ["%" + name + "%"]
             );
         }
         console.log('[DB] Initial gender auto-fix completed');
@@ -1080,8 +1080,9 @@ app.get('/api/discovery', authenticateToken, async (req, res) => {
             ${whereClause}
               AND u.id != $2
               AND u.account_status = 'active'
-            ${orderByClause}
+            ${orderByClause}`;
 
+        const { rows } = await db.query(query, queryParams);
         res.json(rows);
     } catch (err) {
         console.error("❌ [DISCOVERY ERROR]:", err);
@@ -1145,60 +1146,10 @@ app.use('/api/starter-pack', starterPackRoutes);
 // NOTE: /api/purchase stays in the inline routes below (uses socket.io io reference)
 // ---------------------------------------------------------
 
-// TEMPORARY: Fix Genders Route
-app.get('/api/admin/fix-genders', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
-    try {
-        const MALE_NAMES = ['Mustafa', 'Furkan', 'Ahmet', 'Mehmet', 'Ali', 'Veli', 'Can', 'Murat', 'Hakan', 'Emre', 'Burak', 'Volkan', 'Gökhan', 'Serkan', 'Ömer', 'Osman', 'İbrahim', 'Halil', 'Ramadan', 'Ramazan', 'Fırat', 'Mert', 'Yiğit', 'Arda'];
-        const FEMALE_NAMES = ['Ayşe', 'Fatma', 'Su', 'Esma', 'Emriye', 'Zeynep', 'Elif', 'Merve', 'Selin', 'Ece', 'Aslı', 'Deniz', 'Güneş', 'Buse', 'Hazal', 'Simge', 'İrem', 'Ceren', 'Dilara', 'Bahar'];
-
-        let maleCount = 0;
-        let femaleCount = 0;
-
-        const regexFix = await db.query(
-            `UPDATE users 
-             SET gender = 'erkek' 
-             WHERE gender != 'erkek' 
-               AND gender != 'coin_bayisi'
-               AND translate(LOWER(COALESCE(display_name, '') || ' ' || COALESCE(name, '') || ' ' || COALESCE(username, '')), 'çğıöşüİ', 'cgiosui') ~* $1`,
-            [MALE_NAME_PATTERN]
-        );
-        maleCount += regexFix.rowCount;
-
-        for (const name of MALE_NAMES) {
-            const r = await db.query(
-                "UPDATE users SET gender = 'erkek' WHERE (display_name ILIKE $1 OR username ILIKE $1) AND gender != 'erkek' AND gender != 'coin_bayisi'",
-                [`%${name}%`]
-            );
-            maleCount += r.rowCount;
-        }
-
-        for (const name of FEMALE_NAMES) {
-            const r = await db.query(
-                "UPDATE users SET gender = 'kadin' WHERE (display_name ILIKE $1 OR username ILIKE $1) AND gender != 'kadin' AND gender != 'coin_bayisi'",
-                [`%${name}%`]
-            );
-            femaleCount += r.rowCount;
-        }
-
-        res.json({ message: 'Genders fixed', updated_male: maleCount, updated_female: femaleCount });
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
-});
 
 app.get('/api/admin/payments', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
     try {
-        const query = `
-            SELECT 
-                p.*, 
-                u.username as user_name, 
-                u.email,
-                cp.name as package_name
-            FROM payments p
-            LEFT JOIN users u ON p.user_id = u.id
-            LEFT JOIN coin_packages cp ON p.package_id = cp.id
-            ORDER BY p.created_at DESC
-        `;
+        const query = "SELECT p.*, u.username as user_name, u.email, cp.name as package_name FROM payments p LEFT JOIN users u ON p.user_id = u.id LEFT JOIN coin_packages cp ON p.package_id = cp.id ORDER BY p.created_at DESC";
         const result = await db.query(query);
         res.json(result.rows);
     } catch (err) {
@@ -2524,7 +2475,7 @@ app.delete('/api/users/:id', authenticateToken, async (req, res) => {
 // UPDATE USER PROFILE
 app.put('/api/users/:id/profile', authenticateToken, async (req, res) => {
     const { id } = req.params;
-    const { name, bio, job, relationship, zodiac, interests, age, edu, boy, kilo } = req.body;
+    const { name, bio, job, relationship, zodiac, interests, age, edu, boy, kilo, gender } = req.body;
 
     // Authorization check: User can update own profile, Admins can update any
     if (req.user.id.toString() !== id.toString() && req.user.role !== 'admin' && req.user.role !== 'super_admin') {
@@ -2544,10 +2495,11 @@ app.put('/api/users/:id/profile', authenticateToken, async (req, res) => {
                  age = COALESCE($7, age),
                  edu = COALESCE($8, edu),
                  boy = COALESCE($9, boy),
-                 kilo = COALESCE($10, kilo)
-             WHERE id = $11 
+                 kilo = COALESCE($10, kilo),
+                 gender = COALESCE($11, gender)
+             WHERE id = $12 
              RETURNING *`,
-            [name, bio, job, relationship, zodiac, interests, age, edu, boy, kilo, id]
+            [name, bio, job, relationship, zodiac, interests, age, edu, boy, kilo, gender, id]
         );
 
         if (result.rows.length === 0) {

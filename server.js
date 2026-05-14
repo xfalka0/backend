@@ -17,7 +17,7 @@ const favoritesRoutes = require('./routes/favorites');
 const viewsRoutes = require('./routes/views');
 const boostsRoutes = require('./routes/boosts');
 const webhooksRoutes = require('./routes/webhooks');
-const { sanitizeUser, logActivity, MALE_NAME_PATTERN } = require('./utils/helpers');
+const { sanitizeUser, logActivity, MALE_NAMES_ARRAY } = require('./utils/helpers');
 const { sendPushNotification } = require('./utils/notificationUtils');
 
 const normalizeText = (value = '') => {
@@ -1040,8 +1040,9 @@ app.get('/api/discovery', authenticateToken, async (req, res) => {
         let queryParams = [targetGender, userId];
         
         if (targetGender === 'kadin') {
-            whereClause += ` AND NOT (translate(LOWER(COALESCE(u.display_name, '') || ' ' || COALESCE(u.name, '') || ' ' || COALESCE(u.username, '')), 'çğıöşüİ', 'cgiosui') ~* $3)`;
-            queryParams.push(MALE_NAME_PATTERN);
+            const patterns = MALE_NAMES_ARRAY.map(name => `%${name}%`);
+            whereClause += ` AND NOT (translate(LOWER(COALESCE(u.display_name, '') || ' ' || COALESCE(u.name, '') || ' ' || COALESCE(u.username, '')), 'çğıöşüİ', 'cgiosui') ILIKE ANY($3))`;
+            queryParams.push(patterns);
         }
 
         let orderByClause = '';

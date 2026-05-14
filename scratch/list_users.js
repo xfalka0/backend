@@ -1,25 +1,12 @@
-const { Client } = require('pg');
-require('dotenv').config();
-
-const client = new Client({
-    user: process.env.DB_USER || 'postgres',
-    host: process.env.DB_HOST || 'localhost',
-    database: process.env.DB_NAME || 'dating',
-    password: process.env.DB_PASSWORD || '123',
-    port: process.env.DB_PORT || 5432,
-    ssl: false
-});
+const db = require('../db');
 
 async function listUsers() {
-    try {
-        await client.connect();
-        const res = await client.query("SELECT username, email, role FROM users");
-        console.table(res.rows);
-    } catch (err) {
-        console.error('Error:', err);
-    } finally {
-        await client.end();
-    }
+    console.log('--- Listing 50 Users ---');
+    const res = await db.query(
+        "SELECT id, username, display_name, gender, role FROM users ORDER BY created_at DESC LIMIT 50"
+    );
+    console.log(JSON.stringify(res.rows, null, 2));
+    process.exit(0);
 }
 
 listUsers();

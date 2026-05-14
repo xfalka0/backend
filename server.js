@@ -22,6 +22,20 @@ const { sendPushNotification } = require('./utils/notificationUtils');
 
 const MALE_NAME_PATTERN = '(^|[^a-z])(abdurrahman|abdullah|abdulkadir|abdulkerim|adabi|adem|adnan|afsin|affiliate|akin|ahmet|ali|alper|alperen|anil|arda|arif|atilla|ayhan|aykut|baris|batuhan|bayram|behcet|berat|berk|berkay|bekir|bora|bulent|burak|cafer|cagatay|cavit|celal|cem|cemal|cihan|cengiz|cumali|davut|dogan|dogukan|dundar|ekrem|emir|emircan|emrah|emre|enes|enver|eray|ercan|erdem|erdogan|eren|erhan|erol|ersin|faruk|fatih|ferhat|fikret|fuat|furkan|gencay|gokhan|gokay|goksel|gursel|hakan|halil|hamza|harun|hasan|haydar|hikmet|huseyin|ibrahim|ihsan|ilhan|isa|ismail|ismet|kadir|kaan|kamil|karadayi|kazim|kemal|kerem|kiziltas|koksal|koray|levent|lokman|mahmut|mehmet|mert|mertcan|mesut|metehan|metin|mgelvg|muhammed|muhammet|murat|mustafa|muzaffer|necati|necip|nihat|nuri|nurullah|okan|okten|omer|onur|orhan|osman|ozan|ozgur|polat|ramadan|ramazan|rasim|recep|ridvan|riza|sabri|sadik|sait|salih|sami|samet|savas|sedat|sefa|selcuk|selim|semih|serdar|serhat|sevket|sinan|suat|sultan|suleyman|taha|tamer|taner|tarik|tayyip|tekin|tolga|tuncay|turan|ugur|umut|ummet|veysel|volkan|yakup|yalcin|yasin|yavuz|yigit|yilmaz|yunus|yusuf|zafer|zeki)[0-9]*([^a-z]|$)';
 
+const normalizeGenderValue = (gender) => {
+    const raw = (gender || '').toString().trim().toLowerCase();
+    const value = raw
+        .replace(/ı/g, 'i')
+        .replace(/İ/g, 'i')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '');
+
+    if (value === 'coin_bayisi') return 'coin_bayisi';
+    if (value === 'erkek' || value === 'male' || value === 'man') return 'erkek';
+    if (value === 'kadin' || value === 'female' || value === 'woman') return 'kadin';
+    return null;
+};
+
 // --- NEW MODULAR ROUTES ---
 const adminUsersRoutes = require('./routes/adminUsers');
 const adminOperatorsRoutes = require('./routes/adminOperators');
@@ -980,7 +994,7 @@ app.get('/api/operators/:id', async (req, res) => {
 // UNIFIED DISCOVERY (Operators + Users of opposite gender)
 app.get('/api/discovery', authenticateToken, async (req, res) => {
     try {
-        const { page = 1, limit = 10, tab = 'Önerilen', gender: filterGender } = req.query;
+        const { page = 1, limit = 10, tab = 'Önerilen' } = req.query;
         const userId = req.user.id;
         const pageNum = Math.max(1, parseInt(page, 10) || 1);
         const limitNum = Math.max(1, parseInt(limit, 10) || 10);
@@ -994,24 +1008,14 @@ app.get('/api/discovery', authenticateToken, async (req, res) => {
         }
         
         const userGenderRaw = userGender.toLowerCase();
-        const isUserMale = (userGenderRaw === 'male' || userGenderRaw === 'erkek');
-        let targetGender = isUserMale ? 'kadin' : 'erkek';
-
-        if (filterGender && ['erkek', 'kadin', 'male', 'female', 'all'].includes(filterGender.toLowerCase())) {
-            const normalized = filterGender.toLowerCase();
-            targetGender = (normalized === 'male' || normalized === 'erkek') ? 'erkek' : (normalized === 'all' ? 'all' : 'kadin');
-        }
+        const normalizedUserGender = normalizeGenderValue(userGender) || 'erkek';
+        const targetGender = normalizedUserGender === 'kadin' ? 'erkek' : 'kadin';
 
         console.log(`[DISCOVERY] User ${userId} (${userGenderRaw}) -> ${targetGender}. Tab: ${tab}`);
 
-        let whereClause = '';
-        if (targetGender === 'all') {
-            whereClause = `WHERE u.role NOT IN ('admin', 'super_admin', 'moderator', 'staff')`;
-        } else {
-            whereClause = `WHERE (LOWER(u.gender) = $1 OR u.gender = 'coin_bayisi') AND u.role NOT IN ('admin', 'super_admin', 'moderator', 'staff')`;
-            if (targetGender === 'kadin') {
-                whereClause += ` AND NOT (translate(LOWER(COALESCE(u.display_name, '') || ' ' || COALESCE(u.name, '') || ' ' || COALESCE(u.username, '')), 'çğıöşü', 'cgiosu') ~* '${MALE_NAME_PATTERN}')`;
-            }
+        let whereClause = `WHERE (LOWER(u.gender) = $1 OR u.gender = 'coin_bayisi') AND u.role NOT IN ('admin', 'super_admin', 'moderator', 'staff')`;
+        if (targetGender === 'kadin') {
+            whereClause += ` AND NOT (translate(LOWER(COALESCE(u.display_name, '') || ' ' || COALESCE(u.name, '') || ' ' || COALESCE(u.username, '')), 'çğıöşü', 'cgiosu') ~* '${MALE_NAME_PATTERN}')`;
         }
 
         let orderByClause = '';
@@ -1048,13 +1052,13 @@ app.get('/api/discovery', authenticateToken, async (req, res) => {
             FROM users u
             LEFT JOIN operators o ON u.id = o.user_id
             ${whereClause}
-              AND u.id != ${targetGender === 'all' ? '$1' : '$2'}
+              AND u.id != $2
               AND u.account_status = 'active'
             ${orderByClause}
-            LIMIT ${targetGender === 'all' ? '$2' : '$3'} OFFSET ${targetGender === 'all' ? '$3' : '$4'}
+            LIMIT $3 OFFSET $4
         `;
 
-        const queryParams = targetGender === 'all' ? [userId, limitNum, offset] : [targetGender, userId, limitNum, offset];
+        const queryParams = [targetGender, userId, limitNum, offset];
         const result = await db.query(query, queryParams);
 
         const rows = result.rows.map(row => {
@@ -1387,6 +1391,7 @@ app.get('/api/admin/sync-albums', async (req, res) => {
 app.put('/api/users/:id', async (req, res) => {
     const { id } = req.params;
     const { name, display_name, age, gender, bio, job, edu } = req.body;
+    const normalizedGender = normalizeGenderValue(gender);
 
     // Synchronize name and display_name
     const finalName = name || display_name;
@@ -1403,7 +1408,7 @@ app.put('/api/users/:id', async (req, res) => {
                  job = COALESCE($6, job),
                  edu = COALESCE($7, edu)
              WHERE id = $8 RETURNING *`,
-            [finalDisplayName || null, finalName || null, age ? parseInt(age) : null, gender || null, bio || null, job || null, edu || null, id]
+            [finalDisplayName || null, finalName || null, age ? parseInt(age) : null, normalizedGender || null, bio || null, job || null, edu || null, id]
         );
 
         if (result.rows.length === 0) return res.status(404).json({ error: 'User not found' });
@@ -1417,6 +1422,7 @@ app.put('/api/users/:id', async (req, res) => {
 app.put('/api/users/:id/profile', async (req, res) => {
     const { id } = req.params;
     const { display_name, name, bio, avatar_url, gender, interests, onboarding_completed, relationship, zodiac, age, push_token } = req.body;
+    const normalizedGender = normalizeGenderValue(gender);
 
     // Synchronize
     const finalDisplayName = req.body.display_name || req.body.name;
@@ -1463,7 +1469,7 @@ app.put('/api/users/:id/profile', async (req, res) => {
                 req.body.name || null,
                 req.body.bio || null,
                 req.body.avatar_url || null,
-                req.body.gender || null,
+                normalizedGender || null,
                 req.body.interests || null,
                 req.body.onboarding_completed !== undefined ? req.body.onboarding_completed : null,
                 (req.body.age && !isNaN(parseInt(req.body.age))) ? parseInt(req.body.age) : null,

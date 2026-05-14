@@ -4,6 +4,20 @@ const db = require('../db');
 const { authenticateToken, authorizeRole } = require('../middleware/auth');
 const { sanitizeUser, logActivity } = require('../utils/helpers');
 
+const normalizeGenderValue = (gender) => {
+    const raw = (gender || '').toString().trim().toLowerCase();
+    const value = raw
+        .replace(/ı/g, 'i')
+        .replace(/İ/g, 'i')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '');
+
+    if (value === 'coin_bayisi') return 'coin_bayisi';
+    if (value === 'erkek' || value === 'male' || value === 'man') return 'erkek';
+    if (value === 'kadin' || value === 'female' || value === 'woman') return 'kadin';
+    return null;
+};
+
 // GET USER PROFILE
 router.get('/:id', async (req, res) => {
     try {
@@ -33,6 +47,7 @@ router.get('/:id/album', async (req, res) => {
 router.put('/:id', async (req, res) => {
     const { id } = req.params;
     const { name, display_name, age, gender, bio, job, edu } = req.body;
+    const normalizedGender = normalizeGenderValue(gender);
     const finalDisplayName = display_name || name;
     const finalName = name || display_name;
     try {
@@ -40,7 +55,7 @@ router.put('/:id', async (req, res) => {
             `UPDATE users SET display_name = COALESCE($1, display_name), name = COALESCE($2, name),
              age = COALESCE($3::INTEGER, age), gender = COALESCE($4, gender), bio = COALESCE($5, bio),
              job = COALESCE($6, job), edu = COALESCE($7, edu) WHERE id::text = $8::text RETURNING *`,
-            [finalDisplayName || null, finalName || null, age ? parseInt(age) : null, gender || null, bio || null, job || null, edu || null, id]
+            [finalDisplayName || null, finalName || null, age ? parseInt(age) : null, normalizedGender || null, bio || null, job || null, edu || null, id]
         );
         if (result.rows.length === 0) return res.status(404).json({ error: 'User not found' });
         res.json(sanitizeUser(result.rows[0], req));

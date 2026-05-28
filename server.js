@@ -1085,7 +1085,7 @@ app.post('/api/auth/verify-otp', async (req, res) => {
         if ((email === 'test@example.com' || phone === '+10000000000') && code === '123456') {
             console.log('[AUTH] Google Reviewer Bypass triggered for:', identifier);
         } else {
-            const otpRes = await db.query('SELECT * FROM otps WHERE identifier = $1 AND otp_code = $2 AND expires_at > NOW()', [identifier, code]);
+            const otpRes = await db.query('SELECT * FROM otps WHERE identifier = $1 AND otp_code = $2 AND expires_at > $3', [identifier, code, new Date()]);
             if (otpRes.rows.length === 0) return res.status(401).json({ error: 'Geçersiz veya süresi dolmuş kod.' });
             await db.query('DELETE FROM otps WHERE identifier = $1', [identifier]);
         }

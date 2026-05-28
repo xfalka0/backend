@@ -241,6 +241,13 @@ const initializeDatabase = async () => {
         if (!payCols.includes('status')) await db.query('ALTER TABLE payments ADD COLUMN status VARCHAR(50) DEFAULT \'completed\'');
         if (!payCols.includes('created_at')) await db.query('ALTER TABLE payments ADD COLUMN created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP');
 
+        // --- OTPs Migrations ---
+        try {
+            await db.query('ALTER TABLE otps ADD COLUMN IF NOT EXISTS attempts INTEGER DEFAULT 0');
+        } catch (e) {
+            console.error('[DB] Migration Error (otps attempts):', e.message);
+        }
+
         // Seed packages if none exist
         const result = await db.query('SELECT COUNT(*) FROM coin_packages');
         if (parseInt(result.rows[0].count) === 0) {
@@ -1008,6 +1015,10 @@ app.post('/api/auth/request-otp', authLimiter, async (req, res) => {
     try {
         const otp = Math.floor(100000 + Math.random() * 900000).toString();
         const expires = new Date(Date.now() + 10 * 60 * 1000);
+        
+        // Security: Clean up expired OTPs (Keeps database lightweight and fast)
+        await db.query('DELETE FROM otps WHERE expires_at < NOW()');
+
         await db.query('DELETE FROM otps WHERE identifier = $1', [identifier]);
         await db.query('INSERT INTO otps (identifier, otp_code, expires_at) VALUES ($1, $2, $3)', [identifier, otp, expires]);
         console.log(`[AUTH] OTP for ${identifier}: ${otp}`);
@@ -1085,8 +1096,34 @@ app.post('/api/auth/verify-otp', async (req, res) => {
         if ((email === 'test@example.com' || phone === '+10000000000') && code === '123456') {
             console.log('[AUTH] Google Reviewer Bypass triggered for:', identifier);
         } else {
-            const otpRes = await db.query('SELECT * FROM otps WHERE identifier = $1 AND otp_code = $2 AND expires_at > $3', [identifier, code, new Date()]);
-            if (otpRes.rows.length === 0) return res.status(401).json({ error: 'Geçersiz veya süresi dolmuş kod.' });
+            // Fetch OTP by identifier only to verify attempts and perform JS-level timezone safe expiration check
+            const otpRes = await db.query('SELECT * FROM otps WHERE identifier = $1', [identifier]);
+            if (otpRes.rows.length === 0) {
+                return res.status(401).json({ error: 'Geçersiz veya süresi dolmuş kod. Lütfen yeni bir kod isteyin.' });
+            }
+
+            const otpRow = otpRes.rows[0];
+            const now = new Date();
+            
+            // Timezone-safe expiration check in JS (completely immune to Postgres timezone casting differences!)
+            if (new Date(otpRow.expires_at) < now) {
+                await db.query('DELETE FROM otps WHERE identifier = $1', [identifier]);
+                return res.status(401).json({ error: 'Bu kodun süresi dolmuş. Lütfen yeni bir kod isteyin.' });
+            }
+
+            // Brute-force protection: Increment attempts on failure, lock after 5 attempts
+            if (otpRow.otp_code !== code) {
+                const currentAttempts = (otpRow.attempts || 0) + 1;
+                if (currentAttempts >= 5) {
+                    await db.query('DELETE FROM otps WHERE identifier = $1', [identifier]);
+                    return res.status(401).json({ error: 'Çok fazla hatalı deneme yaptınız. Lütfen yeni bir kod isteyin.' });
+                } else {
+                    await db.query('UPDATE otps SET attempts = attempts + 1 WHERE identifier = $1', [identifier]);
+                    return res.status(401).json({ error: `Hatalı kod girdiniz. Kalan hakkınız: ${5 - currentAttempts}` });
+                }
+            }
+
+            // Successful verification: Delete OTP row
             await db.query('DELETE FROM otps WHERE identifier = $1', [identifier]);
         }
         // --- END BYPASS ---

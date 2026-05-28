@@ -938,7 +938,7 @@ app.post('/api/auth/request-otp', authLimiter, async (req, res) => {
 
         // If it's an email, and SMTP is configured, send the mail!
         if (email) {
-            await sendOtpEmail(email, otp);
+            sendOtpEmail(email, otp);
         }
 
         res.json({ success: true, message: 'OTP gönderildi (Konsol loguna bakınız).', dev_otp: otp });

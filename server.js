@@ -888,6 +888,12 @@ const transporter = nodemailer.createTransport(
           }
 );
 
+const getCleanedBrevoKey = () => {
+    const rawKey = process.env.BREVO_API_KEY || '';
+    const match = rawKey.match(/(xkeysib-[a-zA-Z0-9-]+)/);
+    return match ? match[1] : '';
+};
+
 const sendOtpEmail = async (email, otp) => {
     const emailHtml = `
         <!DOCTYPE html>
@@ -927,7 +933,8 @@ const sendOtpEmail = async (email, otp) => {
     `;
 
     // 1. Check if BREVO_API_KEY is configured (Highly recommended for Render cloud deployment)
-    if (process.env.BREVO_API_KEY) {
+    const cleanedBrevoKey = getCleanedBrevoKey();
+    if (cleanedBrevoKey) {
         try {
             console.log(`[EMAIL] Sending verification mail to: ${email} via Brevo HTTP API...`);
             const senderEmail = process.env.EMAIL_USER || 'falkasoft@gmail.com';
@@ -938,7 +945,7 @@ const sendOtpEmail = async (email, otp) => {
                 htmlContent: emailHtml
             }, {
                 headers: {
-                    'api-key': process.env.BREVO_API_KEY,
+                    'api-key': cleanedBrevoKey,
                     'Content-Type': 'application/json'
                 },
                 timeout: 10000
@@ -996,11 +1003,12 @@ app.post('/api/auth/request-otp', authLimiter, async (req, res) => {
 });
 
 app.get('/api/auth/smtp-diagnostics', async (req, res) => {
+    const cleanedBrevoKey = getCleanedBrevoKey();
     const results = {
         success: false,
         brevo: {
-            configured: !!process.env.BREVO_API_KEY,
-            key_length: process.env.BREVO_API_KEY ? process.env.BREVO_API_KEY.length : 0,
+            configured: !!cleanedBrevoKey,
+            key_length: cleanedBrevoKey ? cleanedBrevoKey.length : 0,
             status: 'NOT_TESTED'
         },
         smtp: {
@@ -1012,11 +1020,11 @@ app.get('/api/auth/smtp-diagnostics', async (req, res) => {
     };
 
     // Test Brevo if configured
-    if (process.env.BREVO_API_KEY) {
+    if (cleanedBrevoKey) {
         try {
             console.log('[DIAGNOSTICS] Verifying Brevo API Key...');
             const response = await axios.get('https://api.brevo.com/v3/smtp/templates', {
-                headers: { 'api-key': process.env.BREVO_API_KEY },
+                headers: { 'api-key': cleanedBrevoKey },
                 timeout: 5000
             });
             results.brevo.status = 'SUCCESS';

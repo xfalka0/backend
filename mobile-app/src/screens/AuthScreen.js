@@ -54,6 +54,7 @@ export default function AuthScreen({ navigation, route }) {
     const [isRegisterMode, setIsRegisterMode] = useState(false);
     const [loading, setLoading] = useState(false);
     const [alert, setAlert] = useState({ visible: false, title: '', message: '', type: 'error' });
+    const [resendCountdown, setResendCountdown] = useState(0);
 
     const sheetY = useSharedValue(height);
 
@@ -75,6 +76,18 @@ export default function AuthScreen({ navigation, route }) {
             handleGoogleLogin();
         }
     }, []);
+
+    useEffect(() => {
+        let interval = null;
+        if (resendCountdown > 0) {
+            interval = setInterval(() => {
+                setResendCountdown(prev => prev - 1);
+            }, 1000);
+        } else {
+            clearInterval(interval);
+        }
+        return () => clearInterval(interval);
+    }, [resendCountdown]);
 
     const animatedSheetStyle = useAnimatedStyle(() => ({
         transform: [{ translateY: sheetY.value }],
@@ -153,7 +166,9 @@ export default function AuthScreen({ navigation, route }) {
             const res = await axios.post(`${API_URL}/auth/request-otp`, payload);
 
             if (res.data.success) {
+                setOtp('');
                 setStep(2);
+                setResendCountdown(60); // Start 1-minute countdown
             }
         } catch (error) {
             setAlert({ visible: true, title: 'Hata', message: error.response?.data?.error || 'Kod gönderilemedi.', type: 'error' });
@@ -162,13 +177,17 @@ export default function AuthScreen({ navigation, route }) {
         }
     };
 
-    const handleVerifyOtp = async () => {
-        if (otp.length < 6) return;
+    const handleVerifyOtp = async (codeToVerify) => {
+        const verifyCode = codeToVerify || otp;
+        if (!verifyCode || verifyCode.length < 6) {
+            setAlert({ visible: true, title: 'Hata', message: 'Lütfen 6 haneli doğrulama kodunu girin.', type: 'error' });
+            return;
+        }
 
         setLoading(true);
         try {
             const deviceId = await getDeviceId();
-            const payload = authMethod === 'email' ? { email, otp, deviceId } : { phone, otp, deviceId };
+            const payload = authMethod === 'email' ? { email, otp: verifyCode, deviceId } : { phone, otp: verifyCode, deviceId };
             const res = await axios.post(`${API_URL}/auth/verify-otp`, payload);
 
             if (res.data.user) {
@@ -372,16 +391,42 @@ export default function AuthScreen({ navigation, route }) {
                 onChangeText={(val) => {
                     setOtp(val);
                     if (val.length === 6) {
-                        // Auto verify when 6 chars entered
-                        setTimeout(() => handleVerifyOtp(), 100);
+                        // Auto-submit immediately using latest string to bypass state delay
+                        handleVerifyOtp(val);
                     }
                 }}
             />
 
-            {loading && <ActivityIndicator size="large" color="#8b5cf6" style={{ marginTop: 20 }} />}
+            {loading && <ActivityIndicator size="large" color="#8b5cf6" style={{ marginTop: 15 }} />}
 
-            <TouchableOpacity style={styles.resendButton} onPress={handleRequestOtp}>
-                <Text style={styles.resendText}>Kodu tekrar gönder</Text>
+            <WelcomeButton
+                title="DEVAM ET"
+                variant="gradient"
+                onPress={() => handleVerifyOtp()}
+                loading={loading}
+                style={{ marginTop: 25 }}
+            />
+
+            <WelcomeButton
+                title="E-POSTAYI DEĞİŞTİR"
+                variant="outline"
+                onPress={() => {
+                    setOtp('');
+                    setStep(1);
+                }}
+                style={{ marginTop: 10 }}
+            />
+
+            <TouchableOpacity 
+                style={[styles.resendButton, resendCountdown > 0 && { opacity: 0.5 }, { marginTop: 20 }]} 
+                onPress={handleRequestOtp}
+                disabled={resendCountdown > 0 || loading}
+            >
+                <Text style={styles.resendText}>
+                    {resendCountdown > 0 
+                        ? `Kodu tekrar gönder (${resendCountdown}s)` 
+                        : 'Kodu tekrar gönder'}
+                </Text>
             </TouchableOpacity>
         </Animated.View>
     );

@@ -73,7 +73,7 @@ export default function WelcomeScreen({ navigation }) {
     const insets = useSafeAreaInsets();
     const bubbleY = useSharedValue(0);
     const [loading, setLoading] = useState(false);
-    const [onlineCount, setOnlineCount] = useState(72);
+    const [onlineCount, setOnlineCount] = useState(142);
 
     useEffect(() => {
         console.log('--- WelcomeScreen Mounted ---');
@@ -98,7 +98,11 @@ export default function WelcomeScreen({ navigation }) {
         }
 
         const interval = setInterval(() => {
-            setOnlineCount(prev => prev + (Math.floor(Math.random() * 5) - 2));
+            setOnlineCount(prev => {
+                const change = Math.floor(Math.random() * 5) - 2;
+                const newCount = prev + change;
+                return newCount < 120 ? 120 : (newCount > 300 ? 300 : newCount);
+            });
         }, 3000);
 
         return () => {
@@ -211,17 +215,17 @@ export default function WelcomeScreen({ navigation }) {
                         </Animated.View>
                     </Animated.View>
 
-                    <View style={styles.bottomSection}>
+                    <View style={[styles.bottomSection, { transform: [{ translateY: -40 }] }]}>
                         <Animated.View
                             entering={FadeInUp.delay(500).springify()}
-                            style={{ marginTop: -100, marginBottom: 20 }}
+                            style={{ width: '100%', alignItems: 'center', marginBottom: 10 }}
                         >
                             <Text style={styles.title}>Yeni insanlarla tanış</Text>
                         </Animated.View>
 
                         <Animated.View
                             entering={FadeInUp.delay(650).springify()}
-                            style={{ marginTop: -30 }}
+                            style={{ width: '100%', alignItems: 'center', marginBottom: 25 }}
                         >
                             <Text style={styles.subtitle}>Sohbet et, bağlan, eğlen</Text>
                         </Animated.View>
@@ -229,7 +233,7 @@ export default function WelcomeScreen({ navigation }) {
                         <View style={styles.buttonContainer}>
                             <Animated.View
                                 entering={FadeInUp.delay(800).springify()}
-                                style={{ width: '90%', alignItems: 'center', marginTop: 50 }}
+                                style={{ width: '90%', alignItems: 'center', marginTop: 0 }}
                             >
                                 <WelcomeButton
                                     title="Google ile devam et"
@@ -243,14 +247,16 @@ export default function WelcomeScreen({ navigation }) {
 
                             <Animated.View
                                 entering={FadeInUp.delay(1000).springify()}
-                                style={{ width: '90%', alignItems: 'center', marginTop: 20 }}
+                                style={{ width: '90%', alignItems: 'center', marginTop: 12 }}
                             >
-                                <TouchableOpacity
+                                <WelcomeButton
+                                    title="E-posta ile devam et"
+                                    icon="mail"
                                     onPress={() => navigation.navigate('Auth', { mode: 'email' })}
-                                    style={styles.emailButton}
-                                >
-                                    <Text style={styles.emailButtonText}>E-posta ile devam et</Text>
-                                </TouchableOpacity>
+                                    loading={loading}
+                                    variant="gradient"
+                                    gradient={['#8b5cf6', '#ec4899']}
+                                />
                             </Animated.View>
 
                             <Animated.View entering={FadeInUp.delay(1000).springify()} style={styles.footerLinks}>

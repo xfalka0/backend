@@ -215,21 +215,25 @@ export default function WelcomeScreen({ navigation }) {
                         </Animated.View>
                     </Animated.View>
 
-                    <View style={[styles.bottomSection, { transform: [{ translateY: -40 }] }]}>
+                    {/* Middle Section (Vertically Centered Title & Subtitle) */}
+                    <View style={styles.middleSection}>
                         <Animated.View
                             entering={FadeInUp.delay(500).springify()}
-                            style={{ width: '100%', alignItems: 'center', marginBottom: 10 }}
+                            style={{ width: '100%', alignItems: 'center' }}
                         >
                             <Text style={styles.title}>Yeni insanlarla tanış</Text>
                         </Animated.View>
 
                         <Animated.View
                             entering={FadeInUp.delay(650).springify()}
-                            style={{ width: '100%', alignItems: 'center', marginBottom: 25 }}
+                            style={{ width: '100%', alignItems: 'center', marginTop: 10 }}
                         >
                             <Text style={styles.subtitle}>Sohbet et, bağlan, eğlen</Text>
                         </Animated.View>
+                    </View>
 
+                    {/* Bottom Section (Buttons & Footer Links) */}
+                    <View style={styles.bottomSection}>
                         <View style={styles.buttonContainer}>
                             <Animated.View
                                 entering={FadeInUp.delay(800).springify()}
@@ -258,33 +262,33 @@ export default function WelcomeScreen({ navigation }) {
                                     gradient={['#8b5cf6', '#ec4899']}
                                 />
                             </Animated.View>
-
-                            <Animated.View entering={FadeInUp.delay(1000).springify()} style={styles.footerLinks}>
-                                <Text style={styles.footerText}>
-                                    Devam ederek{' '}
-                                    <Text
-                                        style={styles.linkText}
-                                        onPress={() => {
-                                            console.log('--- Navigating to Terms ---');
-                                            navigation.navigate('Legal', { type: 'terms' });
-                                        }}
-                                    >
-                                        Şartlar
-                                    </Text>
-                                    {' ve '}
-                                    <Text
-                                        style={styles.linkText}
-                                        onPress={() => {
-                                            console.log('--- Navigating to Privacy ---');
-                                            navigation.navigate('Legal', { type: 'privacy' });
-                                        }}
-                                    >
-                                        Gizlilik
-                                    </Text>
-                                    {' Politikasını kabul etmiş olursun.'}
-                                </Text>
-                            </Animated.View>
                         </View>
+
+                        <Animated.View entering={FadeInUp.delay(1000).springify()} style={styles.footerLinks}>
+                            <Text style={styles.footerText}>
+                                Devam ederek{' '}
+                                <Text
+                                    style={styles.linkText}
+                                    onPress={() => {
+                                        console.log('--- Navigating to Terms ---');
+                                        navigation.navigate('Legal', { type: 'terms' });
+                                    }}
+                                >
+                                    Şartlar
+                                </Text>
+                                {' ve '}
+                                <Text
+                                    style={styles.linkText}
+                                    onPress={() => {
+                                        console.log('--- Navigating to Privacy ---');
+                                        navigation.navigate('Legal', { type: 'privacy' });
+                                    }}
+                                >
+                                    Gizlilik
+                                </Text>
+                                {' Politikasını kabul etmiş olursun.'}
+                            </Text>
+                        </Animated.View>
                     </View>
                 </View>
             </SafeAreaView>
@@ -362,6 +366,14 @@ const styles = StyleSheet.create({
         color: 'white',
         fontSize: 13,
         fontWeight: '600',
+        fontFamily: 'Outfit_500Medium',
+    },
+    middleSection: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        width: '100%',
+        marginVertical: 20,
     },
     bottomSection: {
         width: '100%',
@@ -370,22 +382,24 @@ const styles = StyleSheet.create({
     title: {
         fontSize: 34,
         fontWeight: '800',
+        fontFamily: 'Outfit_800ExtraBold',
         color: 'white',
         textAlign: 'center',
-        marginBottom: 12,
+        marginBottom: 8,
         letterSpacing: -0.5,
     },
     subtitle: {
         fontSize: 18,
         color: 'rgba(255,255,255,0.7)',
         textAlign: 'center',
-        marginBottom: 40,
+        fontFamily: 'Outfit_400Regular',
         fontWeight: '400',
     },
     buttonContainer: {
         width: '100%',
         alignItems: 'center',
         justifyContent: 'center',
+        transform: [{ translateY: -50 }],
     },
     footerLinks: {
         marginTop: 40,

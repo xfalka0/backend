@@ -59,7 +59,7 @@ export default function AuthScreen({ navigation, route }) {
     const sheetY = useSharedValue(height);
 
     useEffect(() => {
-        sheetY.value = withSpring(height * 0.35, { damping: 15 });
+        sheetY.value = withSpring(height * 0.05, { damping: 15 });
 
         GoogleSignin.configure({
             webClientId: '46669084263-drv76chuoahgvfitcdmctvvqm3cbudl7.apps.googleusercontent.com',
@@ -292,6 +292,19 @@ export default function AuthScreen({ navigation, route }) {
         }
     };
 
+    const handleDomainSuggestion = (domain) => {
+        if (!email) {
+            setEmail(domain);
+            return;
+        }
+        if (email.includes('@')) {
+            const parts = email.split('@');
+            setEmail(parts[0] + domain);
+        } else {
+            setEmail(email + domain);
+        }
+    };
+
     const resetAuth = () => {
         if (navigation.canGoBack()) {
             navigation.goBack();
@@ -366,6 +379,20 @@ export default function AuthScreen({ navigation, route }) {
                 />
             )}
 
+            {authMethod === 'email' && (
+                <View style={styles.suggestionRow}>
+                    {['@gmail.com', '@hotmail.com', '@outlook.com'].map((domain) => (
+                        <TouchableOpacity
+                            key={domain}
+                            style={styles.suggestionChip}
+                            onPress={() => handleDomainSuggestion(domain)}
+                        >
+                            <Text style={styles.suggestionText}>{domain}</Text>
+                        </TouchableOpacity>
+                    ))}
+                </View>
+            )}
+
             <WelcomeButton
                 title="KOD GÖNDER"
                 variant="gradient"
@@ -438,22 +465,9 @@ export default function AuthScreen({ navigation, route }) {
             <View style={styles.topSection}>
                 <FloatingProfiles />
                 <LinearGradient
-                    colors={['rgba(15, 23, 42, 0.2)', 'rgba(15, 23, 42, 0.6)']}
+                    colors={['rgba(15, 23, 42, 0.92)', 'rgba(15, 23, 42, 0.98)']}
                     style={StyleSheet.absoluteFill}
                 />
-
-                <SafeAreaView style={styles.logoContainer}>
-                    <Animated.View entering={FadeIn.delay(300)}>
-                        <View style={styles.logoCircle}>
-                            <LinearGradient
-                                colors={['#8b5cf6', '#ec4899']}
-                                style={styles.logoGradient}
-                            >
-                                <Ionicons name="heart" size={32} color="white" />
-                            </LinearGradient>
-                        </View>
-                    </Animated.View>
-                </SafeAreaView>
             </View>
 
             <Animated.View style={[styles.bottomSheet, animatedSheetStyle]}>
@@ -489,7 +503,7 @@ const styles = StyleSheet.create({
         backgroundColor: '#0f172a',
     },
     topSection: {
-        height: height * 0.45,
+        height: height * 0.15,
         width: '100%',
     },
     logoContainer: {
@@ -514,7 +528,7 @@ const styles = StyleSheet.create({
         top: 0,
         left: 0,
         right: 0,
-        height: height * 0.75,
+        height: height * 0.95,
         backgroundColor: '#0f172a',
         borderTopLeftRadius: 40,
         borderTopRightRadius: 40,
@@ -571,5 +585,31 @@ const styles = StyleSheet.create({
         fontSize: 14,
         fontWeight: '600',
         textDecorationLine: 'underline',
+    },
+    suggestionRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        width: '100%',
+        marginTop: 10,
+        marginBottom: 20,
+    },
+    suggestionChip: {
+        backgroundColor: 'rgba(255, 255, 255, 0.08)',
+        borderWidth: 1,
+        borderColor: 'rgba(255, 255, 255, 0.15)',
+        borderRadius: 18,
+        paddingHorizontal: 8,
+        paddingVertical: 8,
+        justifyContent: 'center',
+        alignItems: 'center',
+        flex: 1,
+        marginHorizontal: 4,
+    },
+    suggestionText: {
+        color: 'white',
+        fontSize: 12,
+        fontWeight: '600',
+        fontFamily: 'Outfit_500Medium',
     }
 });

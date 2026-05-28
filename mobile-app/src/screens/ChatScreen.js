@@ -67,7 +67,6 @@ export default function ChatScreen({ route, navigation }) {
     const [showReportModal, setShowReportModal] = useState(false);
     const [showGiftModal, setShowGiftModal] = useState(false);
     const { openStarterPack, handleInsufficientCoins } = useStarterPack();
-    const [showCoinModal, setShowCoinModal] = useState(false);
 
     // Track Balance for Gift Modal (Initial from route, updated via socket)
     const [currentBalance, setCurrentBalance] = useState(user.balance || 0);
@@ -352,7 +351,7 @@ export default function ChatScreen({ route, navigation }) {
 
                 if (data.code === 'INSUFFICIENT_FUNDS') {
                     // Show Coin Modal on insufficient balance error
-                    setShowCoinModal(true);
+                    handleInsufficientCoins();
                 } else {
                     const errorMsg = data.debug ? `${data.message}\n(Hata: ${data.debug})` : (data.message || 'Mesaj gönderilemedi.');
                     showAlert({ title: 'Hata', message: errorMsg, type: 'error' });
@@ -437,7 +436,7 @@ export default function ChatScreen({ route, navigation }) {
     const handleUnlockImage = async (msg) => {
         const cost = msg.unlock_cost || 50;
         if (currentBalance < cost) {
-            setShowCoinModal(true);
+            handleInsufficientCoins();
             return;
         }
 
@@ -456,7 +455,7 @@ export default function ChatScreen({ route, navigation }) {
             }
         } catch (error) {
             if (error.response?.data?.code === 'INSUFFICIENT_FUNDS') {
-                setShowCoinModal(true);
+                handleInsufficientCoins();
             } else {
                 showAlert({ title: 'Hata', message: 'Fotoğraf açılamadı.', type: 'error' });
             }

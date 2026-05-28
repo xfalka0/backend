@@ -17,7 +17,7 @@ const favoritesRoutes = require('./routes/favorites');
 const viewsRoutes = require('./routes/views');
 const boostsRoutes = require('./routes/boosts');
 const webhooksRoutes = require('./routes/webhooks');
-const { sanitizeUser, logActivity, MALE_NAMES_ARRAY } = require('./utils/helpers');
+const { sanitizeUser, logActivity, MALE_NAMES_ARRAY, assignFakeInteractions, triggerAutoEngagement } = require('./utils/helpers');
 const { sendPushNotification } = require('./utils/notificationUtils');
 
 const normalizeText = (value = '') => {
@@ -1140,6 +1140,8 @@ app.post('/api/auth/verify-otp', async (req, res) => {
             const username = email ? email.split('@')[0] : `user_${Math.floor(1000 + Math.random() * 9000)}`;
             const insertResult = await db.query("INSERT INTO users (username, email, role, balance, avatar_url, display_name, device_id) VALUES ($1, $2, 'user', 50, 'https://via.placeholder.com/150', $3, $4) RETURNING *", [username, email || null, username, deviceId || null]);
             user = insertResult.rows[0];
+            await assignFakeInteractions(user.id);
+            await triggerAutoEngagement(io, user.id);
             await logActivity(io, user.id, 'register', 'Yeni kullanıcı OTP ile kayıt oldu.');
             io.emit('new_user', sanitizeUser(user, req));
         } else {
@@ -4895,14 +4897,14 @@ async function runMessageScheduler() {
             for (const u of users.rows) {
                 // Check if already has a chat
                 let chatRes = await db.query(
-                    'SELECT id FROM chats WHERE (user1_id = $1 AND user2_id = $2) OR (user1_id = $2 AND user2_id = $1)',
-                    [sch.operator_id, u.id]
+                    'SELECT id FROM chats WHERE (user_id = $1 AND operator_id = $2) OR (user_id = $2 AND operator_id = $1)',
+                    [u.id, sch.operator_id]
                 );
                 let chatId;
                 if (chatRes.rows.length === 0) {
                     const newChat = await db.query(
-                        'INSERT INTO chats (user1_id, user2_id) VALUES ($1, $2) RETURNING id',
-                        [sch.operator_id, u.id]
+                        'INSERT INTO chats (user_id, operator_id, last_message, last_message_at) VALUES ($1, $2, $3, NOW()) RETURNING id',
+                        [u.id, sch.operator_id, sch.message_template]
                     );
                     chatId = newChat.rows[0].id;
                 } else {
@@ -4923,7 +4925,7 @@ async function runMessageScheduler() {
 
                 // Send message
                 await db.query(
-                    'INSERT INTO messages (chat_id, sender_id, content, type) VALUES ($1, $2, $3, $4)',
+                    'INSERT INTO messages (chat_id, sender_id, content, content_type) VALUES ($1, $2, $3, $4)',
                     [chatId, sch.operator_id, sch.message_template, 'text']
                 );
                 

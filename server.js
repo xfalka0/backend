@@ -1089,11 +1089,12 @@ app.get('/api/auth/smtp-diagnostics', async (req, res) => {
 });
 
 app.post('/api/auth/verify-otp', async (req, res) => {
-    const { email, phone, code, deviceId } = req.body;
+    const { email, phone, code, otp, deviceId } = req.body;
+    const finalCode = code || otp;
     const identifier = email || phone;
     try {
         // --- GOOGLE REVIEWER BYPASS ---
-        if ((email === 'test@example.com' || phone === '+10000000000') && code === '123456') {
+        if ((email === 'test@example.com' || phone === '+10000000000') && finalCode === '123456') {
             console.log('[AUTH] Google Reviewer Bypass triggered for:', identifier);
         } else {
             // Fetch OTP by identifier only to verify attempts and perform JS-level timezone safe expiration check
@@ -1112,7 +1113,7 @@ app.post('/api/auth/verify-otp', async (req, res) => {
             }
 
             // Brute-force protection: Increment attempts on failure, lock after 5 attempts
-            if (otpRow.otp_code !== code) {
+            if (otpRow.otp_code !== finalCode) {
                 const currentAttempts = (otpRow.attempts || 0) + 1;
                 if (currentAttempts >= 5) {
                     await db.query('DELETE FROM otps WHERE identifier = $1', [identifier]);

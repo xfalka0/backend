@@ -894,6 +894,27 @@ const getCleanedBrevoKey = () => {
     return match ? match[1] : '';
 };
 
+let cachedBrevoSender = null;
+const getBrevoSender = async (apiKey) => {
+    if (cachedBrevoSender) return cachedBrevoSender;
+    try {
+        console.log('[EMAIL] Fetching verified senders from Brevo...');
+        const res = await axios.get('https://api.brevo.com/v3/senders', {
+            headers: { 'api-key': apiKey },
+            timeout: 5000
+        });
+        const activeSender = res.data.senders?.find(s => s.active);
+        if (activeSender) {
+            cachedBrevoSender = { name: 'Fiva', email: activeSender.email };
+            console.log(`[EMAIL] Cached Brevo sender: ${activeSender.email}`);
+            return cachedBrevoSender;
+        }
+    } catch (err) {
+        console.error('[EMAIL] Failed to fetch Brevo senders:', err.message);
+    }
+    return { name: 'Fiva', email: process.env.EMAIL_USER || 'fdnsmn00@gmail.com' };
+};
+
 const sendOtpEmail = async (email, otp) => {
     const emailHtml = `
         <!DOCTYPE html>
@@ -937,9 +958,9 @@ const sendOtpEmail = async (email, otp) => {
     if (cleanedBrevoKey) {
         try {
             console.log(`[EMAIL] Sending verification mail to: ${email} via Brevo HTTP API...`);
-            const senderEmail = process.env.EMAIL_USER || 'falkasoft@gmail.com';
+            const sender = await getBrevoSender(cleanedBrevoKey);
             const response = await axios.post('https://api.brevo.com/v3/smtp/email', {
-                sender: { name: 'Fiva', email: senderEmail },
+                sender: sender,
                 to: [{ email: email }],
                 subject: 'Fiva Giriş Kodu',
                 htmlContent: emailHtml

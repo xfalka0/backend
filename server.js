@@ -858,15 +858,25 @@ const authLimiter = rateLimit({
 // --- SMTP Email Setup ---
 const nodemailer = require('nodemailer');
 
-const transporter = nodemailer.createTransport({
-    host: process.env.SMTP_HOST || 'smtp.gmail.com',
-    port: parseInt(process.env.SMTP_PORT, 10) || 465,
-    secure: process.env.SMTP_SECURE !== 'false', // true for 465, false for other ports
-    auth: {
-        user: process.env.EMAIL_USER || '',
-        pass: process.env.EMAIL_PASS || ''
-    }
-});
+const transporter = nodemailer.createTransport(
+    process.env.SMTP_HOST 
+        ? {
+            host: process.env.SMTP_HOST,
+            port: parseInt(process.env.SMTP_PORT, 10) || 465,
+            secure: process.env.SMTP_SECURE !== 'false',
+            auth: {
+                user: process.env.EMAIL_USER || '',
+                pass: process.env.EMAIL_PASS || ''
+            }
+          }
+        : {
+            service: 'gmail',
+            auth: {
+                user: process.env.EMAIL_USER || '',
+                pass: process.env.EMAIL_PASS || ''
+            }
+          }
+);
 
 const sendOtpEmail = async (email, otp) => {
     if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {

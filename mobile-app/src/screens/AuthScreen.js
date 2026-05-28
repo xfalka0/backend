@@ -154,9 +154,6 @@ export default function AuthScreen({ navigation, route }) {
 
             if (res.data.success) {
                 setStep(2);
-                if (res.data.dev_otp) {
-                    setAlert({ visible: true, title: 'DEV MODU', message: `Kodunuz: ${res.data.dev_otp}`, type: 'info' });
-                }
             }
         } catch (error) {
             setAlert({ visible: true, title: 'Hata', message: error.response?.data?.error || 'Kod gönderilemedi.', type: 'error' });

@@ -166,7 +166,7 @@ export default function SwipeDeck({ data = [], onSwipeLeft, onSwipeRight, onCard
                         )}
                         {item.is_online && <View style={styles.onlineDot} />}
                     </View>
-                    <Text style={styles.jobText}>{item.job || 'Kullanıcı'}</Text>
+                    {item.job ? <Text style={styles.jobText}>{item.job}</Text> : null}
                 </View>
 
                 {/* LIKE Stamp */}

@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { View, Text, FlatList, Image, TouchableOpacity, StyleSheet, Dimensions, ScrollView, Alert, TextInput, Modal, Pressable, ActivityIndicator, Linking } from 'react-native';
+import { View, Text, FlatList, Image, TouchableOpacity, StyleSheet, Dimensions, ScrollView, Alert, TextInput, Modal, Pressable, ActivityIndicator, Linking, Platform, StatusBar } from 'react-native';
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -8,1583 +8,421 @@ import io from 'socket.io-client';
 import { useFocusEffect } from '@react-navigation/native';
 import { API_URL, SOCKET_URL } from '../config';
 import { useTheme } from '../contexts/ThemeContext';
-import { Motion } from '../components/motion/MotionSystem';
 import VipFrame from '../components/ui/VipFrame';
 import HiButton from '../components/ui/HiButton';
-import PromoBanner from '../components/ui/PromoBanner';
 import StoryRing from '../components/animated/StoryRing';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { InteractionManager, Platform } from 'react-native';
-import { FadeIn } from 'react-native-reanimated';
-import DestinyMatchModal from '../components/DestinyMatchModal';
-import DestinyHero from '../components/DestinyHero';
 import GlassCard from '../components/ui/GlassCard';
 import SkeletonCard from '../components/ui/SkeletonCard';
-import SwipeDeck from '../components/discovery/SwipeDeck';
-import HeroSection from '../components/hero/HeroSection';
-import PremiumBackground from '../components/animated/PremiumBackground';
-import PromotedProfiles from '../components/home/PromotedProfiles';
-import ModernAlert from '../components/ui/ModernAlert';
-import FloatingParticles from '../components/hero/FloatingParticles';
+import DestinyHero from '../components/DestinyHero';
 import { resolveImageUrl } from '../utils/imageUtils';
-import InsufficientCoinsModal from '../components/InsufficientCoinsModal';
-
-import Animated, {
-    useSharedValue,
-    useAnimatedStyle,
-    useAnimatedScrollHandler,
-    interpolate,
-    withRepeat,
-    withSequence,
-    withTiming,
-    Extrapolate
-} from 'react-native-reanimated';
 
 const { width } = Dimensions.get('window');
-const BANNER_WIDTH = width * 0.85;
-const BANNER_SPACER = (width - BANNER_WIDTH) / 2;
-
 let lastProfileTap = 0;
-
-const turkishToLower = (str) => {
-    if (!str) return '';
-    return str.replace(/İ/g, 'i').replace(/I/g, 'ı').toLowerCase();
-};
 
 const normalizeText = (value = '') => {
     if (!value) return '';
     let text = value.toString();
-    
-    // Manual Turkish character replacement for maximum reliability
-    text = text.replace(/İ/g, 'i')
-               .replace(/I/g, 'ı')
-               .replace(/ı/g, 'i')
-               .replace(/Ş/g, 's')
-               .replace(/ş/g, 's')
-               .replace(/Ğ/g, 'g')
-               .replace(/ğ/g, 'g')
-               .replace(/Ü/g, 'u')
-               .replace(/ü/g, 'u')
-               .replace(/Ö/g, 'o')
-               .replace(/ö/g, 'o')
-               .replace(/Ç/g, 'c')
-               .replace(/ç/g, 'c');
-
-    return text.toLowerCase()
-               .normalize('NFD')
-               .replace(/[\u0300-\u036f]/g, '')
-               .replace(/[^a-z0-9\s]/g, ' ')
-               .replace(/\s+/g, ' ')
-               .trim();
+    text = text.replace(/İ/g, 'i').replace(/I/g, 'ı').replace(/ı/g, 'i').replace(/Ş/g, 's').replace(/ş/g, 's')
+               .replace(/Ğ/g, 'g').replace(/ğ/g, 'g').replace(/Ü/g, 'u').replace(/ü/g, 'u')
+               .replace(/Ö/g, 'o').replace(/ö/g, 'o').replace(/Ç/g, 'c').replace(/ç/g, 'c');
+    return text.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
 };
 
 const MALE_NAME_HINTS = new Set([
-    'abdurrahman', 'abdullah', 'abdulkadir', 'abdulkerim', 'adabi', 'adem', 'adnan',
-    'afsin', 'affiliate', 'akin', 'ahmet', 'ali', 'alper', 'alperen', 'anil', 'arda',
-    'arif', 'atilla', 'aziz', 'ayhan', 'aykut', 'baris', 'batuhan', 'bayram', 'behcet',
-    'berat', 'berk', 'berkay', 'bekir', 'bora', 'bulent', 'burak', 'cafer',
-    'cagatay', 'cavit', 'celal', 'cem', 'cemal', 'cevat', 'cihan', 'cengiz', 'cumali',
-    'davut', 'dogan', 'dogukan', 'dundar', 'ekrem', 'emir', 'emircan', 'emrah',
-    'emre', 'enes', 'enver', 'eray', 'ercan', 'erdem', 'erdogan', 'eren', 'erhan',
-    'erol', 'ersin', 'faruk', 'fatih', 'ferhat', 'fikret', 'fuat', 'furkan',
-    'gencay', 'gokhan', 'gokay', 'goksel', 'gursel', 'hakan', 'halil', 'hamza',
-    'harun', 'hasan', 'haydar', 'hikmet', 'huseyin', 'ibrahim', 'ihsan', 'ilhan',
-    'isa', 'ismail', 'ismet', 'kadir', 'kaan', 'kamil', 'karadayi', 'kazim',
-    'kemal', 'kerem', 'kiziltas', 'koksal', 'koray', 'levent', 'lokman', 'mahmut',
-    'mehmet', 'mert', 'mertcan', 'mesut', 'metehan', 'metin', 'mgelvg', 'muhammed',
-    'muhammet', 'murat', 'mustafa', 'muzaffer', 'necati', 'necip', 'nevzat', 'nihat',
-    'nuri', 'nusret', 'nurullah', 'okan', 'okten', 'omer', 'onur', 'orhan', 'osman',
-    'ozan', 'ozgur', 'polat', 'ramadan', 'ramazan', 'rasim', 'recep', 'ridvan',
-    'riza', 'sabri', 'sadik', 'sahin', 'sait', 'salih', 'sami', 'samet', 'savas',
-    'sedat', 'sefa', 'selcuk', 'selim', 'semih', 'serdar', 'serdal', 'serhat',
-    'sevket', 'sinan', 'suat', 'sultan', 'suleyman', 'taha', 'tamer', 'taner',
-    'tarik', 'tayyip', 'tekin', 'tolga', 'tuncay', 'turan', 'ugur', 'umut', 'ummet',
-    'veysel', 'volkan', 'yakup', 'yalcin', 'yasin', 'yasar', 'yavuz', 'yigit',
-    'yilmaz', 'yunus', 'yusuf', 'zafer', 'zeki', 'izzet', 'bilal', 'faysal', 'alpaslan',
-    'sefer', 'celil', 'suha', 'dadas', 'abuzer', 'agah', 'akif', 'asim', 'aslan',
-    'atac', 'aybars', 'ayberk', 'aydemir', 'aydin', 'ayhan', 'aytekin', 'aziz',
-    'azmi', 'bahadir', 'bahtiyar', 'baki', 'balkan', 'bamsi', 'barbaros', 'baskin',
-    'baskurt', 'basri', 'battal', 'bedir', 'bedirhan', 'bedri', 'behzad', 'bera',
-    'berkan', 'besim', 'beyani', 'birol', 'boran', 'boyzan', 'bozkurt', 'bugra',
-    'bulut', 'bunyamin', 'burhan', 'burhanettin', 'cabbar', 'cahit', 'can', 'caner',
-    'canip', 'canpolat', 'celalettin', 'cemali', 'cemil', 'cemsit', 'cenk', 'cevahir',
-    'cevdet', 'cevher', 'cezmi', 'cihangir', 'civan', 'coskun', 'cuma', 'cumhur',
-    'cuneyt', 'daghan', 'dalay', 'danis', 'demir', 'demirhan', 'dervis', 'devran',
-    'devrim', 'dilaver', 'dinc', 'dinger', 'diren', 'dogu', 'dogus', 'duran',
-    'dursun', 'duru', 'ebu', 'ebubekir', 'ecevit', 'ediz', 'efe', 'efecan',
-    'efendi', 'eflatun', 'egemen', 'ege', 'ender', 'engin', 'enis', 'ensar',
-    'eralp', 'erbak', 'erden', 'ergin', 'ergun', 'erkin', 'erkut', 'ertan',
-    'ertekin', 'ertugrul', 'esat', 'esref', 'evren', 'eymen', 'eyup', 'fahrettin',
-    'fahri', 'faik', 'fahriddin', 'fazil', 'fehmi', 'fehim', 'ferit', 'ferdi',
-    'feridun', 'ferman', 'fethi', 'fevzi', 'feyyaz', 'feyzullah', 'fikri', 'galip',
-    'gani', 'gazi', 'gediz', 'gencer', 'giyas', 'giyasettin', 'gokalp', 'gokcan',
-    'gokdeniz', 'gokmen', 'gokturk', 'gorkem', 'guven', 'guney', 'guray', 'gurbuz',
-    'gurkan', 'hakki', 'haldun', 'halim', 'halis', 'halit', 'haluk', 'hamdi',
-    'hamit', 'hasbi', 'hasim', 'hatay', 'hayati', 'hayrettin', 'hayri', 'hazim',
-    'hazrat', 'hidayet', 'hilmi', 'himmet', 'hulusi', 'husnu', 'husrev', 'idris',
-    'ikbal', 'ilhami', 'ilker', 'ilter', 'ilyas', 'imdat', 'inan', 'inanc', 'kaan',
-    'kadri', 'kasim', 'kaya', 'kayahan', 'kemalettin', 'kenan', 'koray', 'korkut',
-    'koksal', 'kudret', 'kurban', 'kursat', 'kutay', 'lutfi', 'lutfullah', 'mahir',
-    'mahzun', 'malkoc', 'mansur', 'mazhar', 'mazin', 'mecit', 'medeni', 'melih',
-    'memduh', 'menderes', 'menduh', 'menter', 'merter', 'mete', 'mithat', 'muammer',
-    'muaz', 'muharrem', 'muhlis', 'muhsin', 'muhtar', 'muhyiddin', 'mujdat',
-    'mukremin', 'mumin', 'munir', 'murtaza', 'musa', 'mutlu', 'muslum', 'nabi',
-    'naci', 'nadir', 'nafi', 'nail', 'naim', 'namik', 'nasir', 'nasuh', 'nazif',
-    'nazim', 'nazmi', 'nebi', 'necdet', 'necmettin', 'necmi', 'nedim', 'nejat',
-    'neset', 'nezat', 'nezih', 'niyazi', 'nizam', 'nizamettin', 'nuh', 'numan',
-    'nurettin', 'ogun', 'oguz', 'oguzhan', 'oktay', 'okyanus', 'olcay', 'omerfaruk',
-    'onder', 'orhun', 'ozcan', 'ozdemir', 'ozer', 'ozhan', 'ozkan', 'paksoy',
-    'pala', 'pamir', 'parlan', 'pars', 'pasa', 'peyami', 'polat', 'poyraz', 'rafey',
-    'rafet', 'rahim', 'rahmi', 'raif', 'ramiz', 'rasit', 'rauf', 'refik', 'reha',
-    'remzi', 'resul', 'resat', 'resit', 'ridvan', 'rifat', 'rifki', 'ruchan',
-    'rustem', 'rustu', 'sadi', 'sadullah', 'safa', 'saffet', 'sahir', 'sakip',
-    'salim', 'samih', 'sener', 'sermet', 'sertac', 'servet', 'seyfi', 'seyfullah',
-    'seyit', 'sezai', 'sezer', 'sezgin', 'sitki', 'soner', 'subhi', 'suphi',
-    'sumer', 'sungur', 'saban', 'sadi', 'safak', 'sahin', 'sakir', 'samil',
-    'sanal', 'sansal', 'sayan', 'sefik', 'semsi', 'senol', 'serafettin', 'serif',
-    'sevki', 'sih', 'sinasi', 'sukru', 'taha', 'tahir', 'tahsin', 'talat', 'talha',
-    'talip', 'tanju', 'tarkan', 'tayfun', 'tayfur', 'taylan', 'tayyar', 'temel',
-    'teoman', 'tevfik', 'tunc', 'tuncer', 'turgay', 'turgut', 'turkay', 'turker',
-    'tursun', 'ufuk', 'ugur', 'ulas', 'ulvi', 'umit', 'unal', 'unalmis', 'utku',
-    'uysal', 'uzun', 'uzer', 'vakas', 'vahit', 'varol', 'vedat', 'vefa', 'vehbi',
-    'vural', 'yalcin', 'yaman', 'yekta', 'yener', 'yetkin', 'yucel', 'yuksel',
-    'yup', 'yusa', 'zahit', 'zekai', 'zekeriya', 'zeynel', 'zeynelabidin', 'zihni',
-    'ziya', 'zorlu', 'zulfu', 'zulkuf'
+    'abdurrahman', 'abdullah', 'abdulkadir', 'abdulkerim', 'adem', 'adnan', 'ahmet', 'ali', 'alper', 'anil', 'arda',
+    'arif', 'atilla', 'aziz', 'ayhan', 'aykut', 'baris', 'batuhan', 'bayram', 'berat', 'berk', 'berkay', 'bekir',
+    'bora', 'bulent', 'burak', 'cafer', 'cagatay', 'celal', 'cem', 'cemal', 'cihan', 'cengiz', 'davut', 'dogan',
+    'dogukan', 'ekrem', 'emir', 'emrah', 'emre', 'enes', 'enver', 'eray', 'ercan', 'erdem', 'erdogan', 'eren',
+    'erhan', 'erol', 'ersin', 'faruk', 'fatih', 'ferhat', 'fikret', 'fuat', 'furkan', 'gokhan', 'hakan', 'halil',
+    'hamza', 'harun', 'hasan', 'haydar', 'huseyin', 'ibrahim', 'ihsan', 'ilhan', 'isa', 'ismail', 'ismet', 'kadir',
+    'kaan', 'kamil', 'kazim', 'kemal', 'kerem', 'koray', 'levent', 'mahmut', 'mehmet', 'mert', 'mesut', 'metin',
+    'muhammed', 'muhammet', 'murat', 'mustafa', 'muzaffer', 'necati', 'necip', 'nihat', 'nuri', 'nusret', 'okan',
+    'omer', 'onur', 'orhan', 'osman', 'ozan', 'ozgur', 'polat', 'ramazan', 'recep', 'ridvan', 'riza', 'sabri',
+    'sahin', 'sait', 'salih', 'sami', 'samet', 'savas', 'sedat', 'sefa', 'selcuk', 'selim', 'semih', 'serdar',
+    'serhat', 'sinan', 'suat', 'suleyman', 'taha', 'tamer', 'taner', 'tarik', 'tayfun', 'taylan', 'temel', 'tolga',
+    'tuncay', 'turgut', 'ufuk', 'ugur', 'umit', 'umut', 'utku', 'uzay', 'vahit', 'velat', 'veli', 'volkan', 'yahya',
+    'yakup', 'yasin', 'yavuz', 'yunus', 'yusuf', 'zafer', 'zeki', 'ziya'
 ]);
 
-const getGenderKey = (gender) => {
-    const raw = (gender || '').toString().trim().toLowerCase();
-    if (raw === 'coin_bayisi') return 'coin_bayisi';
-
-    const value = normalizeText(raw).replace(/\s+/g, '');
-    if (value === 'erkek' || value === 'male' || value === 'man') return 'erkek';
-    if (value === 'kadin' || value === 'female' || value === 'woman') return 'kadin';
-    return '';
-};
-
-const hasMaleNameHint = (profile = {}) => {
-    const text = normalizeText([profile.name, profile.display_name, profile.username].filter(Boolean).join(' '));
-    if (!text) return false;
-
-    return text.split(' ').some(part => {
-        const token = part.replace(/\d+$/g, '');
-        if (!token) return false;
-        return MALE_NAME_HINTS.has(token);
-    });
-};
-
 const getProfileGender = (profile = {}) => {
-    const rawGender = getGenderKey(profile.gender);
-    if (rawGender === 'coin_bayisi') return rawGender;
-    if (hasMaleNameHint(profile)) return 'erkek';
-    return rawGender;
+    const raw = (profile.gender || '').toString().toLowerCase();
+    if (raw.includes('bayi')) return 'coin_bayisi';
+    const name = normalizeText(profile.name || '');
+    if (MALE_NAME_HINTS.has(name.split(' ')[0])) return 'erkek';
+    if (raw.includes('erkek') || raw.includes('male')) return 'erkek';
+    return 'kadin';
 };
 
-const getAllowedGenderParam = (currentUser = {}, requestedGender = 'all') => {
-    const userGender = getProfileGender(currentUser) || 'erkek';
-    const opposite = userGender === 'kadin' ? 'male' : 'female';
-    return requestedGender === opposite ? requestedGender : opposite;
-};
-
-const filterProfilesForCurrentUser = (profiles = [], currentUser = {}, requestedGender = 'all') => {
-    const allowedGender = getAllowedGenderParam(currentUser, requestedGender);
-    const targetGender = allowedGender === 'male' ? 'erkek' : 'kadin';
-
-    return profiles.filter(profile => {
-        const profileGender = getProfileGender(profile);
-        const isDealerOrAdmin = profileGender === 'coin_bayisi' || profile.role === 'admin';
-        return profileGender === targetGender || isDealerOrAdmin;
-    });
-};
-
-const getFilterGenderOptions = (currentUser = {}) => {
-    const allowedGender = getAllowedGenderParam(currentUser, 'all');
-    return ['all', allowedGender];
-};
-
-const FallbackImage = ({ url, style, theme }) => {
-    const [hasError, setHasError] = useState(false);
-
-    useEffect(() => {
-        setHasError(false);
-    }, [url]);
-
-    if (hasError || !url) {
-        return (
-            <View style={[style, { alignItems: 'center', justifyContent: 'center' }]}>
-                <Ionicons name="image-outline" size={24} color={theme?.colors?.textSecondary || 'rgba(255,255,255,0.3)'} />
-            </View>
-        );
-    }
+const OperatorItem = React.memo(({ item, navigation, user, theme, onHiPress }) => {
+    const profileGender = getProfileGender(item);
+    const handleLocalHiPress = React.useCallback(() => {
+        if (onHiPress) onHiPress(item);
+    }, [onHiPress, item]);
 
     return (
-        <Image
-            key={url}
-            source={{ uri: url }}
-            style={style}
-            onError={() => setHasError(true)}
-        />
-    );
-};
-
-const OperatorItem = React.memo(({ item, navigation, user, theme, themeMode, balance, onHiPress }) => (
-
-    <View>
         <GlassCard style={styles.userCard} intensity={40}>
             <View style={styles.cardHeader}>
                 <TouchableOpacity
-                    activeOpacity={0.7}
-                    delayPressIn={0}
                     style={{ flexDirection: 'row', flex: 1, alignItems: 'center' }}
-                    onPress={() => {
-                        const now = Date.now();
-                        if (now - lastProfileTap < 800) return;
-                        lastProfileTap = now;
-                        navigation.navigate('OperatorProfile', { operator: item, user });
-                    }}
+                    onPress={() => navigation.navigate('OperatorProfile', { operator: item, user })}
                 >
                     <View style={styles.avatarContainer}>
-                        <StoryRing hasNewStory={!!item.has_active_story} size={62}>
-                            <VipFrame level={item.gender === 'coin_bayisi' ? 'dealer' : (item.vip_level || 0)} avatar={item.avatar_url} size={58} isStatic={true} />
+                        <StoryRing hasNewStory={!!item.has_active_story} size={54}>
+                            <VipFrame level={profileGender === 'coin_bayisi' ? 'dealer' : (item.vip_level || 0)} avatar={item.avatar_url} size={50} isStatic={true} />
                         </StoryRing>
                         {item.is_online && <View style={styles.onlineBadge} />}
                     </View>
                     <View style={styles.infoContainer}>
                         <View style={styles.nameRow}>
-                            <Text
-                                style={[styles.name, { color: theme.colors.text, flexShrink: 1 }]}
-                                numberOfLines={1}
-                                ellipsizeMode="tail"
-                                onLongPress={() => {
-                                    const msg = `ID: ${item.id}\nAvatar: ${item.avatar_url}\nPhotos: ${item.photos?.length || 0}`;
-                                    Alert.alert("Profil Debug", msg);
-                                }}
-                            >
-                                {item.name}
-                            </Text>
+                            <Text style={[styles.name, { color: theme.colors.text }]} numberOfLines={1}>{item.name}</Text>
                             {item.vip_level > 0 && (
-                                <LinearGradient
-                                    colors={item.vip_level >= 6 ? ['#1a1a1b', '#000000'] : item.vip_level >= 4 ? ['#fbbf24', '#7c3aed'] : ['#a855f7', '#ec4899']}
-                                    start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
-                                    style={styles.premiumVipBadge}
-                                >
-                                    <Ionicons name="star" size={10} color="#fff" />
+                                <LinearGradient colors={['#a855f7', '#ec4899']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.premiumVipBadge}>
                                     <Text style={styles.premiumVipText}>VIP {item.vip_level}</Text>
                                 </LinearGradient>
                             )}
-                            <View style={styles.verifiedBadge}><Ionicons name="checkmark-circle" size={16} color="#3b82f6" /></View>
+                            <Ionicons name="checkmark-circle" size={16} color="#3b82f6" />
                         </View>
-                        <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 2 }}>
-                            <Text style={[styles.jobText, { color: theme.colors.textSecondary }]} numberOfLines={1}>{item.job || 'Öğrenci'}</Text>
+                        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                            {item.job ? (
+                                <Text style={[styles.jobText, { color: theme.colors.textSecondary }]}>{item.job}</Text>
+                            ) : null}
                             {item.age && (
-                                <View style={[styles.ageBadge, { backgroundColor: getProfileGender(item) === 'erkek' ? '#3b82f6' : getProfileGender(item) === 'kadin' ? '#f472b6' : '#64748b' }]}>
-                                    <Ionicons name={getProfileGender(item) === 'erkek' ? "male" : getProfileGender(item) === 'kadin' ? "female" : "person"} size={10} color="white" />
+                                <View style={[styles.ageBadge, { backgroundColor: profileGender === 'erkek' ? '#3b82f6' : '#f472b6' }]}>
+                                    <Ionicons name={profileGender === 'erkek' ? "male" : "female"} size={8} color="white" />
                                     <Text style={styles.ageBadgeText}>{item.age}</Text>
                                 </View>
                             )}
                         </View>
-                        <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 5, gap: 6 }}>
-                            <View style={{ backgroundColor: 'rgba(139, 92, 246, 0.15)', paddingHorizontal: 5, paddingVertical: 1.5, borderRadius: 6, borderWidth: 1, borderColor: 'rgba(139, 92, 246, 0.3)' }}>
-                                <Text style={{ color: '#c4b5fd', fontSize: 8, fontWeight: '700' }}>{(item.name?.length || 0) % 2 === 0 ? '🎵 Müzik' : '✈️ Seyahat'}</Text>
-                            </View>
-                            <View style={{ backgroundColor: 'rgba(236, 72, 153, 0.15)', paddingHorizontal: 5, paddingVertical: 1.5, borderRadius: 6, borderWidth: 1, borderColor: 'rgba(236, 72, 153, 0.3)' }}>
-                                <Text style={{ color: '#fbcfe8', fontSize: 8, fontWeight: '700' }}>{(item.name?.length || 0) % 3 === 0 ? '🎮 Oyun' : '📸 Fotoğraf'}</Text>
-                            </View>
-                        </View>
                     </View>
                 </TouchableOpacity>
-                <View style={styles.hiButtonContainer}>
+                <View style={{ transform: [{ scale: 0.9 }] }}>
                     <HiButton
                         operatorId={item.id}
-                        userBalance={balance}
-                        cost={10}
                         onPress={() => navigation.navigate('Chat', { operatorId: item.id, name: item.name, gender: item.gender, avatar_url: item.avatar_url, user })}
-                        onHiPress={() => onHiPress(item)}
+                        onHiPress={handleLocalHiPress}
                     />
                 </View>
             </View>
-
-            {item.bio && (
-                <View style={[styles.cardBioContainer, { backgroundColor: themeMode === 'dark' ? 'rgba(15, 23, 42, 0.4)' : 'rgba(15, 23, 42, 0.05)' }]}>
-                    <Text style={[styles.cardBioBody, { color: theme.colors.textSecondary }]} numberOfLines={3}>{item.bio}</Text>
-                </View>
-            )}
-
+            {item.bio && <Text style={[styles.bioText, { color: theme.colors.textSecondary }]} numberOfLines={2}>{item.bio}</Text>}
+            {(() => {
+                let ints = item.interests || [];
+                if (typeof ints === 'string') {
+                    try { ints = JSON.parse(ints); }
+                    catch (e) { ints = ints.split(',').map(i => i.trim()); }
+                }
+                if (!Array.isArray(ints)) ints = [];
+                const displayInts = ints.slice(0, 3).filter(Boolean);
+                if (displayInts.length === 0) return null;
+                return (
+                    <View style={styles.interestsContainer}>
+                        {displayInts.map((interest, idx) => (
+                            <View key={idx} style={[styles.interestBadge, { backgroundColor: 'rgba(139, 92, 246, 0.15)', borderColor: 'rgba(139, 92, 246, 0.3)' }]}>
+                                <Text style={[styles.interestText, { color: '#c084fc' }]}>{interest}</Text>
+                            </View>
+                        ))}
+                    </View>
+                );
+            })()}
             {item.photos && item.photos.length > 0 && (
-                <View style={styles.albumContainer}>
-                    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.albumScroll}>
-                        {item.photos.map((rawUrl, idx) => {
-                            const photoUrl = resolveImageUrl(rawUrl);
-                            if (!photoUrl) return null;
-                            return (
-                                <View key={`${item.id}_album_${idx}`} style={styles.albumImageWrapper}>
-                                    <FallbackImage url={photoUrl} style={[styles.albumImage, { backgroundColor: theme.colors.glass }]} theme={theme} />
-                                </View>
-                            );
-                        })}
-                    </ScrollView>
-                </View>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.albumScroll}>
+                    {item.photos.map((p, i) => (
+                        <Image key={i} source={{ uri: resolveImageUrl(p) }} style={styles.albumImage} />
+                    ))}
+                </ScrollView>
             )}
         </GlassCard>
-    </View>
-));
+    );
+});
+
+import PremiumCoinCard from '../components/hero/PremiumCoinCard';
+import PromotedProfiles from '../components/home/PromotedProfiles';
 
 export default function HomeScreen({ navigation, route }) {
     const insets = useSafeAreaInsets();
-    const { theme, themeMode } = useTheme();
-    const isFetchingRef = useRef(false);
-    const { user: routeUser, gender } = route.params || {};
-    const TEST_USER_ID = 'c917f7d6-cc44-4b04-8917-1dbbed0b1e9b';
-    const user = React.useMemo(() => {
-        return routeUser ? { ...routeUser, name: routeUser.name || routeUser.display_name || routeUser.username || 'Kullanıcı' } : { id: TEST_USER_ID, name: 'Misafir', hearts: 0, balance: 0 };
-    }, [routeUser]);
-    const [balance, setBalance] = useState(user.balance || user.hearts || 0);
+    const { theme } = useTheme();
+    const { user: routeUser } = route.params || {};
+    const user = routeUser || { id: 'guest', name: 'Misafir', balance: 0 };
+    
     const [operators, setOperators] = useState([]);
+    const [featuredOperators, setFeaturedOperators] = useState([]);
     const [loading, setLoading] = useState(true);
-    const [promotedProfiles, setPromotedProfiles] = useState([]);
-    const [isBoosted, setIsBoosted] = useState(false);
+    const [balance, setBalance] = useState(user.balance || 0);
     const [activeTab, setActiveTab] = useState('Önerilen');
     const [searchText, setSearchText] = useState('');
     const [showSearch, setShowSearch] = useState(false);
-    const [showFilterModal, setShowFilterModal] = useState(false);
-    const [showWelcomeAlert, setShowWelcomeAlert] = useState(false);
-    const [showLeaderboardAlert, setShowLeaderboardAlert] = useState(false);
-    const [filterOptions, setFilterOptions] = useState(() => {
-        return { 
-            gender: getAllowedGenderParam(user, 'all'), 
-            online: false 
-        };
-    });
-    const [page, setPage] = useState(1);
-    const [hasMore, setHasMore] = useState(true);
-    const [isMoreLoading, setIsMoreLoading] = useState(false);
-    const LIMIT = 10;
-
-    // Fake Message System State
-    const [fakeMessage, setFakeMessage] = useState(null);
-    const fakeMessageAnimY = useSharedValue(-150);
-
-    const fakeMessageStyle = useAnimatedStyle(() => {
-        return {
-            transform: [{ translateY: fakeMessageAnimY.value }]
-        };
-    });
-
-    // Track which operators have already sent a fake message in this session
-    const sentFakeOperators = useRef(new Set());
-    const fakeMsgTriggered = useRef(false);
-
-    const FAKE_MESSAGES = [
-        "selam tanisalim mi",
-        "merhaba buralarda yenisin sanrm",
-        "hey ordamisin",
-        "naber nasilsin",
-        "selam napiysn",
-        "cok tatlisina benziyosun tanisalim mi",
-        "profilin cok guzel mis",
-        "selm nasilsin canim",
-        "slm tanismak ister misin"
-    ];
+    const [refreshing, setRefreshing] = useState(false);
 
     useEffect(() => {
-        let fakeMsgTimer;
-        let hideMsgTimer;
+        fetchOperators();
+    }, [activeTab]);
 
-        const triggerFakeMessage = () => {
-            if (fakeMsgTriggered.current) return;
-
-            // Filter for operators of the opposite gender
-            const availableOps = operators.filter(op => {
-                const userGender = getProfileGender(user) === 'kadin' ? 'kadin' : 'erkek';
-                const targetGender = userGender === 'kadin' ? 'erkek' : 'kadin';
-                
-                const opGender = getProfileGender(op);
-                const isTargetGender = opGender === targetGender || opGender === 'coin_bayisi';
-                const isRealOperator = op.role === 'operator';
-                
-                return isTargetGender && isRealOperator && !sentFakeOperators.current.has(op.id);
-            });
-
-            if (availableOps.length > 0) {
-                const randomOp = availableOps[Math.floor(Math.random() * availableOps.length)];
-                const randomMsg = FAKE_MESSAGES[Math.floor(Math.random() * FAKE_MESSAGES.length)];
-
-                setFakeMessage({ operator: randomOp, text: randomMsg });
-                sentFakeOperators.current.add(randomOp.id);
-                fakeMsgTriggered.current = true;
-
-                // Persist to backend so it stays in chat history
-                AsyncStorage.getItem('token').then(token => {
-                    axios.post(`${API_URL}/messages/internal-fake`, {
-                        userId: user.id,
-                        operatorId: randomOp.id,
-                        content: randomMsg
-                    }, {
-                        headers: { Authorization: `Bearer ${token}` }
-                    }).catch(err => console.error('[HomeScreen] Fake message persistence error:', err));
-                });
-
-                // Slide down
-                fakeMessageAnimY.value = withTiming(insets.top + 10, { duration: 600 });
-
-                // Hide after 5 seconds
-                hideMsgTimer = setTimeout(() => {
-                    fakeMessageAnimY.value = withTiming(-150, { duration: 500 });
-                    setTimeout(() => {
-                        setFakeMessage(null);
-                        fakeMsgTriggered.current = false; // Allow another message later if desired, or keep true to only allow 1 per mount
-                    }, 500);
-                }, 5000);
-            }
-        };
-
-        // Trigger between 8 and 15 seconds for a more natural feel (increased from 4-8)
-        if (operators.length > 0 && !fakeMsgTriggered.current) {
-            const delay = Math.floor(Math.random() * 7000) + 8000;
-            fakeMsgTimer = setTimeout(triggerFakeMessage, delay);
-        }
-
-        return () => {
-            clearTimeout(fakeMsgTimer);
-            clearTimeout(hideMsgTimer);
-        };
-    }, [operators.length > 0]); // Re-run once we have operators
-
-    useFocusEffect(
-        React.useCallback(() => {
-            // Only fetch if we have no operators yet, to prevent lag on every tab switch
-            if (operators.length === 0) {
-                fetchOperators(true);
-            }
-
-            const syncLiveBalance = async () => {
-                try {
-                    const token = await AsyncStorage.getItem('token');
-                    if (token) {
-                        const balRes = await axios.get(`${API_URL}/users/balance`, {
-                            headers: { Authorization: `Bearer ${token}` }
-                        });
-                        if (balRes.data && balRes.data.balance !== undefined) {
-                            setBalance(balRes.data.balance);
-                            const storedUser = await AsyncStorage.getItem('user');
-                            if (storedUser) {
-                                const parsed = JSON.parse(storedUser);
-                                parsed.balance = balRes.data.balance;
-                                parsed.hearts = balRes.data.balance;
-                                await AsyncStorage.setItem('user', JSON.stringify(parsed));
-                            }
-                        }
-                    }
-                } catch (e) {
-                    // console.log('[HomeScreen] Live balance fetch failed, falling back to local');
-                    const str = await AsyncStorage.getItem('user');
-                    if (str) {
-                        const parsedUser = JSON.parse(str);
-                        setBalance(parsedUser.balance !== undefined ? parsedUser.balance : (parsedUser.hearts || 0));
-                    }
-                }
-            };
-
-            const checkBoostStatus = async () => {
-                if (user && user.id && user.id !== TEST_USER_ID) {
-                    try {
-                        const token = await AsyncStorage.getItem('token');
-                        if (token) {
-                            const res = await axios.get(`${API_URL}/boosts/status/${user.id}`, {
-                                headers: { Authorization: `Bearer ${token}` }
-                            });
-                            setIsBoosted(res.data.isBoosted);
-                        }
-                    } catch (e) {
-                        console.error('[HomeScreen] Boost check failed', e);
-                    }
-                }
-            };
-
-            syncLiveBalance();
-            checkBoostStatus();
-        }, [operators.length])
-    );
-
-    useEffect(() => {
-        const checkFirstLaunch = async () => {
-            try {
-                const hasSeenAlert = await AsyncStorage.getItem('has_seen_welcome_alert');
-                if (!hasSeenAlert) {
-                    setShowWelcomeAlert(true);
-                    await AsyncStorage.setItem('has_seen_welcome_alert', 'true');
-                }
-            } catch (error) {
-                console.error("Welcome alert check error:", error);
-            }
-        };
-        checkFirstLaunch();
-    }, []);
-
-    const fetchOperators = React.useCallback(async (reset = false, isLoadMore = false, overrideTab = activeTab) => {
-        if (isFetchingRef.current) return;
-        if (isLoadMore && !hasMore) return;
-
-        isFetchingRef.current = true;
-
+    const fetchOperators = async () => {
+        if (!refreshing) setLoading(true);
         try {
-            if (isLoadMore) setIsMoreLoading(true);
-            else setLoading(true);
-
-            const currentPage = reset ? 1 : page;
-            const token = user?.token || await AsyncStorage.getItem('token');
-            const requestGender = getAllowedGenderParam(user, filterOptions.gender);
-
-            let res;
-            if (!token) {
-                res = await axios.get(`${API_URL}/operators?gender=${requestGender}&page=${currentPage}&limit=${LIMIT}&tab=${encodeURIComponent(overrideTab)}`);
-            } else {
-                res = await axios.get(`${API_URL}/discovery`, {
-                    params: { 
-                        page: currentPage, 
-                        limit: LIMIT, 
-                        tab: overrideTab,
-                        gender: requestGender 
-                    },
-                    headers: { 'Authorization': `Bearer ${token}` }
-                });
-            }
-
-            const newDataRaw = res.data?.data || res.data || [];
-            const newData = filterProfilesForCurrentUser(newDataRaw, user, filterOptions.gender);
-
-            if (reset) {
-                setOperators(newData);
-                setPage(2);
-                setHasMore(newDataRaw.length === LIMIT);
-
-                // Generate promoted profiles (only on first load)
-                if (newData.length > 0) {
-                    const shuffled = [...newData].sort(() => Math.random() - 0.5).slice(0, 10);
-                    setPromotedProfiles(shuffled);
-                }
-                setLoading(false);
-                setIsMoreLoading(false);
-            } else {
-                setOperators(prev => {
-                    // Filter out duplicates just in case
-                    const existingIds = new Set(prev.map(op => op.id));
-                    const uniqueNewData = newData.filter(op => !existingIds.has(op.id));
-                    return [...prev, ...uniqueNewData];
-                });
-                setPage(prev => prev + 1);
-                setHasMore(newDataRaw.length === LIMIT);
-                setLoading(false);
-                setIsMoreLoading(false);
-            }
-
-        } catch (error) {
-            console.error("Fetch Discovery Error:", error);
-
-            if (error.response?.status === 401 || error.response?.status === 403) {
-                console.warn("[Home] Token invalid detected, clearing session.");
-                await AsyncStorage.multiRemove(['token', 'user']);
-                navigation.replace('Auth');
-                return;
-            }
-
-            // Fallback
-            try {
-                const fallbackGender = getAllowedGenderParam(user, filterOptions.gender);
-                const res = await axios.get(`${API_URL}/operators?gender=${fallbackGender}&limit=${LIMIT}`);
-                setOperators(filterProfilesForCurrentUser(res.data, user, filterOptions.gender));
-                setHasMore(false);
-            } catch (inner) {
-                console.error("Fallback error:", inner);
-            } finally {
-                setLoading(false);
-                setIsMoreLoading(false);
-            }
-        } finally {
-            isFetchingRef.current = false;
-        }
-    }, [page, hasMore, activeTab, user, navigation, filterOptions]);
-
-    // Trigger re-fetch when filters or tab changes
-    useEffect(() => {
-        fetchOperators(true);
-    }, [filterOptions, activeTab]);
-
-    const handleLoadMore = React.useCallback(() => {
-        if (!loading && !isFetchingRef.current && hasMore) {
-            console.log(`[HomeScreen] Triggering load more. Current page: ${page}`);
-            fetchOperators(false, true);
-        }
-    }, [loading, isMoreLoading, hasMore, page]);
-
-    const [showMatchModal, setShowMatchModal] = useState(false);
-    const [showCoinModal, setShowCoinModal] = useState(false);
-
-    const getDestinyColors = () => {
-        if (themeMode === 'dark') return {
-            outer: ['#2e1065', '#4c1d95', '#ec4899'],
-            inner: '#1e1b4b',
-            title: '#ec4899',
-            text: 'white',
-            subtext: '#e2e8f0'
-        };
-        return {
-            outer: ['#f472b6', '#a855f7', '#8b5cf6'],
-            inner: theme.colors.card,
-            title: theme.colors.primary,
-            text: theme.colors.text,
-            subtext: theme.colors.textSecondary
-        };
-    };
-
-    const renderDestinyBanner = () => (
-        <TouchableOpacity
-            activeOpacity={0.9}
-            onPress={() => setShowMatchModal(true)}
-            style={{ marginHorizontal: 20, marginBottom: 25 }}
-        >
-            <LinearGradient
-                colors={getDestinyColors().outer}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={{
-                    borderRadius: 28,
-                    padding: 3,
-                    elevation: 10,
-                    shadowColor: '#ec4899',
-                    shadowOffset: { width: 0, height: 10 },
-                    shadowOpacity: themeMode === 'dark' ? 0.4 : 0.1,
-                    shadowRadius: 15,
-                }}
-            >
-                <View style={{
-                    backgroundColor: getDestinyColors().inner,
-                    borderRadius: 26,
-                    padding: 24,
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    overflow: 'hidden',
-                    minHeight: 110
-                }}>
-                    {/* Background decoration */}
-                    <View style={{
-                        position: 'absolute',
-                        right: -20,
-                        top: -20,
-                        width: 100,
-                        height: 100,
-                        borderRadius: 50,
-                        backgroundColor: '#ec4899',
-                        opacity: 0.15,
-                        transform: [{ scale: 1.5 }]
-                    }} />
-
-                    <View style={{ flex: 1, paddingRight: 10 }}>
-                        <Text style={{
-                            color: getDestinyColors().title,
-                            fontWeight: '900',
-                            fontSize: 11,
-                            letterSpacing: 2,
-                            marginBottom: 8,
-                            textTransform: 'uppercase'
-                        }}>
-                            PREMIUM EŞLEŞME
-                        </Text>
-                        <Text style={{
-                            color: getDestinyColors().text,
-                            fontWeight: 'bold',
-                            fontSize: 22,
-                            marginBottom: 6,
-                            lineHeight: 28
-                        }}>
-                            Eşleşmeni Bul
-                        </Text>
-                        <Text style={{
-                            color: getDestinyColors().subtext,
-                            fontSize: 13,
-                            opacity: 0.8,
-                            fontWeight: '500'
-                        }}>
-                            Kader seni biriyle buluşturmak üzere...
-                        </Text>
-                    </View>
-
-                    <View style={{
-                        width: 56,
-                        height: 56,
-                        borderRadius: 28,
-                        backgroundColor: 'rgba(236, 72, 153, 0.15)',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        borderWidth: 1,
-                        borderColor: 'rgba(236, 72, 153, 0.5)',
-                        elevation: 5,
-                        shadowColor: "#ec4899",
-                        shadowOffset: { width: 0, height: 0 },
-                        shadowOpacity: 0.5,
-                        shadowRadius: 10,
-                    }}>
-                        <Ionicons name="infinite" size={28} color="#ec4899" />
-                    </View>
-                </View>
-            </LinearGradient>
-        </TouchableOpacity>
-    );
-
-
-    const filteredOperators = React.useMemo(() => {
-        let result = operators;
-
-        // Search Filter
-        if (searchText) {
-            result = result.filter(op =>
-                op.name.toLowerCase().includes(searchText.toLowerCase()) ||
-                (op.job && op.job.toLowerCase().includes(searchText.toLowerCase()))
-            );
-        }
-
-        // Advanced Filters
-        let effectiveGender = getAllowedGenderParam(user, filterOptions.gender);
-
-        if (effectiveGender !== 'all') {
-            const targetGenderArray = effectiveGender === 'female' ? ['kadin', 'female'] : ['erkek', 'male'];
-            result = result.filter(op => {
-                const profileGender = getProfileGender(op);
-                const isTargetGender = targetGenderArray.includes(profileGender);
-                const isDealerOrAdmin = profileGender === 'coin_bayisi' || op.role === 'admin';
-                
-                // Extra fail-safe for incorrectly categorized profiles (as seen in reports)
-                if (effectiveGender === 'female' && !isDealerOrAdmin) {
-                    const nameNormalized = normalizeText(op.name);
-                    const maleNames = [
-                        'hasan', 'ihsan', 'karadayi', 'adabi', 'affiliate', 'fatih', 'ahmet', 'mehmet', 'mustafa', 
-                        'furkan', 'ali', 'veli', 'osman', 'ibrahim', 'halil', 'yusuf', 'zafer', 'sultan', 'turan', 
-                        'yilmaz', 'metin', 'bekir', 'kamil', 'burak', 'emre', 'can', 'deniz', 'mert', 'baris', 
-                        'murat', 'volkan', 'serkan', 'gokhan', 'hakan', 'ugur', 'selim', 'kerem', 'cengiz', 
-                        'emrah', 'erhan', 'oguz', 'dogukan', 'berkay', 'arda', 'emircan', 'cagatay', 'serhat',
-                        'onur', 'ozgur', 'ozan', 'mertcan', 'batuhan', 'berk', 'bugra', 'taha', 'yasin',
-                        'gursel', 'dundar', 'ihsan', 'zafer', 'yusuf', 'hamza', 'omer', 'enes', 'yunus', 'berat',
-                        'miraç', 'umut', 'ayhan', 'ercan', 'serdar', 'adem', 'mesut', 'sinan', 'kemal', 'bulent',
-                        'ersin', 'ozkan', 'sedat', 'taner', 'tamer', 'yavuz', 'selçuk', 'ismail', 'recep', 'tayyip'
-                    ];
-                    if (maleNames.some(mn => nameNormalized.includes(mn))) return false;
-                }
-                
-                return isTargetGender || isDealerOrAdmin;
+            const token = await AsyncStorage.getItem('token');
+            const res = await axios.get(`${API_URL}/discovery?tab=${activeTab}`, {
+                headers: { Authorization: `Bearer ${token}` }
             });
-        }
-
-        if (filterOptions.online) {
-            result = result.filter(op => op.is_online);
-        }
-
-        return result;
-    }, [operators, searchText, filterOptions, user]);
-
-    const handleTabPress = (tabName) => {
-        if (activeTab === tabName) return;
-        
-        // 1. Update active tab UI state first
-        setActiveTab(tabName);
-        
-        // 2. Use a slight defer to allow UI to render the active state and loading skeletons
-        requestAnimationFrame(() => {
-            setLoading(true);
-            setPage(1);
-            setOperators([]);
-            setHasMore(true);
+            const data = res.data?.data || res.data || [];
+            setOperators(data);
             
-            // 3. Actual fetch in next tick
-            setTimeout(() => {
-                fetchOperators(true, false, tabName);
-            }, 50);
-        });
+            // Extract boosted/featured operators for the horizontal list
+            const featured = data.filter(op => op.is_boosted || op.vip_level > 0).slice(0, 15);
+            setFeaturedOperators(featured);
+        } catch (e) {
+            console.error('Fetch operators error:', e);
+        } finally {
+            setLoading(false);
+            setRefreshing(false);
+        }
     };
 
-    const handleHiPress = React.useCallback(async (item) => {
+    const onRefresh = () => {
+        setRefreshing(true);
+        fetchOperators();
+    };
+
+    const handleHiPress = React.useCallback(async (operator) => {
         try {
             const token = await AsyncStorage.getItem('token');
             const res = await axios.post(`${API_URL}/messages/send-hi`, {
-                userId: user.id,
-                operatorId: item.id,
-                content: 'Merhaba 👋'
+                senderId: user.id,
+                receiverId: operator.id,
+                content: 'Merhaba'
             }, {
                 headers: { Authorization: `Bearer ${token}` }
             });
 
             if (res.data.success) {
+                // Update local balance state and storage
                 if (res.data.newBalance !== undefined) {
                     setBalance(res.data.newBalance);
-                    const storedUser = await AsyncStorage.getItem('user');
-                    if (storedUser) {
-                        const parsed = JSON.parse(storedUser);
-                        parsed.balance = res.data.newBalance;
-                        parsed.hearts = res.data.newBalance;
-                        await AsyncStorage.setItem('user', JSON.stringify(parsed));
-                    }
+                    const updatedUser = { ...user, balance: res.data.newBalance };
+                    await AsyncStorage.setItem('user', JSON.stringify(updatedUser));
                 }
             }
-        } catch (e) {
-            console.error('[HomeScreen] Hi message err', e);
-            if (e.response?.data?.insufficientFunds) {
-                setShowCoinModal(true);
-            } else if (e.response?.data?.error) {
-                Alert.alert("Mesaj Hatası", e.response.data.error);
-            } else {
-                Alert.alert("Hata", "Sunucuya ulaşılamadı. Lütfen tekrar deneyin.");
+        } catch (error) {
+            console.error('Hi send error:', error);
+            if (error.response?.data?.insufficientFunds) {
+                navigation.navigate('PurchaseInfo', { user });
             }
         }
-    }, [user.id, API_URL]);
+    }, [user, navigation]);
 
-    const renderOperator = React.useCallback(({ item }) => (
-        <OperatorItem
-            item={item}
-            navigation={navigation}
-            user={user}
-            theme={theme}
-            themeMode={themeMode}
-            balance={balance}
-            onHiPress={handleHiPress}
-        />
-    ), [navigation, user, theme, themeMode, balance, handleHiPress]);
+    // Use useMemo for the header to prevent unnecessary re-renders of the entire list
+    const headerComponent = React.useMemo(() => (
+        <View style={styles.header}>
+            <View style={[styles.topBar, { justifyContent: 'flex-end', height: 36, marginBottom: 2 }]}>
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                    <TouchableOpacity 
+                        onPress={() => navigation.navigate('Leaderboard')} 
+                        style={[styles.smallIconBtn, { backgroundColor: 'rgba(255, 255, 255, 0.08)', borderColor: 'rgba(255, 255, 255, 0.15)', marginRight: 10 }]}
+                    >
+                        <Ionicons name="trophy" size={16} color="white" />
+                    </TouchableOpacity>
+                    <TouchableOpacity 
+                        onPress={() => navigation.navigate('Notifications')} 
+                        style={[styles.smallIconBtn, { backgroundColor: 'rgba(255, 255, 255, 0.08)', borderColor: 'rgba(255, 255, 255, 0.15)' }]}
+                    >
+                        <Ionicons name="notifications" size={16} color="white" />
+                    </TouchableOpacity>
+                </View>
+            </View>
 
-    const renderActionCards = () => (
-        <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={{ paddingHorizontal: 16, paddingVertical: 15, gap: 12 }}
-        >
-            {/* Görüntülü Arama Kartı */}
-            <TouchableOpacity activeOpacity={0.8} style={[styles.actionCard, { backgroundColor: '#a78bfa' }]}>
-                <View style={[styles.actionIconBg, { backgroundColor: '#c4b5fd' }]}>
-                    <Ionicons name="videocam" size={28} color="white" />
+            {showSearch && (
+                <View style={[styles.searchWrapper, { backgroundColor: theme.colors.glass }]}>
+                    <Ionicons name="search" size={18} color={theme.colors.textSecondary} style={{ marginRight: 10 }} />
+                    <TextInput
+                        style={[styles.searchInput, { color: theme.colors.text }]}
+                        placeholder="İsim veya meslek ara..."
+                        placeholderTextColor={theme.colors.textSecondary}
+                        value={searchText}
+                        onChangeText={setSearchText}
+                        autoFocus
+                    />
                 </View>
-                <View style={styles.actionAvatarGroup}>
-                    <Image source={{ uri: 'https://i.pravatar.cc/100?img=1' }} style={[styles.actionTinyAvatar, { zIndex: 3 }]} />
-                    <Image source={{ uri: 'https://i.pravatar.cc/100?img=2' }} style={[styles.actionTinyAvatar, { zIndex: 2, marginLeft: -10 }]} />
-                </View>
-                <View style={styles.actionTextContainer}>
-                    <Text style={styles.actionTitle}>Görüntülü</Text>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 2 }}>
-                        <Text style={styles.actionSubtitle}>300</Text>
-                        <Image source={require('../../assets/gold_coin_3d.png')} style={{ width: 12, height: 12, marginHorizontal: 2 }} />
-                        <Text style={styles.actionSubtitle}>/dakika</Text>
-                    </View>
-                </View>
-            </TouchableOpacity>
+            )}
 
-            {/* Sesli Arama Kartı */}
-            <TouchableOpacity activeOpacity={0.8} style={[styles.actionCard, { backgroundColor: '#f472b6' }]}>
-                <View style={[styles.actionIconBg, { backgroundColor: '#fbcfe8' }]}>
-                    <Ionicons name="mic" size={28} color="white" />
-                </View>
-                <View style={styles.actionTextContainer}>
-                    <Text style={styles.actionTitle}>Sesli arama</Text>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 2 }}>
-                        <Text style={styles.actionSubtitle}>200</Text>
-                        <Image source={require('../../assets/gold_coin_3d.png')} style={{ width: 12, height: 12, marginHorizontal: 2 }} />
-                        <Text style={styles.actionSubtitle}>/dakika</Text>
-                    </View>
-                </View>
-            </TouchableOpacity>
+            <PremiumCoinCard 
+                onCoinPress={() => navigation.navigate('PurchaseInfo', { user })}
+                onExplorePress={() => navigation.navigate('Keşfet')}
+                onResellerPress={() => navigation.navigate('PurchaseInfo', { user, reseller: true })}
+            />
 
-            {/* Ödüller Kartı */}
-            <TouchableOpacity activeOpacity={0.8} style={[styles.actionCard, { backgroundColor: '#fbbf24' }]}>
-                <View style={[styles.actionIconBg, { backgroundColor: '#fde68a' }]}>
-                    {/* Using a star icon or coin image */}
-                    <Image source={require('../../assets/gold_coin_3f.png')} style={{ width: 35, height: 35 }} />
-                </View>
-                <View style={styles.actionTextContainer}>
-                    <Text style={styles.actionTitle}>Ödüller</Text>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 2 }}>
-                        <Text style={styles.actionSubtitle}>670</Text>
-                        <Image source={require('../../assets/gold_coin_3d.png')} style={{ width: 12, height: 12, marginHorizontal: 2 }} />
-                        <Text style={styles.actionSubtitle}>alınabilir</Text>
-                    </View>
-                </View>
-            </TouchableOpacity>
+            {featuredOperators.length > 0 && (
+                <PromotedProfiles 
+                    data={featuredOperators} 
+                    onProfilePress={(op) => navigation.navigate('OperatorProfile', { operator: op, user })}
+                    theme={theme}
+                />
+            )}
 
-            {/* Daha Fazla Kartı */}
-            <TouchableOpacity activeOpacity={0.8} style={[styles.actionCard, { backgroundColor: '#4ade80' }]}>
-                <View style={[styles.actionIconBg, { backgroundColor: '#bbf7d0' }]}>
-                    <Ionicons name="gift" size={28} color="white" />
-                </View>
-                <View style={styles.actionTextContainer}>
-                    <Text style={styles.actionTitle}>Daha</Text>
-                    <Text style={styles.actionSubtitle}>Kazan</Text>
-                </View>
-            </TouchableOpacity>
-        </ScrollView>
+            <View style={{ paddingHorizontal: 16 }}>
+                <DestinyHero onPress={() => navigation.navigate('Keşfet')} />
+            </View>
+            
+            <View style={styles.tabContainer}>
+                {['Önerilen', 'Yeni', 'Popüler'].map(tab => (
+                    <TouchableOpacity 
+                        key={tab} 
+                        onPress={() => setActiveTab(tab)} 
+                        style={[
+                            styles.tab, 
+                            activeTab === tab ? { backgroundColor: theme.colors.primary } : { backgroundColor: theme.colors.glass }
+                        ]}
+                    >
+                        <Text style={[
+                            styles.tabText, 
+                            activeTab === tab ? { color: 'white' } : { color: theme.colors.textSecondary }
+                        ]}>{tab}</Text>
+                    </TouchableOpacity>
+                ))}
+            </View>
+        </View>
+    ), [theme, balance, showSearch, searchText, activeTab, user, featuredOperators]);
+
+
+    const filteredData = operators.filter(op => 
+        normalizeText(op.name).includes(normalizeText(searchText)) ||
+        normalizeText(op.job || '').includes(normalizeText(searchText))
     );
 
-    const ListHeader = React.useMemo(() => (
-        <View>
-            <HeroSection
-                onCoinPress={() => navigation.navigate('PurchaseInfo', { user })}
-                onExplorePress={() => setActiveTab('Önerilen')}
-                onResellerPress={() => {
-                    const phoneNumber = "905414738700";
-                    const message = "Merhaba, kredi yüklemek istiyorum ama Play Store kullanamıyorum, yardımcı olur musunuz?";
-                    Linking.openURL(`https://wa.me/${phoneNumber}?text=${encodeURIComponent(message)}`).catch(() => {
-                        Alert.alert("Hata", "WhatsApp açılamadı. Uygulamanın yüklü olduğundan emin olun.");
-                    });
-                }}
-                onDestinyPress={() => setShowMatchModal(true)}
-                onLeaderboardPress={() => setShowLeaderboardAlert(true)}
-                onNotificationsPress={() => navigation.navigate('Notifications')}
-            />
-            <PromotedProfiles
-                data={promotedProfiles}
-                isBoosted={isBoosted}
-                onProfilePress={(profile) => {
-                    console.log(`[HomeScreen] Promoted profile click: ${profile.name}`);
-                    navigation.navigate('OperatorProfile', { operator: profile, user });
-                }}
-                user={user}
-            />
-            <View style={{ paddingHorizontal: 16 }}>
-                <DestinyHero onPress={() => setShowMatchModal(true)} />
-            </View>
-            <View style={{ marginHorizontal: 16, marginBottom: 10, marginTop: 5 }}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flex: 1, marginRight: 10 }}>
-                        {['Önerilen', 'Yeni', 'Popüler'].map((tab) => (
-                            <TouchableOpacity
-                                key={tab}
-                                onPress={() => handleTabPress(tab)}
-                                style={{
-                                    marginRight: 10,
-                                    paddingHorizontal: 16,
-                                    paddingVertical: 8,
-                                    borderRadius: 20,
-                                    backgroundColor: activeTab === tab ? theme.colors.primary : theme.colors.glass,
-                                    borderWidth: 1,
-                                    borderColor: activeTab === tab ? theme.colors.primary : theme.colors.glassBorder
-                                }}
-                            >
-                                <Text style={{ 
-                                    fontSize: 11, 
-                                    fontWeight: '900', 
-                                    color: activeTab === tab ? 'white' : theme.colors.textSecondary,
-                                    textTransform: 'uppercase',
-                                    letterSpacing: 1
-                                }}>{tab}</Text>
-                            </TouchableOpacity>
-                        ))}
-                    </ScrollView>
-                    <View style={{ flexDirection: 'row', gap: 8 }}>
-                        <TouchableOpacity
-                            onPress={() => setShowSearch(!showSearch)}
-                            style={{
-                                width: 38, height: 38, borderRadius: 19,
-                                backgroundColor: showSearch ? theme.colors.primary : theme.colors.glass,
-                                alignItems: 'center', justifyContent: 'center',
-                                borderWidth: 1, borderColor: showSearch ? theme.colors.primary : theme.colors.glassBorder
-                            }}>
-                            <Ionicons name="search" size={18} color={showSearch ? 'white' : theme.colors.text} />
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                            onPress={() => setShowFilterModal(true)}
-                            style={{
-                                width: 38, height: 38, borderRadius: 19,
-                                backgroundColor: (filterOptions.gender !== 'all' || filterOptions.online) ? theme.colors.primary : theme.colors.glass,
-                                alignItems: 'center', justifyContent: 'center',
-                                borderWidth: 1, borderColor: (filterOptions.gender !== 'all' || filterOptions.online) ? theme.colors.primary : theme.colors.glassBorder
-                            }}>
-                            <Ionicons name="options" size={18} color={(filterOptions.gender !== 'all' || filterOptions.online) ? 'white' : theme.colors.text} />
-                        </TouchableOpacity>
-                    </View>
-                </View>
-                {showSearch && (
-                    <Motion.SlideUp>
-                        <View style={{ marginTop: 15 }}>
-                            <View style={{
-                                flexDirection: 'row', alignItems: 'center',
-                                backgroundColor: theme.colors.glass,
-                                borderColor: theme.colors.glassBorder,
-                                borderWidth: 1,
-                                borderRadius: 12, paddingHorizontal: 12, height: 46
-                            }}>
-                                <Ionicons name="search" size={20} color={theme.colors.textSecondary} style={{ marginRight: 10 }} />
-                                <TextInput
-                                    placeholder="Bir isim ara"
-                                    placeholderTextColor={theme.colors.textSecondary}
-                                    style={{ flex: 1, color: theme.colors.text, fontSize: 14 }}
-                                    value={searchText}
-                                    onChangeText={setSearchText}
-                                />
-                                {searchText.length > 0 && (
-                                    <TouchableOpacity onPress={() => setSearchText('')}>
-                                        <Ionicons name="close-circle" size={18} color={theme.colors.textSecondary} />
-                                    </TouchableOpacity>
-                                )}
-                            </View>
-                        </View>
-                    </Motion.SlideUp>
-                )}
-            </View>
-        </View>
-    ), [activeTab, promotedProfiles, showSearch, searchText, filterOptions, theme, user]);
-
-    // Removed faulty getItemLayout which caused phantom scrolling space on Android due to dynamic item heights
+    const renderItem = React.useCallback(({ item }) => (
+        <OperatorItem 
+            item={item} 
+            navigation={navigation} 
+            user={user} 
+            theme={theme} 
+            onHiPress={handleHiPress}
+        />
+    ), [navigation, user, theme, handleHiPress]);
 
     return (
-        <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
-            {themeMode === 'dark' && <PremiumBackground />}
+        <LinearGradient
+            colors={theme.mode === 'dark' ? theme.gradients.dark : [theme.colors.background, theme.colors.backgroundSecondary]}
+            style={styles.container}
+        >
+            <View style={{ height: Platform.OS === 'ios' ? insets.top : (StatusBar.currentHeight || 24) - 4 }} />
             <FlatList
-                data={filteredOperators}
+                data={filteredData}
                 keyExtractor={item => item.id.toString()}
-                extraData={balance}
-                renderItem={renderOperator}
-                // getItemLayout removed to fix dynamic height calculating bug
-                contentContainerStyle={styles.listContent}
+                renderItem={renderItem}
+                ListHeaderComponent={headerComponent}
+                ListEmptyComponent={loading ? (
+                    <View style={{ padding: 20 }}>
+                        <SkeletonCard />
+                        <SkeletonCard />
+                        <SkeletonCard />
+                    </View>
+                ) : (
+                    <View style={styles.emptyContainer}>
+                        <Ionicons name="search-outline" size={48} color={theme.colors.textSecondary} />
+                        <Text style={[styles.emptyText, { color: theme.colors.textSecondary }]}>
+                            Sonuç bulunamadı.
+                        </Text>
+                    </View>
+                )}
+                contentContainerStyle={{ paddingBottom: 120 }}
+                onRefresh={onRefresh}
+                refreshing={refreshing}
                 showsVerticalScrollIndicator={false}
-                ListHeaderComponent={ListHeader}
-                onEndReached={handleLoadMore}
-                onEndReachedThreshold={0.5} // Trigger earlier for seamless scroll
-                initialNumToRender={10}
-
+                removeClippedSubviews={Platform.OS === 'android'}
                 maxToRenderPerBatch={10}
                 windowSize={5}
-                removeClippedSubviews={true}
-                keyboardShouldPersistTaps="handled"
-                bounces={false}
-                overScrollMode="never"
-                ListFooterComponent={
-                    <View style={{
-                        paddingTop: 10,
-                        paddingBottom: 40,
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        width: '100%'
-                    }}>
-                        {isMoreLoading && (
-                            <ActivityIndicator size="small" color={theme.colors.primary} style={{ marginVertical: 15 }} />
-                        )}
-                        {!hasMore && operators.length > 0 && (
-                            <Text style={{ color: theme.colors.textSecondary, fontSize: 13, marginTop: 15, opacity: 0.8 }}>
-                                Şimdilik bu kadar...
-                            </Text>
-                        )}
-                    </View>
-                }
-                ListEmptyComponent={
-                    loading ? (
-                        <View style={{ paddingTop: 10 }}>
-                            <SkeletonCard />
-                            <SkeletonCard />
-                            <SkeletonCard />
-                            <SkeletonCard />
-                        </View>
-                    ) : (
-                        <View style={styles.emptyContainer}>
-                            <Text style={[styles.emptyText, { color: theme.colors.textSecondary }]}>Sonuç bulunamadı.</Text>
-                        </View>
-                    )
-                }
             />
-            {showMatchModal && <DestinyMatchModal visible={showMatchModal} onClose={() => setShowMatchModal(false)} operators={operators} navigation={navigation} user={user} />}
-            <InsufficientCoinsModal
-                visible={showCoinModal}
-                onClose={() => setShowCoinModal(false)}
-                onBuyCoins={() => {
-                    setShowCoinModal(false);
-                    navigation.navigate('Shop', { user });
-                }}
-            />
-            <Modal visible={showFilterModal} transparent animationType="slide" onRequestClose={() => setShowFilterModal(false)}>
-                <View style={styles.modalOverlay}>
-                    <GlassCard style={styles.modalContent} intensity={95} tint="dark">
-                        <View style={styles.modalHeader}>
-                            <View>
-                                <Text style={[styles.modalTitle, { color: theme.colors.text }]}>Filtrele</Text>
-                                <Text style={{ color: theme.colors.textSecondary, fontSize: 13, marginTop: 4 }}>Size en uygun kişileri bulun</Text>
-                            </View>
-                            <TouchableOpacity onPress={() => setShowFilterModal(false)} style={styles.closeButton}>
-                                <Ionicons name="close" size={24} color="white" />
-                            </TouchableOpacity>
-                        </View>
-
-                        <View style={styles.filterSection}>
-                            <Text style={[styles.filterLabel, { color: theme.colors.text }]}>CİNSİYET</Text>
-                            <View style={styles.filterOptions}>
-                                {getFilterGenderOptions(user).map((g) => {
-                                    const isActive = filterOptions.gender === g;
-                                    const icon = g === 'all' ? 'people' : g === 'female' ? 'woman' : 'man';
-                                    const label = g === 'all' ? 'Hepsi' : g === 'female' ? 'Kadın' : 'Erkek';
-                                    
-                                    return (
-                                        <TouchableOpacity 
-                                            key={g} 
-                                            activeOpacity={0.8}
-                                            style={{ flex: 1 }}
-                                            onPress={() => setFilterOptions(prev => ({ ...prev, gender: g }))}
-                                        >
-                                            {isActive ? (
-                                                <LinearGradient
-                                                    colors={['#8b5cf6', '#d946ef']}
-                                                    start={{ x: 0, y: 0 }}
-                                                    end={{ x: 1, y: 1 }}
-                                                    style={styles.filterChipActiveModern}
-                                                >
-                                                    <Ionicons name={icon} size={18} color="white" style={{ marginBottom: 4 }} />
-                                                    <Text style={styles.filterChipTextActiveModern}>{label}</Text>
-                                                </LinearGradient>
-                                            ) : (
-                                                <View style={[styles.filterChipModern, { backgroundColor: 'rgba(255,255,255,0.05)', borderColor: 'rgba(255,255,255,0.1)' }]}>
-                                                    <Ionicons name={icon} size={18} color="rgba(255,255,255,0.4)" style={{ marginBottom: 4 }} />
-                                                    <Text style={[styles.filterChipTextModern, { color: 'rgba(255,255,255,0.6)' }]}>{label}</Text>
-                                                </View>
-                                            )}
-                                        </TouchableOpacity>
-                                    );
-                                })}
-                            </View>
-                        </View>
-
-                        <View style={styles.filterSection}>
-                            <Text style={[styles.filterLabel, { color: theme.colors.text }]}>DURUM</Text>
-                            <TouchableOpacity 
-                                activeOpacity={0.8}
-                                style={[styles.onlineToggle, { backgroundColor: 'rgba(255,255,255,0.05)', borderColor: filterOptions.online ? '#d946ef' : 'rgba(255,255,255,0.1)' }]} 
-                                onPress={() => setFilterOptions(prev => ({ ...prev, online: !prev.online }))}
-                            >
-                                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                                    <View style={[styles.onlineIndicator, { backgroundColor: filterOptions.online ? '#10b981' : '#64748b' }]} />
-                                    <Text style={[styles.onlineToggleText, { color: filterOptions.online ? 'white' : 'rgba(255,255,255,0.6)' }]}>Sadece Online Üyeleri Göster</Text>
-                                </View>
-                                <View style={[styles.toggleSwitch, { backgroundColor: filterOptions.online ? '#d946ef' : 'rgba(255,255,255,0.1)' }]}>
-                                    <View style={[styles.toggleCircle, { transform: [{ translateX: filterOptions.online ? 20 : 0 }] }]} />
-                                </View>
-                            </TouchableOpacity>
-                        </View>
-
-                        <TouchableOpacity style={styles.applyButton} onPress={() => setShowFilterModal(false)}>
-                            <LinearGradient colors={['#8b5cf6', '#ec4899']} style={styles.applyButtonGradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}>
-                                <Text style={styles.applyButtonText}>Filtreleri Uygula</Text>
-                            </LinearGradient>
-                        </TouchableOpacity>
-                    </GlassCard>
-                </View>
-            </Modal>
-
-            <ModernAlert
-                visible={showWelcomeAlert}
-                title="Hoş Geldiniz! 👋"
-                message="Uygulamamız henüz çok yenidir. Sizlere daha iyi bir deneyim sunabilmek için değerli önerilerinizi ve geri bildirimlerinizi bekliyoruz. Keyifli vakit geçirmeniz dileğiyle!"
-                type="info"
-                onClose={() => setShowWelcomeAlert(false)}
-            />
-
-            {/* Fake Incoming Message Toast */}
-            {fakeMessage && (
-                <Animated.View style={[{
-                    position: 'absolute',
-                    top: 0,
-                    left: 20,
-                    right: 20,
-                    zIndex: 9999,
-                    elevation: 100,
-                }, fakeMessageStyle]}>
-                    <TouchableOpacity
-                        activeOpacity={0.9}
-                        onPress={() => {
-                            // Hide the message
-                            fakeMessageAnimY.value = withTiming(-150, { duration: 300 });
-                            setTimeout(() => setFakeMessage(null), 300);
-
-                            // Navigate to chat
-                            navigation.navigate('Chat', {
-                                operatorId: fakeMessage.operator.id,
-                                name: fakeMessage.operator.name,
-                                gender: fakeMessage.operator.gender,
-                                avatar_url: fakeMessage.operator.avatar_url,
-                                user
-                            });
-                        }}
-                    >
-                        <GlassCard intensity={80} tint="dark" style={{
-                            padding: 12,
-                            borderRadius: 20,
-                            flexDirection: 'row',
-                            alignItems: 'center',
-                            borderWidth: 1,
-                            borderColor: 'rgba(236,72,153, 0.5)', // Pink tinted border
-                            shadowColor: '#ec4899',
-                            shadowOffset: { width: 0, height: 10 },
-                            shadowOpacity: 0.3,
-                            shadowRadius: 15,
-                        }}>
-                            <View style={{ position: 'relative' }}>
-                                <Image
-                                    source={{ uri: resolveImageUrl(fakeMessage.operator.avatar_url) }}
-                                    style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: theme.colors.glass }}
-                                />
-                                <View style={{
-                                    position: 'absolute', bottom: -2, right: -2,
-                                    width: 14, height: 14, borderRadius: 7,
-                                    backgroundColor: '#10b981',
-                                    borderWidth: 2, borderColor: '#0f172a',
-                                    justifyContent: 'center', alignItems: 'center'
-                                }}>
-                                    <Text style={{ color: 'white', fontSize: 7, fontWeight: 'bold' }}>1</Text>
-                                </View>
-                            </View>
-
-                            <View style={{ flex: 1, marginLeft: 12 }}>
-                                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-                                    <Text style={{ color: 'white', fontWeight: 'bold', fontSize: 15 }}>{fakeMessage.operator.name}</Text>
-                                    <Text style={{ color: 'rgba(255,255,255,0.5)', fontSize: 11 }}>Şimdi</Text>
-                                </View>
-                                <Text style={{ color: 'rgba(255,255,255,0.9)', fontSize: 13, marginTop: 2 }}>{fakeMessage.text}</Text>
-                            </View>
-                        </GlassCard>
-                    </TouchableOpacity>
-                </Animated.View>
-            )}
-            <ModernAlert
-                visible={showLeaderboardAlert}
-                title="Sıralama"
-                message="Liderlik Tablosu çok yakında aktif olacaktır. Heyecan verici ödüller için takipte kal!"
-                type="info"
-                onClose={() => setShowLeaderboardAlert(false)}
-            />
-        </View>
+        </LinearGradient>
     );
 }
 
 const styles = StyleSheet.create({
     container: { flex: 1 },
-    background: { ...StyleSheet.absoluteFillObject },
-    listContent: {
-        flexGrow: 1,
-        paddingBottom: 130, // Just enough to clear the bottom tab bar
-    },
-    headerContainer: { paddingHorizontal: 20, marginBottom: 15, marginTop: 10 },
-    topBar: { flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', marginBottom: 20 },
-    logoText: { fontSize: 26, fontWeight: '900' },
-    logoDot: { color: '#d946ef' },
-    coinBadge: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, elevation: 5, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.2, shadowRadius: 4 },
-    coinText: { color: 'white', fontWeight: 'bold', marginLeft: 6 },
-    tabScroll: { marginBottom: 10 },
-    tabButton: { marginRight: 25, alignItems: 'center' },
-    tabText: { color: '#64748b', fontSize: 16, fontWeight: '700' },
-    activeTabText: { fontWeight: 'bold' },
-    activeIndicator: { width: 16, height: 4, backgroundColor: '#d946ef', borderRadius: 2, marginTop: 6 },
-    bannerWrapper: { marginVertical: 10 },
-    bannerScrollContent: { paddingVertical: 10 },
-    bannerCardContainer: {
-        width: BANNER_WIDTH,
-        height: 160,
-        borderRadius: 24,
-        shadowColor: "#000",
-        shadowOffset: { width: 0, height: 10 },
-        shadowOpacity: 0.3,
-        shadowRadius: 15,
-        elevation: 10,
-    },
-    bannerCard: {
-        flex: 1,
-        borderRadius: 24,
-        padding: 20,
-        flexDirection: 'row',
-        alignItems: 'center',
-        overflow: 'hidden'
-    },
-    bannerContent: { flex: 1, justifyContent: 'center' },
-    bannerTitle: { color: 'white', fontSize: 12, fontWeight: '800', opacity: 0.8, letterSpacing: 1 },
-    bannerSubtitle: { color: 'white', fontSize: 22, fontWeight: '900', marginVertical: 4 },
-    bannerButton: { backgroundColor: 'white', paddingHorizontal: 18, paddingVertical: 8, borderRadius: 12, alignSelf: 'flex-start', marginTop: 12 },
-    bannerButtonText: { color: '#1e293b', fontWeight: 'bold', fontSize: 13 },
-    bannerIconWrapper: { marginLeft: 10, position: 'relative' },
-    iconGlow: {
-        position: 'absolute',
-        width: 40,
-        height: 40,
-        borderRadius: 20,
-        backgroundColor: 'white',
-        opacity: 0.2,
-        top: 15,
-        left: 15,
-        shadowRadius: 30,
-        shadowOpacity: 1,
-        elevation: 20,
-    },
-    sectionTitle: {
-        fontSize: 16,
-        fontWeight: '900',
-        marginHorizontal: 20,
-        marginBottom: 15,
-        marginTop: 10,
-        letterSpacing: 0.8,
-    },
-    userCard: {
-        marginHorizontal: 16,
-        marginBottom: 12,
-        borderRadius: 20,
-        padding: 12,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 6 },
-        shadowOpacity: 0.2,
-        shadowRadius: 15,
-        elevation: 8,
-        borderWidth: 1,
-        borderColor: 'rgba(139, 92, 246, 0.1)',
-    },
-    cardHeader: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        marginBottom: 8,
-    },
-    avatarContainer: {
-        position: 'relative',
-        marginRight: 8,
-    },
-    onlineBadge: {
-        position: 'absolute',
-        bottom: 0,
-        right: 0,
-        width: 12,
-        height: 12,
-        borderRadius: 6,
-        backgroundColor: '#10b981',
-        borderWidth: 2,
-        borderColor: '#0f172a',
-    },
-    infoContainer: {
-        flex: 1,
-    },
-    nameRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        marginBottom: 0,
-    },
-    name: {
-        fontSize: 15,
-        fontWeight: 'bold',
-        marginRight: 6,
-    },
-    premiumVipBadge: {
-        flexDirection: 'row',
-        paddingHorizontal: 4,
-        paddingVertical: 1,
-        borderRadius: 6,
-        alignItems: 'center',
-        marginRight: 6,
-    },
-    premiumVipText: {
-        color: 'white',
-        fontSize: 9,
-        fontWeight: 'bold',
-        marginLeft: 2,
-    },
-    verifiedBadge: {
-        marginLeft: 2,
-    },
-    ageBadge: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        paddingHorizontal: 4,
-        paddingVertical: 0,
-        borderRadius: 5,
-        marginLeft: 6,
-    },
-    ageBadgeText: {
-        color: 'white',
-        fontSize: 8,
-        fontWeight: 'bold',
-        marginLeft: 2,
-        lineHeight: 12,
-    },
-    jobText: { 
-        fontSize: 10, 
-        color: '#94a3b8', // Softer color for hierarchy
-        fontWeight: '500',
-        lineHeight: 14,
-    },
-
-    // Bio Stilleri
-    cardBioContainer: {
-        padding: 0,
-        borderRadius: 16,
-        marginBottom: 8,
-    },
-    cardBioTitle: {
-        color: '#d946ef', // Marka rengi
-        fontSize: 11,
-        fontWeight: '900',
-        textTransform: 'uppercase',
-        marginBottom: 4,
-        letterSpacing: 0.5,
-    },
-    cardBioBody: {
-        fontSize: 11, // Reduced from 12
-        lineHeight: 15,
-    },
-
-    // Albüm Stilleri
-    albumContainer: {
-        marginTop: 1,
-    },
-    albumScroll: {
-        paddingRight: 10,
-    },
-    albumImage: {
-        width: 65,
-        height: 75,
-        borderRadius: 10,
-        marginRight: 8,
-    },
-
-    hiButtonContainer: { marginLeft: 10, alignItems: 'center', justifyContent: 'center' },
-    emptyContainer: { alignItems: 'center', marginTop: 50 },
-    emptyText: { color: '#64748b' },
-
-    // Modal Stilleri
-    modalOverlay: {
-        flex: 1,
-        backgroundColor: 'rgba(0,0,0,0.6)',
-        justifyContent: 'flex-end',
-    },
-    modalContent: {
-        borderTopLeftRadius: 36,
-        borderTopRightRadius: 36,
-        padding: 24,
-        paddingBottom: 40,
-        borderWidth: 1,
-        borderBottomWidth: 0,
-    },
-    modalHeader: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: 25,
-    },
-    modalTitle: {
-        fontSize: 20,
-        fontWeight: '900',
-    },
-    closeButton: {
+    header: { paddingTop: 0, paddingBottom: 5 },
+    topBar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, paddingHorizontal: 16 },
+    logo: { fontSize: 32, fontWeight: '900', letterSpacing: -1 },
+    subLogo: { fontSize: 12, fontWeight: '500', marginTop: -5, opacity: 0.8 },
+    iconBtn: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center', marginRight: 0 },
+    smallIconBtn: {
         width: 36,
         height: 36,
         borderRadius: 18,
-        backgroundColor: 'rgba(255,255,255,0.1)',
         alignItems: 'center',
         justifyContent: 'center',
+        borderWidth: 1.5,
+        borderColor: 'rgba(255,255,255,0.05)',
     },
-    filterSection: {
-        marginBottom: 24,
-    },
-    filterLabel: {
-        fontSize: 14,
-        fontWeight: '700',
-        marginBottom: 12,
-        textTransform: 'uppercase',
-        letterSpacing: 1,
-    },
-    filterOptions: {
-        flexDirection: 'row',
-        gap: 12,
-    },
-    filterChip: {
-        flexDirection: 'row',
-        paddingHorizontal: 16,
-        paddingVertical: 10,
-        borderRadius: 16,
+    balanceBadge: { 
+        flexDirection: 'row', 
+        alignItems: 'center', 
+        paddingLeft: 4, 
+        paddingRight: 14, 
+        paddingVertical: 4, 
+        borderRadius: 22,
         borderWidth: 1,
-        alignItems: 'center',
+        borderColor: 'rgba(255,255,255,0.05)'
     },
-    filterChipActive: {
-        backgroundColor: '#8b5cf6',
-        borderColor: '#a78bfa',
-    },
-    filterChipText: {
-        fontSize: 14,
-        fontWeight: '600',
-    },
-    filterChipTextActive: {
-        color: 'white',
-    },
-    applyButton: {
-        marginTop: 10,
-    },
-    applyButtonGradient: {
-        height: 56,
-        borderRadius: 20,
+    heartCircle: {
+        width: 34,
+        height: 34,
+        borderRadius: 17,
         alignItems: 'center',
         justifyContent: 'center',
     },
-    applyButtonText: {
-        color: 'white',
-        fontSize: 16,
-        fontWeight: '800',
-    },
-    // New Modern Filter Styles
-    filterChipModern: {
-        height: 80,
-        borderRadius: 20,
+    balanceText: { fontSize: 15, fontWeight: '800', marginLeft: 10 },
+    searchWrapper: { 
+        flexDirection: 'row', 
+        alignItems: 'center', 
+        height: 50, 
+        borderRadius: 15, 
+        paddingHorizontal: 15, 
+        marginHorizontal: 16,
+        marginBottom: 20,
         borderWidth: 1,
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: 10,
+        borderColor: 'rgba(255,255,255,0.05)'
     },
-    filterChipActiveModern: {
-        height: 80,
-        borderRadius: 20,
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: 10,
-        elevation: 4,
-        shadowColor: '#d946ef',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.3,
-        shadowRadius: 8,
+    searchInput: { flex: 1, height: '100%', fontSize: 15 },
+    tabContainer: { flexDirection: 'row', marginBottom: 15, marginTop: 15, paddingHorizontal: 16 },
+    tab: { 
+        paddingHorizontal: 20, 
+        paddingVertical: 10, 
+        borderRadius: 25, 
+        marginRight: 10,
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.05)'
     },
-    filterChipTextModern: {
-        fontSize: 12,
+    tabText: { fontSize: 13, fontWeight: '700' },
+    userCard: { marginHorizontal: 16, marginBottom: 10, padding: 12, borderRadius: 16 },
+    cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+    avatarContainer: { position: 'relative' },
+    onlineBadge: { position: 'absolute', bottom: 0, right: 0, width: 13, height: 13, borderRadius: 6.5, backgroundColor: '#10b981', borderWidth: 2, borderColor: '#110C24' },
+    infoContainer: { marginLeft: 12, flex: 1 },
+    nameRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 1 },
+    name: { fontSize: 16, fontWeight: 'bold' },
+    jobText: { fontSize: 11, marginRight: 6 },
+    ageBadge: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 10 },
+    ageBadgeText: { color: 'white', fontSize: 10, fontWeight: 'bold', marginLeft: 2 },
+    premiumVipBadge: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6, marginRight: 4 },
+    premiumVipText: { color: 'white', fontSize: 9, fontWeight: 'bold' },
+    bioText: { fontSize: 11, marginTop: 8, lineHeight: 16 },
+    interestsContainer: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        gap: 6,
+        marginTop: 8,
+    },
+    interestBadge: {
+        paddingHorizontal: 8,
+        paddingVertical: 3,
+        borderRadius: 8,
+        borderWidth: 1,
+    },
+    interestText: {
+        fontSize: 10,
         fontWeight: '700',
     },
-    filterChipTextActiveModern: {
-        color: 'white',
-        fontSize: 12,
-        fontWeight: '800',
-    },
-    onlineToggle: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        paddingHorizontal: 20,
-        paddingVertical: 18,
-        borderRadius: 24,
-        borderWidth: 1,
-    },
-    onlineIndicator: {
-        width: 10,
-        height: 10,
-        borderRadius: 5,
-        marginRight: 12,
-    },
-    onlineToggleText: {
-        fontSize: 14,
-        fontWeight: '600',
-    },
-    toggleSwitch: {
-        width: 44,
-        height: 24,
-        borderRadius: 12,
-        padding: 2,
-    },
-    toggleCircle: {
-        width: 20,
-        height: 20,
-        borderRadius: 10,
-        backgroundColor: 'white',
-        elevation: 2,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.2,
-        shadowRadius: 2,
-    },
+    albumScroll: { marginTop: 10 },
+    albumImage: { width: 70, height: 70, borderRadius: 12, marginRight: 10 },
+    emptyContainer: { alignItems: 'center', justifyContent: 'center', marginTop: 100 },
+    emptyText: { marginTop: 15, fontSize: 16, fontWeight: '500' }
 });
+

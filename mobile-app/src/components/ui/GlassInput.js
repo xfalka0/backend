@@ -15,7 +15,8 @@ export default function GlassInput({
     onChangeText,
     secureTextEntry,
     autoCapitalize = 'none',
-    keyboardType = 'default'
+    keyboardType = 'default',
+    ...restProps
 }) {
     const [isFocused, setIsFocused] = useState(false);
     const focusAnim = useSharedValue(0);
@@ -77,6 +78,7 @@ export default function GlassInput({
                         keyboardType={keyboardType}
                         placeholderTextColor="transparent"
                         underlineColorAndroid="transparent"
+                        {...restProps}
                     />
                 </BlurView>
             </Animated.View>

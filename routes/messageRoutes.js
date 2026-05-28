@@ -110,7 +110,7 @@ router.post('/internal-fake', async (req, res) => {
         const result = await db.query('INSERT INTO messages (chat_id, sender_id, content, content_type) VALUES ($1, $2, $3, $4) RETURNING *', [chatId, operatorId, content, 'text']);
         await db.query('UPDATE chats SET last_message_at = NOW(), last_message = $2 WHERE id = $1', [chatId, content]);
         const io = req.app.get('io');
-        if (io) io.emit('new_message', { ...result.rows[0], chat_id: chatId.toString() });
+        if (io) io.to(userId.toString()).emit('new_message', { ...result.rows[0], chat_id: chatId.toString() });
         res.json({ success: true, message: result.rows[0], chatId });
     } catch (err) {
         res.status(500).json({ error: err.message });

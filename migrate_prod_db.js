@@ -29,13 +29,13 @@ async function run() {
             console.log('No packages exist, creating them...');
             // Insert the packages
             const newPackages = [
-                { coins: 100, price: 49.99, name: 'Başlangıç Paketi', revenuecat_id: 'coins_100_v1' },
-                { coins: 200, price: 89.99, name: 'Gümüş Paket', revenuecat_id: 'coins_200_v1' },
-                { coins: 400, price: 159.99, name: 'Altın Paket', revenuecat_id: 'coins_400_v1' },
-                { coins: 700, price: 299.99, name: 'VIP Paket', revenuecat_id: 'coins_700_v1' },
-                { coins: 1200, price: 549.99, name: 'Platin Paket', revenuecat_id: 'coins_1200_v1' },
-                { coins: 2500, price: 1149.99, name: 'Efsane Paket', revenuecat_id: 'coins_2500_v1' },
-                { coins: 5000, price: 2099.99, name: 'Ultimate Paket', revenuecat_id: 'coins_5000_v1' }
+                { coins: 100, price: 54.99, name: 'Başlangıç Paketi', revenuecat_id: 'coins_100_v1' },
+                { coins: 200, price: 98.99, name: 'Gümüş Paket', revenuecat_id: 'coins_200_v1' },
+                { coins: 400, price: 189.99, name: 'Altın Paket', revenuecat_id: 'coins_400_v1' },
+                { coins: 700, price: 334.99, name: 'VIP Paket', revenuecat_id: 'coins_700_v1' },
+                { coins: 1200, price: 604.99, name: 'Platin Paket', revenuecat_id: 'coins_1200_v1' },
+                { coins: 2500, price: 1299.99, name: 'Efsane Paket', revenuecat_id: 'coins_2500_v1' },
+                { coins: 5000, price: 2399.99, name: 'Ultimate Paket', revenuecat_id: 'coins_5000_v1' }
             ];
             for (let pkg of newPackages) {
                 await client.query(
@@ -48,13 +48,13 @@ async function run() {
             console.log('Found existing packages. Updating prices and details...');
             // Need to map our new pricing logic to existing rows by matching 'coins' or ID.
             const updates = [
-                { coins: 100, price: 49.99 },
-                { coins: 200, price: 89.99 },
-                { coins: 400, price: 159.99 },
-                { coins: 700, price: 299.99 },
-                { coins: 1200, price: 549.99 },
-                { coins: 2500, price: 1149.99 },
-                { coins: 5000, price: 2099.99 }
+                { coins: 100, price: 54.99 },
+                { coins: 200, price: 98.99 },
+                { coins: 400, price: 189.99 },
+                { coins: 700, price: 334.99 },
+                { coins: 1200, price: 604.99 },
+                { coins: 2500, price: 1299.99 },
+                { coins: 5000, price: 2399.99 }
             ];
 
             for (let up of updates) {

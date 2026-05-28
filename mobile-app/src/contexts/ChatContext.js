@@ -136,7 +136,8 @@ export const ChatProvider = ({ children }) => {
             setActiveChatId,
             balance,
             setBalance,
-            fetchBalance
+            fetchBalance,
+            refreshUser: initialize
         }}>
             {children}
         </ChatContext.Provider>

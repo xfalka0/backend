@@ -31,6 +31,7 @@ import { GoogleSignin, statusCodes } from '@react-native-google-signin/google-si
 
 import { API_URL } from '../config';
 import { NotificationService } from '../services/notificationService';
+import { useChat } from '../contexts/ChatContext';
 import { COLORS } from '../theme';
 import AuthBackground from '../components/animated/AuthBackground';
 import GlassInput from '../components/ui/GlassInput';
@@ -42,11 +43,12 @@ import ModernAlert from '../components/ui/ModernAlert';
 const { width, height } = Dimensions.get('window');
 
 export default function AuthScreen({ navigation, route }) {
+    const { refreshUser } = useChat();
     // Steps: 0: Method Selection, 1: Identifier Input, 2: OTP Entry
     const [step, setStep] = useState(1);
     const [authMethod, setAuthMethod] = useState('email'); // Default to email
     const [email, setEmail] = useState('');
-    const [phone, setPhone] = useState('+90');
+    const [phone, setPhone] = useState('');
     const [otp, setOtp] = useState('');
     const [password, setPassword] = useState('');
     const [isRegisterMode, setIsRegisterMode] = useState(false);
@@ -109,6 +111,9 @@ export default function AuthScreen({ navigation, route }) {
                 await AsyncStorage.setItem('token', token);
                 await AsyncStorage.setItem('user', JSON.stringify(user));
 
+                // Initialize global ChatProvider context immediately
+                await refreshUser();
+
                 if (user.onboarding_completed) {
                     // Register notifications after login
                     const token = await NotificationService.registerForPushNotificationsAsync();
@@ -127,20 +132,25 @@ export default function AuthScreen({ navigation, route }) {
     };
 
     const handleRequestOtp = async () => {
+        const identifier = authMethod === 'email' ? email : phone;
+        
         if (authMethod === 'email') {
-            handleEmailAuth();
-            return;
-        }
-
-        const identifier = phone;
-        if (!identifier || phone.length < 10) {
-            setAlert({ visible: true, title: 'Hata', message: 'Lütfen geçerli bir telefon numarası girin.', type: 'error' });
-            return;
+            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            if (!emailRegex.test(email)) {
+                setAlert({ visible: true, title: 'Hata', message: 'Lütfen geçerli bir e-posta adresi girin.', type: 'error' });
+                return;
+            }
+        } else {
+            if (!identifier || phone.length < 10) {
+                setAlert({ visible: true, title: 'Hata', message: 'Lütfen geçerli bir telefon numarası girin.', type: 'error' });
+                return;
+            }
         }
 
         setLoading(true);
         try {
-            const res = await axios.post(`${API_URL}/auth/request-otp`, { phone });
+            const payload = authMethod === 'email' ? { email } : { phone };
+            const res = await axios.post(`${API_URL}/auth/request-otp`, payload);
 
             if (res.data.success) {
                 setStep(2);
@@ -161,13 +171,16 @@ export default function AuthScreen({ navigation, route }) {
         setLoading(true);
         try {
             const deviceId = await getDeviceId();
-            const payload = { phone, otp, deviceId };
+            const payload = authMethod === 'email' ? { email, otp, deviceId } : { phone, otp, deviceId };
             const res = await axios.post(`${API_URL}/auth/verify-otp`, payload);
 
             if (res.data.user) {
                 const { user, token } = res.data;
                 await AsyncStorage.setItem('token', token);
                 await AsyncStorage.setItem('user', JSON.stringify(user));
+
+                // Initialize global ChatProvider context immediately
+                await refreshUser();
 
                 if (user.onboarding_completed) {
                     // Register notifications after login
@@ -202,6 +215,9 @@ export default function AuthScreen({ navigation, route }) {
                 const { user, token } = res.data;
                 await AsyncStorage.setItem('token', token);
                 await AsyncStorage.setItem('user', JSON.stringify(user));
+
+                // Initialize global ChatProvider context immediately
+                await refreshUser();
 
                 if (user.onboarding_completed) {
                     // Register notifications after login
@@ -242,6 +258,9 @@ export default function AuthScreen({ navigation, route }) {
                 const { user, token } = res.data;
                 await AsyncStorage.setItem('token', token);
                 await AsyncStorage.setItem('user', JSON.stringify(user));
+                
+                // Initialize global ChatProvider context immediately
+                await refreshUser();
                 
                 // Register notifications after login
                 const tokenResult = await NotificationService.registerForPushNotificationsAsync();
@@ -305,55 +324,38 @@ export default function AuthScreen({ navigation, route }) {
             </TouchableOpacity>
 
             <Text style={styles.title}>
-                {authMethod === 'email' ? (isRegisterMode ? 'Hesap Oluştur' : 'Giriş Yap') : 'Telefon Numaran'}
+                {authMethod === 'email' ? 'E-posta Adresin' : 'Telefon Numaran'}
             </Text>
             <Text style={styles.subtitle}>
-                {authMethod === 'email'
-                    ? (isRegisterMode ? 'Kaydolmak için bilgileri girin' : 'Devam etmek için giriş yapın')
-                    : 'Doğrulama kodu göndereceğiz'}
+                Doğrulama kodu göndereceğiz
             </Text>
 
             {authMethod === 'email' ? (
-                <>
-                    <GlassInput
-                        label="E-posta"
-                        value={email}
-                        onChangeText={setEmail}
-                        keyboardType="email-address"
-                    />
-                    <GlassInput
-                        label="Şifre"
-                        value={password}
-                        onChangeText={setPassword}
-                        secureTextEntry
-                    />
-                </>
+                <GlassInput
+                    label="E-posta"
+                    value={email}
+                    onChangeText={setEmail}
+                    keyboardType="email-address"
+                />
             ) : (
                 <GlassInput
-                    label="Telefon"
+                    label="Telefon (05xx xxx xx xx)"
                     value={phone}
-                    onChangeText={setPhone}
+                    onChangeText={(val) => {
+                        const numericVal = val.replace(/[^0-9]/g, '');
+                        setPhone(numericVal);
+                    }}
                     keyboardType="phone-pad"
+                    maxLength={11}
                 />
             )}
 
             <WelcomeButton
-                title={authMethod === 'email' ? (isRegisterMode ? 'KAYIT OL' : 'GİRİŞ YAP') : 'KOD GÖNDER'}
+                title="KOD GÖNDER"
                 variant="gradient"
                 onPress={handleRequestOtp}
                 loading={loading}
             />
-
-            {authMethod === 'email' && (
-                <TouchableOpacity
-                    onPress={() => setIsRegisterMode(!isRegisterMode)}
-                    style={{ alignSelf: 'center', marginTop: 16 }}
-                >
-                    <Text style={{ color: 'rgba(255,255,255,0.7)', fontSize: 14 }}>
-                        {isRegisterMode ? 'Zaten hesabın var mı? Giriş yap' : 'Hesabın yok mu? Kayıt ol'}
-                    </Text>
-                </TouchableOpacity>
-            )}
         </Animated.View>
     );
 

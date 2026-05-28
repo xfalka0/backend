@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, TextInput, FlatList, StyleSheet, KeyboardAvoidingView, Platform, TouchableOpacity, Image, RefreshControl, Animated, ScrollView, Keyboard } from 'react-native';
+import { View, Text, TextInput, FlatList, StyleSheet, KeyboardAvoidingView, Platform, TouchableOpacity, Image, RefreshControl, Animated, ScrollView, Keyboard, PanResponder } from 'react-native';
 import { BlurView } from 'expo-blur';
 import * as Haptics from 'expo-haptics';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -103,6 +103,47 @@ export default function ChatScreen({ route, navigation }) {
     const typingTimeoutRef = useRef(null);
     const giftAnim = useRef(new Animated.Value(0)).current;
     const offerPulseAnim = useRef(new Animated.Value(1)).current;
+
+    const recordingRef = useRef(null);
+    const isRecordingRef = useRef(false);
+
+    const panResponder = useRef(
+        PanResponder.create({
+            onStartShouldSetPanResponder: () => true,
+            onMoveShouldSetPanResponder: () => true,
+            onPanResponderGrant: (evt, gestureState) => {
+                startRecording();
+            },
+            onPanResponderMove: (evt, gestureState) => {
+                if (!isRecordingRef.current) return;
+                
+                const dx = gestureState.dx;
+                
+                // Slide to the right by more than 100 pixels triggers cancellation
+                if (dx > 100) {
+                    if (!isCancellingRef.current) {
+                        isCancellingRef.current = true;
+                        setIsCancelling(true);
+                        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+                    }
+                } else {
+                    if (isCancellingRef.current) {
+                        isCancellingRef.current = false;
+                        setIsCancelling(false);
+                    }
+                }
+                
+                // Visual slide effect (move right)
+                slideAnim.setValue(Math.min(150, Math.max(0, dx)));
+            },
+            onPanResponderRelease: (evt, gestureState) => {
+                stopRecording();
+            },
+            onPanResponderTerminate: (evt, gestureState) => {
+                stopRecording();
+            }
+        })
+    ).current;
 
     // Gift Floating & Offer Pulse Animations
     useEffect(() => {
@@ -362,6 +403,7 @@ export default function ChatScreen({ route, navigation }) {
 
     useEffect(() => {
         initializeChat();
+        
         return () => {
             if (socketRef.current) socketRef.current.disconnect();
         };
@@ -654,7 +696,9 @@ export default function ChatScreen({ route, navigation }) {
                     Audio.RecordingOptionsPresets.HIGH_QUALITY
                 );
                 setRecording(newRecording);
+                recordingRef.current = newRecording;
                 setIsRecording(true);
+                isRecordingRef.current = true;
                 setIsCancelling(false);
                 isCancellingRef.current = false;
                 slideAnim.setValue(0);
@@ -724,18 +768,20 @@ export default function ChatScreen({ route, navigation }) {
     };
 
     const stopRecording = async () => {
-        if (!recording) return;
+        const toStop = recordingRef.current;
+        if (!toStop) return;
         
         const wasCancelling = isCancellingRef.current;
         const duration = Date.now() - startTimeRef.current;
-        const toStop = recording;
 
         // Clean up UI and state immediately
         if (timerRef.current) clearInterval(timerRef.current);
         blinkAnim.setValue(1);
         waveAnim.setValue(0);
         setRecording(null);
+        recordingRef.current = null;
         setIsRecording(false);
+        isRecordingRef.current = false;
         setIsCancelling(false);
         isCancellingRef.current = false;
         slideAnim.setValue(0);
@@ -757,13 +803,20 @@ export default function ChatScreen({ route, navigation }) {
 
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
             const uri = toStop.getURI();
-            uploadAndSendAudio(uri);
+            
+            // Format duration in minutes:seconds
+            const durationSec = Math.max(1, Math.round(duration / 1000));
+            const minutes = Math.floor(durationSec / 60);
+            const seconds = durationSec % 60;
+            const durationStr = `${minutes}:${seconds < 10 ? '0' : ''}${seconds}`;
+
+            uploadAndSendAudio(uri, durationStr);
         } catch (err) {
             console.error('Stop Recording Error:', err);
         }
     };
 
-    const uploadAndSendAudio = async (uri) => {
+    const uploadAndSendAudio = async (uri, durationStr) => {
         try {
             const formData = new FormData();
             formData.append('file', {
@@ -790,6 +843,7 @@ export default function ChatScreen({ route, navigation }) {
                 content: audioUrl,
                 type: 'audio',
                 content_type: 'audio',
+                duration: durationStr,
                 created_at: new Date().toISOString(),
                 is_optimistic: true
             };
@@ -800,7 +854,8 @@ export default function ChatScreen({ route, navigation }) {
                 senderId: user.id,
                 content: audioUrl,
                 type: 'audio',
-                tempId: tempId
+                tempId: tempId,
+                duration: durationStr
             };
             socketRef.current?.emit('send_message', msgData);
 
@@ -883,32 +938,33 @@ export default function ChatScreen({ route, navigation }) {
             const gift = GIFTS.find(g => g.id === giftId) || { name: item.content || 'Hediye', price: '?' };
 
             return (
-                <View style={[styles.giftBubbleContainer, isUser ? { alignSelf: 'flex-end' } : { alignSelf: 'flex-start' }]}>
-                    <MessageBubble 
-                        isMine={isUser} 
-                        index={index} 
-                        isRead={item.is_read}
-                        reaction={item.reaction}
-                        onReaction={(type) => {
-                            socketRef.current?.emit('message_reaction', { messageId: item.id, reaction: type, chatId });
-                            setMessages(prev => prev.map(m => m.id === item.id ? { ...m, reaction: type } : m));
-                        }}
-                    >
-                        <View style={styles.giftMessageContent}>
-                            <Image
-                                source={gift.image || require('../assets/gift_icon.webp')}
-                                style={{ width: 80, height: 80, marginBottom: 8 }}
-                                resizeMode="contain"
-                            />
-                            <View style={styles.giftInfo}>
-                                <Text style={[styles.giftNameText, { color: theme.colors.text }]}>{gift.name}</Text>
-                                <View style={styles.giftPriceBadge}>
-                                    <Text style={[styles.giftPriceText, { color: theme.colors.text }]}>{gift.price} COIN</Text>
-                                </View>
+                <MessageBubble 
+                    isMine={isUser} 
+                    index={index} 
+                    isRead={item.is_read}
+                    avatar={resolveImageUrl(isUser ? user.avatar : avatar_url)}
+                    vipLevel={isUser ? user.vip_level : vip_level}
+                    timestamp={item.created_at}
+                    reaction={item.reaction}
+                    onReaction={(type) => {
+                        socketRef.current?.emit('message_reaction', { messageId: item.id, reaction: type, chatId });
+                        setMessages(prev => prev.map(m => m.id === item.id ? { ...m, reaction: type } : m));
+                    }}
+                >
+                    <View style={styles.giftMessageContent}>
+                        <Image
+                            source={gift.image || require('../assets/gift_icon.webp')}
+                            style={{ width: 80, height: 80, marginBottom: 8 }}
+                            resizeMode="contain"
+                        />
+                        <View style={styles.giftInfo}>
+                            <Text style={[styles.giftNameText, { color: theme.colors.text }]}>{gift.name}</Text>
+                            <View style={styles.giftPriceBadge}>
+                                <Text style={[styles.giftPriceText, { color: theme.colors.text }]}>{gift.price} COIN</Text>
                             </View>
                         </View>
-                    </MessageBubble>
-                </View>
+                    </View>
+                </MessageBubble>
             );
         }
 
@@ -1024,6 +1080,10 @@ export default function ChatScreen({ route, navigation }) {
                     renderItem={renderMessage}
                     contentContainerStyle={styles.messagesList}
                     scrollIndicatorInsets={{ right: 1 }} // Fix scrollbar on iOS
+                    removeClippedSubviews={Platform.OS === 'android'}
+                    maxToRenderPerBatch={10}
+                    windowSize={10}
+                    initialNumToRender={15}
                 />
 
                 {isTyping && <TypingIndicator />}
@@ -1032,12 +1092,9 @@ export default function ChatScreen({ route, navigation }) {
                     {/* renderIcebreakers() is now handled by QuickActionsModal */}
                     <GlassCard intensity={40} tint="dark" style={styles.glassInputContainer}>
                         <View style={styles.inputRow}>
-                              <TouchableOpacity 
+                              <Animated.View 
+                                  {...panResponder.panHandlers}
                                   style={[styles.quickMsgToggle, { transform: [{ translateX: slideAnim }] }]} 
-                                  activeOpacity={0.7}
-                                  onPressIn={startRecording}
-                                  onPressOut={stopRecording}
-                                  onResponderMove={handleRecordingMove}
                               >
                                   <Ionicons 
                                       name={isCancelling ? "trash" : "mic"} 
@@ -1050,7 +1107,7 @@ export default function ChatScreen({ route, navigation }) {
                                           opacity: waveAnim.interpolate({ inputRange: [0, 1], outputRange: [0.5, 0] })
                                       }]} />
                                   )}
-                              </TouchableOpacity>
+                              </Animated.View>
                              
                              <View style={styles.inputFlexContainer}>
                                  {isRecording ? (

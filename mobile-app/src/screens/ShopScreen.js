@@ -14,30 +14,56 @@ import ModernAlert from '../components/ui/ModernAlert';
 
 const { width } = Dimensions.get('window');
 
-const CoinPackageCard = ({ pack, index, handlePurchase, theme, themeMode }) => {
+// Bonus & label config per coin amount
+const PACKAGE_CONFIG = {
+    '100':  { bonus: 10,   label: null, labelColor: null },
+    '200':  { bonus: 25,   label: null, labelColor: null },
+    '400':  { bonus: 60,   label: null, labelColor: null },
+    '700':  { bonus: 120,  label: null, labelColor: null },
+    '1200': { bonus: 250,  label: null, labelColor: null },
+    '2500': { bonus: 600,  label: null, labelColor: null },
+    '5000': { bonus: 1500, label: null, labelColor: null },
+};
+
+const CoinPackageCard = ({ pack, index, handlePurchase, theme, themeMode, baselineRate }) => {
     const product = pack.product;
     const coinAmount = product.title.split(' ')[0] || product.title;
     const isBestValue = product.identifier.includes('popular') || coinAmount === '1200';
+    const config = PACKAGE_CONFIG[coinAmount] || { bonus: 0, label: null };
+    const coins = parseInt(coinAmount, 10) || 0;
+    const totalCoins = coins + (config.bonus || 0);
+    const price = product.price;
+
+    let advantage = 0;
+    if (baselineRate && baselineRate > 0 && price && price > 0) {
+        const currentRate = totalCoins / price;
+        advantage = Math.round(((currentRate / baselineRate) - 1) * 100);
+    }
 
     return (
         <Motion.SlideUp delay={index * 50}>
             <TouchableOpacity
                 style={[styles.cardContainer, isBestValue && styles.bestValueContainer]}
                 onPress={() => handlePurchase(pack)}
-                activeOpacity={0.8}
+                activeOpacity={0.75}
             >
                 <LinearGradient
-                    colors={isBestValue ? (themeMode === 'dark' ? ['#4c1d95', '#2e1065'] : ['#fef3c7', '#fffbeb']) : (themeMode === 'dark' ? ['rgba(255, 255, 255, 0.08)', 'rgba(255, 255, 255, 0.03)'] : ['#ffffff', '#f8fafc'])}
+                    colors={isBestValue
+                        ? (themeMode === 'dark' ? ['#3b0764', '#4c1d95'] : ['#fef3c7', '#fffbeb'])
+                        : (themeMode === 'dark' ? ['rgba(255,255,255,0.09)', 'rgba(255,255,255,0.04)'] : ['#ffffff', '#f8fafc'])
+                    }
                     style={[styles.card, isBestValue && styles.bestValueCard]}
                 >
-                    {isBestValue && (
+                    {/* Top Label Badge */}
+                    {config.label && config.labelColor && (
                         <View style={styles.ribbonContainer}>
-                            <LinearGradient colors={['#fbbf24', '#f59e0b']} style={styles.ribbon}>
-                                <Text style={styles.ribbonText}>POPÜLER</Text>
+                            <LinearGradient colors={config.labelColor} style={styles.ribbon}>
+                                <Text style={styles.ribbonText}>{config.label}</Text>
                             </LinearGradient>
                         </View>
                     )}
 
+                    {/* Coin Image */}
                     <View style={styles.coinImageContainer}>
                         <Image
                             source={require('../../assets/gold_coin_3f.png')}
@@ -46,6 +72,7 @@ const CoinPackageCard = ({ pack, index, handlePurchase, theme, themeMode }) => {
                         />
                     </View>
 
+                    {/* Coin Count */}
                     <View style={styles.packageInfo}>
                         <Text style={[styles.coinCount, { color: isBestValue ? '#fbbf24' : theme.colors.text }]}>
                             {coinAmount}
@@ -55,6 +82,14 @@ const CoinPackageCard = ({ pack, index, handlePurchase, theme, themeMode }) => {
                         </Text>
                     </View>
 
+                    {/* Advantage Badge */}
+                    {advantage > 0 && (
+                        <View style={styles.bonusBadge}>
+                            <Text style={styles.bonusBadgeText}>%{advantage} AVANTAJ</Text>
+                        </View>
+                    )}
+
+                    {/* Price Button */}
                     <LinearGradient
                         colors={isBestValue ? ['#fbbf24', '#f59e0b'] : ['#ec4899', '#e11d48']}
                         start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
@@ -342,6 +377,23 @@ export default function ShopScreen({ navigation, route }) {
         }
     };
 
+    // Calculate baseline rate for advantage calculation (using 100 coin package as baseline)
+    const baselinePack = offerings.find(p => {
+        const coinAmount = parseInt(p.product.title.split(' ')[0], 10) || p.product.coins || 0;
+        return coinAmount === 100;
+    }) || offerings[0];
+
+    let baselineRate = 0;
+    if (baselinePack && baselinePack.product) {
+        const baselineCoins = parseInt(baselinePack.product.title.split(' ')[0], 10) || baselinePack.product.coins || 100;
+        const baselinePrice = baselinePack.product.price;
+        if (baselinePrice && baselinePrice > 0) {
+            const baselineConfig = PACKAGE_CONFIG[baselineCoins.toString()] || { bonus: 0 };
+            const baselineTotal = baselineCoins + (baselineConfig.bonus || 0);
+            baselineRate = baselineTotal / baselinePrice;
+        }
+    }
+
     return (
         <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
             <StatusBar barStyle={themeMode === 'dark' ? "light-content" : "dark-content"} />
@@ -426,8 +478,8 @@ export default function ShopScreen({ navigation, route }) {
                         </TouchableOpacity>
                     </Motion.SlideUp>
 
-                    <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Coin Paketleri</Text>
-                    <Text style={[styles.sectionSub, { color: theme.colors.textSecondary }]}>Daha fazla etkileşim için hesabına coin yükle.</Text>
+                    <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>💰 Coin Paketleri</Text>
+                    <Text style={[styles.sectionSub, { color: theme.colors.textSecondary }]}>Daha fazla coin, daha fazla sohbet ve bağlantı! Bonus coinlerle avantajlı fırsatları kaçırma.</Text>
 
                     <View style={styles.packagesGrid}>
                         {loading ? (
@@ -443,17 +495,18 @@ export default function ShopScreen({ navigation, route }) {
                                     handlePurchase={handlePurchase}
                                     theme={theme}
                                     themeMode={themeMode}
+                                    baselineRate={baselineRate}
                                 />
                             ))
                         ) : (
                             // Absolute Fallback if even API fails
                             [
-                                { coins: 100, price: '49,99 ₺', name: 'Küçük Paket' },
-                                { coins: 250, price: '109,99 ₺', name: 'Gümüş Paket' },
-                                { coins: 500, price: '199,99 ₺', name: 'Altın Paket' },
-                                { coins: 1000, price: '359,99 ₺', name: 'VIP Paket' },
-                                { coins: 2500, price: '849,99 ₺', name: 'Platin Paket' },
-                                { coins: 5000, price: '1599,99 ₺', name: 'Efsane Paket' }
+                                { coins: 100, price: '54,99 ₺', numPrice: 54.99, name: 'Küçük Paket' },
+                                { coins: 250, price: '120,99 ₺', numPrice: 120.99, name: 'Gümüş Paket' },
+                                { coins: 500, price: '219,99 ₺', numPrice: 219.99, name: 'Altın Paket' },
+                                { coins: 1000, price: '395,99 ₺', numPrice: 395.99, name: 'VIP Paket' },
+                                { coins: 2500, price: '1299,99 ₺', numPrice: 1299.99, name: 'Platin Paket' },
+                                { coins: 5000, price: '2399,99 ₺', numPrice: 2399.99, name: 'Efsane Paket' }
                             ].map((p, i) => (
                                 <CoinPackageCard
                                     key={`fallback_${i}`}
@@ -463,13 +516,16 @@ export default function ShopScreen({ navigation, route }) {
                                             identifier: `fallback_${i}`,
                                             title: `${p.coins} Coin`,
                                             description: p.name,
-                                            priceString: p.price
+                                            priceString: p.price,
+                                            price: p.numPrice,
+                                            coins: p.coins
                                         }
                                     }}
                                     index={i}
                                     handlePurchase={handlePurchase}
                                     theme={theme}
                                     themeMode={themeMode}
+                                    baselineRate={baselineRate}
                                 />
                             ))
                         )}
@@ -586,12 +642,12 @@ const styles = StyleSheet.create({
         borderRadius: 14,
         borderWidth: 1,
         borderColor: 'rgba(255,255,255,0.05)',
-        minHeight: 130,
+        minHeight: 155,
         justifyContent: 'space-between',
     },
     bestValueCard: {
         borderColor: '#fbbf24',
-        borderWidth: 1.2,
+        borderWidth: 1.5,
     },
     ribbonContainer: {
         position: 'absolute',
@@ -636,6 +692,25 @@ const styles = StyleSheet.create({
         fontWeight: '700',
         opacity: 0.6,
         letterSpacing: 1,
+    },
+    bonusBadge: {
+        backgroundColor: '#16a34a',
+        borderRadius: 6,
+        paddingHorizontal: 5,
+        paddingVertical: 2,
+        marginTop: 2,
+    },
+    bonusBadgeText: {
+        color: '#ffffff',
+        fontSize: 7,
+        fontWeight: '900',
+        letterSpacing: 0.3,
+    },
+    totalCoinsText: {
+        fontSize: 7.5,
+        fontWeight: '600',
+        opacity: 0.65,
+        marginBottom: 1,
     },
     priceButton: {
         paddingVertical: 5,

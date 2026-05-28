@@ -33,6 +33,7 @@ import { COLORS, GRADIENTS } from '../theme';
 import AuthBackground from '../components/animated/AuthBackground';
 import GradientButton from '../components/ui/GradientButton';
 import ModernAlert from '../components/ui/ModernAlert';
+import { useChat } from '../contexts/ChatContext';
 
 const { width, height } = Dimensions.get('window');
 
@@ -63,6 +64,7 @@ const INTERESTS_OPTIONS = [
 ];
 
 export default function OnboardingScreen({ navigation, route }) {
+    const { refreshUser } = useChat();
     const insets = useSafeAreaInsets();
     const { userId, token } = route.params || {};
     const [currentStep, setCurrentStep] = useState(0);
@@ -173,6 +175,9 @@ export default function OnboardingScreen({ navigation, route }) {
                 const userData = { ...JSON.parse(userJson), ...updatedUser, onboarding_completed: true };
                 await AsyncStorage.setItem('user', JSON.stringify(userData));
             }
+
+            // Sync global socket connection with completed onboarding user data
+            await refreshUser();
 
             setAlert({
                 visible: true,
@@ -325,6 +330,15 @@ export default function OnboardingScreen({ navigation, route }) {
                                         if (interests.includes(opt)) {
                                             setInterests(interests.filter(i => i !== opt));
                                         } else {
+                                            if (interests.length >= 3) {
+                                                setAlert({
+                                                    visible: true,
+                                                    title: 'Uyarı',
+                                                    message: 'En fazla 3 ilgi alanı seçebilirsiniz.',
+                                                    type: 'warning'
+                                                });
+                                                return;
+                                            }
                                             setInterests([...interests, opt]);
                                         }
                                     }}
@@ -359,7 +373,7 @@ export default function OnboardingScreen({ navigation, route }) {
         if (step.id === 'name') return name.trim().length > 1;
         if (step.id === 'gender') return gender !== null;
         if (step.id === 'relationship') return relationship.length > 0;
-        if (step.id === 'interests') return interests.length >= 2;
+        if (step.id === 'interests') return interests.length >= 1;
         if (step.id === 'photo') return photo !== null;
         return true;
     };

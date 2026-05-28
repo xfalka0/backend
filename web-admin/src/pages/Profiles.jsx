@@ -450,6 +450,10 @@ export default function ProfilesPage() {
                                                         const val = e.target.value.trim();
                                                         if (val) {
                                                             const current = formData.interests ? (Array.isArray(formData.interests) ? formData.interests : JSON.parse(formData.interests || '[]')) : [];
+                                                            if (current.length >= 3) {
+                                                                alert('En fazla 3 ilgi alanı ekleyebilirsiniz.');
+                                                                return;
+                                                            }
                                                             setFormData({ ...formData, interests: JSON.stringify([...current, val]) });
                                                             e.target.value = '';
                                                         }
@@ -461,6 +465,10 @@ export default function ProfilesPage() {
                                                 const val = input.value.trim();
                                                 if (val) {
                                                     const current = formData.interests ? (Array.isArray(formData.interests) ? formData.interests : JSON.parse(formData.interests || '[]')) : [];
+                                                    if (current.length >= 3) {
+                                                        alert('En fazla 3 ilgi alanı ekleyebilirsiniz.');
+                                                        return;
+                                                    }
                                                     setFormData({ ...formData, interests: JSON.stringify([...current, val]) });
                                                     input.value = '';
                                                 }

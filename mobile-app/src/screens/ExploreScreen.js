@@ -645,7 +645,7 @@ export default function ExploreScreen({ navigation, route }) {
         <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
             <View pointerEvents="none" style={StyleSheet.absoluteFill}>
                 <LinearGradient
-                    colors={themeMode === 'dark' ? ['#030712', '#0f172a'] : [theme.colors.background, theme.colors.backgroundSecondary]}
+                    colors={themeMode === 'dark' ? theme.gradients.dark : [theme.colors.background, theme.colors.backgroundSecondary]}
                     style={StyleSheet.absoluteFill}
                 />
             </View>
@@ -659,6 +659,10 @@ export default function ExploreScreen({ navigation, route }) {
                 contentContainerStyle={styles.feedList}
                 scrollEventThrottle={16}
                 ListHeaderComponent={renderHeader}
+                removeClippedSubviews={Platform.OS === 'android'}
+                maxToRenderPerBatch={5}
+                windowSize={5}
+                initialNumToRender={3}
             />
 
             {/* Lightbox Modal */}

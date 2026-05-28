@@ -128,11 +128,19 @@ const SwipeableCard = ({ profile, onSwipeLeft, onSwipeRight, isTop }) => {
                     <Text style={styles.name}>{profile.name}, {profile.age}</Text>
                     <Text style={styles.bio}>{profile.bio}</Text>
                     <View style={styles.tags}>
-                        {profile.interests?.slice(0, 3).map((interest, index) => (
-                            <View key={index} style={styles.tag}>
-                                <Text style={styles.tagText}>{interest}</Text>
-                            </View>
-                        ))}
+                        {(() => {
+                            let ints = profile.interests || [];
+                            if (typeof ints === 'string') {
+                                try { ints = JSON.parse(ints); }
+                                catch (e) { ints = ints.split(',').map(i => i.trim()); }
+                            }
+                            if (!Array.isArray(ints)) ints = [];
+                            return ints.slice(0, 3).filter(Boolean).map((interest, index) => (
+                                <View key={index} style={styles.tag}>
+                                    <Text style={styles.tagText}>{interest}</Text>
+                                </View>
+                            ));
+                        })()}
                     </View>
                 </View>
             </Animated.View>

@@ -74,7 +74,7 @@ export default function FavoritesScreen({ navigation, route }) {
                                 isStatic={true}
                             />
                             {item.is_online && (
-                                <View style={[styles.onlineBadge, { borderColor: themeMode === 'dark' ? '#0f172a' : theme.colors.background }]} />
+                                <View style={[styles.onlineBadge, { borderColor: theme.colors.background }]} />
                             )}
                         </View>
 

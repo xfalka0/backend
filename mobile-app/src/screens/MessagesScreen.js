@@ -163,12 +163,13 @@ export default function MessagesScreen({ navigation, route }) {
                     activeOpacity={0.8}
                 >
                     <GlassCard
-                        intensity={hasUnread ? 40 : 20}
+                        intensity={hasUnread ? 50 : 35}
                         tint={themeMode === 'dark' ? 'dark' : 'light'}
-                        noBorder={!hasUnread}
                         style={[
                             styles.chatItem,
-                            hasUnread && { borderColor: 'rgba(236, 72, 153, 0.5)', borderWidth: 1.5 }
+                            hasUnread 
+                                ? { borderColor: 'rgba(236, 72, 153, 0.5)', borderWidth: 1.5 }
+                                : { borderColor: 'rgba(255, 255, 255, 0.1)', borderWidth: 1 }
                         ]}
                     >
                         <View style={styles.avatarContainer}>
@@ -254,7 +255,7 @@ export default function MessagesScreen({ navigation, route }) {
             {themeMode === 'dark' && (
                 <View pointerEvents="none" style={StyleSheet.absoluteFill}>
                     <LinearGradient
-                        colors={['#030712', '#0f172a']}
+                        colors={theme.gradients.dark}
                         style={StyleSheet.absoluteFill}
                     />
                 </View>
@@ -363,17 +364,17 @@ const styles = StyleSheet.create({
     chatItem: {
         flexDirection: 'row',
         alignItems: 'center',
-        paddingVertical: 14, // Reduced from 18
+        paddingVertical: 14,
         paddingHorizontal: 16,
-        borderRadius: 20, // Reduced from 24
-        backgroundColor: 'transparent',
+        borderRadius: 20,
+        backgroundColor: 'rgba(255, 255, 255, 0.04)',
         overflow: 'hidden',
         // Premium Shadow
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 6 },
-        shadowOpacity: 0.2, // slightly reduced
+        shadowOpacity: 0.2,
         shadowRadius: 15,
-        elevation: 0, // Removed elevation to fix rectangular artifact in Android
+        elevation: 0,
     },
     avatarContainer: {
         position: 'relative',

@@ -33,7 +33,7 @@ const { width } = Dimensions.get('window');
 
 const ProfileScreen = ({ route }) => {
     const navigation = useNavigation();
-    const { theme } = useTheme();
+    const { theme, themeMode } = useTheme();
     const { showAlert } = useAlert();
     const [user, setUser] = useState(route?.params?.user || {});
     const [loading, setLoading] = useState(false);
@@ -255,6 +255,14 @@ const ProfileScreen = ({ route }) => {
         if (currentInterests.includes(interest)) {
             newInterests = currentInterests.filter(i => i !== interest);
         } else {
+            if (currentInterests.length >= 3) {
+                showAlert({
+                    title: 'Uyarı',
+                    message: 'En fazla 3 ilgi alanı seçebilirsiniz.',
+                    type: 'warning'
+                });
+                return;
+            }
             newInterests = [...currentInterests, interest];
         }
         
@@ -360,7 +368,7 @@ const ProfileScreen = ({ route }) => {
     ];
 
     return (
-        <View style={styles.mainContainer}>
+        <View style={[styles.mainContainer, { backgroundColor: theme.colors.background }]}>
             <StatusBar barStyle="light-content" />
             
             {/* Background Image Layer */}
@@ -370,11 +378,15 @@ const ProfileScreen = ({ route }) => {
                     style={styles.backgroundImage}
                 />
                 <LinearGradient
-                    colors={['rgba(9, 2, 26, 0.4)', 'rgba(9, 2, 26, 0.95)', '#09021a']}
+                    colors={
+                        themeMode === 'dark'
+                            ? ['rgba(41, 24, 84, 0.3)', 'rgba(21, 14, 48, 0.9)', theme.colors.background]
+                            : ['rgba(248, 250, 252, 0.4)', 'rgba(241, 245, 249, 0.95)', theme.colors.background]
+                    }
                     style={StyleSheet.absoluteFill}
                 />
             </View>
-
+ 
             <Animated.ScrollView
                 showsVerticalScrollIndicator={false}
                 scrollEventThrottle={16}
@@ -393,12 +405,12 @@ const ProfileScreen = ({ route }) => {
                         />
                         <Image 
                             source={{ uri: user?.avatar_url || user?.profile_image || 'https://via.placeholder.com/150' }} 
-                            style={styles.avatarImage} 
+                            style={[styles.avatarImage, { borderColor: theme.colors.background }]} 
                         />
-                        <View style={styles.cameraBadge}>
+                        <View style={[styles.cameraBadge, { borderColor: theme.colors.background }]}>
                             <Ionicons name="camera" size={16} color="#fff" />
                         </View>
-                        <View style={styles.onlineStatus} />
+                        <View style={[styles.onlineStatus, { borderColor: theme.colors.background }]} />
                     </TouchableOpacity>
 
                     <View style={styles.profileInfo}>

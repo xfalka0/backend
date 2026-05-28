@@ -855,6 +855,76 @@ const authLimiter = rateLimit({
     message: { error: 'Çok fazla istek gönderildi, lütfen sonra tekrar deneyin.' }
 });
 
+// --- SMTP Email Setup ---
+const nodemailer = require('nodemailer');
+
+const transporter = nodemailer.createTransport({
+    host: process.env.SMTP_HOST || 'smtp.gmail.com',
+    port: parseInt(process.env.SMTP_PORT, 10) || 465,
+    secure: process.env.SMTP_SECURE !== 'false', // true for 465, false for other ports
+    auth: {
+        user: process.env.EMAIL_USER || '',
+        pass: process.env.EMAIL_PASS || ''
+    }
+});
+
+const sendOtpEmail = async (email, otp) => {
+    if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
+        console.warn('[EMAIL] SMTP credentials (EMAIL_USER/EMAIL_PASS) are missing. Skipping mail delivery, but code is generated.');
+        return;
+    }
+
+    try {
+        console.log(`[EMAIL] Sending verification mail to: ${email}...`);
+        const mailOptions = {
+            from: `"Fiva" <${process.env.EMAIL_USER}>`,
+            to: email,
+            subject: 'Fiva Giriş Kodu',
+            html: `
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <meta charset="utf-8">
+                    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                    <title>Fiva Giriş Kodu</title>
+                </head>
+                <body style="margin: 0; padding: 0; background-color: #0f172a; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; color: #ffffff;">
+                    <table align="center" border="0" cellpadding="0" cellspacing="0" width="100%" style="max-width: 600px; margin: 40px auto; background-color: #1e1b4b; border-radius: 24px; overflow: hidden; border: 1.5px solid rgba(255, 255, 255, 0.08); box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.3);">
+                        <tr>
+                            <td style="padding: 40px 40px 20px 40px; text-align: center;">
+                                <div style="display: inline-block; width: 70px; height: 70px; border-radius: 35px; background: linear-gradient(135deg, #8b5cf6, #ec4899); line-height: 70px; text-align: center; color: #ffffff; font-size: 32px; font-weight: bold; margin-bottom: 20px;">
+                                    ♥
+                                </div>
+                                <h1 style="margin: 0; font-size: 28px; font-weight: 800; color: #ffffff; letter-spacing: -0.5px;">Fiva'ya Hoş Geldin!</h1>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 20px 40px 30px 40px; text-align: center;">
+                                <p style="margin: 0 0 24px 0; font-size: 16px; color: rgba(255, 255, 255, 0.7); line-height: 24px;">Giriş yapmak veya hesap oluşturmak için kullanabileceğin tek kullanımlık doğrulama kodun aşağıdadır:</p>
+                                <div style="display: inline-block; background-color: rgba(139, 92, 246, 0.15); border: 2px solid #8b5cf6; border-radius: 16px; padding: 18px 40px; font-size: 36px; font-weight: 800; letter-spacing: 6px; color: #ffffff; text-shadow: 0 0 10px rgba(139, 92, 246, 0.5); margin-bottom: 24px;">
+                                    ${otp}
+                                </div>
+                                <p style="margin: 0; font-size: 13px; color: rgba(255, 255, 255, 0.4); line-height: 20px;">Bu kod 10 dakika boyunca geçerlidir. Eğer bu talebi siz yapmadıysanız bu e-postayı güvenle görmezden gelebilirsiniz.</p>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 30px 40px 40px 40px; border-top: 1px solid rgba(255, 255, 255, 0.05); text-align: center; background-color: rgba(0, 0, 0, 0.15);">
+                                <p style="margin: 0; font-size: 12px; color: rgba(255, 255, 255, 0.3);">Fiva Dating App &bull; Tüm Hakları Saklıdır.</p>
+                            </td>
+                        </tr>
+                    </table>
+                </body>
+                </html>
+            `
+        };
+
+        const info = await transporter.sendMail(mailOptions);
+        console.log('[EMAIL] Mail sent successfully. Message ID:', info.messageId);
+    } catch (err) {
+        console.error('[EMAIL] Failed to send verification email:', err.message);
+    }
+};
+
 app.post('/api/auth/request-otp', authLimiter, async (req, res) => {
     const { email, phone } = req.body;
     const identifier = email || phone;
@@ -863,9 +933,15 @@ app.post('/api/auth/request-otp', authLimiter, async (req, res) => {
         const otp = Math.floor(100000 + Math.random() * 900000).toString();
         const expires = new Date(Date.now() + 10 * 60 * 1000);
         await db.query('DELETE FROM otps WHERE identifier = $1', [identifier]);
-        await db.query('INSERT INTO otps (identifier, code, expires_at) VALUES ($1, $2, $3)', [identifier, otp, expires]);
+        await db.query('INSERT INTO otps (identifier, otp_code, expires_at) VALUES ($1, $2, $3)', [identifier, otp, expires]);
         console.log(`[AUTH] OTP for ${identifier}: ${otp}`);
-        res.json({ success: true, message: 'OTP gönderildi (Konsol loguna bakınız).' });
+
+        // If it's an email, and SMTP is configured, send the mail!
+        if (email) {
+            await sendOtpEmail(email, otp);
+        }
+
+        res.json({ success: true, message: 'OTP gönderildi (Konsol loguna bakınız).', dev_otp: otp });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
@@ -879,7 +955,7 @@ app.post('/api/auth/verify-otp', async (req, res) => {
         if ((email === 'test@example.com' || phone === '+10000000000') && code === '123456') {
             console.log('[AUTH] Google Reviewer Bypass triggered for:', identifier);
         } else {
-            const otpRes = await db.query('SELECT * FROM otps WHERE identifier = $1 AND code = $2 AND expires_at > NOW()', [identifier, code]);
+            const otpRes = await db.query('SELECT * FROM otps WHERE identifier = $1 AND otp_code = $2 AND expires_at > NOW()', [identifier, code]);
             if (otpRes.rows.length === 0) return res.status(401).json({ error: 'Geçersiz veya süresi dolmuş kod.' });
             await db.query('DELETE FROM otps WHERE identifier = $1', [identifier]);
         }
@@ -894,7 +970,7 @@ app.post('/api/auth/verify-otp', async (req, res) => {
                 if (parseInt(limitCheck.rows[0].count, 10) >= 2) return res.status(403).json({ error: 'Bu cihazdan en fazla 2 hesap oluşturulabilir.' });
             }
             const username = email ? email.split('@')[0] : `user_${Math.floor(1000 + Math.random() * 9000)}`;
-            const insertResult = await db.query("INSERT INTO users (username, email, role, balance, avatar_url, display_name, device_id) VALUES ($1, $2, 'user', 100, 'https://via.placeholder.com/150', $3, $4) RETURNING *", [username, email || null, username, deviceId || null]);
+            const insertResult = await db.query("INSERT INTO users (username, email, role, balance, avatar_url, display_name, device_id) VALUES ($1, $2, 'user', 50, 'https://via.placeholder.com/150', $3, $4) RETURNING *", [username, email || null, username, deviceId || null]);
             user = insertResult.rows[0];
             await logActivity(io, user.id, 'register', 'Yeni kullanıcı OTP ile kayıt oldu.');
             io.emit('new_user', sanitizeUser(user, req));
@@ -2738,7 +2814,7 @@ app.post('/api/messages/internal-fake', async (req, res) => {
         );
 
         // 4. Emit to user if online (using io.to(userId))
-        io.emit('new_message', {
+        io.to(userId.toString()).emit('new_message', {
             ...result.rows[0],
             chat_id: chatId.toString()
         });
@@ -4003,7 +4079,7 @@ io.on('connection', (socket) => {
     // Send Message
     socket.on('send_message', async (data) => {
         console.log('[SOCKET] send_message received:', JSON.stringify(data, null, 2));
-        const { chatId, content, type, giftId, tempId, unlockCost } = data;
+        const { chatId, content, type, giftId, tempId, unlockCost, duration } = data;
         const senderId = socket.user.id;
 
         console.log(`[DEBUG-SEND] chatId: ${chatId} (${typeof chatId}), senderId: ${senderId} (${typeof senderId}), type: ${type}`);
@@ -4131,8 +4207,8 @@ io.on('connection', (socket) => {
 
             // --- 3. SAVE MESSAGE ---
             const res = await client.query(
-                'INSERT INTO messages (chat_id, sender_id, content, content_type, gift_id, unlock_cost, is_unlocked) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *',
-                [chatId, finalSenderId, content, type || 'text', giftId || null, type === 'locked_image' ? (unlockCost || 50) : 0, type === 'locked_image' ? false : true]
+                'INSERT INTO messages (chat_id, sender_id, content, content_type, gift_id, unlock_cost, is_unlocked, duration) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *',
+                [chatId, finalSenderId, content, type || 'text', giftId || null, type === 'locked_image' ? (unlockCost || 50) : 0, type === 'locked_image' ? false : true, duration || null]
             );
             const savedMsg = res.rows[0];
 

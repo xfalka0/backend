@@ -85,7 +85,7 @@ export default function WhoFavoritedMeScreen({ navigation, route }) {
                                 )}
                             </View>
                             {item.is_online && !item.is_blurred && (
-                                <View style={[styles.onlineBadge, { borderColor: themeMode === 'dark' ? '#0f172a' : theme.colors.background }]} />
+                                <View style={[styles.onlineBadge, { borderColor: theme.colors.background }]} />
                             )}
                         </View>
 

@@ -25,7 +25,7 @@ const REACTION_EMOJIS = [
     { type: 'like', icon: '👍' },
 ];
 
-const MessageBubble = ({ children, isMine, index, isRead, avatar, vipLevel = 0, timestamp, reaction, onReaction }) => {
+const MessageBubble = React.memo(({ children, isMine, index, isRead, avatar, vipLevel = 0, timestamp, reaction, onReaction }) => {
     const { theme, themeMode } = useTheme();
     const translateX = useSharedValue(isMine ? 50 : -50);
     const opacity = useSharedValue(0);
@@ -238,7 +238,7 @@ const MessageBubble = ({ children, isMine, index, isRead, avatar, vipLevel = 0, 
             )}
         </View>
     );
-};
+});
 
 const styles = StyleSheet.create({
     container: {

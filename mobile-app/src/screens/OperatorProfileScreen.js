@@ -161,7 +161,7 @@ export default function OperatorProfileScreen({ route, navigation }) {
     });
 
     return (
-        <View style={styles.container}>
+        <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
             {/* Animasyonlu Header Arka Planı */}
             <Animated.View
                 pointerEvents="none"
@@ -173,14 +173,14 @@ export default function OperatorProfileScreen({ route, navigation }) {
                 />
                 <LinearGradient
                     colors={themeMode === 'dark'
-                        ? ['rgba(15, 23, 42, 0.2)', 'rgba(15, 23, 42, 0.4)', '#0f172a']
+                        ? ['rgba(21, 14, 48, 0.2)', 'rgba(21, 14, 48, 0.5)', theme.colors.background]
                         : ['rgba(255,255,255,0.1)', 'rgba(255,255,255,0.3)', theme.colors.background]}
                     style={styles.gradientOverlay}
                 />
 
                 {/* Scroll ile aktive olan Blur efekti */}
                 <Animated.View style={[StyleSheet.absoluteFill, animatedBlurStyle]}>
-                    <View style={[StyleSheet.absoluteFill, { backgroundColor: themeMode === 'dark' ? 'rgba(15, 23, 42, 0.7)' : 'rgba(255, 255, 255, 0.7)' }]} />
+                    <View style={[StyleSheet.absoluteFill, { backgroundColor: themeMode === 'dark' ? 'rgba(21, 14, 48, 0.7)' : 'rgba(255, 255, 255, 0.7)' }]} />
                 </Animated.View>
             </Animated.View>
 
@@ -273,10 +273,10 @@ export default function OperatorProfileScreen({ route, navigation }) {
                     <GlassCard
                         style={[
                             styles.contentCard,
-                            { backgroundColor: themeMode === 'dark' ? '#0f172a' : theme.colors.surface }
+                            { backgroundColor: themeMode === 'dark' ? theme.colors.surface : theme.colors.surface }
                         ]}
                         intensity={70}
-                        tint="dark"
+                        tint={themeMode === 'dark' ? 'dark' : 'light'}
                     >
                         <View style={styles.nameRow}>
                             <View style={{ flexDirection: 'row', alignItems: 'center' }}>
@@ -454,7 +454,7 @@ export default function OperatorProfileScreen({ route, navigation }) {
                         </TouchableOpacity>
                     </BlurView>
                 ) : (
-                    <View style={[styles.bottomBlur, { backgroundColor: '#0f172a' }]}>
+                    <View style={[styles.bottomBlur, { backgroundColor: theme.colors.background }]}>
                         <TouchableOpacity
                             style={styles.messageButton}
                             onPress={() => {

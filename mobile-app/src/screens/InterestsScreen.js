@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, SafeAreaView, ScrollView } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, SafeAreaView, ScrollView, Alert } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, GRADIENTS } from '../theme';
@@ -27,6 +27,10 @@ export default function InterestsScreen({ navigation, route }) {
         if (selected.includes(id)) {
             setSelected(selected.filter(i => i !== id));
         } else {
+            if (selected.length >= 3) {
+                Alert.alert('Uyarı', 'En fazla 3 ilgi alanı seçebilirsiniz.');
+                return;
+            }
             setSelected([...selected, id]);
         }
     };

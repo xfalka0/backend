@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, Image, ScrollView, TouchableOpacity, SafeAreaVi
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import Animated, { useSharedValue, useAnimatedStyle, withRepeat, withTiming, withSequence, Easing } from 'react-native-reanimated';
+import { useTheme } from '../contexts/ThemeContext';
 
 const { width } = Dimensions.get('window');
 
@@ -28,6 +29,7 @@ const VIP_CONFIGS = {
 };
 
 export default function VipDetailsScreen({ navigation, route }) {
+    const { theme } = useTheme();
     const { user } = route.params || {};
     const vipLevel = user?.vip_level || 0;
     const [selectedLevel, setSelectedLevel] = useState(vipLevel > 0 ? vipLevel : 1);
@@ -54,7 +56,7 @@ export default function VipDetailsScreen({ navigation, route }) {
     }));
 
     return (
-        <SafeAreaView style={styles.container}>
+        <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]}>
             {/* Ambient Background Particles Removed */}
             <View style={[StyleSheet.absoluteFill, { zIndex: 0 }]} pointerEvents="none" />
 
@@ -83,7 +85,7 @@ export default function VipDetailsScreen({ navigation, route }) {
                         <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                             <View style={{ padding: 3, borderWidth: 1, borderColor: '#fff', borderRadius: 50, marginRight: 15 }}>
                                 <LinearGradient colors={frameColors} style={{ padding: 3, borderRadius: 50 }}>
-                                    <Image source={{ uri: avatarUri }} style={styles.avatar} />
+                                    <Image source={{ uri: avatarUri }} style={[styles.avatar, { borderColor: theme.colors.background }]} />
                                 </LinearGradient>
                                 <View style={styles.badgeContainer}>
                                     <LinearGradient colors={frameColors} style={styles.badge}>
@@ -147,7 +149,7 @@ export default function VipDetailsScreen({ navigation, route }) {
             </ScrollView>
 
             {/* BOTTOM BUTTON */}
-            <View style={styles.bottomBar}>
+            <View style={[styles.bottomBar, { backgroundColor: theme.mode === 'dark' ? 'rgba(14, 9, 38, 0.95)' : 'rgba(255, 255, 255, 0.95)' }]}>
                 <TouchableOpacity onPress={() => navigation.navigate('Shop')}>
                     <LinearGradient
                         colors={['#fbebb5', '#d4af37']}

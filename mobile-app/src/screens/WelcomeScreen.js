@@ -228,8 +228,8 @@ export default function WelcomeScreen({ navigation }) {
 
                         <View style={styles.buttonContainer}>
                             <Animated.View
-                                entering={FadeInUp.delay(850).springify()}
-                                style={{ width: '90%', alignItems: 'center', marginTop: 150 }}
+                                entering={FadeInUp.delay(800).springify()}
+                                style={{ width: '90%', alignItems: 'center', marginTop: 50 }}
                             >
                                 <WelcomeButton
                                     title="Google ile devam et"
@@ -239,6 +239,18 @@ export default function WelcomeScreen({ navigation }) {
                                     variant="gradient"
                                     gradient={['#4285F4', '#34b356ff', '#34b356ff', '#4285F4']}
                                 />
+                            </Animated.View>
+
+                            <Animated.View
+                                entering={FadeInUp.delay(1000).springify()}
+                                style={{ width: '90%', alignItems: 'center', marginTop: 20 }}
+                            >
+                                <TouchableOpacity
+                                    onPress={() => navigation.navigate('Auth', { mode: 'email' })}
+                                    style={styles.emailButton}
+                                >
+                                    <Text style={styles.emailButtonText}>E-posta ile devam et</Text>
+                                </TouchableOpacity>
                             </Animated.View>
 
                             <Animated.View entering={FadeInUp.delay(1000).springify()} style={styles.footerLinks}>
@@ -418,5 +430,22 @@ const styles = StyleSheet.create({
         fontFamily: 'Outfit_800ExtraBold',
         letterSpacing: 1,
         opacity: 0.8,
+    },
+    emailButton: {
+        paddingVertical: 14,
+        paddingHorizontal: 28,
+        borderRadius: 25,
+        backgroundColor: 'rgba(255, 255, 255, 0.05)',
+        borderWidth: 1.5,
+        borderColor: 'rgba(255, 255, 255, 0.1)',
+        width: '100%',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    emailButtonText: {
+        color: 'rgba(255, 255, 255, 0.85)',
+        fontSize: 15,
+        fontWeight: '700',
+        letterSpacing: 0.2,
     },
 });

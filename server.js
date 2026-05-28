@@ -857,7 +857,6 @@ const authLimiter = rateLimit({
 
 // --- SMTP Email Setup ---
 const nodemailer = require('nodemailer');
-const axios = require('axios');
 
 const transporter = nodemailer.createTransport(
     process.env.SMTP_HOST 

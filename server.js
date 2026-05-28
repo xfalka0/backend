@@ -857,6 +857,7 @@ const authLimiter = rateLimit({
 
 // --- SMTP Email Setup ---
 const nodemailer = require('nodemailer');
+const axios = require('axios');
 
 const transporter = nodemailer.createTransport(
     process.env.SMTP_HOST 
@@ -889,59 +890,87 @@ const transporter = nodemailer.createTransport(
 );
 
 const sendOtpEmail = async (email, otp) => {
+    const emailHtml = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="utf-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Fiva Giriş Kodu</title>
+        </head>
+        <body style="margin: 0; padding: 0; background-color: #0f172a; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; color: #ffffff;">
+            <table align="center" border="0" cellpadding="0" cellspacing="0" width="100%" style="max-width: 600px; margin: 40px auto; background-color: #1e1b4b; border-radius: 24px; overflow: hidden; border: 1.5px solid rgba(255, 255, 255, 0.08); box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.3);">
+                <tr>
+                    <td style="padding: 40px 40px 20px 40px; text-align: center;">
+                        <div style="display: inline-block; width: 70px; height: 70px; border-radius: 35px; background: linear-gradient(135deg, #8b5cf6, #ec4899); line-height: 70px; text-align: center; color: #ffffff; font-size: 32px; font-weight: bold; margin-bottom: 20px;">
+                            ♥
+                        </div>
+                        <h1 style="margin: 0; font-size: 28px; font-weight: 800; color: #ffffff; letter-spacing: -0.5px;">Fiva'ya Hoş Geldin!</h1>
+                    </td>
+                </tr>
+                <tr>
+                    <td style="padding: 20px 40px 30px 40px; text-align: center;">
+                        <p style="margin: 0 0 24px 0; font-size: 16px; color: rgba(255, 255, 255, 0.7); line-height: 24px;">Giriş yapmak veya hesap oluşturmak için kullanabileceğin tek kullanımlık doğrulama kodun aşağıdadır:</p>
+                        <div style="display: inline-block; background-color: rgba(139, 92, 246, 0.15); border: 2px solid #8b5cf6; border-radius: 16px; padding: 18px 40px; font-size: 36px; font-weight: 800; letter-spacing: 6px; color: #ffffff; text-shadow: 0 0 10px rgba(139, 92, 246, 0.5); margin-bottom: 24px;">
+                            ${otp}
+                        </div>
+                        <p style="margin: 0; font-size: 13px; color: rgba(255, 255, 255, 0.4); line-height: 20px;">Bu kod 10 dakika boyunca geçerlidir. Eğer bu talebi siz yapmadıysanız bu e-postayı güvenle görmezden gelebilirsiniz.</p>
+                    </td>
+                </tr>
+                <tr>
+                    <td style="padding: 30px 40px 40px 40px; border-top: 1px solid rgba(255, 255, 255, 0.05); text-align: center; background-color: rgba(0, 0, 0, 0.15);">
+                        <p style="margin: 0; font-size: 12px; color: rgba(255, 255, 255, 0.3);">Fiva Dating App &bull; Tüm Hakları Saklıdır.</p>
+                    </td>
+                </tr>
+            </table>
+        </body>
+        </html>
+    `;
+
+    // 1. Check if BREVO_API_KEY is configured (Highly recommended for Render cloud deployment)
+    if (process.env.BREVO_API_KEY) {
+        try {
+            console.log(`[EMAIL] Sending verification mail to: ${email} via Brevo HTTP API...`);
+            const senderEmail = process.env.EMAIL_USER || 'falkasoft@gmail.com';
+            const response = await axios.post('https://api.brevo.com/v3/smtp/email', {
+                sender: { name: 'Fiva', email: senderEmail },
+                to: [{ email: email }],
+                subject: 'Fiva Giriş Kodu',
+                htmlContent: emailHtml
+            }, {
+                headers: {
+                    'api-key': process.env.BREVO_API_KEY,
+                    'Content-Type': 'application/json'
+                },
+                timeout: 10000
+            });
+            console.log('[EMAIL] Mail sent successfully via Brevo. Message ID:', response.data.messageId);
+            return;
+        } catch (err) {
+            console.error('[EMAIL] Failed to send email via Brevo HTTP API:', err.response?.data || err.message);
+            console.log('[EMAIL] Attempting fallback to SMTP...');
+        }
+    }
+
+    // 2. Fallback to Nodemailer SMTP (Default local development)
     if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
         console.warn('[EMAIL] SMTP credentials (EMAIL_USER/EMAIL_PASS) are missing. Skipping mail delivery, but code is generated.');
         return;
     }
 
     try {
-        console.log(`[EMAIL] Sending verification mail to: ${email}...`);
+        console.log(`[EMAIL] Sending verification mail to: ${email} via SMTP...`);
         const mailOptions = {
             from: `"Fiva" <${process.env.EMAIL_USER}>`,
             to: email,
             subject: 'Fiva Giriş Kodu',
-            html: `
-                <!DOCTYPE html>
-                <html>
-                <head>
-                    <meta charset="utf-8">
-                    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                    <title>Fiva Giriş Kodu</title>
-                </head>
-                <body style="margin: 0; padding: 0; background-color: #0f172a; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; color: #ffffff;">
-                    <table align="center" border="0" cellpadding="0" cellspacing="0" width="100%" style="max-width: 600px; margin: 40px auto; background-color: #1e1b4b; border-radius: 24px; overflow: hidden; border: 1.5px solid rgba(255, 255, 255, 0.08); box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.3);">
-                        <tr>
-                            <td style="padding: 40px 40px 20px 40px; text-align: center;">
-                                <div style="display: inline-block; width: 70px; height: 70px; border-radius: 35px; background: linear-gradient(135deg, #8b5cf6, #ec4899); line-height: 70px; text-align: center; color: #ffffff; font-size: 32px; font-weight: bold; margin-bottom: 20px;">
-                                    ♥
-                                </div>
-                                <h1 style="margin: 0; font-size: 28px; font-weight: 800; color: #ffffff; letter-spacing: -0.5px;">Fiva'ya Hoş Geldin!</h1>
-                            </td>
-                        </tr>
-                        <tr>
-                            <td style="padding: 20px 40px 30px 40px; text-align: center;">
-                                <p style="margin: 0 0 24px 0; font-size: 16px; color: rgba(255, 255, 255, 0.7); line-height: 24px;">Giriş yapmak veya hesap oluşturmak için kullanabileceğin tek kullanımlık doğrulama kodun aşağıdadır:</p>
-                                <div style="display: inline-block; background-color: rgba(139, 92, 246, 0.15); border: 2px solid #8b5cf6; border-radius: 16px; padding: 18px 40px; font-size: 36px; font-weight: 800; letter-spacing: 6px; color: #ffffff; text-shadow: 0 0 10px rgba(139, 92, 246, 0.5); margin-bottom: 24px;">
-                                    ${otp}
-                                </div>
-                                <p style="margin: 0; font-size: 13px; color: rgba(255, 255, 255, 0.4); line-height: 20px;">Bu kod 10 dakika boyunca geçerlidir. Eğer bu talebi siz yapmadıysanız bu e-postayı güvenle görmezden gelebilirsiniz.</p>
-                            </td>
-                        </tr>
-                        <tr>
-                            <td style="padding: 30px 40px 40px 40px; border-top: 1px solid rgba(255, 255, 255, 0.05); text-align: center; background-color: rgba(0, 0, 0, 0.15);">
-                                <p style="margin: 0; font-size: 12px; color: rgba(255, 255, 255, 0.3);">Fiva Dating App &bull; Tüm Hakları Saklıdır.</p>
-                            </td>
-                        </tr>
-                    </table>
-                </body>
-                </html>
-            `
+            html: emailHtml
         };
 
         const info = await transporter.sendMail(mailOptions);
-        console.log('[EMAIL] Mail sent successfully. Message ID:', info.messageId);
+        console.log('[EMAIL] Mail sent successfully via SMTP. Message ID:', info.messageId);
     } catch (err) {
-        console.error('[EMAIL] Failed to send verification email:', err.message);
+        console.error('[EMAIL] Failed to send verification email via SMTP:', err.message);
     }
 };
 
@@ -968,25 +997,55 @@ app.post('/api/auth/request-otp', authLimiter, async (req, res) => {
 });
 
 app.get('/api/auth/smtp-diagnostics', async (req, res) => {
-    try {
-        console.log('[DIAGNOSTICS] Verifying SMTP connection...');
-        await transporter.verify();
-        res.json({ 
-            success: true, 
-            message: 'SMTP connection verified successfully!',
+    const results = {
+        success: false,
+        brevo: {
+            configured: !!process.env.BREVO_API_KEY,
+            key_length: process.env.BREVO_API_KEY ? process.env.BREVO_API_KEY.length : 0,
+            status: 'NOT_TESTED'
+        },
+        smtp: {
+            configured: !!(process.env.EMAIL_USER && process.env.EMAIL_PASS),
             EMAIL_USER: process.env.EMAIL_USER ? `${process.env.EMAIL_USER.substring(0, 4)}...` : 'MISSING',
-            EMAIL_PASS_LENGTH: process.env.EMAIL_PASS ? process.env.EMAIL_PASS.length : 0
-        });
-    } catch (err) {
-        console.error('[DIAGNOSTICS] SMTP verification failed:', err.message);
-        res.status(500).json({ 
-            success: false, 
-            error: err.message, 
-            code: err.code,
-            response: err.response,
-            EMAIL_USER: process.env.EMAIL_USER ? `${process.env.EMAIL_USER.substring(0, 4)}...` : 'MISSING',
-            EMAIL_PASS_LENGTH: process.env.EMAIL_PASS ? process.env.EMAIL_PASS.length : 0
-        });
+            EMAIL_PASS_LENGTH: process.env.EMAIL_PASS ? process.env.EMAIL_PASS.length : 0,
+            status: 'NOT_TESTED'
+        }
+    };
+
+    // Test Brevo if configured
+    if (process.env.BREVO_API_KEY) {
+        try {
+            console.log('[DIAGNOSTICS] Verifying Brevo API Key...');
+            const response = await axios.get('https://api.brevo.com/v3/smtp/templates', {
+                headers: { 'api-key': process.env.BREVO_API_KEY },
+                timeout: 5000
+            });
+            results.brevo.status = 'SUCCESS';
+            results.success = true;
+        } catch (err) {
+            results.brevo.status = 'FAILED';
+            results.brevo.error = err.response?.data || err.message;
+        }
+    }
+
+    // Test SMTP if configured
+    if (process.env.EMAIL_USER && process.env.EMAIL_PASS) {
+        try {
+            console.log('[DIAGNOSTICS] Verifying SMTP connection...');
+            await transporter.verify();
+            results.smtp.status = 'SUCCESS';
+            results.success = true;
+        } catch (err) {
+            results.smtp.status = 'FAILED';
+            results.smtp.error = err.message;
+            results.smtp.code = err.code;
+        }
+    }
+
+    if (results.success) {
+        res.json({ success: true, message: 'At least one email service is fully functional!', details: results });
+    } else {
+        res.status(500).json({ success: false, message: 'All email services failed connection verification.', details: results });
     }
 });
 

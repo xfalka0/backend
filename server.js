@@ -957,6 +957,29 @@ app.post('/api/auth/request-otp', authLimiter, async (req, res) => {
     }
 });
 
+app.get('/api/auth/smtp-diagnostics', async (req, res) => {
+    try {
+        console.log('[DIAGNOSTICS] Verifying SMTP connection...');
+        await transporter.verify();
+        res.json({ 
+            success: true, 
+            message: 'SMTP connection verified successfully!',
+            EMAIL_USER: process.env.EMAIL_USER ? `${process.env.EMAIL_USER.substring(0, 4)}...` : 'MISSING',
+            EMAIL_PASS_LENGTH: process.env.EMAIL_PASS ? process.env.EMAIL_PASS.length : 0
+        });
+    } catch (err) {
+        console.error('[DIAGNOSTICS] SMTP verification failed:', err.message);
+        res.status(500).json({ 
+            success: false, 
+            error: err.message, 
+            code: err.code,
+            response: err.response,
+            EMAIL_USER: process.env.EMAIL_USER ? `${process.env.EMAIL_USER.substring(0, 4)}...` : 'MISSING',
+            EMAIL_PASS_LENGTH: process.env.EMAIL_PASS ? process.env.EMAIL_PASS.length : 0
+        });
+    }
+});
+
 app.post('/api/auth/verify-otp', async (req, res) => {
     const { email, phone, code, deviceId } = req.body;
     const identifier = email || phone;

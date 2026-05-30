@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { View, StyleSheet, Dimensions, Image, TouchableOpacity, Modal, StatusBar } from 'react-native';
+import { View, StyleSheet, Dimensions, Image, TouchableOpacity, Modal, StatusBar, Text } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons';
 import Animated, {

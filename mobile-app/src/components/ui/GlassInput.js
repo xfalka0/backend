@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, TextInput, StyleSheet, Animated as RNAnimated, Platform } from 'react-native';
+import { View, TextInput, StyleSheet, Animated as RNAnimated, Platform, Text } from 'react-native';
 import { BlurView } from 'expo-blur';
 import Animated, {
     useAnimatedStyle,
@@ -8,6 +8,8 @@ import Animated, {
     interpolateColor,
     interpolate
 } from 'react-native-reanimated';
+
+const AnimatedText = Animated.createAnimatedComponent(Text);
 
 export default function GlassInput({
     label,
@@ -63,9 +65,9 @@ export default function GlassInput({
             <Animated.View style={[styles.container, containerStyle]}>
                 <BlurView intensity={20} style={styles.blur} tint="dark">
                     <View style={styles.labelWrapper}>
-                        <Animated.Text style={[styles.label, labelStyle]}>
+                        <AnimatedText style={[styles.label, labelStyle]}>
                             {label}
-                        </Animated.Text>
+                        </AnimatedText>
                     </View>
                     <TextInput
                         style={styles.input}

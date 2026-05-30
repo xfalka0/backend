@@ -16,6 +16,10 @@ import GlassCard from '../components/ui/GlassCard';
 import SkeletonCard from '../components/ui/SkeletonCard';
 import DestinyHero from '../components/DestinyHero';
 import { resolveImageUrl } from '../utils/imageUtils';
+import { maskContactInfo } from '../utils/textUtils';
+import GradientText from '../components/ui/GradientText';
+import ActionCards from '../components/ui/ActionCards';
+import FilterModal from '../components/ui/FilterModal';
 
 const { width } = Dimensions.get('window');
 let lastProfileTap = 0;
@@ -104,7 +108,7 @@ const OperatorItem = React.memo(({ item, navigation, user, theme, onHiPress }) =
                     />
                 </View>
             </View>
-            {item.bio && <Text style={[styles.bioText, { color: theme.colors.textSecondary }]} numberOfLines={2}>{item.bio}</Text>}
+            {item.bio && <Text style={[styles.bioText, { color: theme.colors.textSecondary }]} numberOfLines={2}>{maskContactInfo(item.bio)}</Text>}
             {(() => {
                 let ints = item.interests || [];
                 if (typeof ints === 'string') {
@@ -112,15 +116,53 @@ const OperatorItem = React.memo(({ item, navigation, user, theme, onHiPress }) =
                     catch (e) { ints = ints.split(',').map(i => i.trim()); }
                 }
                 if (!Array.isArray(ints)) ints = [];
-                const displayInts = ints.slice(0, 3).filter(Boolean);
+                let displayInts = ints.slice(0, 3).filter(Boolean);
+                
+                // If empty, generate deterministic random interests (0 to 3) based on operator ID
+                if (displayInts.length === 0) {
+                    const allInterests = ["Müzik", "Spor", "Seyahat", "Kitap", "Sinema", "Dans", "Oyun", "Sanat", "Doğa", "Fotoğraf", "Yazılım", "Yoga", "Kamp"];
+                    const idVal = item.id || 'default';
+                    let hash = 0;
+                    const str = String(idVal);
+                    for (let i = 0; i < str.length; i++) {
+                        hash = str.charCodeAt(i) + ((hash << 5) - hash);
+                    }
+                    const count = Math.abs(hash) % 4; // 0 to 3 interests
+                    const tempPool = [...allInterests];
+                    for (let j = 0; j < count; j++) {
+                        const index = Math.abs(hash + j) % tempPool.length;
+                        displayInts.push(tempPool[index]);
+                        tempPool.splice(index, 1);
+                    }
+                }
+                
                 if (displayInts.length === 0) return null;
                 return (
                     <View style={styles.interestsContainer}>
-                        {displayInts.map((interest, idx) => (
-                            <View key={idx} style={[styles.interestBadge, { backgroundColor: 'rgba(139, 92, 246, 0.15)', borderColor: 'rgba(139, 92, 246, 0.3)' }]}>
-                                <Text style={[styles.interestText, { color: '#c084fc' }]}>{interest}</Text>
-                            </View>
-                        ))}
+                        {displayInts.map((interest, idx) => {
+                            const clean = String(interest || '').trim();
+                            const emojiMap = {
+                                "müzik": "🎵 Müzik",
+                                "spor": "⚽ Spor",
+                                "seyahat": "✈️ Seyahat",
+                                "kitap": "📚 Kitap",
+                                "sinema": "🎬 Sinema",
+                                "dans": "💃 Dans",
+                                "oyun": "🎮 Oyun",
+                                "sanat": "🎨 Sanat",
+                                "doğa": "🌿 Doğa",
+                                "fotoğraf": "📷 Fotoğraf",
+                                "yazılım": "💻 Yazılım",
+                                "yoga": "🧘 Yoga",
+                                "kamp": "⛺ Kamp"
+                            };
+                            const withEmoji = emojiMap[clean.toLowerCase()] || clean;
+                            return (
+                                <View key={idx} style={[styles.interestBadge, { backgroundColor: 'rgba(139, 92, 246, 0.15)', borderColor: 'rgba(139, 92, 246, 0.3)' }]}>
+                                    <Text style={[styles.interestText, { color: '#c084fc' }]}>{withEmoji}</Text>
+                                </View>
+                            );
+                        })}
                     </View>
                 );
             })()}
@@ -152,6 +194,8 @@ export default function HomeScreen({ navigation, route }) {
     const [searchText, setSearchText] = useState('');
     const [showSearch, setShowSearch] = useState(false);
     const [refreshing, setRefreshing] = useState(false);
+    const [currentFilters, setCurrentFilters] = useState({ gender: 'all', ageGroup: 'all' });
+    const [showFilterModal, setShowFilterModal] = useState(false);
 
     useEffect(() => {
         fetchOperators();
@@ -249,44 +293,96 @@ export default function HomeScreen({ navigation, route }) {
                 onExplorePress={() => navigation.navigate('Keşfet')}
                 onResellerPress={() => navigation.navigate('PurchaseInfo', { user, reseller: true })}
             />
-
-            {featuredOperators.length > 0 && (
-                <PromotedProfiles 
-                    data={featuredOperators} 
-                    onProfilePress={(op) => navigation.navigate('OperatorProfile', { operator: op, user })}
-                    theme={theme}
-                />
-            )}
+            <ActionCards 
+                onRewardsPress={() => navigation.navigate('Leaderboard')} 
+                onInvitePress={() => navigation.navigate('Invite')} 
+                theme={theme}
+            />
 
             <View style={{ paddingHorizontal: 16 }}>
                 <DestinyHero onPress={() => navigation.navigate('Keşfet')} />
             </View>
             
-            <View style={styles.tabContainer}>
-                {['Önerilen', 'Yeni', 'Popüler'].map(tab => (
-                    <TouchableOpacity 
-                        key={tab} 
-                        onPress={() => setActiveTab(tab)} 
-                        style={[
-                            styles.tab, 
-                            activeTab === tab ? { backgroundColor: theme.colors.primary } : { backgroundColor: theme.colors.glass }
-                        ]}
-                    >
-                        <Text style={[
-                            styles.tabText, 
-                            activeTab === tab ? { color: 'white' } : { color: theme.colors.textSecondary }
-                        ]}>{tab}</Text>
-                    </TouchableOpacity>
-                ))}
+            <View style={[styles.tabContainer, { justifyContent: 'space-between' }]}>
+                <View style={{ flexDirection: 'row', gap: 10, alignItems: 'center' }}>
+                    {['Önerilen', 'Çevrimiçi', 'Yeni', 'Popüler'].map(tab => {
+                        const isActive = activeTab === tab;
+                        return (
+                            <TouchableOpacity 
+                                key={tab} 
+                                onPress={() => setActiveTab(tab)} 
+                                style={styles.tab}
+                                activeOpacity={0.75}
+                            >
+                                {isActive ? (
+                                    <GradientText
+                                        colors={['#a855f7', '#ec4899']}
+                                        start={{ x: 0, y: 0 }}
+                                        end={{ x: 1, y: 0 }}
+                                        style={[styles.tabText, styles.activeTabText]}
+                                    >
+                                        {tab}
+                                    </GradientText>
+                                ) : (
+                                    <Text style={[
+                                        styles.tabText, 
+                                        styles.inactiveTabText,
+                                        { 
+                                            color: theme.mode === 'dark' ? 'rgba(255, 255, 255, 0.4)' : '#64748B' 
+                                        }
+                                    ]}>
+                                        {tab}
+                                    </Text>
+                                )}
+                                {isActive && (
+                                    <LinearGradient
+                                        colors={['#a855f7', '#ec4899']}
+                                        start={{ x: 0, y: 0 }}
+                                        end={{ x: 1, y: 0 }}
+                                        style={styles.tabIndicator}
+                                    />
+                                )}
+                            </TouchableOpacity>
+                        );
+                    })}
+                </View>
+
+                <TouchableOpacity 
+                    onPress={() => setShowFilterModal(true)}
+                    style={{ padding: 4 }}
+                >
+                    <Ionicons 
+                        name="options-outline" 
+                        size={24} 
+                        color={(currentFilters.gender !== 'all' || currentFilters.ageGroup !== 'all') ? '#ec4899' : (theme.mode === 'dark' ? '#fff' : '#0f172a')} 
+                    />
+                </TouchableOpacity>
             </View>
         </View>
-    ), [theme, balance, showSearch, searchText, activeTab, user, featuredOperators]);
+    ), [theme, balance, showSearch, searchText, activeTab, user, featuredOperators, currentFilters]);
 
 
-    const filteredData = operators.filter(op => 
-        normalizeText(op.name).includes(normalizeText(searchText)) ||
-        normalizeText(op.job || '').includes(normalizeText(searchText))
-    );
+    const filteredData = operators.filter(op => {
+        const matchesSearch = normalizeText(op.name).includes(normalizeText(searchText)) ||
+                              normalizeText(op.job || '').includes(normalizeText(searchText));
+        
+        let matchesGender = true;
+        if (currentFilters.gender !== 'all') {
+            const opGender = getProfileGender(op);
+            matchesGender = opGender === currentFilters.gender;
+        }
+
+        let matchesAge = true;
+        if (currentFilters.ageGroup !== 'all' && op.age) {
+            const age = parseInt(op.age, 10);
+            if (currentFilters.ageGroup === '18-24') matchesAge = age >= 18 && age <= 24;
+            else if (currentFilters.ageGroup === '25-34') matchesAge = age >= 25 && age <= 34;
+            else if (currentFilters.ageGroup === '35-44') matchesAge = age >= 35 && age <= 44;
+            else if (currentFilters.ageGroup === '45+') matchesAge = age >= 45;
+        }
+
+        return matchesSearch && matchesGender && matchesAge;
+    });
 
     const renderItem = React.useCallback(({ item }) => (
         <OperatorItem 
@@ -330,6 +426,14 @@ export default function HomeScreen({ navigation, route }) {
                 removeClippedSubviews={Platform.OS === 'android'}
                 maxToRenderPerBatch={10}
                 windowSize={5}
+            />
+
+            <FilterModal 
+                visible={showFilterModal} 
+                onClose={() => setShowFilterModal(false)} 
+                onApply={(filters) => setCurrentFilters(filters)} 
+                currentFilters={currentFilters}
+                theme={theme}
             />
         </LinearGradient>
     );
@@ -381,16 +485,35 @@ const styles = StyleSheet.create({
         borderColor: 'rgba(255,255,255,0.05)'
     },
     searchInput: { flex: 1, height: '100%', fontSize: 15 },
-    tabContainer: { flexDirection: 'row', marginBottom: 15, marginTop: 15, paddingHorizontal: 16 },
-    tab: { 
-        paddingHorizontal: 20, 
-        paddingVertical: 10, 
-        borderRadius: 25, 
-        marginRight: 10,
-        borderWidth: 1,
-        borderColor: 'rgba(255,255,255,0.05)'
+    tabContainer: { 
+        flexDirection: 'row', 
+        marginBottom: 15, 
+        marginTop: 15, 
+        paddingHorizontal: 20,
+        gap: 10, 
+        alignItems: 'center',
     },
-    tabText: { fontSize: 13, fontWeight: '700' },
+    tab: { 
+        paddingVertical: 6,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    tabText: { 
+        fontSize: 15,
+        letterSpacing: -0.3,
+    },
+    activeTabText: {
+        fontFamily: 'Outfit_800ExtraBold',
+    },
+    inactiveTabText: {
+        fontFamily: 'Outfit_500Medium',
+    },
+    tabIndicator: {
+        width: 20,
+        height: 4,
+        borderRadius: 2,
+        marginTop: 4,
+    },
     userCard: { marginHorizontal: 16, marginBottom: 10, padding: 12, borderRadius: 16 },
     cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
     avatarContainer: { position: 'relative' },

@@ -56,8 +56,6 @@ exports.googleAuth = async (req, res) => {
                 if (matchRes.rows.length > 0) {
                     finalReferralCode = matchRes.rows[0].code;
                     console.log(`[REFERRAL] Auto-matched via IP: ${ip} -> ${finalReferralCode}`);
-                } else {
-                    console.log(`[REFERRAL_DEBUG] No recent click found for IP: ${ip}`);
                 }
             }
 
@@ -77,6 +75,46 @@ exports.googleAuth = async (req, res) => {
                 [username, email, name, picture || 'https://via.placeholder.com/150', deviceId || null, referredBy]
             );
             user = result.rows[0];
+
+            // REFERRAL REWARD LOGIC
+            if (referredBy) {
+                try {
+                    let fraudDetected = false;
+                    if (deviceId) {
+                        const refUserRes = await db.query('SELECT device_id FROM users WHERE id = $1', [referredBy]);
+                        if (refUserRes.rows.length > 0 && refUserRes.rows[0].device_id === deviceId) {
+                            fraudDetected = true;
+                            console.log(`[REFERRAL_FRAUD] User ${user.id} and Referrer ${referredBy} share same device_id: ${deviceId}`);
+                        }
+                    }
+
+                    if (!fraudDetected) {
+                        await db.query('UPDATE users SET balance = balance + 500 WHERE id = $1', [referredBy]);
+                        await db.query("INSERT INTO transactions (user_id, amount, type, description) VALUES ($1, $2, $3, $4)", 
+                            [referredBy, 500, 'referral_bonus', 'Davet ettiğiniz kullanıcı kayıt oldu']);
+                        
+                        await db.query('UPDATE users SET balance = balance + 500 WHERE id = $1', [user.id]);
+                        await db.query("INSERT INTO transactions (user_id, amount, type, description) VALUES ($1, $2, $3, $4)", 
+                            [user.id, 500, 'referral_bonus', 'Davet kodu ile kayıt olma bonusu']);
+                        user.balance += 500;
+
+                        await db.query('INSERT INTO referral_rewards (referrer_id, referred_id, reward_type, amount) VALUES ($1, $2, $3, $4)',
+                            [referredBy, user.id, 'registration', 500]);
+
+                        if (io) {
+                            db.query("INSERT INTO notifications (user_id, type, body) VALUES ($1, $2, $3) RETURNING *",
+                                [referredBy, 'system', 'Tebrikler! Davet ettiğin bir arkadaşın kayıt oldu ve 500 Coin kazandın!']
+                            ).then(notif => {
+                                io.emit('new_notification', notif.rows[0]);
+                                io.emit('balance_update', { userId: referredBy, newBalance: null });
+                            }).catch(console.error);
+                        }
+                    }
+                } catch (refErr) {
+                    console.error('[REFERRAL_REWARD_ERROR]', refErr);
+                }
+            }
+
             await assignFakeInteractions(user.id);
             await triggerAutoEngagement(io, user.id);
             await logActivity(io, user.id, 'register', 'Kullanıcı Google ile kayıt oldu.');
@@ -169,6 +207,46 @@ exports.registerEmail = async (req, res) => {
         );
 
         const user = result.rows[0];
+
+        // REFERRAL REWARD LOGIC
+        if (referredBy) {
+            try {
+                let fraudDetected = false;
+                if (deviceId) {
+                    const refUserRes = await db.query('SELECT device_id FROM users WHERE id = $1', [referredBy]);
+                    if (refUserRes.rows.length > 0 && refUserRes.rows[0].device_id === deviceId) {
+                        fraudDetected = true;
+                        console.log(`[REFERRAL_FRAUD] User ${user.id} and Referrer ${referredBy} share same device_id: ${deviceId}`);
+                    }
+                }
+
+                if (!fraudDetected) {
+                    await db.query('UPDATE users SET balance = balance + 500 WHERE id = $1', [referredBy]);
+                    await db.query("INSERT INTO transactions (user_id, amount, type, description) VALUES ($1, $2, $3, $4)", 
+                        [referredBy, 500, 'referral_bonus', 'Davet ettiğiniz kullanıcı kayıt oldu']);
+                    
+                    await db.query('UPDATE users SET balance = balance + 500 WHERE id = $1', [user.id]);
+                    await db.query("INSERT INTO transactions (user_id, amount, type, description) VALUES ($1, $2, $3, $4)", 
+                        [user.id, 500, 'referral_bonus', 'Davet kodu ile kayıt olma bonusu']);
+                    user.balance += 500;
+
+                    await db.query('INSERT INTO referral_rewards (referrer_id, referred_id, reward_type, amount) VALUES ($1, $2, $3, $4)',
+                        [referredBy, user.id, 'registration', 500]);
+
+                    if (io) {
+                        db.query("INSERT INTO notifications (user_id, type, body) VALUES ($1, $2, $3) RETURNING *",
+                            [referredBy, 'system', 'Tebrikler! Davet ettiğin bir arkadaşın kayıt oldu ve 500 Coin kazandın!']
+                        ).then(notif => {
+                            io.emit('new_notification', notif.rows[0]);
+                            io.emit('balance_update', { userId: referredBy, newBalance: null });
+                        }).catch(console.error);
+                    }
+                }
+            } catch (refErr) {
+                console.error('[REFERRAL_REWARD_ERROR]', refErr);
+            }
+        }
+
         await assignFakeInteractions(user.id);
         await triggerAutoEngagement(io, user.id);
 

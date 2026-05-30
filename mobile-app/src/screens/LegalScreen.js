@@ -80,9 +80,11 @@ export default function LegalScreen({ route, navigation }) {
                     >
                         <Ionicons name="chevron-back" size={28} color={theme.colors.text} />
                     </TouchableOpacity>
-                    <Animated.Text entering={FadeIn.delay(200)} style={[styles.headerTitle, { color: theme.colors.text }]}>
-                        {isPrivacy ? 'Gizlilik' : 'Şartlar'}
-                    </Animated.Text>
+                    <Animated.View entering={FadeIn.delay(200)}>
+                        <Text style={[styles.headerTitle, { color: theme.colors.text }]}>
+                            {isPrivacy ? 'Gizlilik' : 'Şartlar'}
+                        </Text>
+                    </Animated.View>
                     <View style={{ width: 40 }} />
                 </View>
 

@@ -76,28 +76,56 @@ export default function MessagesScreen({ navigation, route }) {
     const [showSearch, setShowSearch] = useState(false);
     const [chats, setChats] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [page, setPage] = useState(0);
+    const [loadingMore, setLoadingMore] = useState(false);
+    const [hasMore, setHasMore] = useState(true);
 
     useFocusEffect(
         React.useCallback(() => {
             if (user?.id) {
-                fetchChats();
+                fetchChats(0, true);
                 fetchUnreadCount(user.id);
                 fetchBalance(user.id);
             } else {
-                // If context user is not loaded yet, wait for it
                 setLoading(false);
             }
         }, [user?.id])
     );
 
-    const fetchChats = async () => {
+    const fetchChats = async (pageNum = 0, isRefresh = false) => {
+        if (!isRefresh && !hasMore) return;
+
         try {
-            const res = await axios.get(`${API_URL}/users/${user.id}/chats`);
-            setChats(res.data);
+            if (isRefresh) {
+                // Keep the current chats but show loading indicator if desired, or just silent refresh.
+                // setLoading(true); is omitted here to avoid skeleton flashing on every focus
+            } else if (pageNum > 0) {
+                setLoadingMore(true);
+            }
+            
+            const limit = 10;
+            const res = await axios.get(`${API_URL}/users/${user.id}/chats?limit=${limit}&offset=${pageNum * limit}`);
+            
+            if (res.data.length < limit) {
+                setHasMore(false);
+            } else {
+                setHasMore(true);
+            }
+
+            if (isRefresh || pageNum === 0) {
+                setChats(res.data);
+            } else {
+                setChats(prev => {
+                    const newItems = res.data.filter(newItem => !prev.some(existing => existing.id === newItem.id));
+                    return [...prev, ...newItems];
+                });
+            }
+            setPage(pageNum);
         } catch (error) {
             console.error('Fetch Chats Error:', error);
         } finally {
             setLoading(false);
+            setLoadingMore(false);
         }
     };
 
@@ -272,6 +300,19 @@ export default function MessagesScreen({ navigation, route }) {
                     renderItem={renderChatItem}
                     contentContainerStyle={styles.list}
                     showsVerticalScrollIndicator={false}
+                    onEndReached={() => {
+                        if (!loadingMore && hasMore && !searchText) {
+                            fetchChats(page + 1);
+                        }
+                    }}
+                    onEndReachedThreshold={0.5}
+                    ListFooterComponent={
+                        loadingMore ? (
+                            <View style={{ paddingVertical: 20, alignItems: 'center' }}>
+                                <ActivityIndicator size="small" color={theme.colors.primary} />
+                            </View>
+                        ) : null
+                    }
                     ListHeaderComponent={(
                         <>
                             <View style={{ height: insets.top + 10 }} />

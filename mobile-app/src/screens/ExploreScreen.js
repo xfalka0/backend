@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { View, Text, StyleSheet, Image, TouchableOpacity, Dimensions, Modal, TextInput, FlatList, Alert, ActivityIndicator, RefreshControl } from 'react-native';
+import { View, Text, StyleSheet, Image, TouchableOpacity, Dimensions, Modal, TextInput, FlatList, Alert, ActivityIndicator, RefreshControl, Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Animated, {
     useSharedValue,
@@ -14,6 +14,7 @@ import StoryRing from '../components/animated/StoryRing';
 import VipFrame from '../components/ui/VipFrame';
 import { useTheme } from '../contexts/ThemeContext';
 import { resolveImageUrl } from '../utils/imageUtils';
+import { maskContactInfo } from '../utils/textUtils';
 
 import { API_URL } from '../config';
 import axios from 'axios';
@@ -612,7 +613,7 @@ export default function ExploreScreen({ navigation, route }) {
                 <View style={styles.modernFooter}>
                     <View style={styles.modernCaptionSection}>
                         <Text style={styles.modernCaption} numberOfLines={2}>
-                            {item.content || item.caption || "Merhaba! Beni takip etmeyi unutma! ✨"}
+                            {maskContactInfo(item.content || item.caption || "Merhaba! Beni takip etmeyi unutma! ✨")}
                         </Text>
                     </View>
 

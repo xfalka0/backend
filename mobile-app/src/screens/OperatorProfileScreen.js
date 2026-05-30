@@ -20,6 +20,7 @@ import VipFrame from '../components/ui/VipFrame';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import ImageViewing from 'react-native-image-viewing';
 import { resolveImageUrl } from '../utils/imageUtils';
+import { maskContactInfo } from '../utils/textUtils';
 
 const { width } = Dimensions.get('window');
 const HEADER_HEIGHT = width * 1.2;
@@ -375,48 +376,104 @@ export default function OperatorProfileScreen({ route, navigation }) {
                             {/* 2. Hakkımda */}
                             <View style={styles.section}>
                                 <Text style={styles.sectionTitle}>Hakkımda</Text>
-                                <Text style={styles.bioText}>{operator.bio || 'Merhaba! Seninle tanışmak için sabırsızlanıyorum.'}</Text>
+                                <Text style={styles.bioText}>{maskContactInfo(operator.bio) || 'Merhaba! Seninle tanışmak için sabırsızlanıyorum.'}</Text>
                             </View>
 
-                            {/* 3. Kişisel Bilgiler ve İlgi Alanları */}
-                            {(operator.relationship || operator.zodiac || operator.interests) && (
-                                <View style={styles.section}>
-                                    <Text style={styles.sectionTitle}>Kişisel Bilgiler</Text>
-                                    <View style={styles.infoTagsContainer}>
-                                        {operator.relationship && (
-                                            <View style={[styles.infoTag, { backgroundColor: 'rgba(236, 72, 153, 0.15)', borderColor: 'rgba(236, 72, 153, 0.3)' }]}>
-                                                <Ionicons name="heart" size={14} color="#ec4899" />
-                                                <Text style={[styles.infoTagText, { color: '#fbcfe8' }]}>{operator.relationship}</Text>
-                                            </View>
-                                        )}
-                                        {operator.zodiac && (
-                                            <View style={[styles.infoTag, { backgroundColor: 'rgba(139, 92, 246, 0.15)', borderColor: 'rgba(139, 92, 246, 0.3)' }]}>
-                                                <Ionicons name="sparkles" size={14} color="#a78bfa" />
-                                                <Text style={[styles.infoTagText, { color: '#ddd6fe' }]}>{operator.zodiac}</Text>
-                                            </View>
-                                        )}
-                                        {operator.job && (
-                                            <View style={[styles.infoTag, { backgroundColor: 'rgba(59, 130, 246, 0.15)', borderColor: 'rgba(59, 130, 246, 0.3)' }]}>
-                                                <Ionicons name="briefcase" size={14} color="#60a5fa" />
-                                                <Text style={[styles.infoTagText, { color: '#dbeafe' }]}>{operator.job}</Text>
-                                            </View>
-                                        )}
-                                    </View>
+                            {/* 3. İlgi Alanları (Her Zaman Gösterilecek) */}
+                            {(() => {
+                                 let displayInterests = [];
+                                 if (operator.interests) {
+                                     try {
+                                         displayInterests = Array.isArray(operator.interests) 
+                                             ? operator.interests 
+                                             : (JSON.parse(operator.interests || '[]').length > 0 
+                                                 ? JSON.parse(operator.interests) 
+                                                 : operator.interests.split(','));
+                                     } catch (e) {
+                                         displayInterests = operator.interests.split(',');
+                                     }
+                                 }
+                                 
+                                 // Deterministic random interests (0 to 3) based on profile ID
+                                 if (!displayInterests || displayInterests.length === 0 || (displayInterests.length === 1 && !displayInterests[0])) {
+                                     const allInterests = ["Müzik", "Spor", "Seyahat", "Kitap", "Sinema", "Dans", "Oyun", "Sanat", "Doğa", "Fotoğraf", "Yazılım", "Yoga", "Kamp"];
+                                     const idVal = operator.id || operator.user_id || 'default';
+                                     let hash = 0;
+                                     const str = String(idVal);
+                                     for (let i = 0; i < str.length; i++) {
+                                         hash = str.charCodeAt(i) + ((hash << 5) - hash);
+                                     }
+                                     const count = Math.abs(hash) % 4; // 0 to 3 interests
+                                     displayInterests = [];
+                                     const tempPool = [...allInterests];
+                                     for (let j = 0; j < count; j++) {
+                                         const index = Math.abs(hash + j) % tempPool.length;
+                                         displayInterests.push(tempPool[index]);
+                                         tempPool.splice(index, 1);
+                                     }
+                                 }
+                                 
+                                 if (!displayInterests || displayInterests.length === 0) return null;
+                                 
+                                 return (
+                                      <View style={styles.section}>
+                                          <Text style={styles.sectionTitle}>İlgi Alanları</Text>
+                                          <View style={styles.interestsContainer}>
+                                              {displayInterests.map((interest, idx) => {
+                                                  const clean = String(interest || '').trim();
+                                                  const emojiMap = {
+                                                      "müzik": "🎵 Müzik",
+                                                      "spor": "⚽ Spor",
+                                                      "seyahat": "✈️ Seyahat",
+                                                      "kitap": "📚 Kitap",
+                                                      "sinema": "🎬 Sinema",
+                                                      "dans": "💃 Dans",
+                                                      "oyun": "🎮 Oyun",
+                                                      "sanat": "🎨 Sanat",
+                                                      "doğa": "🌿 Doğa",
+                                                      "fotoğraf": "📷 Fotoğraf",
+                                                      "yazılım": "💻 Yazılım",
+                                                      "yoga": "🧘 Yoga",
+                                                      "kamp": "⛺ Kamp"
+                                                  };
+                                                  const withEmoji = emojiMap[clean.toLowerCase()] || clean;
+                                                  return (
+                                                      <View key={idx} style={styles.interestTag}>
+                                                          <Text style={styles.interestText}>{withEmoji}</Text>
+                                                      </View>
+                                                  );
+                                              })}
+                                          </View>
+                                      </View>
+                                  );
+                             })()}
 
-                                    {operator.interests && (
-                                        <View style={{ marginTop: 12 }}>
-                                            <Text style={[styles.sectionTitle, { fontSize: 14, marginBottom: 8, opacity: 0.8 }]}>İlgi Alanları</Text>
-                                            <View style={styles.interestsContainer}>
-                                                {(Array.isArray(operator.interests) ? operator.interests : JSON.parse(operator.interests || '[]').length > 0 ? JSON.parse(operator.interests) : operator.interests.split(',')).map((interest, idx) => (
-                                                    <View key={idx} style={styles.interestTag}>
-                                                        <Text style={styles.interestText}>{interest.trim()}</Text>
-                                                    </View>
-                                                ))}
-                                            </View>
-                                        </View>
-                                    )}
-                                </View>
-                            )}
+                             {/* 4. Kişisel Bilgiler */}
+                             {(operator.relationship || operator.zodiac || operator.job) && (
+                                 <View style={styles.section}>
+                                     <Text style={styles.sectionTitle}>Kişisel Bilgiler</Text>
+                                     <View style={styles.infoTagsContainer}>
+                                         {operator.relationship && (
+                                             <View style={[styles.infoTag, { backgroundColor: 'rgba(236, 72, 153, 0.15)', borderColor: 'rgba(236, 72, 153, 0.3)' }]}>
+                                                 <Ionicons name="heart" size={14} color="#ec4899" />
+                                                 <Text style={[styles.infoTagText, { color: '#fbcfe8' }]}>{operator.relationship}</Text>
+                                             </View>
+                                         )}
+                                         {operator.zodiac && (
+                                             <View style={[styles.infoTag, { backgroundColor: 'rgba(139, 92, 246, 0.15)', borderColor: 'rgba(139, 92, 246, 0.3)' }]}>
+                                                 <Ionicons name="sparkles" size={14} color="#a78bfa" />
+                                                 <Text style={[styles.infoTagText, { color: '#ddd6fe' }]}>{operator.zodiac}</Text>
+                                             </View>
+                                         )}
+                                         {operator.job && (
+                                             <View style={[styles.infoTag, { backgroundColor: 'rgba(59, 130, 246, 0.15)', borderColor: 'rgba(59, 130, 246, 0.3)' }]}>
+                                                 <Ionicons name="briefcase" size={14} color="#60a5fa" />
+                                                 <Text style={[styles.infoTagText, { color: '#dbeafe' }]}>{operator.job}</Text>
+                                             </View>
+                                         )}
+                                     </View>
+                                 </View>
+                             )}
                         </View>
                         <View style={{ height: 100 }} />
                     </GlassCard>

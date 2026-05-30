@@ -95,6 +95,51 @@ router.post('/purchase', authenticateToken, async (req, res) => {
         await db.query('COMMIT');
 
         const io = req.app.get('io');
+
+        // REFERRAL RECHARGE REWARD LOGIC (First Purchase Only)
+        try {
+            const userRes = await db.query('SELECT referred_by, device_id FROM users WHERE id = $1', [userId]);
+            if (userRes.rows.length > 0 && userRes.rows[0].referred_by) {
+                const referredBy = userRes.rows[0].referred_by;
+                const userDeviceId = userRes.rows[0].device_id;
+                
+                const rewardCheck = await db.query(
+                    "SELECT id FROM referral_rewards WHERE referrer_id = $1 AND referred_id = $2 AND reward_type = 'first_purchase'",
+                    [referredBy, userId]
+                );
+
+                if (rewardCheck.rows.length === 0) {
+                    let fraudDetected = false;
+                    if (userDeviceId) {
+                        const refUserRes = await db.query('SELECT device_id FROM users WHERE id = $1', [referredBy]);
+                        if (refUserRes.rows.length > 0 && refUserRes.rows[0].device_id === userDeviceId) {
+                            fraudDetected = true;
+                            console.log(`[REFERRAL_FRAUD_PURCHASE] User ${userId} and Referrer ${referredBy} share device_id`);
+                        }
+                    }
+
+                    if (!fraudDetected) {
+                        await db.query('UPDATE users SET balance = balance + 500 WHERE id = $1', [referredBy]);
+                        await db.query("INSERT INTO transactions (user_id, amount, type, description) VALUES ($1, $2, $3, $4)", 
+                            [referredBy, 500, 'referral_bonus', 'Davet ettiğiniz kullanıcı ilk yüklemesini yaptı']);
+                        
+                        await db.query("INSERT INTO referral_rewards (referrer_id, referred_id, reward_type, amount) VALUES ($1, $2, 'first_purchase', 500)",
+                            [referredBy, userId]);
+
+                        if (io) {
+                            db.query("INSERT INTO notifications (user_id, type, body) VALUES ($1, $2, $3) RETURNING *",
+                                [referredBy, 'system', 'Harika! Davet ettiğin bir arkadaşın ilk yüklemesini yaptı ve sen 500 Coin kazandın!']
+                            ).then(notif => {
+                                io.emit('new_notification', notif.rows[0]);
+                                io.emit('balance_update', { userId: referredBy, newBalance: null });
+                            }).catch(console.error);
+                        }
+                    }
+                }
+            }
+        } catch (refErr) {
+            console.error('[REFERRAL_PURCHASE_REWARD_ERROR]', refErr);
+        }
         if (io) {
             io.emit('balance_update', { userId, newBalance });
             io.emit('admin_balance_update', { userId, newBalance });

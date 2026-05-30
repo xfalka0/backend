@@ -54,6 +54,7 @@ import WelcomeScreen from './src/screens/WelcomeScreen';
 import OnboardingScreen from './src/screens/OnboardingScreen';
 import PurchaseInfoScreen from './src/screens/PurchaseInfoScreen';
 import LeaderboardScreen from './src/screens/LeaderboardScreen';
+import InviteScreen from './src/screens/InviteScreen';
 import AnimatedTabBar from './src/components/animated/AnimatedTabBar';
 import { trackPurchase } from './src/utils/analytics';
 import { Settings } from 'react-native-fbsdk-next';
@@ -139,6 +140,7 @@ function AppContent() {
                     <Stack.Screen name="Onboarding" component={OnboardingScreen} />
                     <Stack.Screen name="PurchaseInfo" component={PurchaseInfoScreen} />
                     <Stack.Screen name="Leaderboard" component={LeaderboardScreen} />
+                    <Stack.Screen name="Invite" component={InviteScreen} />
                 </Stack.Navigator>
             </StarterPackProvider>
         </NavigationContainer>

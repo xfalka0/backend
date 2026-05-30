@@ -374,14 +374,14 @@ const ProfileScreen = ({ route }) => {
             {/* Background Image Layer */}
             <View style={styles.bgWrapper}>
                 <Image 
-                    source={require('../../assets/top_menu_bg.png')} 
+                    source={require('../../assets/fiva_profile_banner.png')} 
                     style={styles.backgroundImage}
                 />
                 <LinearGradient
                     colors={
                         themeMode === 'dark'
-                            ? ['rgba(41, 24, 84, 0.3)', 'rgba(21, 14, 48, 0.9)', theme.colors.background]
-                            : ['rgba(248, 250, 252, 0.4)', 'rgba(241, 245, 249, 0.95)', theme.colors.background]
+                            ? ['rgba(9, 2, 26, 0.1)', 'rgba(9, 2, 26, 0.7)', theme.colors.background]
+                            : ['rgba(255, 255, 255, 0.1)', 'rgba(255, 255, 255, 0.7)', theme.colors.background]
                     }
                     style={StyleSheet.absoluteFill}
                 />
@@ -405,7 +405,7 @@ const ProfileScreen = ({ route }) => {
                         />
                         <Image 
                             source={{ uri: user?.avatar_url || user?.profile_image || 'https://via.placeholder.com/150' }} 
-                            style={[styles.avatarImage, { borderColor: theme.colors.background }]} 
+                            style={[styles.avatarImage, { borderColor: theme.colors.background, backgroundColor: theme.colors.background }]} 
                         />
                         <View style={[styles.cameraBadge, { borderColor: theme.colors.background }]}>
                             <Ionicons name="camera" size={16} color="#fff" />
@@ -472,7 +472,7 @@ const ProfileScreen = ({ route }) => {
 
                 {/* Floating Action Grid */}
                 <View style={styles.glassCardWrapper}>
-                    <BlurView intensity={30} tint="dark" style={styles.glassCard}>
+                    <LinearGradient colors={themeMode === 'dark' ? theme.gradients.card : ['#fff', '#f0f0f0']} style={styles.glassCard}>
                         <View style={styles.quickActionsGrid}>
                             <TouchableOpacity style={styles.qaItem} onPress={() => {
                                 const phoneNumber = "905414738700";
@@ -527,12 +527,12 @@ const ProfileScreen = ({ route }) => {
                                 <Text style={styles.qaLabel}>Favori</Text>
                             </TouchableOpacity>
                         </View>
-                    </BlurView>
+                    </LinearGradient>
                 </View>
 
                 {/* Wallet Glass Card */}
                 <TouchableOpacity style={styles.glassCardWrapper} onPress={() => navigation.navigate('Shop')} activeOpacity={0.8}>
-                    <BlurView intensity={30} tint="dark" style={styles.walletCard}>
+                    <LinearGradient colors={themeMode === 'dark' ? theme.gradients.card : ['#fff', '#f0f0f0']} style={styles.walletCard}>
                         <View style={styles.walletLeft}>
                             <View style={styles.coinIconBox}>
                                 <FontAwesome5 name="coins" size={20} color="#f59e0b" />
@@ -543,12 +543,14 @@ const ProfileScreen = ({ route }) => {
                             </View>
                         </View>
                         <LinearGradient
-                            colors={['#f59e0b', '#fbbf24']}
+                            colors={['#FDE68A', '#F59E0B']}
                             style={styles.depositBtn}
+                            start={{ x: 0, y: 0 }}
+                            end={{ x: 1, y: 1 }}
                         >
                             <Text style={styles.depositBtnText}>Yükle</Text>
                         </LinearGradient>
-                    </BlurView>
+                    </LinearGradient>
                 </TouchableOpacity>
 
                 {/* Boost Premium Card */}
@@ -557,7 +559,7 @@ const ProfileScreen = ({ route }) => {
                     activeOpacity={0.8}
                     onPress={handleBoost}
                 >
-                    <BlurView intensity={30} tint="dark" style={styles.boostCard}>
+                    <LinearGradient colors={themeMode === 'dark' ? theme.gradients.card : ['#fff', '#f0f0f0']} style={styles.boostCard}>
                         <View style={styles.boostLeft}>
                             <View style={[styles.boostIconCircle, user?.is_boosted && { backgroundColor: 'rgba(16, 185, 129, 0.2)' }]}>
                                 <Ionicons name={user?.is_boosted ? "flash" : "rocket"} size={18} color={user?.is_boosted ? "#10b981" : "#ec4899"} />
@@ -572,12 +574,36 @@ const ProfileScreen = ({ route }) => {
                             </View>
                         </View>
                         <Ionicons name="chevron-forward" size={16} color="#4b5563" />
-                    </BlurView>
+                    </LinearGradient>
+                </TouchableOpacity>
+
+                {/* Invite & Earn Card */}
+                <TouchableOpacity 
+                    style={styles.glassCardWrapper} 
+                    activeOpacity={0.8}
+                    onPress={() => navigation.navigate('Invite')}
+                >
+                    <LinearGradient colors={['#FF5F6D', '#FFC371']} style={styles.boostCard} start={{x:0, y:0}} end={{x:1, y:1}}>
+                        <View style={styles.boostLeft}>
+                            <View style={[styles.boostIconCircle, { backgroundColor: 'rgba(255, 255, 255, 0.25)' }]}>
+                                <Ionicons name="gift" size={20} color="#fff" />
+                            </View>
+                            <View>
+                                <Text style={[styles.boostMainText, { color: '#fff', textShadowColor: 'rgba(0,0,0,0.1)', textShadowOffset: {width: 0, height: 1}, textShadowRadius: 2 }]}>
+                                    Davet Et, Kazan!
+                                </Text>
+                                <Text style={[styles.boostSubText, { color: 'rgba(255,255,255,0.9)' }]}>
+                                    Arkadaşlarını davet et, 500 Coin kazan.
+                                </Text>
+                            </View>
+                        </View>
+                        <Ionicons name="chevron-forward" size={16} color="#fff" />
+                    </LinearGradient>
                 </TouchableOpacity>
 
                 {/* Album Section */}
                 <View style={styles.glassCardWrapper}>
-                    <BlurView intensity={30} tint="dark" style={styles.albumSection}>
+                    <LinearGradient colors={themeMode === 'dark' ? theme.gradients.card : ['#fff', '#f0f0f0']} style={styles.albumSection}>
                         <View style={styles.sectionHeader}>
                             <Text style={styles.sectionTitle}>Albüm</Text>
                         </View>
@@ -622,12 +648,12 @@ const ProfileScreen = ({ route }) => {
                                 </View>
                             ))}
                         </ScrollView>
-                    </BlurView>
+                    </LinearGradient>
                 </View>
 
                 {/* Merged Info Sections */}
                 <View style={styles.glassCardWrapper}>
-                    <BlurView intensity={30} tint="dark" style={styles.infoSection}>
+                    <LinearGradient colors={themeMode === 'dark' ? theme.gradients.card : ['#fff', '#f0f0f0']} style={styles.infoSection}>
                         {/* Temel Bilgiler Section */}
                         <View style={styles.sectionHeader}>
                             <Text style={styles.sectionTitle}>Temel Bilgiler</Text>
@@ -692,11 +718,11 @@ const ProfileScreen = ({ route }) => {
                                 ));
                             })()}
                         </View>
-                    </BlurView>
+                    </LinearGradient>
                 </View>
 
                 {/* Footer Actions */}
-                <View style={styles.footerContainer}>
+                <LinearGradient colors={themeMode === 'dark' ? theme.gradients.card : ['#fff', '#f0f0f0']} style={styles.footerContainer}>
                     <TouchableOpacity style={styles.footerItem} onPress={() => navigation.navigate('Settings')}>
                         <View style={[styles.footerIconBg, { backgroundColor: '#3b82f620' }]}>
                             <Ionicons name="settings-outline" size={20} color="#3b82f6" />
@@ -734,7 +760,7 @@ const ProfileScreen = ({ route }) => {
                         <Text style={styles.footerText}>WhatsApp Destek</Text>
                         <Ionicons name="chevron-forward" size={16} color="#4b3f61" />
                     </TouchableOpacity>
-                </View>
+                </LinearGradient>
 
                 <View style={{ height: 120 }} />
             </Animated.ScrollView>
@@ -1317,14 +1343,19 @@ const styles = StyleSheet.create({
         marginTop: 1,
     },
     depositBtn: {
-        paddingHorizontal: 12,
-        paddingVertical: 6,
-        borderRadius: 12,
+        paddingHorizontal: 16,
+        paddingVertical: 8,
+        borderRadius: 16,
+        shadowColor: '#F59E0B',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.4,
+        shadowRadius: 8,
+        elevation: 6,
     },
     depositBtnText: {
-        color: '#000',
-        fontWeight: 'bold',
-        fontSize: 12,
+        color: '#78350F',
+        fontWeight: '900',
+        fontSize: 13,
     },
     boostCard: {
         flexDirection: 'row',

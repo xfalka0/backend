@@ -26,7 +26,7 @@ const slides = [
         subtitle: 'İlk yüklemene özel bonus',
         buttonText: 'ŞİMDİ AL',
         icon: 'sparkles',
-        colors: ['rgba(245, 158, 11, 0.9)', 'rgba(217, 119, 6, 0.9)'],
+        colors: ['#f59e0b', '#d97706'],
         buttonColors: ['#FBBF24', '#D97706', '#B45309'],
         image: require('../../../assets/gold_coin_3f.png'),
         isCoin: true
@@ -37,7 +37,7 @@ const slides = [
         subtitle: 'Dokun ve eşleşmeni başlat ✨',
         buttonText: 'İNCELE',
         icon: 'star',
-        colors: ['rgba(244, 63, 94, 0.9)', 'rgba(225, 29, 72, 0.9)'],
+        colors: ['#fb7185', '#e11d48'],
         buttonColors: ['#FDA4AF', '#FB7185', '#E11D48'],
         image: require('../../../assets/heart_3d.png'),
         isCoin: false,
@@ -49,7 +49,7 @@ const slides = [
         subtitle: 'Play Store kullanamıyorsan WhatsApp üzerinden anında yükle',
         buttonText: 'WHATSAPP DESTEK',
         icon: 'logo-whatsapp',
-        colors: ['#065f46', '#059669', 'rgba(0, 0, 0, 0.8)'],
+        colors: ['#34d399', '#059669'],
         buttonColors: ['#34D399', '#10B981', '#059669'],
         image: require('../../../assets/reseller_coins.png'),
         isCoin: false,
@@ -349,8 +349,8 @@ const PremiumCoinCard = ({ onCoinPress, onExplorePress, onResellerPress }) => {
                 <Animated.View style={[styles.cardWrapper, cardAnimatedStyle]}>
                     <GlassCard style={styles.cardContainer} intensity={30} tint="dark">
                         <LinearGradient
-                            colors={[item.colors[0], item.colors[1], 'rgba(0, 0, 0, 0.8)']}
-                            start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+                            colors={[item.colors[0], item.colors[1]]}
+                            start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
                             style={StyleSheet.absoluteFill}
                         />
                         <Animated.View style={[styles.bannerSweep, bannerShineStyle]} pointerEvents="none">
@@ -360,8 +360,6 @@ const PremiumCoinCard = ({ onCoinPress, onExplorePress, onResellerPress }) => {
                                 style={StyleSheet.absoluteFill}
                             />
                         </Animated.View>
-                        <View style={styles.radialOverlay} pointerEvents="none" />
-                        <LinearGradient colors={['rgba(0, 0, 0, 0)', 'rgba(0, 0, 0, 0.2)']} style={styles.vignette} pointerEvents="none" />
 
                         <View style={styles.content}>
                             <View style={styles.textContainer}>
@@ -513,22 +511,35 @@ const styles = StyleSheet.create({
         height: '300%',
         zIndex: 2,
     },
-    vignette: {
+    circleOverlayRight: {
         position: 'absolute',
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
+        right: -30,
+        top: -20,
+        width: 130,
+        height: 130,
+        borderRadius: 65,
+        backgroundColor: 'rgba(255, 255, 255, 0.15)',
+        zIndex: 0,
     },
-    radialOverlay: {
+    circleOverlaySmall: {
         position: 'absolute',
-        top: -60,
-        left: -60,
-        width: 250,
-        height: 250,
-        borderRadius: 125,
-        backgroundColor: 'rgba(255, 255, 255, 0.08)',
-        zIndex: 0, // Behind text
+        right: 60,
+        bottom: -30,
+        width: 70,
+        height: 70,
+        borderRadius: 35,
+        backgroundColor: 'rgba(255, 255, 255, 0.1)',
+        zIndex: 0,
+    },
+    glassOverlay: {
+        position: 'absolute',
+        left: -15,
+        top: -40,
+        width: 90,
+        height: 90,
+        borderRadius: 45,
+        backgroundColor: 'rgba(255, 255, 255, 0.06)',
+        zIndex: 0,
     },
     cardGlow: {
         position: 'absolute',

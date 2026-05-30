@@ -134,6 +134,8 @@ router.delete('/:id', authenticateToken, async (req, res) => {
 // GET USER CHATS
 router.get('/:userId/chats', async (req, res) => {
     const { userId } = req.params;
+    const limit = parseInt(req.query.limit) || 15;
+    const offset = parseInt(req.query.offset) || 0;
     try {
         const result = await db.query(`
             SELECT c.id, c.operator_id, c.last_message_at,
@@ -146,7 +148,8 @@ router.get('/:userId/chats', async (req, res) => {
             LEFT JOIN users u ON c.operator_id = u.id
             WHERE c.user_id = $1
             ORDER BY COALESCE((SELECT MAX(created_at) FROM messages WHERE chat_id = c.id), c.last_message_at) DESC
-        `, [userId]);
+            LIMIT $2 OFFSET $3
+        `, [userId, limit, offset]);
         res.json(result.rows.map(row => sanitizeUser(row, req)));
     } catch (err) {
         res.status(500).json({ error: err.message });

@@ -22,7 +22,7 @@ export default function GlassCard({ children, style, intensity = 20, tint = "def
                 <LinearGradient
                     colors={
                         themeMode === 'dark'
-                            ? [isAndroid ? 'rgba(30, 25, 60, 0.95)' : 'rgba(26, 20, 53, 0.4)', isAndroid ? 'rgba(15, 10, 40, 0.98)' : 'rgba(17, 12, 36, 0.6)']
+                            ? [isAndroid ? theme.colors.card + 'E6' : theme.gradients.glass[0], isAndroid ? theme.colors.backgroundSecondary + 'FA' : theme.gradients.glass[1]]
                             : [isAndroid ? 'rgba(255, 255, 255, 0.95)' : 'rgba(255, 255, 255, 0.6)', isAndroid ? 'rgba(245, 245, 245, 0.98)' : 'rgba(240, 240, 240, 0.8)']
                     }
                     start={{ x: 0, y: 0 }}

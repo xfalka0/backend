@@ -1,28 +1,28 @@
 export const DARK_THEME = {
     mode: 'dark',
     colors: {
-        background: '#0E0926',     // Rich Deep Midnight Violet
-        surface: '#1B113B',        // Elegant Deep Violet Surface
-        card: '#271C52',           // Premium Lighter Violet Card
+        background: '#0D1429',     // Deep blue, not black
+        surface: '#151A36',        // Deep blue surface
+        card: '#1D2045',           // Card color
         text: '#ffffff',
-        textSecondary: '#BBB3DC',    // Soft Lavender Muted Text
+        textSecondary: '#9CA3C8',    // Soft muted text
         primary: '#A855F7',          // Vibrant Purple
         secondary: '#EC4899',        // Vibrant Pink
         accent: '#FBBF24',           // Premium Gold
         success: '#10B981',
         danger: '#F43F5E',
-        glass: 'rgba(255, 255, 255, 0.05)',
-        glassBorder: 'rgba(255, 255, 255, 0.12)',
-        inputBg: 'rgba(39, 28, 82, 0.6)',
+        glass: 'rgba(255, 255, 255, 0.06)',
+        glassBorder: 'rgba(255, 255, 255, 0.1)',
+        inputBg: 'rgba(29, 32, 69, 0.6)',
         border: 'rgba(255, 255, 255, 0.1)',
-        backgroundSecondary: '#150D32',
+        backgroundSecondary: '#111730',
     },
     gradients: {
         primary: ['#A855F7', '#EC4899'],
-        dark: ['#241554', '#0E0926'], // Gorgeous glowing violet to midnight obsidian
+        dark: ['#0E1736', '#2A1431'], // Deep blue to dark purple-pink mix, lighter than black
         vip: ['#F59E0B', '#D97706'],
-        glass: ['rgba(255,255,255,0.08)', 'rgba(255,255,255,0.01)'],
-        card: ['#271C52', '#1B113B'],
+        glass: ['rgba(255,255,255,0.08)', 'rgba(255,255,255,0.02)'],
+        card: ['#1D2045', '#24162B'], // Subtle mix for cards
     }
 };
 

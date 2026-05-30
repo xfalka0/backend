@@ -111,7 +111,7 @@ const DestinyHero = ({ onPress }) => {
                         resizeMode="cover"
                     />
                     <LinearGradient
-                        colors={['rgba(88, 28, 135, 0.5)', 'rgba(30, 27, 75, 0.9)']}
+                        colors={['rgba(236, 72, 153, 0.8)', 'rgba(225, 29, 72, 0.9)']}
                         start={{ x: 0, y: 0 }}
                         end={{ x: 1, y: 0 }}
                         style={StyleSheet.absoluteFill}
@@ -170,6 +170,36 @@ const styles = StyleSheet.create({
         paddingHorizontal: 15,
         paddingVertical: 10,
         justifyContent: 'center',
+    },
+    circleOverlayRight: {
+        position: 'absolute',
+        right: -30,
+        top: -20,
+        width: 130,
+        height: 130,
+        borderRadius: 65,
+        backgroundColor: 'rgba(255, 255, 255, 0.15)',
+        zIndex: 0,
+    },
+    circleOverlaySmall: {
+        position: 'absolute',
+        right: 60,
+        bottom: -30,
+        width: 70,
+        height: 70,
+        borderRadius: 35,
+        backgroundColor: 'rgba(255, 255, 255, 0.1)',
+        zIndex: 0,
+    },
+    glassOverlay: {
+        position: 'absolute',
+        left: -15,
+        top: -40,
+        width: 90,
+        height: 90,
+        borderRadius: 45,
+        backgroundColor: 'rgba(255, 255, 255, 0.06)',
+        zIndex: 0,
     },
     content: {
         flexDirection: 'row',

@@ -305,12 +305,9 @@ export default function WelcomeScreen({ navigation }) {
                         />
                         <View style={styles.loadingContent}>
                             <LoadingHeart />
-                            <Animated.Text
-                                entering={FadeIn.delay(200)}
-                                style={styles.loadingText}
-                            >
-                                Hazırlanıyor...
-                            </Animated.Text>
+                            <Animated.View entering={FadeIn.delay(200)}>
+                                <Text style={styles.loadingText}>Hazırlanıyor...</Text>
+                            </Animated.View>
                         </View>
                     </Animated.View>
                 </View>

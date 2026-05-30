@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, TextInput, FlatList, StyleSheet, KeyboardAvoidingView, Platform, TouchableOpacity, Image, RefreshControl, Animated, ScrollView, Keyboard, PanResponder } from 'react-native';
+import { View, Text, TextInput, FlatList, StyleSheet, KeyboardAvoidingView, Platform, TouchableOpacity, Image, RefreshControl, Animated, ScrollView, Keyboard, PanResponder, Alert } from 'react-native';
 import { BlurView } from 'expo-blur';
 import * as Haptics from 'expo-haptics';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -442,9 +442,7 @@ export default function ChatScreen({ route, navigation }) {
 
         try {
             const token = await AsyncStorage.getItem('token');
-            const res = await axios.post(`${API_URL}/messages/unlock`, {
-                messageId: msg.id
-            }, {
+            const res = await axios.post(`${API_URL}/messages/${msg.id}/unlock`, {}, {
                 headers: { Authorization: `Bearer ${token}` }
             });
 
@@ -463,15 +461,16 @@ export default function ChatScreen({ route, navigation }) {
     };
 
     const confirmUnlock = (msg) => {
-        const cost = msg.unlock_cost || 50;
-        Alert.alert(
-            "Kilitli Fotoğraf",
-            `Bu fotoğrafı görmek için ${cost} Coin ödemek istiyor musunuz?`,
-            [
-                { text: "İptal", style: "cancel" },
-                { text: "Aç", onPress: () => handleUnlockImage(msg) }
-            ]
-        );
+        const cost = msg.unlock_cost || 200;
+        showAlert({
+            title: "Kilitli Fotoğraf 🔒",
+            message: `Bu fotoğrafı görmek için ${cost} Coin ödemek istiyor musunuz?`,
+            type: 'info',
+            showCancel: true,
+            cancelText: "Vazgeç",
+            confirmText: "Aç",
+            onConfirm: () => handleUnlockImage(msg)
+        });
     };
 
     const sendMessage = (textOrEvent) => {
@@ -567,10 +566,12 @@ export default function ChatScreen({ route, navigation }) {
 
 
 
-    const handleSendGift = (gift) => {
+    const handleSendGift = (gift, quantity = 1) => {
         if (!chatId) return;
 
-        if (currentBalance < gift.price) {
+        const totalCost = gift.price * quantity;
+
+        if (currentBalance < totalCost) {
             setShowGiftModal(false);
             handleInsufficientCoins();
             return;
@@ -585,9 +586,10 @@ export default function ChatScreen({ route, navigation }) {
             id: tempId,
             chat_id: chatId,
             sender_id: user.id,
-            content: gift.name,
+            content: quantity > 1 ? `${gift.name} (x${quantity})` : gift.name,
             type: 'gift',
             gift_id: gift.id,
+            quantity: quantity,
             created_at: new Date().toISOString(),
             is_optimistic: true
         };
@@ -596,10 +598,11 @@ export default function ChatScreen({ route, navigation }) {
         const msgData = {
             chatId: chatId,
             senderId: user.id,
-            content: gift.name,
+            content: quantity > 1 ? `${gift.name} (x${quantity})` : gift.name,
             type: 'gift',
             tempId: tempId,
-            giftId: gift.id
+            giftId: gift.id,
+            quantity: quantity
         };
 
         socketRef.current?.emit('send_message', msgData);
@@ -990,11 +993,19 @@ export default function ChatScreen({ route, navigation }) {
                             blurRadius={isLocked ? 30 : 0}
                         />
                         {isLocked && (
-                            <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.3)', borderRadius: 16 }}>
-                                <View style={{ backgroundColor: 'rgba(0,0,0,0.5)', padding: 12, borderRadius: 50, alignItems: 'center' }}>
-                                    <Ionicons name="lock-closed" size={32} color="#fbbf24" />
-                                    <Text style={{ color: '#fbbf24', fontWeight: '900', marginTop: 4, fontSize: 12 }}>{item.unlock_cost || 50} COIN</Text>
-                                </View>
+                            <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(9, 2, 26, 0.45)', borderRadius: 16 }}>
+                                <LinearGradient
+                                    colors={['rgba(236, 72, 153, 0.85)', 'rgba(139, 92, 246, 0.9)']}
+                                    start={{ x: 0, y: 0 }}
+                                    end={{ x: 1, y: 1 }}
+                                    style={{ paddingHorizontal: 14, paddingVertical: 12, borderRadius: 20, alignItems: 'center', shadowColor: '#ec4899', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.35, shadowRadius: 10, elevation: 6, width: '85%' }}
+                                >
+                                    <Ionicons name="lock-closed" size={24} color="#fff" style={{ marginBottom: 6 }} />
+                                    <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 11, textAlign: 'center', lineHeight: 15 }}>
+                                        Fotoğrafı görmek için{"\n"}
+                                        <Text style={{ fontWeight: '900', fontSize: 13, color: '#fff' }}>{item.unlock_cost || 200} Coin</Text> ile açın
+                                    </Text>
+                                </LinearGradient>
                             </View>
                         )}
                     </View>

@@ -44,8 +44,8 @@ CREATE TABLE IF NOT EXISTS operators (
 
 CREATE TABLE IF NOT EXISTS chats (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id UUID REFERENCES users(id),
-    operator_id UUID REFERENCES users(id),
+    user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+    operator_id UUID REFERENCES users(id) ON DELETE CASCADE,
     status VARCHAR(50) DEFAULT 'active', -- active, closed
     last_message_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -54,7 +54,7 @@ CREATE TABLE IF NOT EXISTS chats (
 CREATE TABLE IF NOT EXISTS messages (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     chat_id UUID REFERENCES chats(id) ON DELETE CASCADE,
-    sender_id UUID REFERENCES users(id),
+    sender_id UUID REFERENCES users(id) ON DELETE CASCADE,
     content_type VARCHAR(50) DEFAULT 'text', -- text, image, video, gift, call_stub
     content TEXT, -- Text message or URL to media
     gift_id INT,
@@ -88,7 +88,7 @@ CREATE TABLE IF NOT EXISTS fake_videos (
 
 CREATE TABLE IF NOT EXISTS transactions (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id UUID REFERENCES users(id),
+    user_id UUID REFERENCES users(id) ON DELETE CASCADE,
     amount INT NOT NULL, -- Negative for spend, positive for purchase
     type VARCHAR(50) NOT NULL, -- purchase, spend_chat, spend_gift...
     description TEXT,

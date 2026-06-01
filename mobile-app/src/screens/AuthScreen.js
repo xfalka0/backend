@@ -116,7 +116,8 @@ export default function AuthScreen({ navigation, route }) {
         try {
             const endpoint = isRegisterMode ? '/auth/register-email' : '/auth/login-email';
             const deviceId = await getDeviceId();
-            const payload = { email, password, deviceId };
+            const normalizedEmail = email.trim().toLowerCase();
+            const payload = { email: normalizedEmail, password, deviceId };
             const res = await axios.post(`${API_URL}${endpoint}`, payload);
 
             if (res.data.user) {
@@ -145,11 +146,11 @@ export default function AuthScreen({ navigation, route }) {
     };
 
     const handleRequestOtp = async () => {
-        const identifier = authMethod === 'email' ? email : phone;
+        let identifier = authMethod === 'email' ? email.trim().toLowerCase() : phone;
         
         if (authMethod === 'email') {
             const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-            if (!emailRegex.test(email)) {
+            if (!emailRegex.test(identifier)) {
                 setAlert({ visible: true, title: 'Hata', message: 'Lütfen geçerli bir e-posta adresi girin.', type: 'error' });
                 return;
             }
@@ -162,7 +163,7 @@ export default function AuthScreen({ navigation, route }) {
 
         setLoading(true);
         try {
-            const payload = authMethod === 'email' ? { email } : { phone };
+            const payload = authMethod === 'email' ? { email: identifier } : { phone };
             const res = await axios.post(`${API_URL}/auth/request-otp`, payload);
 
             if (res.data.success) {
@@ -187,7 +188,8 @@ export default function AuthScreen({ navigation, route }) {
         setLoading(true);
         try {
             const deviceId = await getDeviceId();
-            const payload = authMethod === 'email' ? { email, otp: verifyCode, deviceId } : { phone, otp: verifyCode, deviceId };
+            const normalizedEmail = email ? email.trim().toLowerCase() : '';
+            const payload = authMethod === 'email' ? { email: normalizedEmail, otp: verifyCode, deviceId } : { phone, otp: verifyCode, deviceId };
             const res = await axios.post(`${API_URL}/auth/verify-otp`, payload);
 
             if (res.data.user) {
@@ -363,7 +365,7 @@ export default function AuthScreen({ navigation, route }) {
                 <GlassInput
                     label="E-posta"
                     value={email}
-                    onChangeText={setEmail}
+                    onChangeText={(val) => setEmail(val.trim().toLowerCase())}
                     keyboardType="email-address"
                 />
             ) : (

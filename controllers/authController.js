@@ -28,8 +28,9 @@ exports.googleAuth = async (req, res) => {
         });
         const payload = ticket.getPayload();
         const { email, name, picture } = payload;
+        const normalizedEmail = email ? email.trim().toLowerCase() : '';
 
-        let userResult = await db.query('SELECT * FROM users WHERE email = $1', [email]);
+        let userResult = await db.query('SELECT * FROM users WHERE LOWER(email) = $1', [normalizedEmail]);
         let user;
 
         if (userResult.rows.length === 0) {
@@ -72,7 +73,7 @@ exports.googleAuth = async (req, res) => {
                 `INSERT INTO users (username, email, display_name, avatar_url, role, balance, device_id, referred_by) 
                  VALUES ($1, $2, $3, $4, 'user', 100, $5, $6) 
                  RETURNING *`,
-                [username, email, name, picture || 'https://via.placeholder.com/150', deviceId || null, referredBy]
+                [username, normalizedEmail || null, name, picture || 'https://via.placeholder.com/150', deviceId || null, referredBy]
             );
             user = result.rows[0];
 
@@ -158,9 +159,10 @@ exports.googleAuth = async (req, res) => {
 
 // Register Email
 exports.registerEmail = async (req, res) => {
-    const { email, password, username, display_name, deviceId } = req.body;
+    let { email, password, username, display_name, deviceId } = req.body;
     const io = req.app.get('io');
     if (!email || !password) return res.status(400).json({ error: 'Email ve şifre zorunludur.' });
+    const normalizedEmail = email.trim().toLowerCase();
 
     try {
         if (deviceId) {
@@ -203,7 +205,7 @@ exports.registerEmail = async (req, res) => {
 
         const result = await db.query(
             "INSERT INTO users (username, email, password_hash, role, balance, display_name, avatar_url, device_id, referred_by) VALUES ($1, $2, $3, 'user', 100, $4, 'https://via.placeholder.com/150', $5, $6) RETURNING *",
-            [finalUsername, email, hashedPassword, display_name || finalUsername, deviceId || null, referredBy]
+            [finalUsername, normalizedEmail, hashedPassword, display_name || finalUsername, deviceId || null, referredBy]
         );
 
         const user = result.rows[0];
@@ -267,11 +269,12 @@ exports.registerEmail = async (req, res) => {
 
 // Login Email
 exports.loginEmail = async (req, res) => {
-    const { email, password, deviceId } = req.body;
+    let { email, password, deviceId } = req.body;
     const io = req.app.get('io');
 
     try {
-        const result = await db.query('SELECT * FROM users WHERE email = $1', [email]);
+        const normalizedEmail = email ? email.trim().toLowerCase() : '';
+        const result = await db.query('SELECT * FROM users WHERE LOWER(email) = $1', [normalizedEmail]);
         if (result.rows.length === 0) {
             return res.status(401).json({ error: 'E-posta veya şifre hatalı.' });
         }

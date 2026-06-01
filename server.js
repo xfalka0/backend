@@ -1012,7 +1012,8 @@ const sendOtpEmail = async (email, otp) => {
 };
 
 app.post('/api/auth/request-otp', authLimiter, async (req, res) => {
-    const { email, phone } = req.body;
+    let { email, phone } = req.body;
+    if (email) email = email.trim().toLowerCase();
     const identifier = email || phone;
     if (!identifier) return res.status(400).json({ error: 'Email veya Telefon gerekli.' });
     try {
@@ -1092,7 +1093,8 @@ app.get('/api/auth/smtp-diagnostics', async (req, res) => {
 });
 
 app.post('/api/auth/verify-otp', async (req, res) => {
-    const { email, phone, code, otp, deviceId } = req.body;
+    let { email, phone, code, otp, deviceId } = req.body;
+    if (email) email = email.trim().toLowerCase();
     const finalCode = code || otp;
     const identifier = email || phone;
     try {
@@ -1132,7 +1134,7 @@ app.post('/api/auth/verify-otp', async (req, res) => {
         }
         // --- END BYPASS ---
         let result;
-        if (email) result = await db.query('SELECT * FROM users WHERE email = $1', [email]);
+        if (email) result = await db.query('SELECT * FROM users WHERE LOWER(email) = $1', [email]);
         else result = await db.query('SELECT * FROM users WHERE phone = $1', [phone]);
         let user;
         if (result.rows.length === 0) {
@@ -4340,12 +4342,14 @@ io.on('connection', (socket) => {
                     }
                 }
             } else {
-                // STAFF OR FEMALE USER EARNS ON RESPONSE
-                let commissionCost = 10;
-                if (type === 'image') commissionCost = 50;
-                else if (type === 'audio') commissionCost = 30;
-                
-                commissionDataToRunLater = { chatId, senderId, cost: commissionCost, type: type || 'text' };
+                // Only female users (gender === 'kadin') earn commission on response!
+                if (userGender === 'kadin') {
+                    let commissionCost = 10;
+                    if (type === 'image') commissionCost = 50;
+                    else if (type === 'audio') commissionCost = 30;
+                    
+                    commissionDataToRunLater = { chatId, senderId, cost: commissionCost, type: type || 'text' };
+                }
             }
 
             console.log(`[SOCKET] Checking management status for role: ${socket.user.role}`);
@@ -4354,23 +4358,27 @@ io.on('connection', (socket) => {
             
             // If sender is management, they should message AS the operator of this chat
             if (isManagement) {
-                const chatRes = await client.query('SELECT operator_id FROM chats WHERE id = $1', [chatId]);
+                const chatRes = await client.query('SELECT operator_id, user_id FROM chats WHERE id = $1', [chatId]);
                 if (chatRes.rows.length > 0) {
                     const avatarId = chatRes.rows[0].operator_id;
+                    const chatUserId = chatRes.rows[0].user_id;
                     
-                    // Zimmet Check: If it's a staff/moderator, check if they are allowed
-                    if (socket.user.role === 'staff' || socket.user.role === 'moderator') {
-                        const manageCheck = await client.query('SELECT managed_by FROM users WHERE id = $1', [avatarId]);
-                        const managerId = manageCheck.rows.length > 0 ? manageCheck.rows[0].managed_by : null;
-                        
-                        if (managerId && managerId.toString() !== senderId.toString() && socket.user.role !== 'admin' && socket.user.role !== 'super_admin') {
-                            console.warn(`[SOCKET] Blocked unauthorized message attempt by ${senderId} for avatar ${avatarId}`);
-                            throw new Error('BU_PROFIL_SIZE_ZIMMETLI_DEGIL');
+                    // ONLY message as the avatar if the sender is NOT the customer (user_id) of the chat!
+                    if (chatUserId && chatUserId.toString() !== senderId.toString()) {
+                        // Zimmet Check: If it's a staff/moderator, check if they are allowed
+                        if (socket.user.role === 'staff' || socket.user.role === 'moderator') {
+                            const manageCheck = await client.query('SELECT managed_by FROM users WHERE id = $1', [avatarId]);
+                            const managerId = manageCheck.rows.length > 0 ? manageCheck.rows[0].managed_by : null;
+                            
+                            if (managerId && managerId.toString() !== senderId.toString() && socket.user.role !== 'admin' && socket.user.role !== 'super_admin') {
+                                console.warn(`[SOCKET] Blocked unauthorized message attempt by ${senderId} for avatar ${avatarId}`);
+                                throw new Error('BU_PROFIL_SIZE_ZIMMETLI_DEGIL');
+                            }
                         }
+                        
+                        // All management roles message AS the avatar to keep chat consistent
+                        finalSenderId = avatarId;
                     }
-                    
-                    // All management roles message AS the avatar to keep chat consistent
-                    finalSenderId = avatarId;
                 }
             }
 

@@ -12,39 +12,60 @@ const db = require('../db');
 async function recordOperatorCommission(client, chatId, senderId, cost, type) {
     if (cost <= 0) return;
 
-    // 1. Find the operator for this chat
-    const chatRes = await client.query('SELECT operator_id FROM chats WHERE id = $1', [chatId]);
+    // 1. Find the users in this chat
+    const chatRes = await client.query('SELECT user_id, operator_id FROM chats WHERE id = $1', [chatId]);
     if (chatRes.rows.length === 0) return;
     
-    const operatorId = chatRes.rows[0].operator_id;
-    if (!operatorId) return;
+    const chatUserId = chatRes.rows[0].user_id;
+    const chatOperatorId = chatRes.rows[0].operator_id;
+    if (!chatUserId || !chatOperatorId) return;
 
-    // 1.5 Find who manages this avatar (to pay the actual human)
-    const managerRes = await client.query('SELECT managed_by, role FROM users WHERE id::text = $1::text', [operatorId]);
-    const avatarData = managerRes.rows[0] || {};
-    
-    // Check if the sender is a staff/moderator/admin/operator
-    let isSenderStaff = false;
-    let senderRole = 'user';
-    
-    if (senderId && senderId !== '00000000-0000-0000-0000-000000000000') {
-        const senderRes = await client.query('SELECT role FROM users WHERE id::text = $1::text', [senderId]);
-        senderRole = senderRes.rows.length > 0 ? senderRes.rows[0].role : 'user';
-        isSenderStaff = ['staff', 'moderator', 'admin', 'super_admin', 'operator'].includes(senderRole);
+    // Load details for both users in the chat to detect roles correctly
+    const usersRes = await client.query(
+        'SELECT id, role, gender, agency_id, managed_by, total_spent FROM users WHERE id::text IN ($1::text, $2::text)',
+        [chatUserId, chatOperatorId]
+    );
+    const chatUsers = usersRes.rows;
+    const femaleUser = chatUsers.find(u => (u.gender || '').toLowerCase() === 'kadin');
+    const maleUser = chatUsers.find(u => (u.gender || '').toLowerCase() === 'erkek');
+
+    let actualPayeeId;
+    let customerId;
+    let payeeData = null;
+
+    if (femaleUser && maleUser) {
+        // If there is one male and one female, the female is ALWAYS the payee/operator and the male is the customer
+        actualPayeeId = femaleUser.id;
+        customerId = maleUser.id;
+        payeeData = femaleUser;
+        console.log(`[COMMISSION-ROLES] Resolved by gender: Payee (Female) = ${actualPayeeId}, Customer (Male) = ${customerId}`);
+    } else {
+        // Fallback to standard chat roles
+        const operatorId = chatOperatorId;
+        const managerRes = await client.query('SELECT managed_by, role, gender, agency_id FROM users WHERE id::text = $1::text', [operatorId]);
+        const avatarData = managerRes.rows[0] || {};
+        
+        let isSenderStaff = false;
+        if (senderId && senderId !== '00000000-0000-0000-0000-000000000000') {
+            const senderRes = await client.query('SELECT role FROM users WHERE id::text = $1::text', [senderId]);
+            const senderRole = senderRes.rows.length > 0 ? senderRes.rows[0].role : 'user';
+            isSenderStaff = ['staff', 'moderator', 'admin', 'super_admin', 'operator'].includes(senderRole);
+        }
+
+        actualPayeeId = operatorId;
+        if (isSenderStaff) {
+            actualPayeeId = senderId;
+        } else if (avatarData.managed_by) {
+            actualPayeeId = avatarData.managed_by;
+        }
+
+        const payeeRes = await client.query('SELECT agency_id, gender, id FROM users WHERE id = $1', [actualPayeeId]);
+        payeeData = payeeRes.rows.length > 0 ? payeeRes.rows[0] : null;
+        customerId = chatUserId;
+        console.log(`[COMMISSION-ROLES] Resolved by fallback: Payee = ${actualPayeeId}, Customer = ${customerId}`);
     }
 
-    let actualPayeeId = operatorId;
-    if (isSenderStaff) {
-        actualPayeeId = senderId;
-    } else if (avatarData.managed_by) {
-        actualPayeeId = avatarData.managed_by;
-    }
-
-    // 1.7 Find Agency and Gender
-    const payeeRes = await client.query('SELECT agency_id, gender FROM users WHERE id = $1', [actualPayeeId]);
-    if (payeeRes.rows.length === 0) return;
-    
-    const payeeData = payeeRes.rows[0];
+    if (!payeeData) return;
     const agencyId = payeeData.agency_id;
     const payeeGender = payeeData.gender;
 
@@ -65,10 +86,7 @@ async function recordOperatorCommission(client, chatId, senderId, cost, type) {
     // 1.6 Activity Tracking
     await client.query('UPDATE operators SET last_active_at = NOW() WHERE user_id = $1', [actualPayeeId]);
 
-    // 2. Bonus Protection Check - CHECK THE CUSTOMER (user_id in chat), NOT THE SENDER (staff)
-    const chatUserRes = await client.query('SELECT user_id FROM chats WHERE id = $1', [chatId]);
-    const customerId = chatUserRes.rows.length > 0 ? chatUserRes.rows[0].user_id : null;
-    
+    // 2. Bonus Protection Check
     const userCheck = await client.query('SELECT total_spent FROM users WHERE id = $1', [customerId]);
     const userLifetimeSpent = userCheck.rows.length > 0 ? parseFloat(userCheck.rows[0].total_spent || 0) : 0;
     

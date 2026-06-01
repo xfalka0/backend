@@ -4173,7 +4173,7 @@ io.use(async (socket, next) => {
         }
 
         const decoded = jwt.verify(token, SECRET_KEY);
-        const result = await db.query('SELECT id, username, role, account_status, balance, vip_level FROM users WHERE id = $1', [decoded.id]);
+        const result = await db.query('SELECT id, username, role, account_status, balance, vip_level, gender, agency_id FROM users WHERE id = $1', [decoded.id]);
 
         if (result.rows.length === 0) {
             global.payoutLogs.push({ timestamp: new Date().toISOString(), type: 'AUTH_FAILED', reason: 'User not found', userId: decoded.id });
@@ -4340,17 +4340,12 @@ io.on('connection', (socket) => {
                     }
                 }
             } else {
-                // STAFF EARNS ON RESPONSE - But ONLY if they are NOT the "user" side of the chat
-                const chatCheck = await client.query('SELECT user_id FROM chats WHERE id = $1', [chatId]);
-                const chatUserId = chatCheck.rows.length > 0 ? chatCheck.rows[0].user_id : null;
+                // STAFF OR FEMALE USER EARNS ON RESPONSE
+                let commissionCost = 10;
+                if (type === 'image') commissionCost = 50;
+                else if (type === 'audio') commissionCost = 30;
                 
-                if (chatUserId && chatUserId.toString() !== senderId.toString()) {
-                    let commissionCost = 10;
-                    if (type === 'image') commissionCost = 50;
-                    else if (type === 'audio') commissionCost = 30;
-                    
-                    commissionDataToRunLater = { chatId, senderId, cost: commissionCost, type: type || 'text' };
-                }
+                commissionDataToRunLater = { chatId, senderId, cost: commissionCost, type: type || 'text' };
             }
 
             console.log(`[SOCKET] Checking management status for role: ${socket.user.role}`);

@@ -50,41 +50,11 @@ const normalizeText = (value = '') => {
                .trim();
 };
 
-const MALE_NAME_HINTS = new Set([
-    'abdurrahman', 'abdullah', 'abdulkadir', 'abdulkerim', 'adabi', 'adem', 'adnan',
-    'afsin', 'affiliate', 'akin', 'ahmet', 'ali', 'alper', 'alperen', 'anil', 'arda',
-    'arif', 'atilla', 'aziz', 'ayhan', 'aykut', 'baris', 'batuhan', 'bayram', 'behcet',
-    'berat', 'berk', 'berkay', 'bekir', 'bora', 'bulent', 'burak', 'cafer',
-    'cagatay', 'cavit', 'celal', 'cem', 'cemal', 'cevat', 'cihan', 'cengiz', 'cumali',
-    'davut', 'dogan', 'dogukan', 'dundar', 'ekrem', 'emir', 'emircan', 'emrah',
-    'emre', 'enes', 'enver', 'eray', 'ercan', 'erdem', 'erdogan', 'eren', 'erhan',
-    'erol', 'ersin', 'faruk', 'fatih', 'ferhat', 'fikret', 'fuat', 'furkan',
-    'gencay', 'gokhan', 'gokay', 'goksel', 'gursel', 'hakan', 'halil', 'hamza',
-    'harun', 'hasan', 'haydar', 'hikmet', 'huseyin', 'ibrahim', 'ihsan', 'ilhan',
-    'isa', 'ismail', 'ismet', 'kadir', 'kaan', 'kamil', 'karadayi', 'kazim',
-    'kemal', 'kerem', 'kiziltas', 'koksal', 'koray', 'levent', 'lokman', 'mahmut',
-    'mehmet', 'mert', 'mertcan', 'mesut', 'metehan', 'metin', 'mgelvg', 'muhammed',
-    'muhammet', 'murat', 'mustafa', 'muzaffer', 'necati', 'necip', 'nevzat', 'nihat',
-    'nuri', 'nusret', 'nurullah', 'okan', 'okten', 'omer', 'onur', 'orhan', 'osman',
-    'ozan', 'ozgur', 'polat', 'ramadan', 'ramazan', 'rasim', 'recep', 'ridvan',
-    'riza', 'sabri', 'sadik', 'sahin', 'sait', 'salih', 'sami', 'samet', 'savas',
-    'sedat', 'sefa', 'selcuk', 'selim', 'semih', 'serdar', 'serdal', 'serhat',
-    'sevket', 'sinan', 'suat', 'sultan', 'suleyman', 'taha', 'tamer', 'taner',
-    'tarik', 'tayyip', 'tekin', 'tolga', 'tuncay', 'turan', 'ugur', 'umut', 'ummet',
-    'veysel', 'volkan', 'yakup', 'yalcin', 'yasin', 'yasar', 'yavuz', 'yigit',
-    'yilmaz', 'yunus', 'yusuf', 'zafer', 'zeki'
-]);
-
 const getProfileGender = (profile = {}) => {
     const raw = (profile.gender || '').toString().trim().toLowerCase();
     if (raw === 'coin_bayisi') return 'coin_bayisi';
-
-    const text = normalizeText([profile.name, profile.display_name, profile.username].filter(Boolean).join(' '));
-    if (text.split(' ').some(part => MALE_NAME_HINTS.has(part.replace(/\d+$/g, '')))) return 'erkek';
-    
-    const value = normalizeText(raw).replace(/\s+/g, '');
-    if (value === 'erkek' || value === 'male' || value === 'man') return 'erkek';
-    if (value === 'kadin' || value === 'female' || value === 'woman') return 'kadin';
+    if (raw === 'erkek' || raw === 'male' || raw === 'man') return 'erkek';
+    if (raw === 'kadin' || raw === 'female' || raw === 'woman') return 'kadin';
     return '';
 };
 
@@ -231,13 +201,13 @@ export default function ExploreScreen({ navigation, route }) {
             const filteredPosts = exploreRes.data.posts.filter(p => {
                 const profileGender = getProfileGender(p);
                 const isDealerOrAdmin = profileGender === 'coin_bayisi' || p.role === 'admin';
-                return profileGender === targetGender || isDealerOrAdmin;
+                return userGender === 'kadin' || profileGender === targetGender || isDealerOrAdmin;
             });
             
             const filteredStories = exploreRes.data.stories.filter(s => {
                 const profileGender = getProfileGender(s);
                 const isDealerOrAdmin = profileGender === 'coin_bayisi' || s.role === 'admin';
-                return profileGender === targetGender || isDealerOrAdmin;
+                return userGender === 'kadin' || profileGender === targetGender || isDealerOrAdmin;
             });
 
             setPosts(filteredPosts);
@@ -245,7 +215,7 @@ export default function ExploreScreen({ navigation, route }) {
             setOperators(operatorsRes.data.filter(op => {
                 const profileGender = getProfileGender(op);
                 const isDealer = profileGender === 'coin_bayisi';
-                return profileGender === targetGender || isDealer;
+                return userGender === 'kadin' || profileGender === targetGender || isDealer;
             }));
         } catch (err) {
             console.error('Fetch Explore Error:', err);

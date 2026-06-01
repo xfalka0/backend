@@ -33,28 +33,10 @@ const normalizeText = (value = '') => {
     return text.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
 };
 
-const MALE_NAME_HINTS = new Set([
-    'abdurrahman', 'abdullah', 'abdulkadir', 'abdulkerim', 'adem', 'adnan', 'ahmet', 'ali', 'alper', 'anil', 'arda',
-    'arif', 'atilla', 'aziz', 'ayhan', 'aykut', 'baris', 'batuhan', 'bayram', 'berat', 'berk', 'berkay', 'bekir',
-    'bora', 'bulent', 'burak', 'cafer', 'cagatay', 'celal', 'cem', 'cemal', 'cihan', 'cengiz', 'davut', 'dogan',
-    'dogukan', 'ekrem', 'emir', 'emrah', 'emre', 'enes', 'enver', 'eray', 'ercan', 'erdem', 'erdogan', 'eren',
-    'erhan', 'erol', 'ersin', 'faruk', 'fatih', 'ferhat', 'fikret', 'fuat', 'furkan', 'gokhan', 'hakan', 'halil',
-    'hamza', 'harun', 'hasan', 'haydar', 'huseyin', 'ibrahim', 'ihsan', 'ilhan', 'isa', 'ismail', 'ismet', 'kadir',
-    'kaan', 'kamil', 'kazim', 'kemal', 'kerem', 'koray', 'levent', 'mahmut', 'mehmet', 'mert', 'mesut', 'metin',
-    'muhammed', 'muhammet', 'murat', 'mustafa', 'muzaffer', 'necati', 'necip', 'nihat', 'nuri', 'nusret', 'okan',
-    'omer', 'onur', 'orhan', 'osman', 'ozan', 'ozgur', 'polat', 'ramazan', 'recep', 'ridvan', 'riza', 'sabri',
-    'sahin', 'sait', 'salih', 'sami', 'samet', 'savas', 'sedat', 'sefa', 'selcuk', 'selim', 'semih', 'serdar',
-    'serhat', 'sinan', 'suat', 'suleyman', 'taha', 'tamer', 'taner', 'tarik', 'tayfun', 'taylan', 'temel', 'tolga',
-    'tuncay', 'turgut', 'ufuk', 'ugur', 'umit', 'umut', 'utku', 'uzay', 'vahit', 'velat', 'veli', 'volkan', 'yahya',
-    'yakup', 'yasin', 'yavuz', 'yunus', 'yusuf', 'zafer', 'zeki', 'ziya'
-]);
-
 const getProfileGender = (profile = {}) => {
-    const raw = (profile.gender || '').toString().toLowerCase();
-    if (raw.includes('bayi')) return 'coin_bayisi';
-    const name = normalizeText(profile.name || '');
-    if (MALE_NAME_HINTS.has(name.split(' ')[0])) return 'erkek';
-    if (raw.includes('erkek') || raw.includes('male')) return 'erkek';
+    const raw = (profile.gender || '').toString().trim().toLowerCase();
+    if (raw === 'coin_bayisi' || raw.includes('bayi')) return 'coin_bayisi';
+    if (raw === 'erkek' || raw.includes('erkek') || raw.includes('male') || raw === 'man') return 'erkek';
     return 'kadin';
 };
 

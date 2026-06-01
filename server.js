@@ -646,12 +646,6 @@ app.get('/api/discovery', authenticateToken, async (req, res) => {
 
         let whereClause = `WHERE (LOWER(u.gender) = $1 OR u.gender = 'coin_bayisi') AND u.role NOT IN ('admin', 'super_admin', 'moderator', 'staff')`;
         let queryParams = [targetGender, userId];
-        
-        if (targetGender === 'kadin') {
-            const patterns = MALE_NAMES_ARRAY.map(name => `%${name}%`);
-            whereClause += ` AND NOT (translate(LOWER(COALESCE(u.display_name, '') || ' ' || COALESCE(u.name, '') || ' ' || COALESCE(u.username, '')), 'çğıöşüİ', 'cgiosui') ILIKE ANY($3))`;
-            queryParams.push(patterns);
-        }
 
         let orderByClause = '';
         if (tab === 'Yeni') {

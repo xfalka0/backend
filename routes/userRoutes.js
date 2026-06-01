@@ -137,19 +137,29 @@ router.get('/:userId/chats', async (req, res) => {
     const limit = parseInt(req.query.limit) || 15;
     const offset = parseInt(req.query.offset) || 0;
     try {
-        const result = await db.query(`
+        const userRes = await db.query('SELECT role, gender FROM users WHERE id = $1', [userId]);
+        const requestingUser = userRes.rows[0];
+        
+        let isOperator = false;
+        if (requestingUser) {
+            isOperator = requestingUser.gender === 'kadin' || ['operator', 'staff', 'moderator', 'admin', 'super_admin'].includes(requestingUser.role);
+        }
+
+        const query = `
             SELECT c.id, c.operator_id, c.last_message_at,
                 (SELECT content FROM messages WHERE chat_id = c.id ORDER BY created_at DESC LIMIT 1) as last_message,
                 (SELECT COUNT(*)::int FROM messages WHERE chat_id = c.id AND sender_id != $1 AND is_read = false) as unread_count,
-                COALESCE(u.display_name, u.username, 'Bilinmeyen Operatör') as name,
+                COALESCE(u.display_name, u.username, 'Bilinmeyen Kullanıcı') as name,
                 COALESCE(u.avatar_url, 'https://via.placeholder.com/150') as avatar_url,
                 u.vip_level, u.is_verified, u.gender, true as is_online
             FROM chats c
-            LEFT JOIN users u ON c.operator_id = u.id
-            WHERE c.user_id = $1
+            LEFT JOIN users u ON ${isOperator ? 'c.user_id = u.id' : 'c.operator_id = u.id'}
+            WHERE ${isOperator ? 'c.operator_id = $1' : 'c.user_id = $1'}
             ORDER BY COALESCE((SELECT MAX(created_at) FROM messages WHERE chat_id = c.id), c.last_message_at) DESC
             LIMIT $2 OFFSET $3
-        `, [userId, limit, offset]);
+        `;
+
+        const result = await db.query(query, [userId, limit, offset]);
         res.json(result.rows.map(row => sanitizeUser(row, req)));
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -160,11 +170,22 @@ router.get('/:userId/chats', async (req, res) => {
 router.get('/:userId/unread-count', async (req, res) => {
     const { userId } = req.params;
     try {
-        const result = await db.query(`
+        const userRes = await db.query('SELECT role, gender FROM users WHERE id = $1', [userId]);
+        const requestingUser = userRes.rows[0];
+        
+        let isOperator = false;
+        if (requestingUser) {
+            isOperator = requestingUser.gender === 'kadin' || ['operator', 'staff', 'moderator', 'admin', 'super_admin'].includes(requestingUser.role);
+        }
+
+        const query = `
             SELECT COUNT(*)::int as total_unread FROM messages m
             JOIN chats c ON m.chat_id = c.id
-            WHERE c.user_id = $1 AND m.sender_id != $1 AND m.is_read = false
-        `, [userId]);
+            WHERE ${isOperator ? 'c.operator_id = $1' : 'c.user_id = $1'} 
+            AND m.sender_id != $1 
+            AND m.is_read = false
+        `;
+        const result = await db.query(query, [userId]);
         res.json({ count: result.rows[0].total_unread || 0 });
     } catch (err) {
         res.status(500).json({ error: err.message });

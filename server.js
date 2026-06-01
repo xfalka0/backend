@@ -3007,26 +3007,34 @@ app.get('/api/users/:userId/chats', async (req, res) => {
     const { userId } = req.params;
     console.log(`GET /api/users/${userId}/chats requested`);
     try {
-        const simpleQuery = `
+        const userRes = await db.query('SELECT role, gender FROM users WHERE id = $1', [userId]);
+        const requestingUser = userRes.rows[0];
+        
+        let isOperator = false;
+        if (requestingUser) {
+            isOperator = requestingUser.gender === 'kadin' || ['operator', 'staff', 'moderator', 'admin', 'super_admin'].includes(requestingUser.role);
+        }
+
+        const query = `
             SELECT 
                 c.id,
                 c.operator_id, 
                 c.last_message_at,
                 (SELECT content FROM messages WHERE chat_id = c.id ORDER BY created_at DESC LIMIT 1) as last_message,
                 (SELECT COUNT(*)::int FROM messages WHERE chat_id = c.id AND sender_id != $1 AND is_read = false) as unread_count,
-                COALESCE(u.display_name, u.username, 'Bilinmeyen Operatör') as name, 
+                COALESCE(u.display_name, u.username, 'Bilinmeyen Kullanıcı') as name, 
                 COALESCE(u.avatar_url, 'https://via.placeholder.com/150') as avatar_url,
                 u.vip_level,
                 u.is_verified,
                 u.gender,
                 true as is_online 
             FROM chats c
-            LEFT JOIN users u ON c.operator_id = u.id
-            WHERE c.user_id = $1
+            LEFT JOIN users u ON ${isOperator ? 'c.user_id = u.id' : 'c.operator_id = u.id'}
+            WHERE ${isOperator ? 'c.operator_id = $1' : 'c.user_id = $1'}
             ORDER BY COALESCE((SELECT MAX(created_at) FROM messages WHERE chat_id = c.id), c.last_message_at) DESC
         `;
 
-        const result = await db.query(simpleQuery, [userId]);
+        const result = await db.query(query, [userId]);
         const processedRows = result.rows.map(row => sanitizeUser(row, req));
         console.log(`GET /api/users/${userId}/chats - Found ${processedRows.length} chats`);
         res.json(processedRows);
@@ -3040,11 +3048,19 @@ app.get('/api/users/:userId/chats', async (req, res) => {
 app.get('/api/users/:userId/unread-count', async (req, res) => {
     const { userId } = req.params;
     try {
+        const userRes = await db.query('SELECT role, gender FROM users WHERE id = $1', [userId]);
+        const requestingUser = userRes.rows[0];
+        
+        let isOperator = false;
+        if (requestingUser) {
+            isOperator = requestingUser.gender === 'kadin' || ['operator', 'staff', 'moderator', 'admin', 'super_admin'].includes(requestingUser.role);
+        }
+
         const query = `
             SELECT COUNT(*)::int as total_unread
             FROM messages m
             JOIN chats c ON m.chat_id = c.id
-            WHERE c.user_id = $1 
+            WHERE ${isOperator ? 'c.operator_id = $1' : 'c.user_id = $1'} 
             AND m.sender_id != $1 
             AND m.is_read = false
         `;

@@ -7,7 +7,7 @@ const path = require('path');
 exports.getExplore = async (req, res) => {
     try {
         const currentUserId = req.query.user_id;
-        const userIdType = 'INTEGER'; // users.id is INTEGER type in this DB
+        const userIdType = req.app?.get('user_id_type') || 'UUID';
 
 
         // 1. Fetch active stories - Filtered by blocks

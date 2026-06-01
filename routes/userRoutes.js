@@ -148,7 +148,7 @@ router.get('/:userId/chats', async (req, res) => {
         const query = `
             SELECT c.id, c.operator_id, c.user_id, c.last_message_at,
                 c.last_message,
-                (SELECT COUNT(*)::int FROM messages WHERE chat_id = c.id AND sender_id != $1 AND is_read = false) as unread_count,
+                (SELECT COUNT(*)::int FROM messages WHERE chat_id = c.id AND sender_id::text != $1::text AND is_read = false) as unread_count,
                 COALESCE(u.display_name, u.username, 'Bilinmeyen Kullanıcı') as name,
                 COALESCE(u.avatar_url, 'https://via.placeholder.com/150') as avatar_url,
                 u.vip_level, u.is_verified, u.gender, true as is_online

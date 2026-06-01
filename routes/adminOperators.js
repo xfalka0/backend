@@ -32,12 +32,6 @@ router.get('/', async (req, res) => {
             params.push(normalizedGender);
             paramCount++;
 
-            // Strict male name filtering if looking for women
-            if (normalizedGender === 'kadin') {
-                query += ` AND NOT (translate(LOWER(COALESCE(u.display_name, '') || ' ' || COALESCE(u.name, '') || ' ' || COALESCE(u.username, '')), 'çğıöşüİ', 'cgiosui') ~* $${paramCount})`;
-                params.push(MALE_NAME_PATTERN);
-                paramCount++;
-            }
         }
 
         let orderByClause = '';

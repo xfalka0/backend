@@ -620,34 +620,9 @@ const initializeDatabase = async (db, app) => {
         await runMigration('idx_chats_operator_id', 'CREATE INDEX IF NOT EXISTS idx_chats_operator_id ON chats(operator_id)');
         await runMigration('idx_messages_chat_unread', 'CREATE INDEX IF NOT EXISTS idx_messages_chat_unread ON messages(chat_id, sender_id) WHERE is_read = false');
 
-        // Auto-fix genders on startup (ONLY for unassigned/unset genders to prevent overwriting valid user data)
-        await db.query(
-            `UPDATE users 
-             SET gender = 'erkek' 
-             WHERE (gender = 'not_set' OR gender IS NULL OR gender = '')
-               AND translate(LOWER(COALESCE(display_name, '') || ' ' || COALESCE(name, '') || ' ' || COALESCE(username, '')), 'çğıöşü', 'cgiosu') ~* $1`,
-            [MALE_NAME_PATTERN]
-        );
-        const MALE_NAMES = ['Mustafa', 'Furkan', 'Ahmet', 'Mehmet', 'Ali', 'Veli', 'Can', 'Murat', 'Hakan', 'Emre', 'Burak', 'Volkan', 'Gökhan', 'Serkan', 'Ömer', 'Osman', 'İbrahim', 'Halil', 'Ramadan', 'Ramazan', 'Fırat', 'Mert', 'Yiğit', 'Arda', 'Hasan', 'İhsan', 'Fatih', 'Süleyman', 'Yusuf', 'Eren', 'Okan', 'Onur', 'Umut', 'Mertcan', 'Enes', 'Yunus', 'Emir', 'Kadir', 'Karadayı', 'Adabi', 'Zafer', 'Turan', 'Yılmaz', 'Metin', 'Bekir', 'Kamil'];
-        for (const name of MALE_NAMES) {
-            await db.query(
-                "UPDATE users SET gender = 'erkek' WHERE (display_name ILIKE $1 OR username ILIKE $1) AND (gender = 'not_set' OR gender IS NULL OR gender = '')",
-                ["%" + name + "%"]
-            );
-        }
-        
-        const FEMALE_NAMES = ['Ayşe', 'Fatma', 'Su', 'Esma', 'Emriye', 'Zeynep', 'Elif', 'Merve', 'Selin', 'Ece', 'Aslı', 'Deniz', 'Güneş', 'Buse', 'Hazal', 'Simge', 'İrem', 'Ceren', 'Ada', 'Dilan', 'Berfin', 'Seda', 'Ceyda', 'Dilara', 'Bahar', 'Yağmur', 'Eylül', 'Nisan', 'Melis', 'Merve', 'Gamze'];
-        for (const name of FEMALE_NAMES) {
-            await db.query(
-                "UPDATE users SET gender = 'kadin' WHERE (display_name ILIKE $1 OR username ILIKE $1) AND (gender = 'not_set' OR gender IS NULL OR gender = '')",
-                ["%" + name + "%"]
-            );
-        }
-        console.log('[DB] Initial gender auto-fix completed');
-
-        // One-time production correction for affected virtual operators back to 'kadin'
-        await db.query("UPDATE users SET gender = 'kadin' WHERE id IN (41, 44, 51) AND gender != 'kadin'");
-        console.log('[DB] Production operators gender correction verified');
+        // One-time production correction for affected virtual operators and user "Aysel demir" back to 'kadin'
+        await db.query("UPDATE users SET gender = 'kadin' WHERE (id IN (41, 44, 51) OR display_name ILIKE '%Aysel%' OR username ILIKE '%Aysel%') AND gender != 'kadin'");
+        console.log('[DB] Production operators and Aysel gender correction verified');
 
         console.log('[DB] SCHEMA VERIFICATION COMPLETE');
         if (!app.get('db_status')) app.set('db_status', 'ready');

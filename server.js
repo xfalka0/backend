@@ -4310,9 +4310,11 @@ io.on('connection', (socket) => {
             // Load recipient and check for female-to-female messaging
             const chatRes = await client.query('SELECT user_id, operator_id FROM chats WHERE id = $1', [chatId]);
             let isFemaleToFemale = false;
+            let chatReceiverId = null;
             if (chatRes.rows.length > 0) {
                 const chat = chatRes.rows[0];
                 const receiverId = senderId.toString() === chat.user_id.toString() ? chat.operator_id : chat.user_id;
+                chatReceiverId = receiverId;
                 
                 const receiverRes = await client.query('SELECT gender FROM users WHERE id = $1', [receiverId]);
                 if (receiverRes.rows.length > 0) {
@@ -4381,11 +4383,27 @@ io.on('connection', (socket) => {
             } else {
                 // Only female users (gender === 'kadin') earn commission on response!
                 if (userGender === 'kadin' && !isFemaleToFemale) {
-                    let commissionCost = 10;
-                    if (type === 'image') commissionCost = 50;
-                    else if (type === 'audio') commissionCost = 30;
-                    
-                    commissionDataToRunLater = { chatId, senderId, cost: commissionCost, type: type || 'text' };
+                    // CHECK: Only give commission if the LAST message in the chat was from the other user (male)
+                    // If the female is sending multiple messages in a row, she only gets paid for the first one.
+                    let shouldGiveCommission = true;
+                    if (chatReceiverId) {
+                        const lastMsgRes = await client.query('SELECT sender_id FROM messages WHERE chat_id = $1 ORDER BY created_at DESC LIMIT 1', [chatId]);
+                        if (lastMsgRes.rows.length > 0) {
+                            const lastSenderId = lastMsgRes.rows[0].sender_id;
+                            if (lastSenderId && lastSenderId.toString() !== chatReceiverId.toString()) {
+                                shouldGiveCommission = false;
+                                console.log(`[SOCKET] Commission denied for ${senderId} in chat ${chatId}: Last message was not from the user ${chatReceiverId}.`);
+                            }
+                        }
+                    }
+
+                    if (shouldGiveCommission) {
+                        let commissionCost = 10;
+                        if (type === 'image') commissionCost = 50;
+                        else if (type === 'audio') commissionCost = 30;
+                        
+                        commissionDataToRunLater = { chatId, senderId, cost: commissionCost, type: type || 'text' };
+                    }
                 }
             }
 

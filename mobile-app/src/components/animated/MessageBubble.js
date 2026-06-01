@@ -198,7 +198,7 @@ const MessageBubble = React.memo(({ children, isMine, index, isRead, avatar, vip
 
                     {!isMine && isReplied && parseFloat(earnedDiamonds) > 0 && (
                         <View style={styles.earningBadge}>
-                            <Ionicons name="checkmark-circle" size={12} color="#10b981" />
+                            <Ionicons name="checkmark-circle" size={10} color="#10b981" />
                             <Text style={styles.earningBadgeText}>
                                 Yanıtlandı (+{parseFloat(earnedDiamonds)} Elmas)
                             </Text>
@@ -369,20 +369,14 @@ const styles = StyleSheet.create({
     earningBadge: {
         flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: 'rgba(16, 185, 129, 0.15)',
-        borderWidth: 1,
-        borderColor: 'rgba(16, 185, 129, 0.25)',
-        borderRadius: 10,
-        paddingHorizontal: 8,
-        paddingVertical: 4,
-        marginTop: 4,
+        marginTop: 2,
         alignSelf: 'flex-start',
     },
     earningBadgeText: {
         color: '#10b981',
-        fontSize: 9.5,
+        fontSize: 8.5,
         fontWeight: 'bold',
-        marginLeft: 4,
+        marginLeft: 3,
     },
 });
 

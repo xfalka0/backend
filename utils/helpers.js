@@ -386,11 +386,15 @@ const MALE_NAMES_ARRAY = [
     'ziya', 'zorlu', 'zulfu', 'zulkuf'
 ];
 
+const MALE_NAME_PATTERN = '\\y(' + MALE_NAMES_ARRAY.join('|') + ')\\y';
+
 module.exports = {
     sanitizeUser,
     logActivity,
     assignFakeInteractions,
     triggerAutoEngagement,
     triggerLoginAutoEngagement,
-    MALE_NAMES_ARRAY
+    MALE_NAMES_ARRAY,
+    MALE_NAME_PATTERN
 };
+

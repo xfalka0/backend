@@ -26,6 +26,14 @@ async function recordOperatorCommission(client, chatId, senderId, cost, type) {
         [chatUserId, chatOperatorId]
     );
     const chatUsers = usersRes.rows;
+
+    // Check if both users are female (female-to-female) - no commission/diamonds should be earned by either
+    const femaleCount = chatUsers.filter(u => (u.gender || '').toLowerCase() === 'kadin').length;
+    if (femaleCount >= 2) {
+        console.log(`[COMMISSION-BYPASS] Female-to-Female chat detected in chat ${chatId}. Commission bypassed.`);
+        return;
+    }
+
     const femaleUser = chatUsers.find(u => (u.gender || '').toLowerCase() === 'kadin');
     const maleUser = chatUsers.find(u => (u.gender || '').toLowerCase() === 'erkek');
 

@@ -17,7 +17,7 @@ const favoritesRoutes = require('./routes/favorites');
 const viewsRoutes = require('./routes/views');
 const boostsRoutes = require('./routes/boosts');
 const webhooksRoutes = require('./routes/webhooks');
-const { sanitizeUser, logActivity, MALE_NAMES_ARRAY, assignFakeInteractions, triggerAutoEngagement } = require('./utils/helpers');
+const { sanitizeUser, logActivity, MALE_NAMES_ARRAY, MALE_NAME_PATTERN, assignFakeInteractions, triggerAutoEngagement } = require('./utils/helpers');
 const { sendPushNotification } = require('./utils/notificationUtils');
 
 const normalizeText = (value = '') => {
@@ -704,19 +704,18 @@ const initializeDatabase = async () => {
             created_at TIMESTAMP DEFAULT NOW()
         )`);
 
-        // Auto-fix genders on startup
+        // Auto-fix genders on startup (ONLY for unassigned/unset genders to prevent overwriting valid user data)
         await db.query(
             `UPDATE users 
              SET gender = 'erkek' 
-             WHERE gender != 'erkek' 
-               AND gender != 'coin_bayisi'
+             WHERE (gender = 'not_set' OR gender IS NULL OR gender = '')
                AND translate(LOWER(COALESCE(display_name, '') || ' ' || COALESCE(name, '') || ' ' || COALESCE(username, '')), 'çğıöşü', 'cgiosu') ~* $1`,
             [MALE_NAME_PATTERN]
         );
         const MALE_NAMES = ['Mustafa', 'Furkan', 'Ahmet', 'Mehmet', 'Ali', 'Veli', 'Can', 'Murat', 'Hakan', 'Emre', 'Burak', 'Volkan', 'Gökhan', 'Serkan', 'Ömer', 'Osman', 'İbrahim', 'Halil', 'Ramadan', 'Ramazan', 'Fırat', 'Mert', 'Yiğit', 'Arda', 'Hasan', 'İhsan', 'Fatih', 'Süleyman', 'Yusuf', 'Eren', 'Okan', 'Onur', 'Umut', 'Mertcan', 'Enes', 'Yunus', 'Emir', 'Kadir', 'Karadayı', 'Adabi', 'Zafer', 'Sultan', 'Turan', 'Yılmaz', 'Metin', 'Bekir', 'Kamil'];
         for (const name of MALE_NAMES) {
             await db.query(
-                "UPDATE users SET gender = 'erkek' WHERE (display_name ILIKE $1 OR username ILIKE $1) AND gender != 'erkek' AND gender != 'coin_bayisi'",
+                "UPDATE users SET gender = 'erkek' WHERE (display_name ILIKE $1 OR username ILIKE $1) AND (gender = 'not_set' OR gender IS NULL OR gender = '')",
                 ["%" + name + "%"]
             );
         }
@@ -724,11 +723,15 @@ const initializeDatabase = async () => {
         const FEMALE_NAMES = ['Ayşe', 'Fatma', 'Su', 'Esma', 'Emriye', 'Zeynep', 'Elif', 'Merve', 'Selin', 'Ece', 'Aslı', 'Deniz', 'Güneş', 'Buse', 'Hazal', 'Simge', 'İrem', 'Ceren', 'Ada', 'Dilan', 'Berfin', 'Seda', 'Ceyda', 'Dilara', 'Bahar', 'Yağmur', 'Eylül', 'Nisan', 'Melis', 'Merve', 'Gamze'];
         for (const name of FEMALE_NAMES) {
             await db.query(
-                "UPDATE users SET gender = 'kadin' WHERE (display_name ILIKE $1 OR username ILIKE $1) AND gender != 'kadin' AND gender != 'coin_bayisi'",
+                "UPDATE users SET gender = 'kadin' WHERE (display_name ILIKE $1 OR username ILIKE $1) AND (gender = 'not_set' OR gender IS NULL OR gender = '')",
                 ["%" + name + "%"]
             );
         }
         console.log('[DB] Initial gender auto-fix completed');
+
+        // One-time production correction for affected virtual operators back to 'kadin'
+        await db.query("UPDATE users SET gender = 'kadin' WHERE id IN (41, 44, 51) AND gender != 'kadin'");
+        console.log('[DB] Production operators gender correction verified');
 
         console.log('[DB] SCHEMA VERIFICATION COMPLETE');
         if (!app.get('db_status')) app.set('db_status', 'ready');
@@ -4304,11 +4307,29 @@ io.on('connection', (socket) => {
             let currentBalance = 0;
             let giftDetails = null;
 
+            // Load recipient and check for female-to-female messaging
+            const chatRes = await client.query('SELECT user_id, operator_id FROM chats WHERE id = $1', [chatId]);
+            let isFemaleToFemale = false;
+            if (chatRes.rows.length > 0) {
+                const chat = chatRes.rows[0];
+                const receiverId = senderId.toString() === chat.user_id.toString() ? chat.operator_id : chat.user_id;
+                
+                const receiverRes = await client.query('SELECT gender FROM users WHERE id = $1', [receiverId]);
+                if (receiverRes.rows.length > 0) {
+                    const receiverGender = (receiverRes.rows[0].gender || '').toLowerCase();
+                    const senderGender = (socket.user.gender || '').toLowerCase();
+                    if (senderGender === 'kadin' && receiverGender === 'kadin') {
+                        isFemaleToFemale = true;
+                        console.log(`[SOCKET] Female-to-Female messaging detected in chat ${chatId} (Sender: ${senderId}, Receiver: ${receiverId}). Coins will be charged and no commission earned.`);
+                    }
+                }
+            }
+
             // --- 1. COIN DEDUCTION LOGIC ---
-            // Management roles don't pay for messages
+            // Management roles don't pay for messages, except when it is a female-to-female chat
             const userRole = (socket.user.role || '').toLowerCase();
             const userGender = (socket.user.gender || '').toLowerCase();
-            const isManagement = ['admin', 'super_admin', 'moderator', 'staff', 'operator'].includes(userRole) || userGender === 'kadin';
+            const isManagement = !isFemaleToFemale && (['admin', 'super_admin', 'moderator', 'staff', 'operator'].includes(userRole) || userGender === 'kadin');
             
             let commissionDataToRunLater = null;
             
@@ -4351,15 +4372,15 @@ io.on('connection', (socket) => {
                 io.emit('admin_balance_update', { userId: senderId, newBalance: userBalance });
                 socket.emit('balance_update', { userId: senderId, newBalance: userBalance });
 
-                if (type === 'gift') {
-                    const chatRes = await client.query('SELECT operator_id FROM chats WHERE id = $1', [chatId]);
-                    if (chatRes.rows.length > 0) {
+                if (type === 'gift' && !isFemaleToFemale) {
+                    const chatResInner = await client.query('SELECT operator_id FROM chats WHERE id = $1', [chatId]);
+                    if (chatResInner.rows.length > 0) {
                         commissionDataToRunLater = { chatId, senderId: null, cost, type: 'gift' };
                     }
                 }
             } else {
                 // Only female users (gender === 'kadin') earn commission on response!
-                if (userGender === 'kadin') {
+                if (userGender === 'kadin' && !isFemaleToFemale) {
                     let commissionCost = 10;
                     if (type === 'image') commissionCost = 50;
                     else if (type === 'audio') commissionCost = 30;

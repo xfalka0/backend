@@ -20,40 +20,45 @@ export const NotificationService = {
    * Registers for push notifications and returns the token
    */
   registerForPushNotificationsAsync: async () => {
-    let token;
+    try {
+      let token;
 
-    if (!Device.isDevice) {
-      console.log('[NOTIFY] Must use physical device for Push Notifications');
+      if (!Device.isDevice) {
+        console.log('[NOTIFY] Must use physical device for Push Notifications');
+        return null;
+      }
+
+      const { status: existingStatus } = await Notifications.getPermissionsAsync();
+      let finalStatus = existingStatus;
+
+      if (existingStatus !== 'granted') {
+        const { status } = await Notifications.requestPermissionsAsync();
+        finalStatus = status;
+      }
+
+      if (finalStatus !== 'granted') {
+        console.log('[NOTIFY] Failed to get push token for push notification!');
+        return null;
+      }
+
+      // Get the token from Expo
+      token = (await Notifications.getExpoPushTokenAsync()).data;
+      console.log('[NOTIFY] Expo Push Token:', token);
+
+      if (Platform.OS === 'android') {
+        Notifications.setNotificationChannelAsync('default', {
+          name: 'default',
+          importance: Notifications.AndroidImportance.MAX,
+          vibrationPattern: [0, 250, 250, 250],
+          lightColor: '#FF231F7C',
+        });
+      }
+
+      return token;
+    } catch (err) {
+      console.warn('[NOTIFY] Error registering push notifications (ignoring EAS project error in dev):', err.message);
       return null;
     }
-
-    const { status: existingStatus } = await Notifications.getPermissionsAsync();
-    let finalStatus = existingStatus;
-
-    if (existingStatus !== 'granted') {
-      const { status } = await Notifications.requestPermissionsAsync();
-      finalStatus = status;
-    }
-
-    if (finalStatus !== 'granted') {
-      console.log('[NOTIFY] Failed to get push token for push notification!');
-      return null;
-    }
-
-    // Get the token from Expo
-    token = (await Notifications.getExpoPushTokenAsync()).data;
-    console.log('[NOTIFY] Expo Push Token:', token);
-
-    if (Platform.OS === 'android') {
-      Notifications.setNotificationChannelAsync('default', {
-        name: 'default',
-        importance: Notifications.AndroidImportance.MAX,
-        vibrationPattern: [0, 250, 250, 250],
-        lightColor: '#FF231F7C',
-      });
-    }
-
-    return token;
   },
 
   /**

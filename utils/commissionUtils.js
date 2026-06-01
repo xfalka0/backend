@@ -40,9 +40,19 @@ async function recordOperatorCommission(client, chatId, senderId, cost, type) {
         actualPayeeId = avatarData.managed_by;
     }
 
-    // 1.7 Find Agency (if any)
-    const payeeRes = await client.query('SELECT agency_id FROM users WHERE id = $1', [actualPayeeId]);
-    const agencyId = payeeRes.rows.length > 0 ? payeeRes.rows[0].agency_id : null;
+    // 1.7 Find Agency and Gender
+    const payeeRes = await client.query('SELECT agency_id, gender FROM users WHERE id = $1', [actualPayeeId]);
+    if (payeeRes.rows.length === 0) return;
+    
+    const payeeData = payeeRes.rows[0];
+    const agencyId = payeeData.agency_id;
+    const payeeGender = payeeData.gender;
+
+    // RULE: Only female users who are in an agency can earn diamonds
+    if (payeeGender !== 'kadin' || !agencyId) {
+        console.log(`[COMMISSION-BYPASS] Operator/Payee ${actualPayeeId} bypassed. Gender: ${payeeGender}, Agency: ${agencyId}`);
+        return;
+    }
     
     let agencyData = null;
     if (agencyId) {
@@ -62,24 +72,22 @@ async function recordOperatorCommission(client, chatId, senderId, cost, type) {
     const userCheck = await client.query('SELECT total_spent FROM users WHERE id = $1', [customerId]);
     const userLifetimeSpent = userCheck.rows.length > 0 ? parseFloat(userCheck.rows[0].total_spent || 0) : 0;
     
-    let rate = 0.25; 
-    if (type === 'text') rate = 0.115; 
-    else if (type === 'image') rate = 1.0; 
-    else if (type === 'audio') rate = 0.5; 
-    else if (type === 'gift') rate = 0.25;
+    // Unified Economic Model: 2000 Diamonds = 1 USD (46 TL).
+    // 1 spent Coin = 4.35 Diamonds earned.
+    let baseRate = 4.35;
     
-    // If customer has never spent money, use bonus rate
+    // If customer has never spent money, use bonus rate (1/5th) to prevent spam/abuse
     if (userLifetimeSpent <= 0 && customerId) {
         const adminAddCheck = await client.query(
             "SELECT id FROM transactions WHERE user_id = $1 AND (type = 'admin_add' OR type = 'admin_edit' OR type = 'purchase') LIMIT 1", 
             [customerId]
         );
         if (adminAddCheck.rows.length === 0) {
-            rate = 0.05; 
+            baseRate = 0.87; // Lower rate for non-paying organic users
         }
     }
     
-    const earned = cost * rate;
+    const earned = Math.round(cost * baseRate * 100) / 100; // Round to 2 decimal places
     if (earned <= 0 && cost > 0) return;
 
     // 3. Update PAYEE balance
@@ -90,6 +98,31 @@ async function recordOperatorCommission(client, chatId, senderId, cost, type) {
          WHERE user_id = $2`,
         [earned, actualPayeeId]
     );
+
+    // 3.1 Update the last customer message as replied with the earned diamonds count
+    if (customerId && earned > 0) {
+        try {
+            // Find the latest message sent by the customer in this chat
+            const lastMsgRes = await client.query(
+                `SELECT id FROM messages 
+                 WHERE chat_id = $1 AND sender_id = $2 AND content_type != 'gift'
+                 ORDER BY created_at DESC LIMIT 1`,
+                [chatId, customerId]
+            );
+            if (lastMsgRes.rows.length > 0) {
+                const lastMsgId = lastMsgRes.rows[0].id;
+                await client.query(
+                    `UPDATE messages 
+                     SET is_replied = true, earned_diamonds = COALESCE(earned_diamonds, 0) + $1 
+                     WHERE id = $2`,
+                    [earned, lastMsgId]
+                );
+                console.log(`[REPLY-TRACK] Marked message ${lastMsgId} as replied. Earned: ${earned} diamonds.`);
+            }
+        } catch (msgErr) {
+            console.error('[REPLY-TRACK-ERROR] Failed to update message reply status:', msgErr.message);
+        }
+    }
 
     // 3.2 Update AGENCY balance (if applicable)
     if (agencyData) {

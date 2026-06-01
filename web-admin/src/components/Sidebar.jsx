@@ -61,6 +61,7 @@ export default function Sidebar() {
             title: 'MAĞAZA & FİNANS',
             items: [
                 { path: '/payments', icon: <CreditCard size={18} />, label: 'Ödemeler', roles: ['admin', 'super_admin'] },
+                { path: '/withdrawals', icon: <Wallet size={18} />, label: 'Para Çekme', roles: ['admin', 'super_admin'] },
                 { path: '/gifts', icon: <Gift size={18} />, label: 'Hediyeler', roles: ['admin', 'super_admin'] },
                 { path: '/vip', icon: <Crown size={18} />, label: 'Coin Fiyatları', roles: ['admin', 'super_admin'] },
                 { path: '/analytics', icon: <BarChart2 size={18} />, label: 'Analiz / Gelir', roles: ['admin', 'super_admin'] },

@@ -30,6 +30,7 @@ import StaffActivity from './pages/StaffActivity';
 import ReferralsPage from './pages/Referrals';
 import AffiliateDashboard from './pages/AffiliateDashboard';
 import SplashIntro from './components/SplashIntro';
+import WithdrawalsPage from './pages/Withdrawals';
 
 // Placeholder Pages
 const Placeholder = ({ title }) => (
@@ -141,6 +142,7 @@ function App() {
                                 <Route path="/profiles" element={<ProfilesPage />} />
                                 <Route path="/social" element={<SocialPage />} />
                                 <Route path="/payments" element={<PaymentsPage />} />
+                                <Route path="/withdrawals" element={<WithdrawalsPage />} />
                                 <Route path="/gifts" element={<GiftsPage />} />
                                 <Route path="/vip" element={<VipPage />} />
                                 <Route path="/analytics" element={<AnalyticsPage />} />

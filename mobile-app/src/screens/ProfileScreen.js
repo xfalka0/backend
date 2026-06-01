@@ -47,6 +47,7 @@ const ProfileScreen = ({ route }) => {
     const [tempBio, setTempBio] = useState('');
     const [isEditingBio, setIsEditingBio] = useState(false);
     const scrollY = new Animated.Value(0);
+    const [operatorStats, setOperatorStats] = useState(null);
 
     const editOptions = {
         job: ["Yazılımcı", "Öğrenci", "Mühendis", "Doktor", "Tasarımcı", "Sanatçı", "Serbest Meslek", "Diğer"],
@@ -90,6 +91,20 @@ const ProfileScreen = ({ route }) => {
                         
                         const profileBalance = updatedUser.balance ?? updatedUser.coins ?? updatedUser.hearts;
                         if (profileBalance !== undefined) setBalance(profileBalance);
+
+                        // Fetch operator balance stats if they are operator staff or female
+                        if (['operator', 'moderator', 'admin', 'super_admin', 'staff'].includes(profileData.role) || profileData.gender === 'kadin') {
+                            try {
+                                const opRes = await axios.get(`${API_URL}/operators/my/stats`, {
+                                    headers: { Authorization: `Bearer ${token}` }
+                                });
+                                if (opRes.data) {
+                                    setOperatorStats(opRes.data);
+                                }
+                            } catch (opErr) {
+                                console.log('Error fetching operator stats:', opErr.message);
+                            }
+                        }
                     }
 
                     if (balanceData) {
@@ -531,27 +546,54 @@ const ProfileScreen = ({ route }) => {
                 </View>
 
                 {/* Wallet Glass Card */}
-                <TouchableOpacity style={styles.glassCardWrapper} onPress={() => navigation.navigate('Shop')} activeOpacity={0.8}>
-                    <LinearGradient colors={themeMode === 'dark' ? theme.gradients.card : ['#fff', '#f0f0f0']} style={styles.walletCard}>
-                        <View style={styles.walletLeft}>
-                            <View style={styles.coinIconBox}>
-                                <FontAwesome5 name="coins" size={20} color="#f59e0b" />
+                {['operator', 'moderator', 'admin', 'super_admin', 'staff'].includes(user?.role) || user?.gender === 'kadin' ? (
+                    <TouchableOpacity style={styles.glassCardWrapper} onPress={() => navigation.navigate('Wallet')} activeOpacity={0.8}>
+                        <LinearGradient colors={['rgba(139, 92, 246, 0.15)', 'rgba(34, 211, 238, 0.15)']} style={styles.walletCard}>
+                            <View style={styles.walletLeft}>
+                                <View style={[styles.coinIconBox, { backgroundColor: 'rgba(34, 211, 238, 0.2)' }]}>
+                                    <Ionicons name="diamond" size={20} color="#22d3ee" />
+                                </View>
+                                <View>
+                                    <Text style={[styles.walletTitle, { color: '#22d3ee' }]}>ELMAS KAZANÇ BAKİYESİ</Text>
+                                    <Text style={styles.walletValue}>{(operatorStats?.pending_balance || 0).toLocaleString()} Elmas</Text>
+                                    <Text style={{ color: 'rgba(255,255,255,0.4)', fontSize: 10, fontWeight: '700', marginTop: 2 }}>
+                                        Tahmini: {((operatorStats?.pending_balance || 0) / 2000 * 46).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} TL
+                                    </Text>
+                                </View>
                             </View>
-                            <View>
-                                <Text style={styles.walletTitle}>CÜZDAN BAKİYESİ</Text>
-                                <Text style={styles.walletValue}>{balance} Kredi</Text>
-                            </View>
-                        </View>
-                        <LinearGradient
-                            colors={['#FDE68A', '#F59E0B']}
-                            style={styles.depositBtn}
-                            start={{ x: 0, y: 0 }}
-                            end={{ x: 1, y: 1 }}
-                        >
-                            <Text style={styles.depositBtnText}>Yükle</Text>
+                            <LinearGradient
+                                colors={['#a855f7', '#22d3ee']}
+                                style={styles.depositBtn}
+                                start={{ x: 0, y: 0 }}
+                                end={{ x: 1, y: 1 }}
+                            >
+                                <Text style={styles.depositBtnText}>Çek</Text>
+                            </LinearGradient>
                         </LinearGradient>
-                    </LinearGradient>
-                </TouchableOpacity>
+                    </TouchableOpacity>
+                ) : (
+                    <TouchableOpacity style={styles.glassCardWrapper} onPress={() => navigation.navigate('Shop')} activeOpacity={0.8}>
+                        <LinearGradient colors={themeMode === 'dark' ? theme.gradients.card : ['#fff', '#f0f0f0']} style={styles.walletCard}>
+                            <View style={styles.walletLeft}>
+                                <View style={styles.coinIconBox}>
+                                    <FontAwesome5 name="coins" size={20} color="#f59e0b" />
+                                </View>
+                                <View>
+                                    <Text style={styles.walletTitle}>CÜZDAN BAKİYESİ</Text>
+                                    <Text style={styles.walletValue}>{balance} Kredi</Text>
+                                </View>
+                            </View>
+                            <LinearGradient
+                                colors={['#FDE68A', '#F59E0B']}
+                                style={styles.depositBtn}
+                                start={{ x: 0, y: 0 }}
+                                end={{ x: 1, y: 1 }}
+                            >
+                                <Text style={styles.depositBtnText}>Yükle</Text>
+                            </LinearGradient>
+                        </LinearGradient>
+                    </TouchableOpacity>
+                )}
 
                 {/* Boost Premium Card */}
                 <TouchableOpacity 

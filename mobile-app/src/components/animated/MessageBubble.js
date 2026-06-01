@@ -25,7 +25,7 @@ const REACTION_EMOJIS = [
     { type: 'like', icon: '👍' },
 ];
 
-const MessageBubble = React.memo(({ children, isMine, index, isRead, avatar, vipLevel = 0, timestamp, reaction, onReaction }) => {
+const MessageBubble = React.memo(({ children, isMine, index, isRead, avatar, vipLevel = 0, timestamp, reaction, onReaction, isReplied, earnedDiamonds }) => {
     const { theme, themeMode } = useTheme();
     const translateX = useSharedValue(isMine ? 50 : -50);
     const opacity = useSharedValue(0);
@@ -196,6 +196,15 @@ const MessageBubble = React.memo(({ children, isMine, index, isRead, avatar, vip
                         </View>
                     </TouchableWithoutFeedback>
 
+                    {!isMine && isReplied && parseFloat(earnedDiamonds) > 0 && (
+                        <View style={styles.earningBadge}>
+                            <Ionicons name="checkmark-circle" size={12} color="#10b981" />
+                            <Text style={styles.earningBadgeText}>
+                                Yanıtlandı (+{parseFloat(earnedDiamonds)} Elmas)
+                            </Text>
+                        </View>
+                    )}
+
                     {showPicker && (
                         <View style={[styles.pickerContainer, isMine ? { left: 0 } : { right: 0 }]}>
                             <GlassCard intensity={80} tint="dark" style={styles.pickerGlass}>
@@ -356,6 +365,24 @@ const styles = StyleSheet.create({
         opacity: 0.8,
     },
     timeTheirs: {
+    },
+    earningBadge: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: 'rgba(16, 185, 129, 0.15)',
+        borderWidth: 1,
+        borderColor: 'rgba(16, 185, 129, 0.25)',
+        borderRadius: 10,
+        paddingHorizontal: 8,
+        paddingVertical: 4,
+        marginTop: 4,
+        alignSelf: 'flex-start',
+    },
+    earningBadgeText: {
+        color: '#10b981',
+        fontSize: 9.5,
+        fontWeight: 'bold',
+        marginLeft: 4,
     },
 });
 

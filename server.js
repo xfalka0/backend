@@ -524,6 +524,8 @@ const initializeDatabase = async () => {
         await db.query('ALTER TABLE messages ADD COLUMN IF NOT EXISTS gift_id INT');
         await db.query('ALTER TABLE messages ADD COLUMN IF NOT EXISTS unlock_cost INTEGER DEFAULT 0');
         await db.query('ALTER TABLE messages ADD COLUMN IF NOT EXISTS is_unlocked BOOLEAN DEFAULT false');
+        await db.query('ALTER TABLE messages ADD COLUMN IF NOT EXISTS is_replied BOOLEAN DEFAULT false');
+        await db.query('ALTER TABLE messages ADD COLUMN IF NOT EXISTS earned_diamonds NUMERIC DEFAULT 0');
 
         // Users & Chats table enhancements
         await db.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS device_id VARCHAR(255)');
@@ -4286,7 +4288,8 @@ io.on('connection', (socket) => {
             // --- 1. COIN DEDUCTION LOGIC ---
             // Management roles don't pay for messages
             const userRole = (socket.user.role || '').toLowerCase();
-            const isManagement = ['admin', 'super_admin', 'moderator', 'staff', 'operator'].includes(userRole);
+            const userGender = (socket.user.gender || '').toLowerCase();
+            const isManagement = ['admin', 'super_admin', 'moderator', 'staff', 'operator'].includes(userRole) || userGender === 'kadin';
             
             let commissionDataToRunLater = null;
             

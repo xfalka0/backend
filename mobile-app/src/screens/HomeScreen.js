@@ -257,23 +257,6 @@ export default function HomeScreen({ navigation, route }) {
     // Use useMemo for the header to prevent unnecessary re-renders of the entire list
     const headerComponent = React.useMemo(() => (
         <View style={styles.header}>
-            <View style={[styles.topBar, { justifyContent: 'flex-end', height: 36, marginBottom: 2 }]}>
-                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                    <TouchableOpacity 
-                        onPress={() => navigation.navigate('Leaderboard')} 
-                        style={[styles.smallIconBtn, { backgroundColor: 'rgba(255, 255, 255, 0.08)', borderColor: 'rgba(255, 255, 255, 0.15)', marginRight: 10 }]}
-                    >
-                        <Ionicons name="trophy" size={16} color="white" />
-                    </TouchableOpacity>
-                    <TouchableOpacity 
-                        onPress={() => navigation.navigate('Notifications')} 
-                        style={[styles.smallIconBtn, { backgroundColor: 'rgba(255, 255, 255, 0.08)', borderColor: 'rgba(255, 255, 255, 0.15)' }]}
-                    >
-                        <Ionicons name="notifications" size={16} color="white" />
-                    </TouchableOpacity>
-                </View>
-            </View>
-
             {showSearch && (
                 <View style={[styles.searchWrapper, { backgroundColor: theme.colors.glass }]}>
                     <Ionicons name="search" size={18} color={theme.colors.textSecondary} style={{ marginRight: 10 }} />

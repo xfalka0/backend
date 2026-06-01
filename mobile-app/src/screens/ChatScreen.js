@@ -1055,6 +1055,8 @@ export default function ChatScreen({ route, navigation }) {
                 vipLevel={isUser ? user.vip_level : vip_level}
                 timestamp={item.created_at}
                 reaction={item.reaction}
+                isReplied={item.is_replied}
+                earnedDiamonds={item.earned_diamonds}
                 onReaction={(type) => {
                     socketRef.current?.emit('message_reaction', { messageId: item.id, reaction: type, chatId });
                     setMessages(prev => prev.map(m => m.id === item.id ? { ...m, reaction: type } : m));

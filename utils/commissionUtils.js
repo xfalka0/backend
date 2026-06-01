@@ -100,6 +100,7 @@ async function recordOperatorCommission(client, chatId, senderId, cost, type) {
     );
 
     // 3.1 Update the last customer message as replied with the earned diamonds count
+    let updatedMessageInfo = null;
     if (customerId && earned > 0) {
         try {
             // Find the latest message sent by the customer in this chat
@@ -118,6 +119,7 @@ async function recordOperatorCommission(client, chatId, senderId, cost, type) {
                     [earned, lastMsgId]
                 );
                 console.log(`[REPLY-TRACK] Marked message ${lastMsgId} as replied. Earned: ${earned} diamonds.`);
+                updatedMessageInfo = { id: lastMsgId, is_replied: true, earned_diamonds: earned };
             }
         } catch (msgErr) {
             console.error('[REPLY-TRACK-ERROR] Failed to update message reply status:', msgErr.message);
@@ -195,6 +197,7 @@ async function recordOperatorCommission(client, chatId, senderId, cost, type) {
         type === 'audio' ? earned : 0,
         type === 'gift' ? earned : 0
     ]);
+    return updatedMessageInfo;
 }
 
 module.exports = { recordOperatorCommission };

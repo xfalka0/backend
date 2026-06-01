@@ -372,6 +372,13 @@ export default function ChatScreen({ route, navigation }) {
                 ));
             });
 
+            socketRef.current.on('message_updated', (data) => {
+                console.log('[SOCKET] Message Update received:', data);
+                setMessages(prev => prev.map(m => 
+                    m.id === data.id ? { ...m, ...data } : m
+                ));
+            });
+
             socketRef.current.on('display_typing', (data) => {
                 console.log('[SOCKET] display_typing received on Mobile:', data, 'Current realChatId:', realChatId);
                 const incomingChatId = data.chatId ? data.chatId.toString() : '';

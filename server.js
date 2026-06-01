@@ -529,6 +529,7 @@ const initializeDatabase = async () => {
 
         // Users & Chats table enhancements
         await db.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS device_id VARCHAR(255)');
+        await db.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS agency_id TEXT');
         await db.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS managed_by UUID REFERENCES users(id) ON DELETE SET NULL');
         await db.query('ALTER TABLE chats ADD COLUMN IF NOT EXISTS last_message TEXT');
         await db.query('ALTER TABLE payments ADD COLUMN IF NOT EXISTS coin_amount INTEGER');
@@ -4398,13 +4399,17 @@ io.on('connection', (socket) => {
             // --- 3.5. EXECUTE COMMISSION LATER (SAFE ZONE) ---
             if (commissionDataToRunLater) {
                 try {
-                    await recordOperatorCommission(
+                    const updateInfo = await recordOperatorCommission(
                         client, 
                         commissionDataToRunLater.chatId, 
                         commissionDataToRunLater.senderId, 
                         commissionDataToRunLater.cost, 
                         commissionDataToRunLater.type
                     );
+                    if (updateInfo) {
+                        io.to(chatId.toString()).emit('message_updated', updateInfo);
+                        console.log(`[SOCKET] Broadcasted message_updated to room ${chatId}:`, updateInfo);
+                    }
                 } catch (commissionErr) {
                     console.error('[COMMISSION-SAFE] Commission failed but message was sent:', commissionErr.message);
                 }

@@ -146,15 +146,15 @@ router.get('/:userId/chats', async (req, res) => {
         }
 
         const query = `
-            SELECT c.id, c.operator_id, c.last_message_at,
+            SELECT c.id, c.operator_id, c.user_id, c.last_message_at,
                 (SELECT content FROM messages WHERE chat_id = c.id ORDER BY created_at DESC LIMIT 1) as last_message,
                 (SELECT COUNT(*)::int FROM messages WHERE chat_id = c.id AND sender_id != $1 AND is_read = false) as unread_count,
                 COALESCE(u.display_name, u.username, 'Bilinmeyen Kullanıcı') as name,
                 COALESCE(u.avatar_url, 'https://via.placeholder.com/150') as avatar_url,
                 u.vip_level, u.is_verified, u.gender, true as is_online
             FROM chats c
-            LEFT JOIN users u ON ${isOperator ? 'c.user_id = u.id' : 'c.operator_id = u.id'}
-            WHERE ${isOperator ? 'c.operator_id = $1' : 'c.user_id = $1'}
+            LEFT JOIN users u ON u.id = CASE WHEN c.user_id::text = $1::text THEN c.operator_id ELSE c.user_id END
+            WHERE c.user_id::text = $1::text OR c.operator_id::text = $1::text
             ORDER BY COALESCE((SELECT MAX(created_at) FROM messages WHERE chat_id = c.id), c.last_message_at) DESC
             LIMIT $2 OFFSET $3
         `;
@@ -181,8 +181,8 @@ router.get('/:userId/unread-count', async (req, res) => {
         const query = `
             SELECT COUNT(*)::int as total_unread FROM messages m
             JOIN chats c ON m.chat_id = c.id
-            WHERE ${isOperator ? 'c.operator_id = $1' : 'c.user_id = $1'} 
-            AND m.sender_id != $1 
+            WHERE (c.operator_id::text = $1::text OR c.user_id::text = $1::text) 
+            AND m.sender_id::text != $1::text 
             AND m.is_read = false
         `;
         const result = await db.query(query, [userId]);

@@ -139,7 +139,7 @@ export default function AuthScreen({ navigation, route }) {
                 }
             }
         } catch (error) {
-            setAlert({ visible: true, title: 'Hata', message: error.response?.data?.error || 'Giriş yapılamadı.', type: 'error' });
+            setAlert({ visible: true, title: 'Hata', message: error.response?.data?.error || `${error.message} (${error.config?.url || 'URL Yok'})`, type: 'error' });
         } finally {
             setLoading(false);
         }
@@ -172,7 +172,7 @@ export default function AuthScreen({ navigation, route }) {
                 setResendCountdown(60); // Start 1-minute countdown
             }
         } catch (error) {
-            setAlert({ visible: true, title: 'Hata', message: error.response?.data?.error || 'Kod gönderilemedi.', type: 'error' });
+            setAlert({ visible: true, title: 'Hata', message: error.response?.data?.error || `${error.message} (${error.config?.url || 'URL Yok'})`, type: 'error' });
         } finally {
             setLoading(false);
         }
@@ -211,7 +211,7 @@ export default function AuthScreen({ navigation, route }) {
                 }
             }
         } catch (error) {
-            setAlert({ visible: true, title: 'Hata', message: error.response?.data?.error || 'Kod doğrulanamadı.', type: 'error' });
+            setAlert({ visible: true, title: 'Hata', message: error.response?.data?.error || `${error.message} (${error.config?.url || 'URL Yok'})`, type: 'error' });
             setOtp('');
         } finally {
             setLoading(false);

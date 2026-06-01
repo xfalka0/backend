@@ -118,3 +118,10 @@ CREATE TABLE IF NOT EXISTS otps (
     expires_at TIMESTAMP NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+-- Performance Indices
+CREATE INDEX IF NOT EXISTS idx_messages_chat_id ON messages(chat_id);
+CREATE INDEX IF NOT EXISTS idx_messages_sender_id ON messages(sender_id);
+CREATE INDEX IF NOT EXISTS idx_chats_user_id ON chats(user_id);
+CREATE INDEX IF NOT EXISTS idx_chats_operator_id ON chats(operator_id);
+CREATE INDEX IF NOT EXISTS idx_messages_chat_unread ON messages(chat_id, sender_id) WHERE is_read = false;

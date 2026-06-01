@@ -147,7 +147,7 @@ router.get('/:userId/chats', async (req, res) => {
 
         const query = `
             SELECT c.id, c.operator_id, c.user_id, c.last_message_at,
-                (SELECT content FROM messages WHERE chat_id = c.id ORDER BY created_at DESC LIMIT 1) as last_message,
+                c.last_message,
                 (SELECT COUNT(*)::int FROM messages WHERE chat_id = c.id AND sender_id != $1 AND is_read = false) as unread_count,
                 COALESCE(u.display_name, u.username, 'Bilinmeyen Kullanıcı') as name,
                 COALESCE(u.avatar_url, 'https://via.placeholder.com/150') as avatar_url,
@@ -155,7 +155,7 @@ router.get('/:userId/chats', async (req, res) => {
             FROM chats c
             LEFT JOIN users u ON u.id = CASE WHEN c.user_id::text = $1::text THEN c.operator_id ELSE c.user_id END
             WHERE c.user_id::text = $1::text OR c.operator_id::text = $1::text
-            ORDER BY COALESCE((SELECT MAX(created_at) FROM messages WHERE chat_id = c.id), c.last_message_at) DESC
+            ORDER BY c.last_message_at DESC
             LIMIT $2 OFFSET $3
         `;
 

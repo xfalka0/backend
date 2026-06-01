@@ -77,9 +77,16 @@ async function recordOperatorCommission(client, chatId, senderId, cost, type) {
     const agencyId = payeeData.agency_id;
     const payeeGender = payeeData.gender;
 
-    // RULE: Only female users who are in an agency can earn diamonds
-    if (payeeGender !== 'kadin' || !agencyId) {
-        console.log(`[COMMISSION-BYPASS] Operator/Payee ${actualPayeeId} bypassed. Gender: ${payeeGender}, Agency: ${agencyId}`);
+    // Ensure operator entry exists for the payee so that pending_balance updates succeed
+    await client.query(`
+        INSERT INTO operators (user_id, category, bio, photos, is_online, rating, commission_rate)
+        VALUES ($1, 'Genel', 'Merhaba!', '{}', false, 5.0, 0.30)
+        ON CONFLICT (user_id) DO NOTHING
+    `, [actualPayeeId]);
+
+    // RULE: Bypassed if not female
+    if (payeeGender !== 'kadin') {
+        console.log(`[COMMISSION-BYPASS] Operator/Payee ${actualPayeeId} bypassed. Gender: ${payeeGender}`);
         return;
     }
     

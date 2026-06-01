@@ -37,7 +37,7 @@ import QuickActionsModal from '../components/QuickActionsModal';
 
 export default function ChatScreen({ route, navigation }) {
     const insets = useSafeAreaInsets();
-    const { fetchUnreadCount, setActiveChatId } = useChat();
+    const { fetchUnreadCount, setActiveChatId, socket } = useChat();
     const { showAlert } = useAlert();
 
     useEffect(() => {
@@ -276,130 +276,122 @@ export default function ChatScreen({ route, navigation }) {
             setMessages(historyRes.data);
             setIsLoading(false);
 
-            // 3. Connect Socket (Keep this at the end)
-            if (socketRef.current) socketRef.current.disconnect();
-
-            console.log('[ChatScreen] Connecting to socket with token:', token ? 'Exists' : 'Missing', 'Local user.id:', user.id);
-
-            socketRef.current = io(SOCKET_URL, {
-                transports: ['websocket', 'polling'],
-                reconnection: true,
-                auth: { token }
-            });
-
-            socketRef.current.on('connect', () => {
+            // 3. Bind Global Persistent Socket (Keep this at the end)
+            if (socket) {
+                socketRef.current = socket;
                 const roomStr = realChatId.toString();
-                console.log('[SOCKET] Connected to Backend. ID:', socketRef.current.id, 'Joining Room:', roomStr);
-                socketRef.current.emit('join_room', roomStr);
-            });
+                console.log('[SOCKET] Reusing global persistent socket. Joining Room:', roomStr);
+                socket.emit('join_room', roomStr);
 
-            socketRef.current.on('connect_error', (err) => {
-                console.error('[SOCKET] Connection Error:', err.message);
-            });
+                // Clear listeners first to avoid duplicate bindings
+                socket.off('receive_message');
+                socket.off('message_error');
+                socket.off('balance_update');
+                socket.off('message_reaction');
+                socket.off('message_updated');
+                socket.off('display_typing');
+                socket.off('hide_typing');
 
-            socketRef.current.on('disconnect', (reason) => {
-                console.warn('[SOCKET] Disconnected from server:', reason);
-            });
+                // Bind new active listeners
+                socket.on('receive_message', (msg) => {
+                    console.log('[SOCKET] receive_message on Mobile:', msg.id, 'for chatId:', msg.chat_id, 'Current chatId:', realChatId);
 
-            // Listeners
-            socketRef.current.on('receive_message', (msg) => {
-                console.log('[SOCKET] receive_message on Mobile:', msg.id, 'for chatId:', msg.chat_id, 'Current chatId:', realChatId);
-
-                // Add explicit chatId check just in case global emission leaks or room logic fails
-                if (msg.chat_id && realChatId && msg.chat_id.toString() !== realChatId.toString()) {
-                    console.warn('[SOCKET] Received message for different chat! Ignoring.');
-                    return;
-                }
-
-                setMessages(prev => {
-                    const exists = prev.some(m => m.id === msg.id);
-                    if (exists) return prev;
-
-                    if (msg.tempId) {
-                        const optimisticIndex = prev.findIndex(m => m.id === msg.tempId);
-                        if (optimisticIndex !== -1) {
-                            const newMessages = [...prev];
-                            newMessages[optimisticIndex] = msg;
-                            return newMessages;
-                        }
-                    } else {
-                        const optimisticIndex = prev.findIndex(m =>
-                            m.is_optimistic &&
-                            m.content === msg.content &&
-                            m.type === msg.type &&
-                            Math.abs(new Date(m.created_at) - new Date(msg.created_at)) < 5000
-                        );
-                        if (optimisticIndex !== -1) {
-                            const newMessages = [...prev];
-                            newMessages[optimisticIndex] = msg;
-                            return newMessages;
-                        }
+                    // Add explicit chatId check just in case global emission leaks or room logic fails
+                    if (msg.chat_id && realChatId && msg.chat_id.toString() !== realChatId.toString()) {
+                        console.warn('[SOCKET] Received message for different chat! Ignoring.');
+                        return;
                     }
 
-                    return [...prev, msg];
+                    setMessages(prev => {
+                        const exists = prev.some(m => m.id === msg.id);
+                        if (exists) return prev;
+
+                        if (msg.tempId) {
+                            const optimisticIndex = prev.findIndex(m => m.id === msg.tempId);
+                            if (optimisticIndex !== -1) {
+                                const newMessages = [...prev];
+                                newMessages[optimisticIndex] = msg;
+                                return newMessages;
+                            }
+                        } else {
+                            const optimisticIndex = prev.findIndex(m =>
+                                m.is_optimistic &&
+                                m.content === msg.content &&
+                                m.type === msg.type &&
+                                Math.abs(new Date(m.created_at) - new Date(msg.created_at)) < 5000
+                            );
+                            if (optimisticIndex !== -1) {
+                                const newMessages = [...prev];
+                                newMessages[optimisticIndex] = msg;
+                                return newMessages;
+                            }
+                        }
+
+                        return [...prev, msg];
+                    });
                 });
-            });
 
-            socketRef.current.on('message_error', (data) => {
-                console.log('[SOCKET] Message Error:', data);
+                socket.on('message_error', (data) => {
+                    console.log('[SOCKET] Message Error:', data);
 
-                // Rollback optimistic update if tempId is present
-                if (data.tempId) {
-                    setMessages(prev => prev.filter(m => m.id !== data.tempId));
-                    // Refund optimistic balance deduction if needed (optional complexity)
-                }
+                    // Rollback optimistic update if tempId is present
+                    if (data.tempId) {
+                        setMessages(prev => prev.filter(m => m.id !== data.tempId));
+                    }
 
-                if (data.code === 'INSUFFICIENT_FUNDS') {
-                    // Show Coin Modal on insufficient balance error
-                    handleInsufficientCoins();
-                } else {
-                    const errorMsg = data.debug ? `${data.message}\n(Hata: ${data.debug})` : (data.message || 'Mesaj gönderilemedi.');
-                    showAlert({ title: 'Hata', message: errorMsg, type: 'error' });
-                }
-            });
+                    if (data.code === 'INSUFFICIENT_FUNDS') {
+                        handleInsufficientCoins();
+                    } else {
+                        const errorMsg = data.debug ? `${data.message}\n(Hata: ${data.debug})` : (data.message || 'Mesaj gönderilemedi.');
+                        showAlert({ title: 'Hata', message: errorMsg, type: 'error' });
+                    }
+                });
 
-            socketRef.current.on('balance_update', (data) => {
-                console.log('[SOCKET] Balance Update received:', data);
-                if (data.userId === user.id || data.id === user.id) {
-                    setCurrentBalance(data.newBalance);
-                }
-            });
+                socket.on('balance_update', (data) => {
+                    console.log('[SOCKET] Balance Update received:', data);
+                    if (data.userId === user.id || data.id === user.id) {
+                        setCurrentBalance(data.newBalance);
+                    }
+                });
 
-            socketRef.current.on('message_reaction', (data) => {
-                console.log('[SOCKET] Reaction received:', data);
-                setMessages(prev => prev.map(m => 
-                    m.id === data.messageId ? { ...m, reaction: data.reaction } : m
-                ));
-            });
+                socket.on('message_reaction', (data) => {
+                    console.log('[SOCKET] Reaction received:', data);
+                    setMessages(prev => prev.map(m => 
+                        m.id === data.messageId ? { ...m, reaction: data.reaction } : m
+                    ));
+                });
 
-            socketRef.current.on('message_updated', (data) => {
-                console.log('[SOCKET] Message Update received:', data);
-                setMessages(prev => prev.map(m => 
-                    m.id === data.id ? { ...m, ...data } : m
-                ));
-            });
+                socket.on('message_updated', (data) => {
+                    console.log('[SOCKET] Message Update received:', data);
+                    setMessages(prev => prev.map(m => 
+                        m.id === data.id ? { ...m, ...data } : m
+                    ));
+                });
 
-            socketRef.current.on('display_typing', (data) => {
-                console.log('[SOCKET] display_typing received on Mobile:', data, 'Current realChatId:', realChatId);
-                const incomingChatId = data.chatId ? data.chatId.toString() : '';
-                const incomingUserId = data.userId ? data.userId.toString() : '';
-                const myId = user?.id ? user.id.toString() : '';
-                const myChatId = realChatId ? realChatId.toString() : '';
+                socket.on('display_typing', (data) => {
+                    console.log('[SOCKET] display_typing received on Mobile:', data, 'Current realChatId:', realChatId);
+                    const incomingChatId = data.chatId ? data.chatId.toString() : '';
+                    const incomingUserId = data.userId ? data.userId.toString() : '';
+                    const myId = user?.id ? user.id.toString() : '';
+                    const myChatId = realChatId ? realChatId.toString() : '';
 
-                if (incomingChatId === myChatId && incomingUserId !== myId) {
-                    console.log('[ChatScreen] Showing Typing Indicator');
-                    setIsTyping(true);
-                }
-            });
+                    if (incomingChatId === myChatId && incomingUserId !== myId) {
+                        console.log('[ChatScreen] Showing Typing Indicator');
+                        setIsTyping(true);
+                    }
+                });
 
-            socketRef.current.on('hide_typing', (data) => {
-                console.log('[SOCKET] hide_typing received on Mobile:', data);
-                const incomingChatId = data.chatId ? data.chatId.toString() : '';
-                const myChatId = realChatId ? realChatId.toString() : '';
-                if (incomingChatId === myChatId) {
-                    setIsTyping(false);
-                }
-            });
+                socket.on('hide_typing', (data) => {
+                    console.log('[SOCKET] hide_typing received on Mobile:', data);
+                    const incomingChatId = data.chatId ? data.chatId.toString() : '';
+                    const myChatId = realChatId ? realChatId.toString() : '';
+                    if (incomingChatId === myChatId) {
+                        setIsTyping(false);
+                    }
+                });
+            } else {
+                console.warn('[SOCKET] Global persistent socket is not ready yet.');
+            }
 
         } catch (err) {
             console.error('[ChatScreen] Init Error:', err);
@@ -411,9 +403,19 @@ export default function ChatScreen({ route, navigation }) {
         initializeChat();
         
         return () => {
-            if (socketRef.current) socketRef.current.disconnect();
+            if (socket && chatId) {
+                console.log('[SOCKET] Leaving room:', chatId);
+                socket.emit('leave_room', chatId.toString());
+                socket.off('receive_message');
+                socket.off('message_error');
+                socket.off('balance_update');
+                socket.off('message_reaction');
+                socket.off('message_updated');
+                socket.off('display_typing');
+                socket.off('hide_typing');
+            }
         };
-    }, []);
+    }, [chatId, socket]);
 
     const handleTyping = (text) => {
         setInput(text);

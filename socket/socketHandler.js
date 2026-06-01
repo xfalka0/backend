@@ -32,6 +32,13 @@ function initializeSockets(io) {
             console.log(`[SOCKET] User ${socket.user?.username || socket.id} (${socket.id}) joined room: ${roomName}`);
         });
 
+        socket.on('leave_room', (chatId) => {
+            if (!chatId) return;
+            const roomName = chatId.toString();
+            socket.leave(roomName);
+            console.log(`[SOCKET] User ${socket.user?.username || socket.id} (${socket.id}) left room: ${roomName}`);
+        });
+
         // --- TYPING INDICATOR (YAZIYOR...) ---
         socket.on('typing_start', (data) => {
             const chatId = data.chatId ? data.chatId.toString() : null;

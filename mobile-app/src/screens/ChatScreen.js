@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, TextInput, FlatList, StyleSheet, KeyboardAvoidingView, Platform, TouchableOpacity, Image, RefreshControl, Animated, ScrollView, Keyboard, PanResponder, Alert } from 'react-native';
-import { BlurView } from 'expo-blur';
+
 import * as Haptics from 'expo-haptics';
 import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
@@ -243,43 +243,66 @@ export default function ChatScreen({ route, navigation }) {
     }, [navigation, showOptions, name, is_online, avatar_url, operatorId, user, vip_level]);
 
     // Initialize Chat
-    const initializeChat = async () => {
-        try {
-            let realChatId = chatId;
+    useEffect(() => {
+        if (!socket) return;
 
-            const token = await AsyncStorage.getItem('token');
-            const authHeader = { headers: { Authorization: `Bearer ${token}` } };
+        let active = true;
 
-            // 1. Get or Create Chat UUID if missing
-            if (!realChatId) {
-                const chatRes = await axios.post(`${API_URL}/chats`, {
-                    userId: user.id,
-                    operatorId: operatorId
-                }, authHeader);
-                realChatId = chatRes.data.id;
-                setChatId(realChatId);
-                console.log('[ChatScreen] Created/Fetched chatId:', realChatId);
-            }
+        if (!chatId) {
+            // Case 1: chatId is missing. Fetch/create it first.
+            const getOrCreateChat = async () => {
+                try {
+                    const token = await AsyncStorage.getItem('token');
+                    const authHeader = { headers: { Authorization: `Bearer ${token}` } };
+                    const chatRes = await axios.post(`${API_URL}/chats`, {
+                        userId: user.id,
+                        operatorId: operatorId
+                    }, authHeader);
+                    const realId = chatRes.data.id;
+                    console.log('[ChatScreen] Fetched/Created chatId:', realId);
+                    if (active) {
+                        setChatId(realId);
+                    }
+                } catch (err) {
+                    console.error('[ChatScreen] getOrCreateChat Error:', err);
+                    if (active) {
+                        setIsLoading(false);
+                    }
+                }
+            };
+            getOrCreateChat();
+            return () => {
+                active = false;
+            };
+        }
 
-            // 2. Parallelize: Balance, History and Read Status
-            const [balanceRes, historyRes] = await Promise.all([
-                axios.get(`${API_URL}/users/${user.id}`, authHeader),
-                axios.get(`${API_URL}/messages/${realChatId}`, authHeader),
-                axios.put(`${API_URL}/chats/${realChatId}/read`, { userId: user.id }, authHeader)
-            ]);
+        // Case 2: chatId is available. Load all data and bind socket.
+        const loadChatData = async () => {
+            try {
+                const token = await AsyncStorage.getItem('token');
+                const authHeader = { headers: { Authorization: `Bearer ${token}` } };
 
-            fetchUnreadCount(user.id);
+                const [balanceRes, historyRes] = await Promise.all([
+                    axios.get(`${API_URL}/users/${user.id}`, authHeader),
+                    axios.get(`${API_URL}/messages/${chatId}`, authHeader),
+                    axios.put(`${API_URL}/chats/${chatId}/read`, { userId: user.id }, authHeader)
+                ]);
 
-            if (balanceRes.data && balanceRes.data.balance !== undefined) {
-                setCurrentBalance(balanceRes.data.balance);
-            }
-            setMessages(historyRes.data);
-            setIsLoading(false);
+                if (!active) return;
 
-            // 3. Bind Global Persistent Socket (Keep this at the end)
-            if (socket) {
+                fetchUnreadCount(user.id);
+
+                if (balanceRes.data && balanceRes.data.balance !== undefined) {
+                    setCurrentBalance(balanceRes.data.balance);
+                }
+                
+                // Keep messages in newest-first order directly in the state
+                setMessages(historyRes.data.reverse());
+                setIsLoading(false);
+
+                // Bind Socket
                 socketRef.current = socket;
-                const roomStr = realChatId.toString();
+                const roomStr = chatId.toString();
                 console.log('[SOCKET] Reusing global persistent socket. Joining Room:', roomStr);
                 socket.emit('join_room', roomStr);
 
@@ -294,10 +317,9 @@ export default function ChatScreen({ route, navigation }) {
 
                 // Bind new active listeners
                 socket.on('receive_message', (msg) => {
-                    console.log('[SOCKET] receive_message on Mobile:', msg.id, 'for chatId:', msg.chat_id, 'Current chatId:', realChatId);
+                    console.log('[SOCKET] receive_message on Mobile:', msg.id, 'for chatId:', msg.chat_id, 'Current chatId:', chatId);
 
-                    // Add explicit chatId check just in case global emission leaks or room logic fails
-                    if (msg.chat_id && realChatId && msg.chat_id.toString() !== realChatId.toString()) {
+                    if (msg.chat_id && chatId && msg.chat_id.toString() !== chatId.toString()) {
                         console.warn('[SOCKET] Received message for different chat! Ignoring.');
                         return;
                     }
@@ -327,18 +349,15 @@ export default function ChatScreen({ route, navigation }) {
                             }
                         }
 
-                        return [...prev, msg];
+                        return [msg, ...prev];
                     });
                 });
 
                 socket.on('message_error', (data) => {
                     console.log('[SOCKET] Message Error:', data);
-
-                    // Rollback optimistic update if tempId is present
                     if (data.tempId) {
                         setMessages(prev => prev.filter(m => m.id !== data.tempId));
                     }
-
                     if (data.code === 'INSUFFICIENT_FUNDS') {
                         handleInsufficientCoins();
                     } else {
@@ -369,11 +388,11 @@ export default function ChatScreen({ route, navigation }) {
                 });
 
                 socket.on('display_typing', (data) => {
-                    console.log('[SOCKET] display_typing received on Mobile:', data, 'Current realChatId:', realChatId);
+                    console.log('[SOCKET] display_typing received on Mobile:', data, 'Current chatId:', chatId);
                     const incomingChatId = data.chatId ? data.chatId.toString() : '';
                     const incomingUserId = data.userId ? data.userId.toString() : '';
                     const myId = user?.id ? user.id.toString() : '';
-                    const myChatId = realChatId ? realChatId.toString() : '';
+                    const myChatId = chatId ? chatId.toString() : '';
 
                     if (incomingChatId === myChatId && incomingUserId !== myId) {
                         console.log('[ChatScreen] Showing Typing Indicator');
@@ -384,36 +403,31 @@ export default function ChatScreen({ route, navigation }) {
                 socket.on('hide_typing', (data) => {
                     console.log('[SOCKET] hide_typing received on Mobile:', data);
                     const incomingChatId = data.chatId ? data.chatId.toString() : '';
-                    const myChatId = realChatId ? realChatId.toString() : '';
+                    const myChatId = chatId ? chatId.toString() : '';
                     if (incomingChatId === myChatId) {
                         setIsTyping(false);
                     }
                 });
-            } else {
-                console.warn('[SOCKET] Global persistent socket is not ready yet.');
+
+            } catch (err) {
+                console.error('[ChatScreen] Init Error:', err);
+                if (active) setIsLoading(false);
             }
+        };
 
-        } catch (err) {
-            console.error('[ChatScreen] Init Error:', err);
-            setIsLoading(false);
-        }
-    };
+        loadChatData();
 
-    useEffect(() => {
-        initializeChat();
-        
         return () => {
-            if (socket && chatId) {
-                console.log('[SOCKET] Leaving room:', chatId);
-                socket.emit('leave_room', chatId.toString());
-                socket.off('receive_message');
-                socket.off('message_error');
-                socket.off('balance_update');
-                socket.off('message_reaction');
-                socket.off('message_updated');
-                socket.off('display_typing');
-                socket.off('hide_typing');
-            }
+            active = false;
+            console.log('[SOCKET] Leaving room and clearing listeners for chatId:', chatId);
+            socket.emit('leave_room', chatId.toString());
+            socket.off('receive_message');
+            socket.off('message_error');
+            socket.off('balance_update');
+            socket.off('message_reaction');
+            socket.off('message_updated');
+            socket.off('display_typing');
+            socket.off('hide_typing');
         };
     }, [chatId, socket]);
 
@@ -527,7 +541,7 @@ export default function ChatScreen({ route, navigation }) {
             is_optimistic: true
         };
 
-        setMessages(prev => [...prev, optimisticMsg]);
+        setMessages(prev => [optimisticMsg, ...prev]);
         setInput('');
 
         const msgData = {
@@ -602,7 +616,7 @@ export default function ChatScreen({ route, navigation }) {
             created_at: new Date().toISOString(),
             is_optimistic: true
         };
-        setMessages(prev => [...prev, optimisticMsg]);
+        setMessages(prev => [optimisticMsg, ...prev]);
 
         const msgData = {
             chatId: chatId,
@@ -671,7 +685,7 @@ export default function ChatScreen({ route, navigation }) {
                 created_at: new Date().toISOString(),
                 is_optimistic: true
             };
-            setMessages(prev => [...prev, optimisticMsg]);
+            setMessages(prev => [optimisticMsg, ...prev]);
 
             const msgData = {
                 chatId: chatId,
@@ -858,7 +872,7 @@ export default function ChatScreen({ route, navigation }) {
                 created_at: new Date().toISOString(),
                 is_optimistic: true
             };
-            setMessages(prev => [...prev, optimisticMsg]);
+            setMessages(prev => [optimisticMsg, ...prev]);
 
             const msgData = {
                 chatId: chatId,
@@ -1095,7 +1109,7 @@ export default function ChatScreen({ route, navigation }) {
             >
                 <FlatList
                     ref={flatListRef}
-                    data={[...messages].reverse()} // Reverse messages for inverted list
+                    data={messages}
                     inverted={true} // Start from bottom
                     keyExtractor={item => item.id.toString()}
                     renderItem={renderMessage}
@@ -1188,18 +1202,18 @@ export default function ChatScreen({ route, navigation }) {
                                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                                 navigation.navigate('VideoCall', { receiver: { id: operatorId, name, avatar_url } });
                             }}>
-                                <BlurView intensity={20} tint="light" style={styles.btnBlur}>
+                                <View style={styles.btnBlur}>
                                     <Ionicons name="videocam" size={22} color="rgba(255,255,255,0.8)" />
-                                </BlurView>
+                                </View>
                             </TouchableOpacity>
 
                             <TouchableOpacity style={styles.modernActionBtn} onPress={() => {
                                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                                 navigation.navigate('VoiceCall', { receiver: { id: operatorId, name, avatar_url } });
                             }}>
-                                <BlurView intensity={20} tint="light" style={styles.btnBlur}>
+                                <View style={styles.btnBlur}>
                                     <Ionicons name="call" size={22} color="rgba(255,255,255,0.8)" />
-                                </BlurView>
+                                </View>
                             </TouchableOpacity>
 
                             <TouchableOpacity style={styles.giftIconContainer} onPress={() => {
@@ -1227,18 +1241,18 @@ export default function ChatScreen({ route, navigation }) {
                                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                                 setShowQuickActions(true);
                             }}>
-                                <BlurView intensity={20} tint="light" style={[styles.btnBlur, showQuickActions && { backgroundColor: 'rgba(250, 204, 21, 0.2)' }]}>
+                                <View style={[styles.btnBlur, showQuickActions && { backgroundColor: 'rgba(250, 204, 21, 0.2)', borderColor: 'rgba(250, 204, 21, 0.4)' }]}>
                                     <Ionicons name="flash" size={22} color={showQuickActions ? "#facc15" : "rgba(255,255,255,0.8)"} />
-                                </BlurView>
+                                </View>
                             </TouchableOpacity>
 
                             <TouchableOpacity style={styles.modernActionBtn} onPress={() => {
                                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                                 handleSendImage();
                             }}>
-                                <BlurView intensity={20} tint="light" style={styles.btnBlur}>
+                                <View style={styles.btnBlur}>
                                     <Ionicons name="image" size={22} color="rgba(255,255,255,0.8)" />
-                                </BlurView>
+                                </View>
                             </TouchableOpacity>
                         </View>
                     </GlassCard>
@@ -1395,7 +1409,10 @@ const styles = StyleSheet.create({
         flex: 1,
         alignItems: 'center',
         justifyContent: 'center',
-        backgroundColor: 'rgba(255,255,255,0.05)',
+        backgroundColor: 'rgba(255, 255, 255, 0.1)',
+        borderWidth: 1,
+        borderColor: 'rgba(255, 255, 255, 0.15)',
+        borderRadius: 22,
     },
     giftIconContainer: {
         alignItems: 'center',

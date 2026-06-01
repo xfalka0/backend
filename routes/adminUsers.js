@@ -355,14 +355,14 @@ router.get('/affiliate-stats', authenticateToken, async (req, res) => {
         `;
         const stats = await db.query(statsQuery, [userId.toString(), myCode]);
 
-        // 2. Earnings (20% of transactions)
+        // 2. Earnings (20% of actual completed payments)
         const earnings = await db.query(`
             SELECT 
-                COALESCE(SUM(t.amount * 0.2), 0) as total_earnings,
-                COALESCE(SUM(CASE WHEN t.created_at >= CURRENT_DATE THEN t.amount * 0.2 ELSE 0 END), 0) as earnings_today
-            FROM transactions t
-            JOIN users u ON t.user_id = u.id
-            WHERE u.referred_by::text = $1::text AND t.status = 'completed'
+                COALESCE(SUM(p.amount * 0.2), 0) as total_earnings,
+                COALESCE(SUM(CASE WHEN p.created_at >= CURRENT_DATE THEN p.amount * 0.2 ELSE 0 END), 0) as earnings_today
+            FROM payments p
+            JOIN users u ON p.user_id = u.id
+            WHERE u.referred_by::text = $1::text AND p.status = 'completed'
         `, [userId]);
 
         // 3. Last 10 Referrals

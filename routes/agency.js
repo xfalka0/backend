@@ -7,7 +7,7 @@ const { authenticateToken, authorizeRole } = require('../middleware/auth');
 db.query(`
     CREATE TABLE IF NOT EXISTS agency_payouts (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        agency_id UUID REFERENCES agencies(id) ON DELETE CASCADE,
+        agency_id TEXT REFERENCES agencies(id) ON DELETE CASCADE,
         amount DECIMAL(12, 2) NOT NULL,
         status VARCHAR(50) DEFAULT 'processed',
         payment_method VARCHAR(100),
@@ -34,7 +34,7 @@ router.get('/admin/agencies/earnings', authenticateToken, authorizeRole('admin',
                 u.display_name as owner_display_name,
                 (SELECT COUNT(*)::int FROM users u2 WHERE u2.agency_id = a.id) as total_models
             FROM agencies a
-            LEFT JOIN users u ON a.owner_id = u.id
+            LEFT JOIN users u ON a.owner_id::text = u.id::text
             ORDER BY a.created_at DESC
         `);
         res.json(result.rows);

@@ -25,31 +25,34 @@ const Chats = () => {
     const fileInputRef = useRef(null);
     const selectedChatIdRef = useRef(null);
     const chatListRef = useRef(null);
+    const isSendingTypingRef = useRef(false);
 
     const handleTyping = (e) => {
         const text = e.target.value;
         setInput(text);
 
         if (!socketRef.current || !selectedChatIdRef.current) {
-            console.log('[Admin] Cannot emit typing: Socket or ChatId missing', !!socketRef.current, selectedChatIdRef.current);
             return;
         }
 
+        const roomStr = selectedChatIdRef.current.toString();
+
         if (text.length > 0) {
-            const roomStr = selectedChatIdRef.current.toString();
-            console.log('[Admin] Emitting typing_start for:', roomStr);
-            socketRef.current.emit('typing_start', { chatId: roomStr });
+            // Only emit typing_start ONCE when starting to type
+            if (!isSendingTypingRef.current) {
+                isSendingTypingRef.current = true;
+                socketRef.current.emit('typing_start', { chatId: roomStr });
+            }
 
             if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
 
             typingTimeoutRef.current = setTimeout(() => {
-                console.log('[Admin] Emitting typing_end (timeout) for:', roomStr);
                 socketRef.current.emit('typing_end', { chatId: roomStr });
+                isSendingTypingRef.current = false;
             }, 2000);
         } else {
-            const roomStr = selectedChatIdRef.current.toString();
-            console.log('[Admin] Emitting typing_end (empty) for:', roomStr);
             socketRef.current.emit('typing_end', { chatId: roomStr });
+            isSendingTypingRef.current = false;
             if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
         }
     };
@@ -341,6 +344,138 @@ const Chats = () => {
         }
     };
 
+    // Performance Optimization: Memoize the chat list to prevent re-rendering on every keystroke
+    const memoizedChatList = React.useMemo(() => {
+        return chats.map((chat) => (
+            <button
+                key={chat.id}
+                onClick={() => fetchMessages(chat)}
+                className={`w-full p-5 flex items-center gap-4 hover:bg-white/5 transition-all text-left border-b border-white/5 relative group ${selectedChat?.id === chat.id ? 'bg-fuchsia-600/10 border-r-4 border-r-fuchsia-600' : ''} ${chat.unread_count > 0 ? 'bg-fuchsia-500/20 shadow-[inset_0_0_30px_rgba(217,70,239,0.4)] border-l-4 border-l-fuchsia-500' : ''}`}
+            >
+                <div className="relative">
+                    <div className={`w-14 h-14 rounded-2xl overflow-hidden border-2 shadow-2xl transition-all ${chat.unread_count > 0 ? 'border-fuchsia-500 shadow-fuchsia-500/20' : 'border-white/5'}`}>
+                        {chat.user_avatar ? (
+                            <img
+                                src={chat.user_avatar}
+                                alt={chat.user_name}
+                                className="w-full h-full object-cover transform group-hover:scale-110 transition-transform duration-500"
+                                onError={(e) => {
+                                    e.target.style.display = 'none';
+                                    e.target.nextSibling.style.display = 'flex';
+                                }}
+                            />
+                        ) : null}
+                        <div
+                            className="w-full h-full bg-gradient-to-br from-fuchsia-600 to-purple-600 flex items-center justify-center"
+                            style={{ display: chat.user_avatar ? 'none' : 'flex' }}
+                        >
+                            <span className="text-white font-black text-xl">
+                                {chat.user_name?.charAt(0)?.toUpperCase() || '?'}
+                            </span>
+                        </div>
+                    </div>
+                    <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-green-500 rounded-full border-2 border-slate-900 shadow-lg"></div>
+                </div>
+
+                <div className="flex-1 overflow-hidden">
+                    <div className="flex justify-between items-start">
+                        <div className="flex flex-col flex-1 min-w-0">
+                            <h3 className={`font-black text-base truncate transition-colors uppercase tracking-tight ${chat.unread_count > 0 ? 'text-fuchsia-400' : 'text-white group-hover:text-fuchsia-400'}`}>
+                                {chat.user_name}
+                            </h3>
+                            <p className={`text-xs truncate font-medium mt-1 ${chat.unread_count > 0 ? 'text-white opacity-90' : 'text-slate-400 opacity-60'}`}>
+                                {chat.last_message || 'Sohbeti başlattı ✨'}
+                            </p>
+                        </div>
+
+                        <div className="flex flex-col items-end gap-2 ml-2">
+                            <span className="text-[10px] text-slate-500 font-black shrink-0">
+                                {chat.last_message_at ? new Date(chat.last_message_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
+                            </span>
+                            {chat.unread_count > 0 && (
+                                <div className="bg-fuchsia-600 text-white text-[10px] font-black min-w-[20px] h-5 px-1.5 flex items-center justify-center rounded-full shadow-lg shadow-fuchsia-600/40">
+                                    {chat.unread_count}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            </button>
+        ));
+    }, [chats, selectedChat]);
+
+    // Performance Optimization: Memoize message elements to prevent re-rendering when typing
+    const memoizedMessageList = React.useMemo(() => {
+        if (!selectedChat) return null;
+        return messages.map((msg, idx) => (
+            <div
+                key={idx}
+                className={`flex ${msg.sender_id === selectedChat.operator_id || msg.sender_id === user?.id ? 'justify-end' : 'justify-start'}`}
+            >
+                <div className={`max-w-[70%] space-y-1`}>
+                    {/* Gift Message Styling */}
+                    {(msg.content_type === 'gift' || msg.type === 'gift' || msg.gift_id) ? (
+                        <div className="bg-gradient-to-r from-amber-200 via-yellow-300 to-amber-200 text-amber-900 p-0.5 rounded-2xl shadow-lg shadow-amber-500/20 transform hover:scale-[1.02] transition-transform duration-300">
+                            <div className="bg-gradient-to-br from-amber-50 to-white px-4 py-3 rounded-[14px] flex items-center gap-4 relative overflow-hidden">
+                                <div className="absolute top-0 right-0 -mr-4 -mt-4 w-20 h-20 bg-yellow-400/20 blur-2xl rounded-full"></div>
+                                <div className="text-4xl filter drop-shadow-md">
+                                    {msg.gift_icon ? <img src={msg.gift_icon} className="w-12 h-12 object-contain" alt="Gift" /> : '🎁'}
+                                </div>
+                                <div>
+                                    <p className="min-w-[100px] font-black text-amber-900 text-sm uppercase tracking-wider">{msg.gift_name || msg.content}</p>
+                                    <div className="flex items-center gap-1 mt-1">
+                                        <span className="bg-amber-100/80 text-amber-800 text-[10px] font-bold px-2 py-0.5 rounded-full border border-amber-200/50 shadow-sm">
+                                            {msg.gift_cost ? `${msg.gift_cost} COINS` : 'HEDİYE'}
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div className="absolute -bottom-1 -right-1">
+                                <span className="flex h-3 w-3">
+                                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-yellow-400 opacity-75"></span>
+                                    <span className="relative inline-flex rounded-full h-3 w-3 bg-yellow-500"></span>
+                                </span>
+                            </div>
+                        </div>
+                    ) : (
+                        <div
+                            className={`p-4 rounded-2xl text-sm font-medium shadow-sm ${msg.sender_id === selectedChat.operator_id || msg.sender_id === user?.id
+                                ? 'bg-purple-600 text-white rounded-br-none'
+                                : 'bg-slate-800 text-slate-200 rounded-bl-none border border-slate-700'
+                                }`}
+                        >
+                            {msg.content_type === 'image' || msg.content_type === 'locked_image' || msg.type === 'image' || msg.type === 'locked_image' ? (
+                                <div className="relative group/img">
+                                    <img
+                                        src={msg.content}
+                                        className={`max-w-full rounded-lg shadow-2xl border border-white/10 cursor-zoom-in ${msg.content_type === 'locked_image' && !msg.is_unlocked && msg.sender_id !== selectedChat.operator_id ? 'blur-md' : ''}`}
+                                        alt="Resim"
+                                        onClick={() => window.open(msg.content, '_blank')}
+                                    />
+                                    {msg.content_type === 'locked_image' && (
+                                        <div className="absolute top-2 right-2 bg-black/60 text-white text-[10px] px-2 py-1 rounded-full flex items-center gap-1 font-bold">
+                                            <span className="text-yellow-400">🔒</span> {msg.unlock_cost || 50} Coin
+                                        </div>
+                                    )}
+                                    <div className="absolute inset-0 bg-black/0 group-hover/img:bg-black/20 transition-all rounded-lg flex items-center justify-center pointer-events-none group-hover/img:pointer-events-auto">
+                                        <svg className="w-8 h-8 text-white opacity-0 group-hover/img:opacity-100 transition-all" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v3m0 0v3m0-3h3m-3 0H7" />
+                                        </svg>
+                                    </div>
+                                </div>
+                            ) : (
+                                msg.content
+                            )}
+                        </div>
+                    )}
+                    <p className={`text-[10px] opacity-50 ${msg.sender_id === selectedChat.operator_id || msg.sender_id === user?.id ? 'text-right' : 'text-left'}`}>
+                        {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </p>
+                </div>
+            </div>
+        ));
+    }, [messages, selectedChat, user?.id]);
+
     return (
         <div className="flex h-[calc(100vh-160px)] bg-slate-950/50 rounded-3xl overflow-hidden border border-white/5 m-8">
             <div className="w-80 border-r border-white/5 flex flex-col bg-slate-900/50">
@@ -352,62 +487,7 @@ const Chats = () => {
                     className="flex-1 overflow-y-auto" 
                     style={{ overflowAnchor: 'none' }}
                 >
-                    {chats.map((chat) => (
-                        <button
-                            key={chat.id}
-                            onClick={() => fetchMessages(chat)}
-                            className={`w-full p-5 flex items-center gap-4 hover:bg-white/5 transition-all text-left border-b border-white/5 relative group ${selectedChat?.id === chat.id ? 'bg-fuchsia-600/10 border-r-4 border-r-fuchsia-600' : ''} ${chat.unread_count > 0 ? 'bg-fuchsia-500/20 shadow-[inset_0_0_30px_rgba(217,70,239,0.4)] border-l-4 border-l-fuchsia-500' : ''}`}
-                        >
-                            <div className="relative">
-                                <div className={`w-14 h-14 rounded-2xl overflow-hidden border-2 shadow-2xl transition-all ${chat.unread_count > 0 ? 'border-fuchsia-500 shadow-fuchsia-500/20' : 'border-white/5'}`}>
-                                    {chat.user_avatar ? (
-                                        <img
-                                            src={chat.user_avatar}
-                                            alt={chat.user_name}
-                                            className="w-full h-full object-cover transform group-hover:scale-110 transition-transform duration-500"
-                                            onError={(e) => {
-                                                e.target.style.display = 'none';
-                                                e.target.nextSibling.style.display = 'flex';
-                                            }}
-                                        />
-                                    ) : null}
-                                    <div
-                                        className="w-full h-full bg-gradient-to-br from-fuchsia-600 to-purple-600 flex items-center justify-center"
-                                        style={{ display: chat.user_avatar ? 'none' : 'flex' }}
-                                    >
-                                        <span className="text-white font-black text-xl">
-                                            {chat.user_name?.charAt(0)?.toUpperCase() || '?'}
-                                        </span>
-                                    </div>
-                                </div>
-                                <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-green-500 rounded-full border-2 border-slate-900 shadow-lg"></div>
-                            </div>
-
-                            <div className="flex-1 overflow-hidden">
-                                <div className="flex justify-between items-start">
-                                    <div className="flex flex-col flex-1 min-w-0">
-                                        <h3 className={`font-black text-base truncate transition-colors uppercase tracking-tight ${chat.unread_count > 0 ? 'text-fuchsia-400' : 'text-white group-hover:text-fuchsia-400'}`}>
-                                            {chat.user_name}
-                                        </h3>
-                                        <p className={`text-xs truncate font-medium mt-1 ${chat.unread_count > 0 ? 'text-white opacity-90' : 'text-slate-400 opacity-60'}`}>
-                                            {chat.last_message || 'Sohbeti başlattı ✨'}
-                                        </p>
-                                    </div>
-
-                                    <div className="flex flex-col items-end gap-2 ml-2">
-                                        <span className="text-[10px] text-slate-500 font-black shrink-0">
-                                            {chat.last_message_at ? new Date(chat.last_message_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
-                                        </span>
-                                        {chat.unread_count > 0 && (
-                                            <div className="bg-fuchsia-600 text-white text-[10px] font-black min-w-[20px] h-5 px-1.5 flex items-center justify-center rounded-full shadow-lg shadow-fuchsia-600/40">
-                                                {chat.unread_count}
-                                            </div>
-                                        )}
-                                    </div>
-                                </div>
-                            </div>
-                        </button>
-                    ))}
+                    {memoizedChatList}
                     {chats.length >= 50 && (
                         <div className="p-4 flex justify-center">
                             <button
@@ -479,75 +559,7 @@ const Chats = () => {
                                 </button>
                             </div>
 
-                            {messages.map((msg, idx) => (
-                                <div
-                                    key={idx}
-                                    className={`flex ${msg.sender_id === selectedChat.operator_id || msg.sender_id === user?.id ? 'justify-end' : 'justify-start'}`}
-                                >
-                                    <div className={`max-w-[70%] space-y-1`}>
-                                        {/* Gift Message Styling */}
-                                        {(msg.content_type === 'gift' || msg.type === 'gift' || msg.gift_id) ? (
-                                            <div className="bg-gradient-to-r from-amber-200 via-yellow-300 to-amber-200 text-amber-900 p-0.5 rounded-2xl shadow-lg shadow-amber-500/20 transform hover:scale-[1.02] transition-transform duration-300">
-                                                <div className="bg-gradient-to-br from-amber-50 to-white px-4 py-3 rounded-[14px] flex items-center gap-4 relative overflow-hidden">
-                                                    {/* Shiny Effect */}
-                                                    <div className="absolute top-0 right-0 -mr-4 -mt-4 w-20 h-20 bg-yellow-400/20 blur-2xl rounded-full"></div>
-
-                                                    <div className="text-4xl filter drop-shadow-md">
-                                                        {msg.gift_icon ? <img src={msg.gift_icon} className="w-12 h-12 object-contain" alt="Gift" /> : '🎁'}
-                                                    </div>
-                                                    <div>
-                                                        <p className="min-w-[100px] font-black text-amber-900 text-sm uppercase tracking-wider">{msg.gift_name || msg.content}</p>
-                                                        <div className="flex items-center gap-1 mt-1">
-                                                            <span className="bg-amber-100/80 text-amber-800 text-[10px] font-bold px-2 py-0.5 rounded-full border border-amber-200/50 shadow-sm">
-                                                                {msg.gift_cost ? `${msg.gift_cost} COINS` : 'HEDİYE'}
-                                                            </span>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                                <div className="absolute -bottom-1 -right-1">
-                                                    <span className="flex h-3 w-3">
-                                                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-yellow-400 opacity-75"></span>
-                                                        <span className="relative inline-flex rounded-full h-3 w-3 bg-yellow-500"></span>
-                                                    </span>
-                                                </div>
-                                            </div>
-                                        ) : (
-                                            <div
-                                                className={`p-4 rounded-2xl text-sm font-medium shadow-sm ${msg.sender_id === selectedChat.operator_id || msg.sender_id === user?.id
-                                                    ? 'bg-purple-600 text-white rounded-br-none'
-                                                    : 'bg-slate-800 text-slate-200 rounded-bl-none border border-slate-700'
-                                                    }`}
-                                            >
-                                                {msg.content_type === 'image' || msg.content_type === 'locked_image' || msg.type === 'image' || msg.type === 'locked_image' ? (
-                                                    <div className="relative group/img">
-                                                        <img
-                                                            src={msg.content}
-                                                            className={`max-w-full rounded-lg shadow-2xl border border-white/10 cursor-zoom-in ${msg.content_type === 'locked_image' && !msg.is_unlocked && msg.sender_id !== selectedChat.operator_id ? 'blur-md' : ''}`}
-                                                            alt="Resim"
-                                                            onClick={() => window.open(msg.content, '_blank')}
-                                                        />
-                                                        {msg.content_type === 'locked_image' && (
-                                                            <div className="absolute top-2 right-2 bg-black/60 text-white text-[10px] px-2 py-1 rounded-full flex items-center gap-1 font-bold">
-                                                                <span className="text-yellow-400">🔒</span> {msg.unlock_cost || 50} Coin
-                                                            </div>
-                                                        )}
-                                                        <div className="absolute inset-0 bg-black/0 group-hover/img:bg-black/20 transition-all rounded-lg flex items-center justify-center pointer-events-none group-hover/img:pointer-events-auto">
-                                                            <svg className="w-8 h-8 text-white opacity-0 group-hover/img:opacity-100 transition-all" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v3m0 0v3m0-3h3m-3 0H7" />
-                                                            </svg>
-                                                        </div>
-                                                    </div>
-                                                ) : (
-                                                    msg.content
-                                                )}
-                                            </div>
-                                        )}
-                                        <p className={`text-[10px] opacity-50 ${msg.sender_id === selectedChat.operator_id || msg.sender_id === user?.id ? 'text-right' : 'text-left'}`}>
-                                            {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                        </p>
-                                    </div>
-                                </div>
-                            ))}
+                            {memoizedMessageList}
 
                             {/* Typing Indicator Bubble */}
                             {isTyping && (

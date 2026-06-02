@@ -339,7 +339,8 @@ exports.getMe = async (req, res) => {
             gender: user.gender,
             display_name: user.display_name,
             referral_code: user.referral_code,
-            onboarding_completed: user.onboarding_completed
+            onboarding_completed: user.onboarding_completed,
+            is_agency_owner: !!user.is_agency_owner
         });
     } catch (err) {
         res.status(500).json({ error: err.message });

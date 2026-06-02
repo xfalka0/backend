@@ -1705,7 +1705,7 @@ app.get('/api/admin/users', authenticateToken, authorizeRole('admin', 'super_adm
     try {
         console.log(`[ADMIN] Fetching users list for admin: ${req.user.id}`);
         const result = await db.query(`
-            SELECT id, username, email, role, account_status, balance, 
+            SELECT id, username, email, role, phone, account_status, balance, 
                    is_vip, created_at, last_login_at, ban_expires_at, avatar_url 
             FROM users 
             ORDER BY created_at DESC
@@ -1843,7 +1843,7 @@ app.get('/api/admin/my-stats', authenticateToken, async (req, res) => {
     }
 });
 app.post('/api/admin/users', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
-    const { username, email, password, role } = req.body;
+    const { username, email, password, role, phone } = req.body;
 
     // Validate role
     if (!['admin', 'moderator', 'operator', 'user', 'staff'].includes(role)) {
@@ -1856,8 +1856,8 @@ app.post('/api/admin/users', authenticateToken, authorizeRole('admin', 'super_ad
 
         // Include legacy 'password' field in INSERT for compatibility
         const result = await db.query(
-            "INSERT INTO users (username, email, password, password_hash, role, balance) VALUES ($1, $2, $3, $3, $4, 0) RETURNING id, username, email, role",
-            [username, email, hashedPassword, role]
+            "INSERT INTO users (username, email, password, password_hash, role, phone, balance) VALUES ($1, $2, $3, $3, $4, $5, 0) RETURNING id, username, email, phone, role",
+            [username, email, hashedPassword, role, phone || null]
         );
 
         res.status(201).json(result.rows[0]);
@@ -2435,12 +2435,15 @@ app.get('/api/admin/agencies', authenticateToken, authorizeRole('admin', 'super_
 
 // CREATE AGENCY
 app.post('/api/admin/agencies', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
-    const { name, owner_id, commission_rate } = req.body;
+    const { name, owner_id, commission_rate, status } = req.body;
     try {
         const result = await db.query(
-            'INSERT INTO agencies (name, owner_id, commission_rate) VALUES ($1, $2, $3) RETURNING *',
-            [name, owner_id || null, commission_rate || 0.40]
+            'INSERT INTO agencies (name, owner_id, commission_rate, status) VALUES ($1, $2, $3, $4) RETURNING *',
+            [name, owner_id || null, commission_rate || 0.40, status || 'active']
         );
+        if (owner_id) {
+            await db.query('UPDATE users SET is_agency_owner = true WHERE id = $1', [owner_id]);
+        }
         res.json(result.rows[0]);
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -2462,6 +2465,94 @@ app.put('/api/admin/agencies/:id', authenticateToken, authorizeRole('admin', 'su
             [name, owner_id, commission_rate, status, id]
         );
         res.json(result.rows[0]);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// GET AGENCY OWNER DASHBOARD
+app.get('/api/agency/my-dashboard', authenticateToken, async (req, res) => {
+    try {
+        // 1. Get Agency owned by current user
+        const agencyResult = await db.query(
+            'SELECT * FROM agencies WHERE owner_id = $1 LIMIT 1',
+            [req.user.id]
+        );
+        
+        if (agencyResult.rows.length === 0) {
+            return res.status(404).json({ error: 'Size ait aktif bir ajans bulunamadı.' });
+        }
+        
+        const agency = agencyResult.rows[0];
+        
+        // 2. Get Today's Total Diamonds/Commissions for this agency
+        const todayLogResult = await db.query(
+            `SELECT COALESCE(SUM(amount), 0) as today_diamonds 
+             FROM commission_logs 
+             WHERE agency_id = $1 AND created_at >= CURRENT_DATE`,
+            [agency.id]
+        );
+        const todayDiamondsRaw = parseFloat(todayLogResult.rows[0].today_diamonds || 0);
+        const todayDiamonds = Math.round(todayDiamondsRaw * parseFloat(agency.commission_rate || 0.40) * 100) / 100;
+        
+        // 3. Get all publishers/operators linked to this agency
+        const operatorsResult = await db.query(
+            `SELECT u.id, u.username, u.display_name, u.avatar_url, 
+                    COALESCE(o.is_online, false) as is_online,
+                    COALESCE(o.rating, 5.0) as rating
+             FROM users u
+             LEFT JOIN operators o ON u.id = o.user_id
+             WHERE u.agency_id = $1 AND u.role = 'operator'`,
+            [agency.id]
+        );
+        
+        // 4. Get today's commissions grouped by operator
+        const operatorCommissionsResult = await db.query(
+            `SELECT operator_id, COALESCE(SUM(amount), 0) as operator_today_commission
+             FROM commission_logs
+             WHERE agency_id = $1 AND created_at >= CURRENT_DATE
+             GROUP BY operator_id`,
+            [agency.id]
+        );
+        
+        // Map commission data to operator objects
+        const commissionMap = {};
+        operatorCommissionsResult.rows.forEach(row => {
+            commissionMap[row.operator_id] = parseFloat(row.operator_today_commission);
+        });
+        
+        let activeOperatorsCount = 0;
+        const operatorsList = operatorsResult.rows.map(op => {
+            if (op.is_online) activeOperatorsCount++;
+            const rawComm = commissionMap[op.id] || 0;
+            const agencyCut = rawComm * parseFloat(agency.commission_rate || 0.40);
+            return {
+                id: op.id,
+                username: op.username,
+                display_name: op.display_name,
+                avatar_url: op.avatar_url,
+                is_online: op.is_online,
+                rating: op.rating,
+                today_commission: Math.round(agencyCut * 100) / 100
+            };
+        });
+        
+        res.json({
+            agency: {
+                id: agency.id,
+                name: agency.name,
+                pending_balance: parseFloat(agency.pending_balance || 0),
+                lifetime_earnings: parseFloat(agency.lifetime_earnings || 0),
+                commission_rate: parseFloat(agency.commission_rate || 0.40),
+                status: agency.status
+            },
+            stats: {
+                today_diamonds: todayDiamonds,
+                active_operators: activeOperatorsCount,
+                total_operators: operatorsList.length
+            },
+            operators: operatorsList
+        });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }

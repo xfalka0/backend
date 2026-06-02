@@ -27,7 +27,123 @@ const AgencyPayouts = () => {
     const [selectedOperator, setSelectedOperator] = useState(null);
     const [payoutModal, setPayoutModal] = useState(false);
     const [payoutAmount, setPayoutAmount] = useState('');
-    const [payoutMethod, setPayoutMethod] = useState('Papara');
+        const [payoutMethod, setPayoutMethod] = useState('Papara');
+
+    // Agency Modal & Creation States
+    const [showAgencyModal, setShowAgencyModal] = useState(false);
+    const [agencyName, setAgencyName] = useState('');
+    const [agencyOwnerId, setAgencyOwnerId] = useState('');
+    const [agencyOwnerSearch, setAgencyOwnerSearch] = useState('');
+    const [agencyStatus, setAgencyStatus] = useState(true); // true = 'active', false = 'inactive'
+    const [agencyCommissionRate, setAgencyCommissionRate] = useState('0.40'); // Default %40
+    
+    // User search & creation states
+    const [allUsersList, setAllUsersList] = useState([]);
+    const [searchingUsers, setSearchingUsers] = useState(false);
+    const [showQuickOwnerCreate, setShowQuickOwnerCreate] = useState(false);
+    const [quickUsername, setQuickUsername] = useState('');
+    const [quickEmail, setQuickEmail] = useState('');
+    const [quickPhone, setQuickPhone] = useState('');
+    const [quickPassword, setQuickPassword] = useState('');
+    const [quickRole, setQuickRole] = useState('operator'); // Default to operator
+    const [creatingUser, setCreatingUser] = useState(false);
+
+    const fetchUsers = async () => {
+        try {
+            setSearchingUsers(true);
+            const res = await axios.get(`${API_URL}/admin/users`, { headers: { Authorization: `Bearer ${token}` } });
+            setAllUsersList(res.data);
+        } catch (err) {
+            console.error('Kullanıcı listesi çekme hatası:', err);
+        } finally {
+            setSearchingUsers(false);
+        }
+    };
+
+    useEffect(() => {
+        if (showAgencyModal) {
+            fetchUsers();
+        }
+    }, [showAgencyModal]);
+
+    const filteredUsers = allUsersList.filter(u => 
+        (u.username?.toLowerCase().includes(agencyOwnerSearch.toLowerCase()) || 
+         u.email?.toLowerCase().includes(agencyOwnerSearch.toLowerCase()) ||
+         u.phone?.toLowerCase().includes(agencyOwnerSearch.toLowerCase()) ||
+         u.id?.toLowerCase().includes(agencyOwnerSearch.toLowerCase())) &&
+        u.role !== 'customer'
+    ).slice(0, 5);
+
+    const handleCreateQuickUser = async () => {
+        if (!quickUsername.trim() || !quickEmail.trim() || !quickPassword.trim()) {
+            alert('Lütfen kullanıcı adı, e-posta ve şifre alanlarını doldurun.');
+            return;
+        }
+
+        try {
+            setCreatingUser(true);
+            const res = await axios.post(`${API_URL}/admin/users`, {
+                username: quickUsername.trim().toLowerCase(),
+                email: quickEmail.trim().toLowerCase(),
+                phone: quickPhone.trim(),
+                password: quickPassword.trim(),
+                role: quickRole
+            }, { headers: { Authorization: `Bearer ${token}` } });
+
+            if (res.data) {
+                alert('Ajans Sahibi profili başarıyla yaratıldı ve seçildi!');
+                const newUser = res.data;
+                setAllUsersList(prev => [newUser, ...prev]);
+                setAgencyOwnerId(newUser.id);
+                setAgencyOwnerSearch(newUser.username);
+                
+                // Clear quick creation form
+                setQuickUsername('');
+                setQuickEmail('');
+                setQuickPhone('');
+                setQuickPassword('');
+                setShowQuickOwnerCreate(false);
+            }
+        } catch (err) {
+            alert('Hızlı kullanıcı yaratma hatası: ' + (err.response?.data?.error || err.message));
+        } finally {
+            setCreatingUser(false);
+        }
+    };
+
+    const handleCreateAgency = async () => {
+        if (!agencyName.trim()) {
+            alert('Lütfen ajans adı girin.');
+            return;
+        }
+        if (!agencyOwnerId) {
+            alert('Lütfen geçerli bir ajans sahibi seçin veya yenisini yaratın.');
+            return;
+        }
+
+        try {
+            await axios.post(`${API_URL}/admin/agencies`, {
+                name: agencyName.trim(),
+                owner_id: agencyOwnerId,
+                commission_rate: parseFloat(agencyCommissionRate || 0.40),
+                status: agencyStatus ? 'active' : 'inactive'
+            }, { headers: { Authorization: `Bearer ${token}` } });
+
+            alert('Yeni ajans başarıyla oluşturuldu!');
+            setShowAgencyModal(false);
+            
+            // Clear inputs
+            setAgencyName('');
+            setAgencyOwnerId('');
+            setAgencyOwnerSearch('');
+            setAgencyStatus(true);
+            setAgencyCommissionRate('0.40');
+            
+            fetchData();
+        } catch (err) {
+            alert('Ajans oluşturma hatası: ' + (err.response?.data?.error || err.message));
+        }
+    };
 
     useEffect(() => {
         fetchData();
@@ -77,7 +193,7 @@ const AgencyPayouts = () => {
                 <div>
                     <p className="text-slate-500 text-[11px] font-black uppercase tracking-widest mb-1">{title}</p>
                     <h3 className="text-3xl font-black text-white tracking-tighter">
-                        {value.toLocaleString()} <span className="text-sm font-bold text-slate-600 ml-1">COIN</span>
+                        {value.toLocaleString()} <span className="text-sm font-bold text-slate-600 ml-1">ELMAS</span>
                     </h3>
                     {subValue && <p className="text-[10px] font-bold text-slate-400 mt-2 uppercase tracking-wide">{subValue}</p>}
                 </div>
@@ -109,6 +225,12 @@ const AgencyPayouts = () => {
                     <p className="text-slate-500 text-sm font-medium mt-1">Personel performansını ve ödeme dengesini yönetin.</p>
                 </div>
                 <div className="flex items-center gap-3">
+                    <button 
+                        onClick={() => setShowAgencyModal(true)} 
+                        className="px-5 py-3 rounded-2xl bg-indigo-600 text-white text-xs font-black uppercase tracking-widest hover:bg-indigo-500 shadow-[0_10px_30px_rgba(99,102,241,0.3)] transition-all"
+                    >
+                        Yeni Ajans Ekle
+                    </button>
                     <button onClick={fetchData} className="px-5 py-3 rounded-2xl bg-white/5 border border-white/10 text-white text-xs font-bold hover:bg-white/10 transition-all">
                         Verileri Yenile
                     </button>
@@ -125,21 +247,21 @@ const AgencyPayouts = () => {
                 value={stats.total_pending || 0} 
                 icon={Wallet} 
                 color="blue"
-                subValue={`Yaklaşık ${((stats.total_pending || 0) * 0.5).toLocaleString('tr-TR')} TL`}
+                subValue={`Yaklaşık ${((stats.total_pending || 0) * 0.023).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} TL`}
             />
             <StatCard 
                 title="Toplam Ödenen" 
                 value={stats.total_paid || 0} 
                 icon={CheckCircle2} 
                 color="emerald"
-                subValue={`${((stats.total_paid || 0) * 0.5).toLocaleString('tr-TR')} TL ödeme yapıldı`}
+                subValue={`${((stats.total_paid || 0) * 0.023).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} TL ödeme yapıldı`}
             />
             <StatCard 
                 title="Ajans Toplam Ciro" 
                 value={stats.total_lifetime || 0} 
                 icon={TrendingUp} 
                 color="indigo"
-                subValue={`Brüt: ${((stats.total_lifetime || 0) * 0.5).toLocaleString('tr-TR')} TL`}
+                subValue={`Brüt: ${((stats.total_lifetime || 0) * 0.023).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} TL`}
             />
         </div>
 
@@ -220,16 +342,16 @@ const AgencyPayouts = () => {
                                     <td className="px-8 py-6">
                                         <p className={`text-sm font-black tracking-tighter ${op.pending_balance > 1000 ? 'text-blue-400' : 'text-white'}`}>
                                             {op.pending_balance?.toLocaleString()} 
-                                            <span className="text-[10px] text-slate-600 ml-1">COIN</span>
+                                            <span className="text-[10px] text-slate-600 ml-1">ELMAS</span>
                                         </p>
                                         <p className="text-[10px] font-bold text-slate-500 mt-1 uppercase tracking-tight">
-                                            ≈ {(op.pending_balance * 0.5).toLocaleString('tr-TR')} TRY
+                                            ≈ {(op.pending_balance * 0.023).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} TRY
                                         </p>
                                     </td>
                                     <td className="px-8 py-6">
                                         <p className="text-sm font-black text-slate-300 tracking-tighter">
                                             {op.lifetime_earnings?.toLocaleString()} 
-                                            <span className="text-[10px] text-slate-700 ml-1">COIN</span>
+                                            <span className="text-[10px] text-slate-700 ml-1">ELMAS</span>
                                         </p>
                                     </td>
                                     <td className="px-8 py-6">
@@ -300,6 +422,268 @@ const AgencyPayouts = () => {
                                 <button onClick={() => setPayoutModal(false)} className="flex-1 py-4 rounded-3xl bg-white/5 text-slate-400 text-xs font-black uppercase tracking-widest hover:bg-white/10 transition-all">İptal</button>
                                 <button onClick={handlePayout} className="flex-2 px-8 py-4 rounded-3xl bg-blue-600 text-white text-xs font-black uppercase tracking-widest hover:bg-blue-500 shadow-xl transition-all">Ödemeyi Tamamla</button>
                             </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Yeni Ajans Ekleme Modali */}
+            {showAgencyModal && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+                    <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-md" onClick={() => setShowAgencyModal(false)} />
+                    <div className="bg-[#0f172a] border border-white/10 w-full max-w-lg rounded-[40px] shadow-2xl relative z-10 overflow-hidden animate-in zoom-in-95 duration-300">
+                        
+                        {/* Modal Header */}
+                        <div className="p-8 border-b border-white/5 bg-gradient-to-r from-indigo-600/10 to-purple-600/10 flex justify-between items-center">
+                            <div>
+                                <h2 className="text-2xl font-black text-white tracking-tighter">Yeni Ajans Kaydı</h2>
+                                <p className="text-slate-400 text-xs font-bold mt-1 uppercase tracking-widest">Sistem Ajansı Tanımlama Formu</p>
+                            </div>
+                            <button 
+                                onClick={() => setShowAgencyModal(false)} 
+                                className="w-8 h-8 rounded-full bg-white/5 hover:bg-white/10 border border-white/10 flex items-center justify-center text-white"
+                            >
+                                ✕
+                            </button>
+                        </div>
+
+                        {/* Modal Body */}
+                        <div className="p-8 space-y-6 max-h-[70vh] overflow-y-auto custom-scrollbar">
+                            
+                            {/* Agency Name */}
+                            <div>
+                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-2">Ajans Adı (Agency Name)</label>
+                                <input 
+                                    type="text" 
+                                    placeholder="Örn: Marilyn Ajans"
+                                    className="w-full bg-white/5 border border-white/10 rounded-2xl py-4 px-6 text-sm font-bold text-white outline-none focus:border-indigo-500/50 focus:bg-white/10 transition-all"
+                                    value={agencyName}
+                                    onChange={(e) => setAgencyName(e.target.value)}
+                                />
+                            </div>
+
+                            {/* Agency Owner selection */}
+                            <div className="border border-white/5 p-5 rounded-3xl bg-white/[0.01] relative">
+                                <div className="flex justify-between items-center mb-3">
+                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Ajans Sahibi (Owner)</label>
+                                    <button 
+                                        type="button"
+                                        onClick={() => setShowQuickOwnerCreate(!showQuickOwnerCreate)}
+                                        className="text-[10px] font-black text-indigo-400 hover:text-indigo-300 uppercase tracking-wider"
+                                    >
+                                        {showQuickOwnerCreate ? 'Kayıtlı Kullanıcılardan Seç' : 'Yeni Sahip Kaydı Yarat ➕'}
+                                    </button>
+                                </div>
+
+                                {!showQuickOwnerCreate ? (
+                                    /* User Search and Selector Panel */
+                                    <div className="space-y-3">
+                                        <div className="relative">
+                                            <input 
+                                                type="text" 
+                                                placeholder="Kullanıcı adı veya ID ile ara..."
+                                                className="w-full bg-white/5 border border-white/10 rounded-2xl py-3 px-5 text-sm font-bold text-white outline-none focus:border-indigo-500/50 transition-all"
+                                                value={agencyOwnerSearch}
+                                                onChange={(e) => {
+                                                    setAgencyOwnerSearch(e.target.value);
+                                                    if (agencyOwnerId) setAgencyOwnerId(''); // Reset selection if typing
+                                                }}
+                                            />
+                                            {searchingUsers && (
+                                                <div className="absolute right-4 top-1/2 -translate-y-1/2">
+                                                    <div className="w-4 h-4 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        {/* Dropdown Results */}
+                                        {agencyOwnerSearch.length > 0 && !agencyOwnerId && (
+                                            <div className="bg-slate-900 border border-white/10 rounded-2xl overflow-hidden mt-1 max-h-48 overflow-y-auto">
+                                                {filteredUsers.length === 0 ? (
+                                                    <div className="p-4 text-xs font-bold text-slate-500 text-center">Kullanıcı bulunamadı.</div>
+                                                ) : (
+                                                    filteredUsers.map(u => (
+                                                        <div 
+                                                            key={u.id}
+                                                            onClick={() => {
+                                                                setAgencyOwnerId(u.id);
+                                                                setAgencyOwnerSearch(u.username);
+                                                            }}
+                                                            className="p-3 hover:bg-white/5 cursor-pointer border-b border-white/5 last:border-0 flex items-center justify-between"
+                                                        >
+                                                            <div>
+                                                                <p className="text-xs font-bold text-white capitalize">{u.username}</p>
+                                                                <p className="text-[10px] text-slate-500 mt-0.5">
+                                                                    {u.email || 'E-posta yok'}{u.phone ? ` • Tel: ${u.phone}` : ''}
+                                                                </p>
+                                                            </div>
+                                                            <span className="text-[9px] font-black px-2 py-0.5 bg-blue-500/10 text-blue-400 rounded-md uppercase">{u.role}</span>
+                                                        </div>
+                                                    ))
+                                                )}
+                                            </div>
+                                        )}
+
+                                        {agencyOwnerId && (
+                                            <div className="flex items-center justify-between p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-2xl">
+                                                <div>
+                                                    <p className="text-xs font-black text-emerald-400">Sahip Seçildi ✓</p>
+                                                    <p className="text-[10px] text-slate-400 mt-0.5">ID: {agencyOwnerId}</p>
+                                                </div>
+                                                <button 
+                                                    onClick={() => {
+                                                        setAgencyOwnerId('');
+                                                        setAgencyOwnerSearch('');
+                                                    }}
+                                                    className="text-xs font-bold text-slate-500 hover:text-rose-400"
+                                                >
+                                                    Temizle
+                                                </button>
+                                            </div>
+                                        )}
+                                    </div>
+                                ) : (
+                                    /* Hızlı Kullanıcı Oluşturma Formu */
+                                    <div className="space-y-4 bg-slate-900/50 p-4 rounded-2xl border border-white/5 animate-in slide-in-from-top-4 duration-300">
+                                        <p className="text-[10px] font-bold text-indigo-400 uppercase tracking-widest mb-1">Yeni Kullanıcı Kaydı</p>
+                                        <div className="grid grid-cols-2 gap-3">
+                                            <div>
+                                                <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-1 block">Kullanıcı Adı</label>
+                                                <input 
+                                                    type="text" 
+                                                    placeholder="Örn: vipowner"
+                                                    className="w-full bg-white/5 border border-white/10 rounded-xl py-2.5 px-4 text-xs font-bold text-white outline-none focus:border-indigo-500"
+                                                    value={quickUsername}
+                                                    onChange={(e) => setQuickUsername(e.target.value)}
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-1 block">Rolü</label>
+                                                <select 
+                                                    className="w-full bg-slate-900 border border-white/10 rounded-xl py-2.5 px-4 text-xs font-bold text-white outline-none focus:border-indigo-500"
+                                                    value={quickRole}
+                                                    onChange={(e) => setQuickRole(e.target.value)}
+                                                >
+                                                    <option value="operator">Yayıncı / Operatör</option>
+                                                    <option value="staff">Personel / Staff</option>
+                                                    <option value="moderator">Moderatör</option>
+                                                    <option value="admin">Yönetici / Admin</option>
+                                                </select>
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-1 block">E-posta</label>
+                                            <input 
+                                                type="email" 
+                                                placeholder="Örn: owner@agency.com"
+                                                className="w-full bg-white/5 border border-white/10 rounded-xl py-2.5 px-4 text-xs font-bold text-white outline-none focus:border-indigo-500"
+                                                value={quickEmail}
+                                                onChange={(e) => setQuickEmail(e.target.value)}
+                                            />
+                                        </div>
+                                        <div className="grid grid-cols-2 gap-3">
+                                            <div>
+                                                <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-1 block">Telefon Numarası</label>
+                                                <input 
+                                                    type="text" 
+                                                    placeholder="Örn: +905..."
+                                                    className="w-full bg-white/5 border border-white/10 rounded-xl py-2.5 px-4 text-xs font-bold text-white outline-none focus:border-indigo-500"
+                                                    value={quickPhone}
+                                                    onChange={(e) => setQuickPhone(e.target.value)}
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-1 block">Şifre</label>
+                                                <input 
+                                                    type="password" 
+                                                    placeholder="En az 6 karakter..."
+                                                    className="w-full bg-white/5 border border-white/10 rounded-xl py-2.5 px-4 text-xs font-bold text-white outline-none focus:border-indigo-500"
+                                                    value={quickPassword}
+                                                    onChange={(e) => setQuickPassword(e.target.value)}
+                                                />
+                                            </div>
+                                        </div>
+                                        
+                                        <button
+                                            type="button"
+                                            onClick={handleCreateQuickUser}
+                                            disabled={creatingUser}
+                                            className="w-full py-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-[10px] font-black uppercase tracking-wider transition-all"
+                                        >
+                                            {creatingUser ? 'Kullanıcı Yaratılıyor...' : 'Kullanıcı Yarat ve Seç'}
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Status and Commission Rate in a responsive row */}
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                
+                                {/* Status Toggle */}
+                                <div>
+                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-3">Durum (Status)</label>
+                                    <div className="flex items-center gap-4 bg-white/5 border border-white/10 p-4 rounded-2xl">
+                                        <button
+                                            type="button"
+                                            onClick={() => setAgencyStatus(!agencyStatus)}
+                                            className={`w-12 h-6 rounded-full p-1 transition-all duration-300 ${agencyStatus ? 'bg-emerald-500' : 'bg-slate-700'}`}
+                                        >
+                                            <div className={`w-4 h-4 bg-white rounded-full transition-all duration-300 ${agencyStatus ? 'translate-x-6' : 'translate-x-0'}`} />
+                                        </button>
+                                        <div>
+                                            <span className={`text-xs font-black uppercase tracking-wider ${agencyStatus ? 'text-emerald-400' : 'text-slate-400'}`}>
+                                                {agencyStatus ? 'Aktif' : 'Pasif'}
+                                            </span>
+                                            <p className="text-[9px] text-slate-500 font-bold mt-0.5">Ajans gelir üretimine açık</p>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Commission Rate */}
+                                <div>
+                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-2">Komisyon Oranı</label>
+                                    <input 
+                                        type="number" 
+                                        step="0.05"
+                                        min="0.10"
+                                        max="0.90"
+                                        placeholder="0.40"
+                                        className="w-full bg-white/5 border border-white/10 rounded-2xl py-4 px-6 text-sm font-bold text-white outline-none focus:border-indigo-500/50 transition-all"
+                                        value={agencyCommissionRate}
+                                        onChange={(e) => setAgencyCommissionRate(e.target.value)}
+                                    />
+                                    {/* Quick pricing selectors */}
+                                    <div className="flex gap-2 mt-2">
+                                        {['0.40', '0.45', '0.50'].map(rate => (
+                                            <button
+                                                key={rate}
+                                                type="button"
+                                                onClick={() => setAgencyCommissionRate(rate)}
+                                                className={`px-3 py-1 bg-white/5 hover:bg-white/10 border rounded-lg text-[9px] font-black tracking-wider transition-all ${agencyCommissionRate === rate ? 'text-indigo-400 border-indigo-500/50 bg-indigo-500/5' : 'text-slate-500 border-white/5'}`}
+                                            >
+                                                %{parseFloat(rate) * 100} ({rate})
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Submit & Cancel Buttons */}
+                            <div className="pt-6 border-t border-white/5 flex gap-3">
+                                <button 
+                                    onClick={() => setShowAgencyModal(false)} 
+                                    className="flex-1 py-4 rounded-3xl bg-white/5 text-slate-400 text-xs font-black uppercase tracking-widest hover:bg-white/10 transition-all"
+                                >
+                                    İptal
+                                </button>
+                                <button 
+                                    onClick={handleCreateAgency} 
+                                    className="flex-2 px-8 py-4 rounded-3xl bg-indigo-600 text-white text-xs font-black uppercase tracking-widest hover:bg-indigo-500 shadow-xl shadow-indigo-600/20 transition-all"
+                                >
+                                    Kaydet ve Oluştur
+                                </button>
+                            </div>
+
                         </div>
                     </div>
                 </div>

@@ -4,6 +4,7 @@ const db = require('../db');
 const { authenticateToken, authorizeRole } = require('../middleware/auth');
 const { sanitizeUser } = require('../utils/helpers');
 const { sendPushNotification } = require('../utils/notificationUtils');
+const { recordOperatorCommission } = require('../utils/commissionUtils');
 
 // GET MESSAGES FOR A CHAT
 router.get('/:chatId', async (req, res) => {
@@ -117,25 +118,51 @@ router.post('/internal-fake', async (req, res) => {
     }
 });
 
-// UNLOCK LOCKED MESSAGE
+// UNLOCK LOCKED MESSAGE WITH ATOMIC TRANSACTION AND COMMISSION INTEGRATION
 router.post('/:messageId/unlock', authenticateToken, async (req, res) => {
     const { messageId } = req.params;
     const userId = req.user.id;
+    
+    const client = await db.connect();
     try {
-        const msgRes = await db.query('SELECT * FROM messages WHERE id = $1', [messageId]);
-        if (msgRes.rows.length === 0) return res.status(404).json({ error: 'Mesaj bulunamadı.' });
+        await client.query('BEGIN');
+
+        const msgRes = await client.query('SELECT * FROM messages WHERE id = $1', [messageId]);
+        if (msgRes.rows.length === 0) {
+            await client.query('ROLLBACK');
+            return res.status(404).json({ error: 'Mesaj bulunamadı.' });
+        }
+        
         const msg = msgRes.rows[0];
-        if (msg.is_unlocked) return res.json({ success: true, message: msg });
+        if (msg.is_unlocked) {
+            await client.query('ROLLBACK');
+            return res.json({ success: true, message: msg });
+        }
 
         const unlockCost = msg.unlock_cost || 50;
-        const userRes = await db.query('SELECT balance FROM users WHERE id = $1', [userId]);
-        if (userRes.rows[0].balance < unlockCost) return res.status(400).json({ error: 'Yetersiz bakiye.', insufficientFunds: true });
+        const userRes = await client.query('SELECT balance FROM users WHERE id = $1', [userId]);
+        if (userRes.rows[0].balance < unlockCost) {
+            await client.query('ROLLBACK');
+            return res.status(400).json({ error: 'Yetersiz bakiye.', insufficientFunds: true });
+        }
 
-        await db.query('UPDATE users SET balance = balance - $1 WHERE id = $2', [unlockCost, userId]);
-        const updated = await db.query('UPDATE messages SET is_unlocked = true WHERE id = $1 RETURNING *', [messageId]);
+        // 1. Deduct Coins from Customer
+        await client.query('UPDATE users SET balance = balance - $1 WHERE id = $2', [unlockCost, userId]);
+        
+        // 2. Mark Message as Unlocked
+        const updated = await client.query('UPDATE messages SET is_unlocked = true WHERE id = $1 RETURNING *', [messageId]);
+
+        // 3. Process Operator & Agency splits in PG Transaction client
+        await recordOperatorCommission(client, msg.chat_id, userId, unlockCost, 'locked_image');
+
+        await client.query('COMMIT');
         res.json({ success: true, message: updated.rows[0] });
     } catch (err) {
+        await client.query('ROLLBACK');
+        console.error('[UNLOCK-COMMISSION-ERROR]:', err.message);
         res.status(500).json({ error: err.message });
+    } finally {
+        client.release();
     }
 });
 

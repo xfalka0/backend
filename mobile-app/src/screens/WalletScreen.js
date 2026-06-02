@@ -294,16 +294,21 @@ const WalletScreen = () => {
         <View style={styles.container}>
             <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
             
-            {/* Premium Feminine Purple Gradient Header Backdrop */}
-            <LinearGradient
-                colors={['#db2777', '#7c3aed', '#09021a']}
-                style={styles.headerBackdrop}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-            >
+            {/* Background Image Layer with Fiva Banner */}
+            <View style={styles.headerBackdrop}>
+                <Image 
+                    source={require('../../assets/fiva_profile_banner.png')} 
+                    style={styles.backgroundImage}
+                />
+                <LinearGradient
+                    colors={['rgba(219, 39, 119, 0.2)', 'rgba(124, 58, 237, 0.5)', '#09021a']}
+                    style={StyleSheet.absoluteFill}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 0, y: 1 }}
+                />
                 {/* Large Subtle Diamond Watermark in top-right */}
                 <Ionicons name="diamond" size={280} color="rgba(255, 255, 255, 0.05)" style={styles.watermarkDiamond} />
-            </LinearGradient>
+            </View>
 
             <SafeAreaView style={styles.safeArea}>
                 {/* Custom Navigation Header */}
@@ -652,6 +657,11 @@ const styles = StyleSheet.create({
         right: 0,
         height: 290,
         zIndex: 0
+    },
+    backgroundImage: {
+        width: '100%',
+        height: '100%',
+        resizeMode: 'cover'
     },
     watermarkDiamond: {
         position: 'absolute',

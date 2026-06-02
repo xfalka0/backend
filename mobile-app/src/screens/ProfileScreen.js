@@ -28,6 +28,8 @@ import * as ImagePicker from 'expo-image-picker';
 import { resolveImageUrl } from '../utils/imageUtils';
 import ImageViewing from 'react-native-image-viewing';
 import { useAlert } from '../contexts/AlertContext';
+import { useAppStore } from '../store/useAppStore';
+import { preventScreenshots } from '../utils/security';
 
 const { width } = Dimensions.get('window');
 
@@ -48,6 +50,21 @@ const ProfileScreen = ({ route }) => {
     const [isEditingBio, setIsEditingBio] = useState(false);
     const scrollY = new Animated.Value(0);
     const [operatorStats, setOperatorStats] = useState(null);
+
+    // Zustand Role & Cihaz Güvenliği
+    const role = useAppStore(state => state.role);
+    const isOperator = role === 'operator';
+
+    useEffect(() => {
+        if (isOperator) {
+            preventScreenshots(true);
+        }
+        return () => {
+            if (isOperator) {
+                preventScreenshots(false);
+            }
+        };
+    }, [isOperator]);
 
     const editOptions = {
         job: ["Yazılımcı", "Öğrenci", "Mühendis", "Doktor", "Tasarımcı", "Sanatçı", "Serbest Meslek", "Diğer"],
@@ -642,6 +659,37 @@ const ProfileScreen = ({ route }) => {
                         <Ionicons name="chevron-forward" size={16} color="#fff" />
                     </LinearGradient>
                 </TouchableOpacity>
+
+                {/* Agency Management Card (Glowing violet/indigo premium button) */}
+                {user?.is_agency_owner && (
+                    <TouchableOpacity 
+                        style={styles.glassCardWrapper} 
+                        activeOpacity={0.8}
+                        onPress={() => navigation.navigate('AgencyDashboard')}
+                    >
+                        <LinearGradient 
+                            colors={['#8b5cf6', '#ec4899']} 
+                            style={styles.boostCard} 
+                            start={{ x: 0, y: 0 }} 
+                            end={{ x: 1, y: 1 }}
+                        >
+                            <View style={styles.boostLeft}>
+                                <View style={[styles.boostIconCircle, { backgroundColor: 'rgba(255, 255, 255, 0.2)' }]}>
+                                    <Ionicons name="business" size={18} color="#fff" />
+                                </View>
+                                <View>
+                                    <Text style={[styles.boostMainText, { color: '#fff', textShadowColor: 'rgba(0,0,0,0.15)', textShadowOffset: {width: 0, height: 1}, textShadowRadius: 2 }]}>
+                                        Ajans Yönetimi ⚡
+                                    </Text>
+                                    <Text style={[styles.boostSubText, { color: 'rgba(255,255,255,0.85)' }]}>
+                                        Ajans kazançlarını ve yayıncı performanslarını yönetin
+                                    </Text>
+                                </View>
+                            </View>
+                            <Ionicons name="chevron-forward" size={16} color="#fff" />
+                        </LinearGradient>
+                    </TouchableOpacity>
+                )}
 
                 {/* Album Section */}
                 <View style={styles.glassCardWrapper}>

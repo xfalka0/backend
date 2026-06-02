@@ -162,7 +162,7 @@ async function recordOperatorCommission(client, chatId, senderId, cost, type) {
     // 3.2 Update AGENCY balance (if applicable)
     if (agencyData) {
         const agencyRate = parseFloat(agencyData.commission_rate || 0.40);
-        const agencyTotalEarned = cost * agencyRate;
+        const agencyTotalEarned = earned * agencyRate;
         
         await client.query(
             `UPDATE agencies SET 
@@ -172,7 +172,7 @@ async function recordOperatorCommission(client, chatId, senderId, cost, type) {
             [agencyTotalEarned, agencyId]
         );
         
-        console.log(`[AGENCY-PAYOUT] Agency ${agencyData.name} earned ${agencyTotalEarned} from transaction of ${cost}`);
+        console.log(`[AGENCY-PAYOUT] Agency ${agencyData.name} earned ${agencyTotalEarned} from transaction of ${cost} (${earned} diamonds)`);
     }
 
     // 3.5 Detailed Log for tracking

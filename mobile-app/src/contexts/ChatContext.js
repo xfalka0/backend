@@ -4,6 +4,7 @@ import io from 'socket.io-client';
 import { API_URL, SOCKET_URL } from '../config';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useInAppNotification } from './InAppNotificationContext';
+import { useAppStore } from '../store/useAppStore';
 
 const ChatContext = createContext();
 
@@ -21,6 +22,7 @@ export const ChatProvider = ({ children }) => {
         try {
             const res = await axios.get(`${API_URL}/users/${userId}/unread-count`);
             setUnreadCount(res.data.count);
+            useAppStore.getState().setUnreadCount(res.data.count);
         } catch (error) {
             console.error('[ChatContext] Fetch unread error:', error);
         }
@@ -31,6 +33,7 @@ export const ChatProvider = ({ children }) => {
         try {
             const res = await axios.get(`${API_URL}/users/${userId}/balance`);
             setBalance(res.data.balance);
+            useAppStore.getState().setBalance(res.data.balance);
         } catch (error) {
             console.error('[ChatContext] Fetch balance error:', error);
         }
@@ -41,6 +44,7 @@ export const ChatProvider = ({ children }) => {
         if (userData) {
             const parsedUser = JSON.parse(userData);
             setUser(parsedUser);
+            useAppStore.getState().setUser(parsedUser);
             fetchUnreadCount(parsedUser.id);
             fetchBalance(parsedUser.id);
             setupSocket(parsedUser.id);
@@ -69,6 +73,7 @@ export const ChatProvider = ({ children }) => {
             // If the message is not from the user themselves, increment unread count
             if (data.sender_id !== userId) {
                 setUnreadCount(prev => prev + 1);
+                useAppStore.getState().setUnreadCount(useAppStore.getState().unreadCount + 1);
 
                 // If message is from a DIFFERENT chat than the active one, show notification
                 const incomingChatId = data.chat_id ? data.chat_id.toString() : '';
@@ -93,6 +98,7 @@ export const ChatProvider = ({ children }) => {
         socketRef.current.on('balance_updated', (data) => {
             if (data && typeof data.balance === 'number') {
                 setBalance(data.balance);
+                useAppStore.getState().setBalance(data.balance);
             }
         });
     };

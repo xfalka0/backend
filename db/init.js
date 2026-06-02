@@ -314,6 +314,11 @@ const initializeDatabase = async (db, app) => {
             await db.query('ALTER TABLE users ADD COLUMN phone VARCHAR(20) UNIQUE');
         }
 
+        if (!columnNames.includes('is_agency_owner')) {
+            console.log('[DB] Adding missing column: is_agency_owner');
+            await db.query('ALTER TABLE users ADD COLUMN is_agency_owner BOOLEAN DEFAULT FALSE');
+        }
+
         if (!columnNames.includes('last_login_at')) {
             console.log('[DB] Adding missing column: last_login_at');
             await db.query('ALTER TABLE users ADD COLUMN last_login_at TIMESTAMP');
@@ -621,7 +626,7 @@ const initializeDatabase = async (db, app) => {
         await runMigration('idx_messages_chat_unread', 'CREATE INDEX IF NOT EXISTS idx_messages_chat_unread ON messages(chat_id, sender_id) WHERE is_read = false');
 
         // One-time production correction for affected virtual operators and user "Aysel demir" back to 'kadin'
-        await db.query("UPDATE users SET gender = 'kadin' WHERE (id IN (41, 44, 51) OR display_name ILIKE '%Aysel%' OR username ILIKE '%Aysel%') AND gender != 'kadin'");
+        await db.query("UPDATE users SET gender = 'kadin' WHERE (id::text IN ('41', '44', '51') OR display_name ILIKE '%Aysel%' OR username ILIKE '%Aysel%') AND gender != 'kadin'");
         console.log('[DB] Production operators and Aysel gender correction verified');
 
         console.log('[DB] SCHEMA VERIFICATION COMPLETE');

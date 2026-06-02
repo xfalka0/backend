@@ -22,6 +22,9 @@ import { GIFTS } from '../constants/gifts';
 import GlassCard from '../components/ui/GlassCard';
 import ModernAlert from '../components/ui/ModernAlert';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useAppStore } from '../store/useAppStore';
+import { Modal } from 'react-native';
+import { preventScreenshots } from '../utils/security';
 
 import { resolveImageUrl } from '../utils/imageUtils';
 
@@ -48,6 +51,18 @@ export default function ChatScreen({ route, navigation }) {
             setActiveChatId(null);
         };
     }, [chatId]);
+
+    // Cihaz Güvenliği: Kadın operatörlerin ekran görüntüsü almasını/kaydetmesini engelle
+    useEffect(() => {
+        if (isOperator) {
+            preventScreenshots(true);
+        }
+        return () => {
+            if (isOperator) {
+                preventScreenshots(false);
+            }
+        };
+    }, [isOperator]);
     const { theme, themeMode } = useTheme();
     const { operatorId, chatId: existingChatId, name, job, user: routeUser = {}, avatar_url, is_online, vip_level = 0, gender } = route.params;
 
@@ -58,6 +73,13 @@ export default function ChatScreen({ route, navigation }) {
     const [messages, setMessages] = useState([]);
     const [isTyping, setIsTyping] = useState(false);
     const [input, setInput] = useState('');
+
+    // Zustand Role & Locked Image Configuration States
+    const role = useAppStore(state => state.role);
+    const isOperator = role === 'operator';
+    const [selectedImageUri, setSelectedImageUri] = useState(null);
+    const [showImageLockModal, setShowImageLockModal] = useState(false);
+    const [unlockCostSelection, setUnlockCostSelection] = useState(50);
     const [chatId, setChatId] = useState(existingChatId || null);
     const [selectedImage, setSelectedImage] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
@@ -633,7 +655,8 @@ export default function ChatScreen({ route, navigation }) {
 
     // --- MEDIA SHARING LOGIC ---
     const handleSendImage = async () => {
-        if (currentBalance < 50 && (user.vip_level || 0) < 1) {
+        // Enforce balance checking ONLY for male customers (non-operators)
+        if (!isOperator && currentBalance < 50 && (user.vip_level || 0) < 1) {
             handleInsufficientCoins();
             return;
         }
@@ -651,11 +674,19 @@ export default function ChatScreen({ route, navigation }) {
         });
 
         if (!result.canceled) {
-            uploadAndSendImage(result.assets[0].uri);
+            const uri = result.assets[0].uri;
+            if (isOperator) {
+                // Operators choose pricing via locked image sheet before upload
+                setSelectedImageUri(uri);
+                setUnlockCostSelection(50); // Default pricing
+                setShowImageLockModal(true);
+            } else {
+                uploadAndSendImage(uri, false, 0);
+            }
         }
     };
 
-    const uploadAndSendImage = async (uri) => {
+    const uploadAndSendImage = async (uri, isLocked = false, unlockCost = 0) => {
         try {
             const formData = new FormData();
             formData.append('file', {
@@ -680,8 +711,10 @@ export default function ChatScreen({ route, navigation }) {
                 chat_id: chatId,
                 sender_id: user.id,
                 content: imageUrl,
-                type: 'image',
-                content_type: 'image',
+                type: isLocked ? 'locked_image' : 'image',
+                content_type: isLocked ? 'locked_image' : 'image',
+                unlock_cost: unlockCost,
+                is_unlocked: !isLocked, // it is always unlocked for the sender!
                 created_at: new Date().toISOString(),
                 is_optimistic: true
             };
@@ -691,8 +724,9 @@ export default function ChatScreen({ route, navigation }) {
                 chatId: chatId,
                 senderId: user.id,
                 content: imageUrl,
-                type: 'image',
-                tempId: tempId
+                type: isLocked ? 'locked_image' : 'image',
+                tempId: tempId,
+                unlockCost: unlockCost
             };
             socketRef.current?.emit('send_message', msgData);
 
@@ -1101,6 +1135,83 @@ export default function ChatScreen({ route, navigation }) {
                 onSelectMessage={(msg) => sendMessage(msg)}
                 onSelectVoice={handleSelectVoice}
             />
+
+            {/* Image Lock Price Selection Modal */}
+            <Modal
+                visible={showImageLockModal}
+                transparent={true}
+                animationType="fade"
+                onRequestClose={() => setShowImageLockModal(false)}
+            >
+                <View style={styles.modalOverlay}>
+                    <GlassCard intensity={80} tint="dark" style={styles.imageLockCard}>
+                        <Text style={styles.imageLockTitle}>Fotoğraf Seçenekleri 🔒</Text>
+                        <Text style={styles.imageLockSub}>Fotoğrafı kilitli mi göndermek istersiniz? Kilidi açmak için erkek kullanıcının ödeyeceği Coin miktarını seçin.</Text>
+                        
+                        {selectedImageUri && (
+                            <Image 
+                                source={{ uri: selectedImageUri }}
+                                style={styles.imageLockPreview}
+                                blurRadius={15}
+                            />
+                        )}
+
+                        <View style={styles.pricingPillContainer}>
+                            {[0, 50, 100, 200, 500].map((cost) => (
+                                <TouchableOpacity
+                                    key={cost}
+                                    style={[
+                                        styles.pricingPill,
+                                        unlockCostSelection === cost && styles.pricingPillActive
+                                    ]}
+                                    onPress={() => {
+                                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                                        setUnlockCostSelection(cost);
+                                    }}
+                                >
+                                    <Text style={[
+                                        styles.pricingPillText,
+                                        unlockCostSelection === cost && styles.pricingPillTextActive
+                                    ]}>
+                                        {cost === 0 ? 'Ücretsiz' : `${cost} Coin`}
+                                    </Text>
+                                </TouchableOpacity>
+                            ))}
+                        </View>
+
+                        <View style={styles.imageLockBtnRow}>
+                            <TouchableOpacity
+                                style={styles.imageLockCancelBtn}
+                                onPress={() => {
+                                    setShowImageLockModal(false);
+                                    setSelectedImageUri(null);
+                                }}
+                            >
+                                <Text style={styles.imageLockCancelBtnText}>İptal</Text>
+                            </TouchableOpacity>
+
+                            <TouchableOpacity
+                                style={styles.imageLockSubmitBtn}
+                                onPress={() => {
+                                    setShowImageLockModal(false);
+                                    const isLocked = unlockCostSelection > 0;
+                                    uploadAndSendImage(selectedImageUri, isLocked, unlockCostSelection);
+                                    setSelectedImageUri(null);
+                                }}
+                            >
+                                <LinearGradient
+                                    colors={['#ec4899', '#8b5cf6']}
+                                    style={styles.imageLockSubmitGradient}
+                                    start={{ x: 0, y: 0 }}
+                                    end={{ x: 1, y: 1 }}
+                                >
+                                    <Text style={styles.imageLockSubmitBtnText}>Gönder</Text>
+                                </LinearGradient>
+                            </TouchableOpacity>
+                        </View>
+                    </GlassCard>
+                </View>
+            </Modal>
 
             <KeyboardAvoidingView
                 behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -1645,5 +1756,101 @@ const styles = StyleSheet.create({
         color: '#fbbf24',
         fontSize: 12,
         fontWeight: '900',
+    },
+    modalOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(9, 2, 26, 0.8)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        paddingHorizontal: 20
+    },
+    imageLockCard: {
+        width: '100%',
+        padding: 24,
+        borderRadius: 36,
+        borderWidth: 1,
+        borderColor: 'rgba(255, 255, 255, 0.1)',
+        alignItems: 'center'
+    },
+    imageLockTitle: {
+        color: '#fff',
+        fontSize: 20,
+        fontWeight: '900',
+        letterSpacing: -0.5
+    },
+    imageLockSub: {
+        color: 'rgba(255, 255, 255, 0.6)',
+        fontSize: 12,
+        textAlign: 'center',
+        marginTop: 6,
+        lineHeight: 16,
+        marginBottom: 16
+    },
+    imageLockPreview: {
+        width: 140,
+        height: 140,
+        borderRadius: 20,
+        marginBottom: 20,
+        backgroundColor: '#cbd5e1'
+    },
+    pricingPillContainer: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        justifyContent: 'center',
+        gap: 8,
+        marginBottom: 24
+    },
+    pricingPill: {
+        paddingHorizontal: 12,
+        paddingVertical: 8,
+        borderRadius: 14,
+        backgroundColor: 'rgba(255, 255, 255, 0.05)',
+        borderWidth: 1,
+        borderColor: 'rgba(255, 255, 255, 0.08)'
+    },
+    pricingPillActive: {
+        backgroundColor: '#ec4899',
+        borderColor: 'transparent'
+    },
+    pricingPillText: {
+        color: 'rgba(255, 255, 255, 0.6)',
+        fontSize: 12,
+        fontWeight: '800'
+    },
+    pricingPillTextActive: {
+        color: '#fff'
+    },
+    imageLockBtnRow: {
+        flexDirection: 'row',
+        width: '100%',
+        gap: 12
+    },
+    imageLockCancelBtn: {
+        flex: 1,
+        backgroundColor: 'rgba(255, 255, 255, 0.05)',
+        paddingVertical: 14,
+        borderRadius: 16,
+        alignItems: 'center',
+        borderWidth: 1,
+        borderColor: 'rgba(255, 255, 255, 0.08)'
+    },
+    imageLockCancelBtnText: {
+        color: 'rgba(255, 255, 255, 0.6)',
+        fontSize: 13,
+        fontWeight: '900'
+    },
+    imageLockSubmitBtn: {
+        flex: 1.5,
+        borderRadius: 16,
+        overflow: 'hidden'
+    },
+    imageLockSubmitGradient: {
+        paddingVertical: 14,
+        alignItems: 'center'
+    },
+    imageLockSubmitBtnText: {
+        color: '#fff',
+        fontSize: 13,
+        fontWeight: '900'
     },
 });

@@ -56,7 +56,10 @@ import PurchaseInfoScreen from './src/screens/PurchaseInfoScreen';
 import LeaderboardScreen from './src/screens/LeaderboardScreen';
 import InviteScreen from './src/screens/InviteScreen';
 import WalletScreen from './src/screens/WalletScreen';
+import MissionBoardScreen from './src/screens/MissionBoardScreen';
+import AgencyDashboardScreen from './src/screens/AgencyDashboardScreen';
 import AnimatedTabBar from './src/components/animated/AnimatedTabBar';
+import { useAppStore } from './src/store/useAppStore';
 import { trackPurchase } from './src/utils/analytics';
 import { Settings } from 'react-native-fbsdk-next';
 
@@ -67,6 +70,10 @@ function MainTabs({ route }) {
     const TEST_USER_ID = 'c917f7d6-cc44-4b04-8917-1dbbed0b1e9b';
     const paramsUser = route.params?.user;
     const user = paramsUser ? paramsUser : { id: TEST_USER_ID, name: 'Test Kullanıcı', hearts: 100 };
+
+    // Read role dynamically from Zustand global store
+    const role = useAppStore(state => state.role);
+    const isOperator = role === 'operator';
 
     return (
         <Tab.Navigator
@@ -91,6 +98,14 @@ function MainTabs({ route }) {
                 initialParams={{ user }}
                 options={{ tabBarIconName: 'chatbubbles' }}
             />
+            {isOperator && (
+                <Tab.Screen
+                    name="Görevler"
+                    component={MissionBoardScreen}
+                    initialParams={{ user }}
+                    options={{ tabBarIconName: 'trophy' }}
+                />
+            )}
             <Tab.Screen
                 name="Profil"
                 component={ProfileScreen}
@@ -143,6 +158,7 @@ function AppContent() {
                     <Stack.Screen name="Leaderboard" component={LeaderboardScreen} />
                     <Stack.Screen name="Invite" component={InviteScreen} />
                     <Stack.Screen name="Wallet" component={WalletScreen} />
+                    <Stack.Screen name="AgencyDashboard" component={AgencyDashboardScreen} />
                 </Stack.Navigator>
             </StarterPackProvider>
         </NavigationContainer>

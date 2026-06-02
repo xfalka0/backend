@@ -10,7 +10,10 @@ import {
     StatusBar,
     RefreshControl,
     Image,
-    ActivityIndicator
+    ActivityIndicator,
+    Modal,
+    TextInput,
+    Alert
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
@@ -51,6 +54,82 @@ export default function AgencyDashboardScreen() {
         },
         operators: []
     });
+
+    const [isInviteModalVisible, setIsInviteModalVisible] = useState(false);
+    const [inviteIdentifier, setInviteIdentifier] = useState('');
+    const [inviting, setInviting] = useState(false);
+
+    const handleSendInvite = async () => {
+        if (!inviteIdentifier.trim()) {
+            Alert.alert('Hata', 'Lütfen yayıncının kullanıcı adını, ID\'sini veya telefon numarasını girin.');
+            return;
+        }
+
+        setInviting(true);
+        try {
+            const token = await AsyncStorage.getItem('token');
+            if (!token) return;
+
+            const res = await axios.post(`${API_URL}/agency/invitations`, {
+                targetIdentifier: inviteIdentifier.trim()
+            }, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+
+            if (res.data && res.data.success) {
+                Alert.alert('Başarılı', res.data.message || 'Davet başarıyla gönderildi.');
+                setInviteIdentifier('');
+                setIsInviteModalVisible(false);
+                fetchDashboardData();
+            } else {
+                Alert.alert('Hata', res.data?.error || 'Davet gönderilemedi.');
+            }
+        } catch (error) {
+            console.error('[AgencyDashboard] Invite error:', error);
+            const errMsg = error.response?.data?.error || 'Bir hata oluştu, lütfen daha sonra tekrar deneyin.';
+            Alert.alert('Hata', errMsg);
+        } finally {
+            setInviting(false);
+        }
+    };
+
+    const handleRemoveOperator = async (operatorId, operatorName) => {
+        Alert.alert(
+            'Yayıncıyı Ajans Dışı Bırak',
+            `"${operatorName}" adlı yayıncıyı ajansınızdan çıkarmak istediğinize emin misiniz? Bu işlem geri alınamaz.`,
+            [
+                { text: 'İptal', style: 'cancel' },
+                { 
+                    text: 'Evet, Çıkar', 
+                    style: 'destructive',
+                    onPress: async () => {
+                        try {
+                            const token = await AsyncStorage.getItem('token');
+                            if (!token) return;
+
+                            const res = await axios.post(`${API_URL}/agency/remove-operator`, {
+                                operatorId
+                            }, {
+                                headers: { Authorization: `Bearer ${token}` }
+                            });
+
+                            if (res.data && res.data.success) {
+                                Alert.alert('Başarılı', res.data.message || 'Yayıncı ajansınızdan çıkarıldı.');
+                                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                                fetchDashboardData(); // Refresh list
+                            } else {
+                                Alert.alert('Hata', res.data?.error || 'Yayıncı çıkarılamadı.');
+                            }
+                        } catch (error) {
+                            console.error('[AgencyDashboard] Remove operator error:', error);
+                            const errMsg = error.response?.data?.error || 'Bir hata oluştu, yayıncı çıkarılamadı.';
+                            Alert.alert('Hata', errMsg);
+                        }
+                    }
+                }
+            ]
+        );
+    };
 
     const fetchDashboardData = async () => {
         try {
@@ -168,8 +247,25 @@ export default function AgencyDashboardScreen() {
 
                         {/* Operators Section Header */}
                         <View style={styles.sectionHeader}>
-                            <Text style={styles.sectionTitle}>Ajans Yayıncıları ({dashboardData.operators?.length || 0})</Text>
-                            <Text style={styles.commissionRateText}>Komisyon Oranı: %{parseFloat(dashboardData.agency?.commission_rate || 0.4) * 100}</Text>
+                            <View>
+                                <Text style={styles.sectionTitle}>Ajans Yayıncıları ({dashboardData.operators?.length || 0})</Text>
+                                <Text style={styles.commissionRateText}>Komisyon Oranı: %{parseFloat(dashboardData.agency?.commission_rate || 0.4) * 100}</Text>
+                            </View>
+                            <TouchableOpacity 
+                                style={styles.inviteButton}
+                                activeOpacity={0.8}
+                                onPress={() => setIsInviteModalVisible(true)}
+                            >
+                                <LinearGradient
+                                    colors={['#8b5cf6', '#ec4899']}
+                                    style={styles.inviteGradient}
+                                    start={{ x: 0, y: 0 }}
+                                    end={{ x: 1, y: 1 }}
+                                >
+                                    <Ionicons name="person-add" size={12} color="#fff" style={{ marginRight: 5 }} />
+                                    <Text style={styles.inviteButtonText}>Davet Et</Text>
+                                </LinearGradient>
+                            </TouchableOpacity>
                         </View>
 
                         {/* Operators List */}
@@ -196,7 +292,15 @@ export default function AgencyDashboardScreen() {
 
                                         {/* Performance Info */}
                                         <View style={styles.opInfo}>
-                                            <Text style={styles.opName} numberOfLines={1}>{op.display_name || op.username}</Text>
+                                            <View style={styles.nameBadgeContainer}>
+                                                <Text style={styles.opName} numberOfLines={1}>{op.display_name || op.username}</Text>
+                                                {op.is_low_quality && (
+                                                    <View style={styles.lowQualityBadge}>
+                                                        <Ionicons name="warning" size={10} color="#fbbf24" style={{ marginRight: 3 }} />
+                                                        <Text style={styles.lowQualityText}>Düşük Kalite</Text>
+                                                    </View>
+                                                )}
+                                            </View>
                                             <View style={styles.metaRow}>
                                                 <Text style={styles.opRole}>Yayıncı</Text>
                                                 <View style={styles.metaDivider} />
@@ -216,6 +320,15 @@ export default function AgencyDashboardScreen() {
                                             </Text>
                                         </View>
 
+                                        {/* Remove Operator Button */}
+                                        <TouchableOpacity
+                                            style={styles.removeOperatorBtn}
+                                            activeOpacity={0.7}
+                                            onPress={() => handleRemoveOperator(op.id, op.display_name || op.username)}
+                                        >
+                                            <Ionicons name="trash-outline" size={15} color="#ef4444" />
+                                        </TouchableOpacity>
+
                                     </View>
                                 </GlassCard>
                             ))
@@ -225,6 +338,75 @@ export default function AgencyDashboardScreen() {
                     </ScrollView>
                 )}
             </SafeAreaView>
+
+            {/* Invite Operator Modal */}
+            <Modal
+                visible={isInviteModalVisible}
+                transparent={true}
+                animationType="fade"
+                onRequestClose={() => setIsInviteModalVisible(false)}
+            >
+                <View style={styles.modalBackdrop}>
+                    <TouchableOpacity 
+                        style={StyleSheet.absoluteFill} 
+                        activeOpacity={1} 
+                        onPress={() => setIsInviteModalVisible(false)} 
+                    />
+                    <GlassCard intensity={40} tint="dark" style={styles.modalCard}>
+                        <View style={styles.modalHeader}>
+                            <View style={styles.modalIconCircle}>
+                                <Ionicons name="person-add" size={24} color="#a855f7" />
+                            </View>
+                            <Text style={styles.modalTitle}>Yayıncı Davet Et</Text>
+                            <Text style={styles.modalSubtitle}>
+                                Kadın yayıncının kullanıcı adını, ID'sini veya telefon numarasını girerek ajansınıza davet edin.
+                            </Text>
+                        </View>
+
+                        <TextInput
+                            style={styles.modalInput}
+                            placeholder="Kullanıcı adı, ID veya Telefon"
+                            placeholderTextColor="rgba(255, 255, 255, 0.4)"
+                            value={inviteIdentifier}
+                            onChangeText={setInviteIdentifier}
+                            autoCapitalize="none"
+                            autoCorrect={false}
+                        />
+
+                        <View style={styles.modalActions}>
+                            <TouchableOpacity 
+                                style={[styles.modalBtn, styles.modalCancelBtn]} 
+                                onPress={() => {
+                                    setInviteIdentifier('');
+                                    setIsInviteModalVisible(false);
+                                }}
+                                disabled={inviting}
+                            >
+                                <Text style={styles.modalCancelText}>İptal</Text>
+                            </TouchableOpacity>
+
+                            <TouchableOpacity 
+                                style={styles.modalBtn}
+                                onPress={handleSendInvite}
+                                disabled={inviting}
+                            >
+                                <LinearGradient
+                                    colors={['#8b5cf6', '#ec4899']}
+                                    style={styles.modalSubmitGradient}
+                                    start={{ x: 0, y: 0 }}
+                                    end={{ x: 1, y: 1 }}
+                                >
+                                    {inviting ? (
+                                        <ActivityIndicator size="small" color="#fff" />
+                                    ) : (
+                                        <Text style={styles.modalSubmitText}>Davet Gönder</Text>
+                                    )}
+                                </LinearGradient>
+                            </TouchableOpacity>
+                        </View>
+                    </GlassCard>
+                </View>
+            </Modal>
         </View>
     );
 }
@@ -507,5 +689,142 @@ const styles = StyleSheet.create({
         fontSize: 10,
         fontWeight: '700',
         marginTop: 1
+    },
+    inviteButton: {
+        borderRadius: 14,
+        overflow: 'hidden',
+    },
+    inviteGradient: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 12,
+        paddingVertical: 7,
+    },
+    inviteButtonText: {
+        color: '#fff',
+        fontSize: 11,
+        fontWeight: '900',
+    },
+    nameBadgeContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
+        flexWrap: 'wrap',
+    },
+    lowQualityBadge: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: 'rgba(251, 191, 36, 0.12)',
+        borderWidth: 1,
+        borderColor: 'rgba(251, 191, 36, 0.25)',
+        paddingHorizontal: 6,
+        paddingVertical: 2,
+        borderRadius: 8,
+    },
+    lowQualityText: {
+        color: '#fbbf24',
+        fontSize: 9,
+        fontWeight: '850',
+    },
+    modalBackdrop: {
+        flex: 1,
+        backgroundColor: 'rgba(0, 0, 0, 0.75)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        padding: 20,
+    },
+    modalCard: {
+        width: '100%',
+        maxWidth: 340,
+        borderRadius: 28,
+        padding: 24,
+        borderWidth: 1,
+        borderColor: 'rgba(255, 255, 255, 0.08)',
+        alignItems: 'center',
+    },
+    modalHeader: {
+        alignItems: 'center',
+        marginBottom: 20,
+    },
+    modalIconCircle: {
+        width: 50,
+        height: 50,
+        borderRadius: 16,
+        backgroundColor: 'rgba(139, 92, 246, 0.15)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginBottom: 12,
+    },
+    modalTitle: {
+        color: '#fff',
+        fontSize: 18,
+        fontWeight: '900',
+        letterSpacing: -0.3,
+    },
+    modalSubtitle: {
+        color: 'rgba(255, 255, 255, 0.5)',
+        fontSize: 12,
+        fontWeight: '500',
+        textAlign: 'center',
+        marginTop: 6,
+        lineHeight: 16,
+    },
+    modalInput: {
+        width: '100%',
+        height: 48,
+        backgroundColor: 'rgba(255, 255, 255, 0.04)',
+        borderWidth: 1,
+        borderColor: 'rgba(255, 255, 255, 0.08)',
+        borderRadius: 14,
+        paddingHorizontal: 16,
+        color: '#fff',
+        fontSize: 14,
+        fontWeight: '600',
+        marginBottom: 20,
+    },
+    modalActions: {
+        flexDirection: 'row',
+        width: '100%',
+        gap: 12,
+    },
+    modalBtn: {
+        flex: 1,
+        height: 44,
+        borderRadius: 14,
+        overflow: 'hidden',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    modalCancelBtn: {
+        backgroundColor: 'rgba(255, 255, 255, 0.06)',
+        borderWidth: 1,
+        borderColor: 'rgba(255, 255, 255, 0.04)',
+    },
+    modalCancelText: {
+        color: 'rgba(255, 255, 255, 0.6)',
+        fontSize: 13,
+        fontWeight: '800',
+    },
+    modalSubmitGradient: {
+        width: '100%',
+        height: '100%',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    modalSubmitText: {
+        color: '#fff',
+        fontSize: 13,
+        fontWeight: '900',
+    },
+    removeOperatorBtn: {
+        width: 32,
+        height: 32,
+        borderRadius: 10,
+        backgroundColor: 'rgba(239, 68, 68, 0.08)',
+        borderWidth: 1,
+        borderColor: 'rgba(239, 68, 68, 0.15)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginLeft: 6,
     }
 });

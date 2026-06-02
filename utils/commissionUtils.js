@@ -178,17 +178,18 @@ async function recordOperatorCommission(client, chatId, senderId, cost, type) {
     // 3.5 Detailed Log for tracking
     try {
         if (chatId && actualPayeeId) {
+            const isLowQuality = baseRate < 4.0;
             await client.query(
-                'INSERT INTO commission_logs (operator_id, chat_id, amount, type, agency_id) VALUES ($1, $2, $3, $4, $5)',
-                [actualPayeeId, chatId, earned, type, agencyId]
+                'INSERT INTO commission_logs (operator_id, chat_id, amount, type, agency_id, is_low_quality) VALUES ($1, $2, $3, $4, $5, $6)',
+                [actualPayeeId, chatId, earned, type, agencyId, isLowQuality]
             );
         }
     } catch (logErr) {
-        // If column doesn't exist yet, try without agency_id
+        // If column doesn't exist yet, try without is_low_quality
         try {
             await client.query(
-                'INSERT INTO commission_logs (operator_id, chat_id, amount, type) VALUES ($1, $2, $3, $4)',
-                [actualPayeeId, chatId, earned, type]
+                'INSERT INTO commission_logs (operator_id, chat_id, amount, type, agency_id) VALUES ($1, $2, $3, $4, $5)',
+                [actualPayeeId, chatId, earned, type, agencyId]
             );
         } catch (inner) {
             console.error('[COMMISSION-LOG-ERROR] Failed to write detailed log:', inner.message);

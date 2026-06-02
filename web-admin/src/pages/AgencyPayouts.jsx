@@ -16,12 +16,18 @@ import {
 import axios from 'axios';
 import { useAuth } from '../context/AuthContext';
 
+import { useLocation, useNavigate } from 'react-router-dom';
+
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 
 const AgencyPayouts = () => {
     const { token } = useAuth();
+    const location = useLocation();
+    const navigate = useNavigate();
+    
     const [stats, setStats] = useState({ total_pending: 0, total_lifetime: 0, total_paid: 0 });
     const [operators, setOperators] = useState([]);
+    const [applications, setApplications] = useState([]);
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
     const [selectedOperator, setSelectedOperator] = useState(null);
@@ -31,6 +37,11 @@ const AgencyPayouts = () => {
 
     // Agency Modal & Creation States
     const [showAgencyModal, setShowAgencyModal] = useState(false);
+    
+    const handleCloseAgencyModal = () => {
+        setShowAgencyModal(false);
+        navigate('/agency-payouts');
+    };
     const [agencyName, setAgencyName] = useState('');
     const [agencyOwnerId, setAgencyOwnerId] = useState('');
     const [agencyOwnerSearch, setAgencyOwnerSearch] = useState('');
@@ -130,7 +141,7 @@ const AgencyPayouts = () => {
             }, { headers: { Authorization: `Bearer ${token}` } });
 
             alert('Yeni ajans başarıyla oluşturuldu!');
-            setShowAgencyModal(false);
+            handleCloseAgencyModal();
             
             // Clear inputs
             setAgencyName('');
@@ -146,18 +157,29 @@ const AgencyPayouts = () => {
     };
 
     useEffect(() => {
+        const queryParams = new URLSearchParams(location.search);
+        if (queryParams.get('action') === 'create') {
+            setShowAgencyModal(true);
+        } else {
+            setShowAgencyModal(false);
+        }
+    }, [location.search]);
+
+    useEffect(() => {
         fetchData();
     }, []);
 
     const fetchData = async () => {
         try {
             setLoading(true);
-            const [statsRes, opsRes] = await Promise.all([
+            const [statsRes, opsRes, appsRes] = await Promise.all([
                 axios.get(`${API_URL}/admin/payouts/summary`, { headers: { Authorization: `Bearer ${token}` } }),
-                axios.get(`${API_URL}/admin/operators/earnings`, { headers: { Authorization: `Bearer ${token}` } })
+                axios.get(`${API_URL}/admin/operators/earnings`, { headers: { Authorization: `Bearer ${token}` } }),
+                axios.get(`${API_URL}/admin/agency/applications`, { headers: { Authorization: `Bearer ${token}` } }).catch(() => ({ data: [] }))
             ]);
             setStats(statsRes.data);
             setOperators(opsRes.data);
+            setApplications(appsRes.data || []);
         } catch (err) {
             console.error('Veri çekme hatası:', err);
         } finally {
@@ -176,6 +198,40 @@ const AgencyPayouts = () => {
             setPayoutModal(false);
             fetchData(); // Refresh
             alert('Ödeme başarıyla işlendi.');
+        } catch (err) {
+            alert('Hata: ' + (err.response?.data?.error || err.message));
+        }
+    };
+
+    const handleApproveApplication = async (appId) => {
+        if (!confirm('Bu başvuruyu onaylamak ve bu kullanıcı için otomatik ajans ve davet kodu oluşturmak istediğinize emin misiniz?')) return;
+        try {
+            const res = await axios.post(`${API_URL}/admin/agency/applications/${appId}/approve`, {}, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            if (res.data && res.data.success) {
+                alert(`Başvuru başarıyla onaylandı! Davet Kodu: ${res.data.referralCode}`);
+                fetchData(); // Refresh lists
+            } else {
+                alert('Hata: ' + (res.data?.error || 'Başvuru onaylanamadı.'));
+            }
+        } catch (err) {
+            alert('Hata: ' + (err.response?.data?.error || err.message));
+        }
+    };
+
+    const handleRejectApplication = async (appId) => {
+        if (!confirm('Bu başvuruyu reddetmek istediğinize emin misiniz?')) return;
+        try {
+            const res = await axios.post(`${API_URL}/admin/agency/applications/${appId}/reject`, {}, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            if (res.data && res.data.success) {
+                alert('Başvuru reddedildi.');
+                fetchData(); // Refresh lists
+            } else {
+                alert('Hata: ' + (res.data?.error || 'Başvuru reddedilemedi.'));
+            }
         } catch (err) {
             alert('Hata: ' + (err.response?.data?.error || err.message));
         }
@@ -384,6 +440,93 @@ const AgencyPayouts = () => {
                 </div>
             </div>
 
+            {/* Agency Applications Console */}
+            <div className="bg-slate-900/50 backdrop-blur-3xl border border-white/5 rounded-[40px] overflow-hidden mt-8">
+                <div className="p-8 border-b border-white/5 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                    <div className="flex items-center gap-4">
+                        <h2 className="text-xl font-black text-white px-2">Ajans Başvuruları</h2>
+                        <span className="px-3 py-1 bg-cyan-600/10 border border-cyan-500/20 text-cyan-400 text-[10px] font-black rounded-full uppercase">
+                            {applications.filter(a => a.status === 'pending').length} BEKLEYEN BAŞVURU
+                        </span>
+                    </div>
+                </div>
+
+                <div className="overflow-x-auto">
+                    <table className="w-full text-left border-collapse">
+                        <thead>
+                            <tr className="border-b border-white/5">
+                                <th className="px-8 py-5 text-[10px] font-black text-slate-500 uppercase tracking-widest">Kullanıcı</th>
+                                <th className="px-8 py-5 text-[10px] font-black text-slate-500 uppercase tracking-widest">Talep Edilen Ajans Adı</th>
+                                <th className="px-8 py-5 text-[10px] font-black text-slate-500 uppercase tracking-widest">Telefon</th>
+                                <th className="px-8 py-5 text-[10px] font-black text-slate-500 uppercase tracking-widest">Gerekçe / Ekip Bilgisi</th>
+                                <th className="px-8 py-5 text-[10px] font-black text-slate-500 uppercase tracking-widest">Tarih</th>
+                                <th className="px-8 py-5 text-[10px] font-black text-slate-500 uppercase tracking-widest">Durum</th>
+                                <th className="px-8 py-5 text-[10px] font-black text-slate-500 uppercase tracking-widest text-right">İşlem</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-white/5">
+                            {applications.length === 0 ? (
+                                <tr>
+                                    <td colSpan="7" className="px-8 py-10 text-slate-500 font-bold tracking-widest uppercase text-xs text-center">
+                                        Bekleyen veya işlem yapılmamış ajans başvurusu bulunmuyor.
+                                    </td>
+                                </tr>
+                            ) : applications.map((app) => (
+                                <tr key={app.id} className="hover:bg-white/[0.02] transition-colors group">
+                                    <td className="px-8 py-6">
+                                        <div>
+                                            <p className="text-sm font-black text-white capitalize">{app.username}</p>
+                                            <p className="text-[10px] font-bold text-slate-500 uppercase mt-0.5">{app.email}</p>
+                                        </div>
+                                    </td>
+                                    <td className="px-8 py-6">
+                                        <p className="text-sm font-black text-cyan-400">{app.agency_name}</p>
+                                    </td>
+                                    <td className="px-8 py-6 text-sm font-medium text-slate-300">
+                                        {app.phone}
+                                    </td>
+                                    <td className="px-8 py-6 max-w-xs">
+                                        <p className="text-xs text-slate-400 line-clamp-2" title={app.reason}>
+                                            {app.reason || 'Belirtilmedi'}
+                                        </p>
+                                    </td>
+                                    <td className="px-8 py-6 text-xs text-slate-500">
+                                        {new Date(app.created_at).toLocaleDateString('tr-TR')}
+                                    </td>
+                                    <td className="px-8 py-6">
+                                        <span className={`text-[9px] font-black px-2 py-1 rounded-md uppercase border ${
+                                            app.status === 'pending' ? 'bg-amber-500/10 border-amber-500/20 text-amber-400' :
+                                            app.status === 'approved' ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' :
+                                            'bg-rose-500/10 border-rose-500/20 text-rose-400'
+                                        }`}>
+                                            {app.status === 'pending' ? 'Bekliyor' : app.status === 'approved' ? 'Onaylandı' : 'Reddedildi'}
+                                        </span>
+                                    </td>
+                                    <td className="px-8 py-6 text-right">
+                                        {app.status === 'pending' && (
+                                            <div className="flex justify-end gap-2">
+                                                <button 
+                                                    onClick={() => handleRejectApplication(app.id)}
+                                                    className="px-3 py-1.5 bg-rose-600/10 border border-rose-500/20 text-rose-400 text-[10px] font-black rounded-lg uppercase hover:bg-rose-600 hover:text-white transition-all"
+                                                >
+                                                    Reddet
+                                                </button>
+                                                <button 
+                                                    onClick={() => handleApproveApplication(app.id)}
+                                                    className="px-3 py-1.5 bg-emerald-600/10 border border-emerald-500/20 text-emerald-400 text-[10px] font-black rounded-lg uppercase hover:bg-emerald-600 hover:text-white transition-all"
+                                                >
+                                                    Onayla
+                                                </button>
+                                            </div>
+                                        )}
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
             {/* Payout Modal */}
             {payoutModal && (
                 <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
@@ -430,7 +573,7 @@ const AgencyPayouts = () => {
             {/* Yeni Ajans Ekleme Modali */}
             {showAgencyModal && (
                 <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-                    <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-md" onClick={() => setShowAgencyModal(false)} />
+                    <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-md" onClick={handleCloseAgencyModal} />
                     <div className="bg-[#0f172a] border border-white/10 w-full max-w-lg rounded-[40px] shadow-2xl relative z-10 overflow-hidden animate-in zoom-in-95 duration-300">
                         
                         {/* Modal Header */}
@@ -440,7 +583,7 @@ const AgencyPayouts = () => {
                                 <p className="text-slate-400 text-xs font-bold mt-1 uppercase tracking-widest">Sistem Ajansı Tanımlama Formu</p>
                             </div>
                             <button 
-                                onClick={() => setShowAgencyModal(false)} 
+                                onClick={handleCloseAgencyModal} 
                                 className="w-8 h-8 rounded-full bg-white/5 hover:bg-white/10 border border-white/10 flex items-center justify-center text-white"
                             >
                                 ✕
@@ -671,7 +814,7 @@ const AgencyPayouts = () => {
                             {/* Submit & Cancel Buttons */}
                             <div className="pt-6 border-t border-white/5 flex gap-3">
                                 <button 
-                                    onClick={() => setShowAgencyModal(false)} 
+                                    onClick={handleCloseAgencyModal} 
                                     className="flex-1 py-4 rounded-3xl bg-white/5 text-slate-400 text-xs font-black uppercase tracking-widest hover:bg-white/10 transition-all"
                                 >
                                     İptal

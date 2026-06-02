@@ -2520,6 +2520,30 @@ app.get('/api/agency/my-dashboard', authenticateToken, async (req, res) => {
         operatorCommissionsResult.rows.forEach(row => {
             commissionMap[row.operator_id] = parseFloat(row.operator_today_commission);
         });
+
+        // 5. Get recent low-quality log metrics for all operators in the agency using window functions (High Performance)
+        const qualityChecksResult = await db.query(
+            `SELECT operator_id, 
+                    COUNT(CASE WHEN is_low_quality = true THEN 1 END) as low_quality_count,
+                    COUNT(*) as total_count
+             FROM (
+                 SELECT operator_id, is_low_quality,
+                        ROW_NUMBER() OVER (PARTITION BY operator_id ORDER BY created_at DESC) as rn
+                 FROM commission_logs
+                 WHERE agency_id = $1
+             ) sub
+             WHERE rn <= 10
+             GROUP BY operator_id`,
+            [agency.id]
+        );
+
+        const qualityMap = {};
+        qualityChecksResult.rows.forEach(row => {
+            const count = parseInt(row.low_quality_count || 0);
+            const total = parseInt(row.total_count || 0);
+            // Flag as low quality if 50% or more of recent chats (min 3 messages) are low quality
+            qualityMap[row.operator_id] = total >= 3 && (count / total) >= 0.50;
+        });
         
         let activeOperatorsCount = 0;
         const operatorsList = operatorsResult.rows.map(op => {
@@ -2533,7 +2557,8 @@ app.get('/api/agency/my-dashboard', authenticateToken, async (req, res) => {
                 avatar_url: op.avatar_url,
                 is_online: op.is_online,
                 rating: op.rating,
-                today_commission: Math.round(agencyCut * 100) / 100
+                today_commission: Math.round(agencyCut * 100) / 100,
+                is_low_quality: !!qualityMap[op.id]
             };
         });
         
@@ -2558,6 +2583,346 @@ app.get('/api/agency/my-dashboard', authenticateToken, async (req, res) => {
     }
 });
 
+// POST /api/agency/invitations (Agency Owner Only)
+app.post('/api/agency/invitations', authenticateToken, async (req, res) => {
+    const { targetIdentifier } = req.body;
+    if (!targetIdentifier) return res.status(400).json({ error: 'Lütfen kullanıcı adı veya ID girin.' });
+
+    try {
+        // 1. Get current user's agency
+        const agencyRes = await db.query('SELECT id, name FROM agencies WHERE owner_id = $1 LIMIT 1', [req.user.id]);
+        if (agencyRes.rows.length === 0) {
+            return res.status(403).json({ error: 'Yetkisiz işlem. Ajans sahibi değilsiniz.' });
+        }
+        const agency = agencyRes.rows[0];
+
+        // 2. Find female operator by username, ID, or phone number
+        const userRes = await db.query(
+            `SELECT id, username, role, gender, agency_id FROM users 
+             WHERE (LOWER(username) = $1 OR id::text = $1 OR phone = $1) AND gender = 'kadin'`,
+            [targetIdentifier.trim().toLowerCase()]
+        );
+
+        if (userRes.rows.length === 0) {
+            return res.status(404).json({ error: 'Belirtilen kriterlerde kadın yayıncı bulunamadı.' });
+        }
+        const operator = userRes.rows[0];
+
+        // 3. Validation: is she already in another agency?
+        if (operator.agency_id) {
+            return res.status(400).json({ error: 'Bu yayıncı zaten bir ajansa bağlı.' });
+        }
+
+        // 4. Validation: check if a pending invitation already exists
+        const pendingCheck = await db.query(
+            "SELECT id FROM agency_invitations WHERE agency_id = $1 AND operator_id = $2 AND status = 'pending'",
+            [agency.id, operator.id]
+        );
+        if (pendingCheck.rows.length > 0) {
+            return res.status(400).json({ error: 'Bu yayıncıya gönderilmiş bekleyen bir davet zaten mevcut.' });
+        }
+
+        // 5. Create invitation
+        await db.query(
+            'INSERT INTO agency_invitations (agency_id, operator_id, status) VALUES ($1, $2, \'pending\')',
+            [agency.id, operator.id]
+        );
+
+        console.log(`[AGENCY-INVITE] Agency ${agency.name} invited operator ${operator.username}`);
+        res.json({ success: true, message: `${operator.username} adlı yayıncıya davet başarıyla gönderildi.` });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// GET /api/agency/my-invitations (Operator Only)
+app.get('/api/agency/my-invitations', authenticateToken, async (req, res) => {
+    try {
+        const result = await db.query(
+            `SELECT ai.id, ai.agency_id, a.name as agency_name, ai.status, ai.created_at
+             FROM agency_invitations ai
+             JOIN agencies a ON ai.agency_id = a.id
+             WHERE ai.operator_id = $1 AND ai.status = 'pending'
+             ORDER BY ai.created_at DESC`,
+            [req.user.id]
+        );
+        res.json(result.rows);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// POST /api/agency/invitations/:id/accept (Operator/Publisher Only)
+app.post('/api/agency/invitations/:id/accept', authenticateToken, async (req, res) => {
+    const { id } = req.params;
+    const operatorId = req.user.id;
+
+    try {
+        await db.query('BEGIN');
+
+        // 1. Fetch invitation and check ownership
+        const inviteRes = await db.query(
+            'SELECT agency_id, status FROM agency_invitations WHERE id = $1 AND operator_id = $2 FOR UPDATE',
+            [id, operatorId]
+        );
+
+        if (inviteRes.rows.length === 0) {
+            await db.query('ROLLBACK');
+            return res.status(404).json({ error: 'Geçersiz veya bulunamayan davet.' });
+        }
+
+        const invite = inviteRes.rows[0];
+        if (invite.status !== 'pending') {
+            await db.query('ROLLBACK');
+            return res.status(400).json({ error: 'Bu davet zaten yanıtlanmış.' });
+        }
+
+        // 2. Update invitation status
+        await db.query(
+            "UPDATE agency_invitations SET status = 'accepted' WHERE id = $1",
+            [id]
+        );
+
+        // 3. Assign operator to agency
+        await db.query(
+            "UPDATE users SET agency_id = $1, role = 'operator' WHERE id = $2",
+            [invite.agency_id, operatorId]
+        );
+
+        // 4. Ensure operator stats and profile exists
+        await db.query(`
+            INSERT INTO operators (user_id, category, bio, photos, is_online, rating)
+            VALUES ($1, 'Genel', 'Merhaba!', '{}', false, 5.0)
+            ON CONFLICT (user_id) DO NOTHING
+        `, [operatorId]);
+
+        // 5. Reject other pending invitations for this operator
+        await db.query(
+            "UPDATE agency_invitations SET status = 'rejected' WHERE operator_id = $1 AND id != $2 AND status = 'pending'",
+            [operatorId, id]
+        );
+
+        await db.query('COMMIT');
+        console.log(`[AGENCY-INVITE] Operator ${operatorId} accepted invitation ${id} for agency ${invite.agency_id}`);
+        res.json({ success: true, message: 'Ajans davetini başarıyla kabul ettiniz!' });
+    } catch (err) {
+        await db.query('ROLLBACK');
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// POST /api/agency/invitations/:id/reject (Operator/Publisher Only)
+app.post('/api/agency/invitations/:id/reject', authenticateToken, async (req, res) => {
+    const { id } = req.params;
+    const operatorId = req.user.id;
+
+    try {
+        const result = await db.query(
+            "UPDATE agency_invitations SET status = 'rejected' WHERE id = $1 AND operator_id = $2 AND status = 'pending' RETURNING agency_id",
+            [id, operatorId]
+        );
+
+        if (result.rows.length === 0) {
+            return res.status(404).json({ error: 'Geçersiz veya aktif olmayan davet.' });
+        }
+
+        console.log(`[AGENCY-INVITE] Operator ${operatorId} rejected invitation ${id}`);
+        res.json({ success: true, message: 'Ajans daveti reddedildi.' });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// SUBMIT AGENCY APPLICATION (User Side)
+app.post('/api/agency/applications', authenticateToken, async (req, res) => {
+    const { agencyName, phone, reason } = req.body;
+    const userId = req.user.id;
+
+    if (!agencyName || !phone) {
+        return res.status(400).json({ error: 'Lütfen Ajans Adı ve Telefon numarası alanlarını doldurun.' });
+    }
+
+    try {
+        // Check if an application is already pending or approved for this user
+        const existingApp = await db.query(
+            "SELECT id, status FROM agency_applications WHERE user_id = $1 AND status IN ('pending', 'approved')",
+            [userId]
+        );
+
+        if (existingApp.rows.length > 0) {
+            const app = existingApp.rows[0];
+            if (app.status === 'approved') {
+                return res.status(400).json({ error: 'Zaten aktif bir ajansınız bulunmaktadır.' });
+            }
+            return res.status(400).json({ error: 'Zaten değerlendirme aşamasında olan aktif bir ajans başvurunuz mevcuttur.' });
+        }
+
+        // Create new application record
+        await db.query(
+            `INSERT INTO agency_applications (user_id, agency_name, phone, reason, status) 
+             VALUES ($1, $2, $3, $4, 'pending')`,
+            [userId, agencyName.trim(), phone.trim(), reason ? reason.trim() : '']
+        );
+
+        console.log(`[AGENCY-APP] User ${userId} submitted application for agency "${agencyName}"`);
+        res.json({ success: true, message: 'Ajans başvurunuz başarıyla alındı! Değerlendirme sonrasında tarafınıza bildirim yapılacaktır.' });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// GET MY AGENCY APPLICATION STATUS (User Side)
+app.get('/api/agency/my-application', authenticateToken, async (req, res) => {
+    try {
+        const result = await db.query(
+            `SELECT aa.id, aa.agency_name, aa.phone, aa.reason, aa.status, aa.created_at,
+                    a.referral_code, a.id as agency_id
+             FROM agency_applications aa
+             LEFT JOIN agencies a ON aa.user_id = a.owner_id
+             WHERE aa.user_id = $1
+             ORDER BY aa.created_at DESC LIMIT 1`,
+            [req.user.id]
+        );
+        if (result.rows.length === 0) {
+            return res.json(null);
+        }
+        res.json(result.rows[0]);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// GET ALL AGENCY APPLICATIONS (Super Admin Only)
+app.get('/api/admin/agency/applications', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
+    try {
+        const result = await db.query(
+            `SELECT aa.id, aa.user_id, aa.agency_name, aa.phone, aa.reason, aa.status, aa.created_at,
+                    u.username, u.email
+             FROM agency_applications aa
+             JOIN users u ON aa.user_id = u.id
+             ORDER BY aa.created_at DESC`
+        );
+        res.json(result.rows);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// APPROVE AGENCY APPLICATION (Super Admin Only)
+app.post('/api/admin/agency/applications/:id/approve', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
+    const { id } = req.params;
+    try {
+        await db.query('BEGIN');
+
+        // 1. Get application
+        const appRes = await db.query('SELECT * FROM agency_applications WHERE id = $1 FOR UPDATE', [id]);
+        if (appRes.rows.length === 0) {
+            await db.query('ROLLBACK');
+            return res.status(404).json({ error: 'Başvuru bulunamadı.' });
+        }
+        const application = appRes.rows[0];
+        if (application.status !== 'pending') {
+            await db.query('ROLLBACK');
+            return res.status(400).json({ error: 'Bu başvuru zaten sonuçlandırılmış.' });
+        }
+
+        // 2. Generate unique referral code
+        let referralCode = '';
+        let isUnique = false;
+        while (!isUnique) {
+            const randomDigits = Math.floor(100 + Math.random() * 900);
+            referralCode = `FLK${randomDigits}`;
+            const dupCheck = await db.query('SELECT id FROM agencies WHERE referral_code = $1', [referralCode]);
+            if (dupCheck.rows.length === 0) {
+                isUnique = true;
+            }
+        }
+
+        // 3. Create agency
+        const agencyRes = await db.query(
+            `INSERT INTO agencies (owner_id, name, commission_rate, pending_balance, lifetime_earnings, status, referral_code) 
+             VALUES ($1, $2, 0.40, 0, 0, 'active', $3) RETURNING id`,
+            [application.user_id.toString(), application.agency_name, referralCode]
+        );
+        const newAgencyId = agencyRes.rows[0].id;
+
+        // 4. Update user role and agency_id
+        await db.query(
+            "UPDATE users SET is_agency_owner = true, role = 'operator', agency_id = $1 WHERE id = $2",
+            [newAgencyId, application.user_id]
+        );
+
+        // 5. Update application status
+        await db.query(
+            "UPDATE agency_applications SET status = 'approved', updated_at = CURRENT_TIMESTAMP WHERE id = $1",
+            [id]
+        );
+
+        await db.query('COMMIT');
+        console.log(`[AGENCY-APPROVE] Approved application ${id}. Created Agency ${application.agency_name} (ID: ${newAgencyId}) with Referral Code: ${referralCode}`);
+        res.json({ success: true, message: 'Başvuru onaylandı, ajans başarıyla oluşturuldu.', referralCode });
+    } catch (err) {
+        await db.query('ROLLBACK');
+        console.error('[AGENCY-APPROVE] Error:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// REJECT AGENCY APPLICATION (Super Admin Only)
+app.post('/api/admin/agency/applications/:id/reject', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
+    const { id } = req.params;
+    try {
+        const result = await db.query(
+            "UPDATE agency_applications SET status = 'rejected', updated_at = CURRENT_TIMESTAMP WHERE id = $1 AND status = 'pending' RETURNING user_id",
+            [id]
+        );
+        if (result.rows.length === 0) {
+            return res.status(404).json({ error: 'Bulunamayan veya işlem yapılmış başvuru.' });
+        }
+        console.log(`[AGENCY-REJECT] Rejected application ${id}`);
+        res.json({ success: true, message: 'Ajans başvurusu reddedildi.' });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// REMOVE OPERATOR FROM AGENCY (Agency Owner Only)
+app.post('/api/agency/remove-operator', authenticateToken, async (req, res) => {
+    const { operatorId } = req.body;
+    const ownerId = req.user.id;
+
+    if (!operatorId) {
+        return res.status(400).json({ error: 'Lütfen çıkarılacak yayıncının ID bilgisini gönderin.' });
+    }
+
+    try {
+        // 1. Find the agency owned by current user
+        const agencyRes = await db.query('SELECT id, name FROM agencies WHERE owner_id = $1 LIMIT 1', [ownerId]);
+        if (agencyRes.rows.length === 0) {
+            return res.status(403).json({ error: 'Yetkisiz işlem: Size ait aktif bir ajans bulunamadı.' });
+        }
+        const agency = agencyRes.rows[0];
+
+        // 2. Verify target user is in this agency
+        const userRes = await db.query('SELECT username, agency_id FROM users WHERE id = $1', [operatorId]);
+        if (userRes.rows.length === 0) {
+            return res.status(404).json({ error: 'Yayıncı bulunamadı.' });
+        }
+        const operator = userRes.rows[0];
+        if (operator.agency_id !== agency.id) {
+            return res.status(400).json({ error: 'Bu yayıncı sizin ajansınıza bağlı değil.' });
+        }
+
+        // 3. Remove publisher from agency
+        await db.query('UPDATE users SET agency_id = NULL WHERE id = $1', [operatorId]);
+        
+        console.log(`[AGENCY-REMOVE] Owner ${ownerId} removed operator ${operator.username} from agency ${agency.name}`);
+        res.json({ success: true, message: `${operator.username} adlı yayıncı ajansınızdan başarıyla çıkarıldı.` });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // ASSIGN USER TO AGENCY
 app.post('/api/admin/users/:userId/assign-agency', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
     const { userId } = req.params;
@@ -2570,43 +2935,38 @@ app.post('/api/admin/users/:userId/assign-agency', authenticateToken, authorizeR
     }
 });
 
-// GET USER AGENCY INFO
-app.get('/api/users/:id/agency', authenticateToken, async (req, res) => {
-    try {
-        const result = await db.query(`
-            SELECT a.name, a.id, a.status
-            FROM users u
-            JOIN agencies a ON u.agency_id = a.id
-            WHERE u.id = $1
-        `, [req.params.id]);
-        
-        if (result.rows.length === 0) return res.json({ name: null });
-        res.json(result.rows[0]);
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
-});
-
 // JOIN AGENCY (User side)
 app.post('/api/agencies/join', authenticateToken, async (req, res) => {
-    const { agencyId } = req.body;
+    const { agencyId } = req.body; // Can be agency UUID or referral code (e.g. FLK123)
     const userId = req.user.id;
 
-    if (!agencyId) return res.status(400).json({ error: 'Ajans kodu gerekli.' });
+    if (!agencyId) return res.status(400).json({ error: 'Ajans kodu veya davet kodu gerekli.' });
 
     try {
-        // 1. Check if agency exists
-        const agencyRes = await db.query('SELECT name FROM agencies WHERE id = $1 AND status = \'active\'', [agencyId]);
-        if (agencyRes.rows.length === 0) {
-            return res.status(404).json({ error: 'Geçersiz veya aktif olmayan ajans kodu.' });
+        // 1. Double Join prevention check
+        const userCheck = await db.query('SELECT agency_id FROM users WHERE id = $1', [userId]);
+        if (userCheck.rows.length > 0 && userCheck.rows[0].agency_id) {
+            return res.status(400).json({ error: 'Zaten bir ajansa bağlısınız. Ajanstan ayrılmak için ajans yöneticiniz ile iletişime geçmelisiniz.' });
         }
 
-        // 2. Update user's agency
-        await db.query('UPDATE users SET agency_id = $1 WHERE id = $2', [agencyId, userId]);
+        // 2. Find agency by ID or referral code
+        const agencyRes = await db.query(
+            "SELECT id, name FROM agencies WHERE (id = $1 OR UPPER(referral_code) = UPPER($1)) AND status = 'active'",
+            [agencyId.trim()]
+        );
+        if (agencyRes.rows.length === 0) {
+            return res.status(404).json({ error: 'Geçersiz veya aktif olmayan ajans kodu / davet kodu.' });
+        }
+
+        const agency = agencyRes.rows[0];
+
+        // 3. Update user's agency
+        await db.query('UPDATE users SET agency_id = $1 WHERE id = $2', [agency.id, userId]);
         
-        console.log(`[AGENCY] User ${userId} joined agency ${agencyRes.rows[0].name}`);
-        res.json({ success: true, message: `${agencyRes.rows[0].name} ajansına başarıyla katıldınız!`, agencyName: agencyRes.rows[0].name });
+        console.log(`[AGENCY] User ${userId} joined agency ${agency.name} using code ${agencyId}`);
+        res.json({ success: true, message: `${agency.name} ajansına başarıyla katıldınız!`, agencyName: agency.name });
     } catch (err) {
+        console.error('[AGENCY-JOIN] Join error:', err);
         res.status(500).json({ error: 'Ajansa katılırken bir hata oluştu.' });
     }
 });

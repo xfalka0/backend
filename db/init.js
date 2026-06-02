@@ -89,6 +89,42 @@ const initializeDatabase = async (db, app) => {
             console.error('[DB] Error creating agencies table:', tableErr.message);
         }
 
+        // 5.1 Agency Invitations Table
+        try {
+            await db.query(`
+                CREATE TABLE IF NOT EXISTS agency_invitations (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    agency_id TEXT REFERENCES agencies(id) ON DELETE CASCADE,
+                    operator_id UUID REFERENCES users(id) ON DELETE CASCADE,
+                    status VARCHAR(20) DEFAULT 'pending',
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE(agency_id, operator_id, status)
+                )
+            `);
+            console.log('[DB] agency_invitations table verified');
+        } catch (tableErr) {
+            console.error('[DB] Error creating agency_invitations table:', tableErr.message);
+        }
+
+        // 5.2 Agency Applications Table
+        try {
+            await db.query(`
+                CREATE TABLE IF NOT EXISTS agency_applications (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+                    agency_name VARCHAR(255) NOT NULL,
+                    phone VARCHAR(50) NOT NULL,
+                    reason TEXT,
+                    status VARCHAR(50) DEFAULT 'pending',
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            `);
+            console.log('[DB] agency_applications table verified');
+        } catch (tableErr) {
+            console.error('[DB] Error creating agency_applications table:', tableErr.message);
+        }
+
         // 6. Referral Clicks Table
         try {
             await db.query(`
@@ -110,7 +146,9 @@ const initializeDatabase = async (db, app) => {
             await db.query('ALTER TABLE commission_logs ALTER COLUMN operator_id TYPE TEXT');
             await db.query('ALTER TABLE commission_logs ALTER COLUMN chat_id TYPE TEXT');
             await db.query('ALTER TABLE commission_logs ADD COLUMN IF NOT EXISTS agency_id TEXT');
-        } catch (e) { /* ignore if column doesn't exist yet */ }
+            await db.query('ALTER TABLE commission_logs ADD COLUMN IF NOT EXISTS is_low_quality BOOLEAN DEFAULT FALSE');
+            await db.query('ALTER TABLE agencies ADD COLUMN IF NOT EXISTS referral_code VARCHAR(50) UNIQUE');
+        } catch (e) { console.error('[DB] Error in schema migrations:', e.message); }
 
         try {
             await db.query('ALTER TABLE users ALTER COLUMN balance TYPE INTEGER USING balance::integer');

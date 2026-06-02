@@ -2,6 +2,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import { View, Text, StyleSheet, Dimensions, TouchableOpacity, Image, FlatList, Pressable } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
+import { useNavigation } from '@react-navigation/native';
 import Animated, {
     useSharedValue,
     useAnimatedStyle,
@@ -32,18 +33,6 @@ const slides = [
         isCoin: true
     },
     {
-        id: '2',
-        title: 'Kaderindeki kişiyi keşfet',
-        subtitle: 'Dokun ve eşleşmeni başlat ✨',
-        buttonText: 'İNCELE',
-        icon: 'star',
-        colors: ['#fb7185', '#e11d48'],
-        buttonColors: ['#FDA4AF', '#FB7185', '#E11D48'],
-        image: require('../../../assets/heart_3d.png'),
-        isCoin: false,
-        isHeart: true
-    },
-    {
         id: '3',
         title: 'Kredi mi Yükleyemiyorsun?',
         subtitle: 'Play Store kullanamıyorsan WhatsApp üzerinden anında yükle',
@@ -55,6 +44,19 @@ const slides = [
         isCoin: false,
         isHeart: false,
         isReseller: true
+    },
+    {
+        id: '4',
+        title: 'AJANS SAHİBİ OL',
+        subtitle: 'Kendi Ekibini Kur, Kazan! ⚡',
+        buttonText: 'BAŞVURU YAP',
+        icon: 'business',
+        colors: ['#06b6d4', '#0891b2'],
+        buttonColors: ['#22d3ee', '#06b6d4', '#0891b2'],
+        image: require('../../../assets/kupa.png'),
+        isCoin: false,
+        isHeart: false,
+        isAgency: true
     }
 ];
 
@@ -162,6 +164,7 @@ const FloatingHeart = ({ delay }) => {
 };
 
 const PremiumCoinCard = ({ onCoinPress, onExplorePress, onResellerPress }) => {
+    const navigation = useNavigation();
     const shineX = useSharedValue(-200);
     const bannerShineX = useSharedValue(-width * 1.5);
     const cardScale = useSharedValue(1);
@@ -334,6 +337,8 @@ const PremiumCoinCard = ({ onCoinPress, onExplorePress, onResellerPress }) => {
                 onExplorePress?.();
             } else if (item.isReseller) {
                 onResellerPress?.();
+            } else if (item.isAgency) {
+                navigation.navigate('AgencyApplication');
             }
         };
 
@@ -346,6 +351,7 @@ const PremiumCoinCard = ({ onCoinPress, onExplorePress, onResellerPress }) => {
             >
                 <Animated.View style={[styles.ambientGlow, ambientGlowStyle]} pointerEvents="none" />
                 {item.isCoin && <View style={styles.cardGlow} />}
+                {item.isAgency && <View style={[styles.cardGlow, { backgroundColor: 'rgba(6, 182, 212, 0.15)', shadowColor: '#06b6d4' }]} />}
                 <Animated.View style={[styles.cardWrapper, cardAnimatedStyle]}>
                     <GlassCard style={styles.cardContainer} intensity={30} tint="dark">
                         <LinearGradient
@@ -389,7 +395,12 @@ const PremiumCoinCard = ({ onCoinPress, onExplorePress, onResellerPress }) => {
 
                                 {/* Button Container */}
                                 <TouchableOpacity activeOpacity={0.8} onPress={handlePress}>
-                                    <Animated.View style={[styles.button, buttonAnimatedStyle, item.isHeart && { shadowColor: '#E11D48', borderColor: 'rgba(255, 255, 255, 0.5)' }]}>
+                                    <Animated.View style={[
+                                        styles.button,
+                                        buttonAnimatedStyle,
+                                        item.isHeart && { shadowColor: '#E11D48', borderColor: 'rgba(255, 255, 255, 0.5)' },
+                                        item.isAgency && { shadowColor: '#06b6d4', borderColor: 'rgba(255, 255, 255, 0.5)' }
+                                    ]}>
                                         <LinearGradient
                                             colors={item.buttonColors}
                                             start={{ x: 0, y: 0 }}
@@ -419,7 +430,7 @@ const PremiumCoinCard = ({ onCoinPress, onExplorePress, onResellerPress }) => {
                                 {item.isHeart && [1, 2, 3, 4, 5].map(i => <FloatingHeart key={i} delay={i * 400} />)}
                                 <Animated.Image
                                     source={item.image}
-                                    style={[styles.coinImage, item.isHeart ? heartAnimatedStyle : (item.isCoin || item.isReseller ? coinAnimatedStyle : {})]}
+                                    style={[styles.coinImage, item.isHeart ? heartAnimatedStyle : (item.isCoin || item.isReseller || item.isAgency ? coinAnimatedStyle : {})]}
                                     resizeMode="contain"
                                 />
                             </View>

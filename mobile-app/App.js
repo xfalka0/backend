@@ -58,6 +58,7 @@ import InviteScreen from './src/screens/InviteScreen';
 import WalletScreen from './src/screens/WalletScreen';
 import MissionBoardScreen from './src/screens/MissionBoardScreen';
 import AgencyDashboardScreen from './src/screens/AgencyDashboardScreen';
+import AgencyApplicationScreen from './src/screens/AgencyApplicationScreen';
 import AnimatedTabBar from './src/components/animated/AnimatedTabBar';
 import { useAppStore } from './src/store/useAppStore';
 import { trackPurchase } from './src/utils/analytics';
@@ -159,6 +160,7 @@ function AppContent() {
                     <Stack.Screen name="Invite" component={InviteScreen} />
                     <Stack.Screen name="Wallet" component={WalletScreen} />
                     <Stack.Screen name="AgencyDashboard" component={AgencyDashboardScreen} />
+                    <Stack.Screen name="AgencyApplication" component={AgencyApplicationScreen} />
                 </Stack.Navigator>
             </StarterPackProvider>
         </NavigationContainer>

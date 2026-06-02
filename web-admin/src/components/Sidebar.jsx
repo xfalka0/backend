@@ -22,7 +22,9 @@ import {
     Activity,
     Wallet,
     ChevronRight,
-    TrendingUp
+    TrendingUp,
+    Building2,
+    PlusCircle
 } from 'lucide-react';
 
 export default function Sidebar() {
@@ -48,12 +50,18 @@ export default function Sidebar() {
             ]
         },
         {
+            title: 'AJANS',
+            items: [
+                { path: '/agency-payouts', icon: <Building2 size={18} />, label: 'Ajans Listesi / Ödemeler', roles: ['admin', 'super_admin'] },
+                { path: '/agency-payouts?action=create', icon: <PlusCircle size={18} />, label: 'Yeni Ajans Aç', roles: ['admin', 'super_admin'] },
+            ]
+        },
+        {
             title: 'PERSONEL & EKİP',
             items: [
                 { path: '/staff-activity', icon: <TrendingUp size={18} />, label: 'Çalışma Takibi', roles: ['admin', 'super_admin'] },
                 { path: '/referrals', icon: <Users size={18} />, label: 'Referans Takibi', roles: ['admin', 'super_admin'] },
                 { path: '/operators', icon: <Shield size={18} />, label: 'Yetkililer', roles: ['admin', 'super_admin'] },
-                { path: '/agency-payouts', icon: <Wallet size={18} />, label: 'Personel Yönetimi', roles: ['admin', 'super_admin'] },
                 { path: '/quick-replies', icon: <MessageSquare size={18} />, label: 'Hızlı Cevaplar', roles: ['admin', 'super_admin', 'operator', 'staff'] },
             ]
         },
@@ -110,7 +118,9 @@ export default function Sidebar() {
                             </h3>
                             <div className="space-y-1">
                                 {visibleItems.map((item) => {
-                                    const isActive = location.pathname === item.path;
+                                    const isActive = item.path.includes('?')
+                                        ? (location.pathname + location.search) === item.path
+                                        : location.pathname === item.path;
                                     return (
                                         <Link
                                             key={item.path}

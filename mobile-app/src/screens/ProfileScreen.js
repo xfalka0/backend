@@ -30,6 +30,7 @@ import ImageViewing from 'react-native-image-viewing';
 import { useAlert } from '../contexts/AlertContext';
 import { useAppStore } from '../store/useAppStore';
 import { preventScreenshots } from '../utils/security';
+import GlassCard from '../components/ui/GlassCard';
 
 const { width } = Dimensions.get('window');
 
@@ -50,6 +51,7 @@ const ProfileScreen = ({ route }) => {
     const [isEditingBio, setIsEditingBio] = useState(false);
     const scrollY = new Animated.Value(0);
     const [operatorStats, setOperatorStats] = useState(null);
+    const [pendingInvitations, setPendingInvitations] = useState([]);
 
     // Zustand Role & Cihaz Güvenliği
     const role = useAppStore(state => state.role);
@@ -122,6 +124,20 @@ const ProfileScreen = ({ route }) => {
                                 console.log('Error fetching operator stats:', opErr.message);
                             }
                         }
+
+                        // Fetch pending agency invitations if user is female/publisher
+                        if (profileData.gender === 'kadin') {
+                            try {
+                                const inviteRes = await axios.get(`${API_URL}/agency/my-invitations`, {
+                                    headers: { Authorization: `Bearer ${token}` }
+                                });
+                                if (inviteRes.data) {
+                                    setPendingInvitations(inviteRes.data);
+                                }
+                            } catch (invErr) {
+                                console.log('Error fetching pending invitations:', invErr.message);
+                            }
+                        }
                     }
 
                     if (balanceData) {
@@ -135,6 +151,92 @@ const ProfileScreen = ({ route }) => {
             syncUserData();
         }, [])
     );
+
+    const handleAcceptInvitation = async (inviteId) => {
+        try {
+            setLoading(true);
+            const token = await AsyncStorage.getItem('token');
+            if (!token) return;
+
+            const res = await axios.post(`${API_URL}/agency/invitations/${inviteId}/accept`, {}, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+
+            if (res.data && res.data.success) {
+                showAlert({
+                    title: 'Başarılı',
+                    message: res.data.message || 'Ajans davetini başarıyla kabul ettiniz! Artık bu ajansın resmi yayıncısısınız.',
+                    type: 'success'
+                });
+                // Reset role in Zustand
+                const userRes = await axios.get(`${API_URL}/users/${user.id}`, { headers: { Authorization: `Bearer ${token}` } });
+                if (userRes.data) {
+                    const updatedUser = { ...user, ...userRes.data };
+                    setUser(updatedUser);
+                    await AsyncStorage.setItem('user', JSON.stringify(updatedUser));
+                    
+                    // Update Zustand store
+                    const setUserState = useAppStore.getState().setUser;
+                    if (setUserState) setUserState(updatedUser);
+                }
+                setPendingInvitations([]);
+            } else {
+                showAlert({
+                    title: 'Hata',
+                    message: res.data?.error || 'Davet kabul edilemedi.',
+                    type: 'error'
+                });
+            }
+        } catch (error) {
+            console.error('[ProfileScreen] Accept invite error:', error);
+            const errMsg = error.response?.data?.error || 'Davet kabul edilirken bir hata oluştu.';
+            showAlert({
+                title: 'Hata',
+                message: errMsg,
+                type: 'error'
+            });
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleRejectInvitation = async (inviteId) => {
+        try {
+            setLoading(true);
+            const token = await AsyncStorage.getItem('token');
+            if (!token) return;
+
+            const res = await axios.post(`${API_URL}/agency/invitations/${inviteId}/reject`, {}, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+
+            if (res.data && res.data.success) {
+                showAlert({
+                    title: 'Başarılı',
+                    message: 'Ajans davetini reddettiniz.',
+                    type: 'success'
+                });
+                // Remove from pending state list
+                setPendingInvitations(prev => prev.filter(inv => inv.id !== inviteId));
+            } else {
+                showAlert({
+                    title: 'Hata',
+                    message: res.data?.error || 'Davet reddedilemedi.',
+                    type: 'error'
+                });
+            }
+        } catch (error) {
+            console.error('[ProfileScreen] Reject invite error:', error);
+            const errMsg = error.response?.data?.error || 'Davet reddedilirken bir hata oluştu.';
+            showAlert({
+                title: 'Hata',
+                message: errMsg,
+                type: 'error'
+            });
+        } finally {
+            setLoading(false);
+        }
+    };
 
     const pickAvatar = async () => {
         const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -428,6 +530,56 @@ const ProfileScreen = ({ route }) => {
                 )}
                 contentContainerStyle={styles.scrollContent}
             >
+                {/* Agency Invitation Banner */}
+                {pendingInvitations && pendingInvitations.length > 0 && (
+                    <View style={styles.inviteBannerContainer}>
+                        {pendingInvitations.map((invite) => (
+                            <GlassCard key={invite.id} intensity={30} tint="dark" style={styles.inviteBannerCard}>
+                                <LinearGradient
+                                    colors={['rgba(139, 92, 246, 0.15)', 'rgba(236, 72, 153, 0.15)']}
+                                    style={StyleSheet.absoluteFill}
+                                    start={{ x: 0, y: 0 }}
+                                    end={{ x: 1, y: 1 }}
+                                />
+                                <View style={styles.inviteBannerHeader}>
+                                    <View style={styles.inviteIconCircle}>
+                                        <Ionicons name="business" size={20} color="#ec4899" />
+                                    </View>
+                                    <View style={styles.inviteHeaderTextContainer}>
+                                        <Text style={styles.inviteBannerTitle}>Ajans Daveti ⚡</Text>
+                                        <Text style={styles.inviteBannerText}>
+                                            <Text style={styles.agencyNameHighlight}>{invite.agency_name}</Text> sizi ajansına katılmaya davet ediyor!
+                                        </Text>
+                                    </View>
+                                </View>
+                                <View style={styles.inviteActionsRow}>
+                                    <TouchableOpacity 
+                                        style={[styles.inviteActionBtn, styles.rejectBtn]} 
+                                        onPress={() => handleRejectInvitation(invite.id)}
+                                        activeOpacity={0.8}
+                                    >
+                                        <Text style={styles.rejectBtnText}>Reddet</Text>
+                                    </TouchableOpacity>
+                                    <TouchableOpacity 
+                                        style={styles.inviteActionBtn}
+                                        onPress={() => handleAcceptInvitation(invite.id)}
+                                        activeOpacity={0.8}
+                                    >
+                                        <LinearGradient
+                                            colors={['#10b981', '#059669']}
+                                            style={styles.acceptBtnGradient}
+                                            start={{ x: 0, y: 0 }}
+                                            end={{ x: 1, y: 1 }}
+                                        >
+                                            <Text style={styles.acceptBtnText}>Kabul Et</Text>
+                                        </LinearGradient>
+                                    </TouchableOpacity>
+                                </View>
+                            </GlassCard>
+                        ))}
+                    </View>
+                )}
+
                 {/* Modern Header Section */}
                 <View style={styles.modernHeader}>
                     <TouchableOpacity style={styles.avatarContainer} onPress={pickAvatar} activeOpacity={0.9}>
@@ -1731,6 +1883,87 @@ const styles = StyleSheet.create({
         fontSize: 13,
         flex: 1,
         fontWeight: '500',
+    },
+    inviteBannerContainer: {
+        marginHorizontal: 16,
+        marginTop: 15,
+        marginBottom: 5,
+        zIndex: 50,
+    },
+    inviteBannerCard: {
+        borderRadius: 24,
+        padding: 16,
+        overflow: 'hidden',
+        borderWidth: 1,
+        borderColor: 'rgba(255, 255, 255, 0.1)',
+        position: 'relative',
+    },
+    inviteBannerHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: 14,
+    },
+    inviteIconCircle: {
+        width: 38,
+        height: 38,
+        borderRadius: 12,
+        backgroundColor: 'rgba(236, 72, 153, 0.15)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginRight: 12,
+    },
+    inviteHeaderTextContainer: {
+        flex: 1,
+    },
+    inviteBannerTitle: {
+        color: '#fff',
+        fontSize: 14,
+        fontWeight: '900',
+        letterSpacing: -0.2,
+    },
+    inviteBannerText: {
+        color: 'rgba(255, 255, 255, 0.75)',
+        fontSize: 12,
+        fontWeight: '500',
+        marginTop: 2,
+        lineHeight: 16,
+    },
+    agencyNameHighlight: {
+        color: '#ec4899',
+        fontWeight: '800',
+    },
+    inviteActionsRow: {
+        flexDirection: 'row',
+        gap: 10,
+    },
+    inviteActionBtn: {
+        flex: 1,
+        height: 38,
+        borderRadius: 14,
+        overflow: 'hidden',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    rejectBtn: {
+        backgroundColor: 'rgba(255, 255, 255, 0.08)',
+        borderWidth: 1,
+        borderColor: 'rgba(255, 255, 255, 0.05)',
+    },
+    rejectBtnText: {
+        color: 'rgba(255, 255, 255, 0.7)',
+        fontSize: 12,
+        fontWeight: '800',
+    },
+    acceptBtnGradient: {
+        width: '100%',
+        height: '100%',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    acceptBtnText: {
+        color: '#fff',
+        fontSize: 12,
+        fontWeight: '900',
     }
 });
 

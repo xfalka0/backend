@@ -47,7 +47,7 @@ export default function AffiliateDashboard() {
     };
 
     const copyLink = () => {
-        const baseUrl = window.location.hostname === 'localhost' ? 'http://localhost:5000' : 'https://backend-kj17.onrender.com';
+        const baseUrl = 'https://backend-kj17.onrender.com';
         const link = `${baseUrl}/api/r/${user?.referral_code || ''}`;
         navigator.clipboard.writeText(link);
         setCopied(true);
@@ -187,7 +187,7 @@ export default function AffiliateDashboard() {
                             
                             <div className="bg-black/20 p-4 rounded-2xl border border-white/10">
                                 <p className="text-[10px] font-black text-white/50 uppercase tracking-widest mb-2">SİZE ÖZEL TAKİP LİNKİ</p>
-                                <p className="text-xs text-white font-mono break-all line-clamp-1">{`${window.location.hostname === 'localhost' ? 'http://localhost:5000' : 'https://backend-kj17.onrender.com'}/api/r/${user?.referral_code || ''}`}</p>
+                                <p className="text-xs text-white font-mono break-all line-clamp-1">{`https://backend-kj17.onrender.com/api/r/${user?.referral_code || ''}`}</p>
                             </div>
 
                             <button 

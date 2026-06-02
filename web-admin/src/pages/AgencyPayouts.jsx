@@ -78,13 +78,19 @@ const AgencyPayouts = () => {
         }
     }, [showAgencyModal]);
 
-    const filteredUsers = allUsersList.filter(u => 
-        (u.username?.toLowerCase().includes(agencyOwnerSearch.toLowerCase()) || 
-         u.email?.toLowerCase().includes(agencyOwnerSearch.toLowerCase()) ||
-         u.phone?.toLowerCase().includes(agencyOwnerSearch.toLowerCase()) ||
-         u.id?.toLowerCase().includes(agencyOwnerSearch.toLowerCase())) &&
-        u.role !== 'customer'
-    ).slice(0, 5);
+    const filteredUsers = allUsersList.filter(u => {
+        const username = String(u.username || '').toLowerCase();
+        const email = String(u.email || '').toLowerCase();
+        const phone = String(u.phone || '').toLowerCase();
+        const id = String(u.id || '').toLowerCase();
+        const search = String(agencyOwnerSearch || '').toLowerCase();
+
+        return (username.includes(search) || 
+                email.includes(search) ||
+                phone.includes(search) ||
+                id.includes(search)) &&
+               u.role !== 'customer';
+    }).slice(0, 5);
 
     const handleCreateQuickUser = async () => {
         if (!quickUsername.trim() || !quickEmail.trim() || !quickPassword.trim()) {

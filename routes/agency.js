@@ -3,7 +3,97 @@ const router = express.Router();
 const db = require('../db');
 const { authenticateToken, authorizeRole } = require('../middleware/auth');
 
+// Ensure agency_payouts table exists on startup
+db.query(`
+    CREATE TABLE IF NOT EXISTS agency_payouts (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        agency_id UUID REFERENCES agencies(id) ON DELETE CASCADE,
+        amount DECIMAL(12, 2) NOT NULL,
+        status VARCHAR(50) DEFAULT 'processed',
+        payment_method VARCHAR(100),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        processed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+`).catch(err => console.error('[DB] Error creating agency_payouts table:', err.message));
+
 // --- AGENCY MANAGEMENT ---
+
+// GET ALL AGENCIES WITH EARNINGS (FOR ADMIN DASHBOARD & PAYOUTS)
+router.get('/admin/agencies/earnings', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
+    try {
+        const result = await db.query(`
+            SELECT 
+                a.id, 
+                a.name, 
+                a.commission_rate, 
+                a.pending_balance, 
+                a.lifetime_earnings, 
+                a.status, 
+                a.referral_code,
+                u.username as owner_username, 
+                u.display_name as owner_display_name,
+                (SELECT COUNT(*)::int FROM users u2 WHERE u2.agency_id = a.id) as total_models
+            FROM agencies a
+            LEFT JOIN users u ON a.owner_id = u.id
+            ORDER BY a.created_at DESC
+        `);
+        res.json(result.rows);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// GET AGENCY PAYOUTS SUMMARY
+router.get('/admin/payouts/summary', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
+    try {
+        const stats = await db.query(`
+            SELECT 
+                COALESCE(SUM(pending_balance), 0) as total_pending,
+                COALESCE(SUM(lifetime_earnings), 0) as total_lifetime,
+                COALESCE((SELECT SUM(amount) FROM agency_payouts WHERE status = 'processed'), 0) as total_paid
+            FROM agencies
+        `);
+        res.json(stats.rows[0]);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// PROCESS AGENCY PAYOUT
+router.post('/admin/agencies/:id/payout', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
+    const { id } = req.params;
+    const { amount, method } = req.body;
+    try {
+        await db.query('BEGIN');
+        const agencyRes = await db.query('SELECT pending_balance FROM agencies WHERE id = $1 FOR UPDATE', [id]);
+        if (agencyRes.rows.length === 0) throw new Error('Ajans bulunamadı.');
+        
+        const pending = parseFloat(agencyRes.rows[0].pending_balance || 0);
+        const payoutAmount = parseFloat(amount || pending);
+        
+        if (payoutAmount <= 0) throw new Error('Ödenecek tutar 0 olamaz.');
+        if (payoutAmount > pending) throw new Error('Ödenmek istenen tutar bekleyen bakiyeden büyük olamaz.');
+
+        // 1. Insert into agency_payouts
+        await db.query(`
+            INSERT INTO agency_payouts (agency_id, amount, status, payment_method, processed_at)
+            VALUES ($1, $2, 'processed', $3, NOW())
+        `, [id, payoutAmount, method || 'Manual']);
+
+        // 2. Decrement pending balance in agencies table
+        await db.query(`
+            UPDATE agencies 
+            SET pending_balance = pending_balance - $1 
+            WHERE id = $2
+        `, [payoutAmount, id]);
+
+        await db.query('COMMIT');
+        res.json({ success: true, message: 'Ödeme başarıyla işlendi.' });
+    } catch (err) {
+        await db.query('ROLLBACK');
+        res.status(500).json({ error: err.message });
+    }
+});
 
 // GET ALL AGENCIES
 router.get('/admin/agencies', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {

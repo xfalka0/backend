@@ -3,7 +3,7 @@ import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '../../contexts/ThemeContext';
 
-export default function GlassCard({ children, style, intensity = 20, tint = "default", noBorder = false, ...props }) {
+export default function GlassCard({ children, style, intensity = 20, tint = "default", noBorder = false, colors, ...props }) {
     const { theme, themeMode } = useTheme();
     const isAndroid = Platform.OS === 'android';
 
@@ -14,16 +14,20 @@ export default function GlassCard({ children, style, intensity = 20, tint = "def
     const flatStyle = StyleSheet.flatten(style) || {};
     const radius = flatStyle.borderRadius !== undefined ? flatStyle.borderRadius : 24;
 
+    // Extract border properties to apply to the absolute background layer
+    const customBorderColor = flatStyle.borderColor !== undefined ? flatStyle.borderColor : theme.colors.glassBorder;
+    const customBorderWidth = flatStyle.borderWidth !== undefined ? flatStyle.borderWidth : (noBorder ? 0 : 1);
+
     return (
         <View style={[{ backgroundColor: 'transparent', overflow: 'hidden' }, style]} {...props}>
             {/* Absolute Background Layer */}
-            <View pointerEvents="none" style={[StyleSheet.absoluteFill, { borderRadius: radius, overflow: 'hidden', borderWidth: noBorder ? 0 : 1, borderColor: theme.colors.glassBorder }]}>
+            <View pointerEvents="none" style={[StyleSheet.absoluteFill, { borderRadius: radius, overflow: 'hidden', borderWidth: customBorderWidth, borderColor: customBorderColor }]}>
                 {!isAndroid && <BlurView intensity={intensity} tint={resolvedTint} style={StyleSheet.absoluteFill} />}
                 <LinearGradient
                     colors={
-                        themeMode === 'dark'
+                        colors || (themeMode === 'dark'
                             ? [isAndroid ? theme.colors.card + 'E6' : theme.gradients.glass[0], isAndroid ? theme.colors.backgroundSecondary + 'FA' : theme.gradients.glass[1]]
-                            : [isAndroid ? 'rgba(255, 255, 255, 0.95)' : 'rgba(255, 255, 255, 0.6)', isAndroid ? 'rgba(245, 245, 245, 0.98)' : 'rgba(240, 240, 240, 0.8)']
+                            : [isAndroid ? 'rgba(255, 255, 255, 0.95)' : 'rgba(255, 255, 255, 0.6)', isAndroid ? 'rgba(245, 245, 245, 0.98)' : 'rgba(240, 240, 240, 0.8)'])
                     }
                     start={{ x: 0, y: 0 }}
                     end={{ x: 1, y: 1 }}

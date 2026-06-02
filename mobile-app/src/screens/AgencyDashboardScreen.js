@@ -13,7 +13,8 @@ import {
     ActivityIndicator,
     Modal,
     TextInput,
-    Alert
+    Alert,
+    Animated
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
@@ -25,13 +26,14 @@ import * as Haptics from 'expo-haptics';
 import { API_URL } from '../config';
 import { useTheme } from '../contexts/ThemeContext';
 import GlassCard from '../components/ui/GlassCard';
+import SafeLottie from '../components/ui/SafeLottie';
 import { useAppStore } from '../store/useAppStore';
 
 const { width } = Dimensions.get('window');
 
 export default function AgencyDashboardScreen() {
     const navigation = useNavigation();
-    const { theme } = useTheme();
+    const { theme, themeMode } = useTheme();
     
     // Connect Zustand Store
     const user = useAppStore(state => state.user);
@@ -41,7 +43,7 @@ export default function AgencyDashboardScreen() {
     const [dashboardData, setDashboardData] = useState({
         agency: {
             id: '',
-            name: 'Yükleniyor...',
+            name: '', // Empty default so it uses the 'Ajans Paneli' placeholder while loading
             pending_balance: 0,
             lifetime_earnings: 0,
             commission_rate: 0.40,
@@ -58,6 +60,35 @@ export default function AgencyDashboardScreen() {
     const [isInviteModalVisible, setIsInviteModalVisible] = useState(false);
     const [inviteIdentifier, setInviteIdentifier] = useState('');
     const [inviting, setInviting] = useState(false);
+
+    // Pulse animation for skeleton loading state
+    const [pulseAnim] = useState(new Animated.Value(0.3));
+
+    useEffect(() => {
+        let animation;
+        if (loading) {
+            animation = Animated.loop(
+                Animated.sequence([
+                    Animated.timing(pulseAnim, {
+                        toValue: 0.7,
+                        duration: 1000,
+                        useNativeDriver: true
+                    }),
+                    Animated.timing(pulseAnim, {
+                        toValue: 0.3,
+                        duration: 1000,
+                        useNativeDriver: true
+                    })
+                ])
+            );
+            animation.start();
+        }
+        return () => {
+            if (animation) {
+                animation.stop();
+            }
+        };
+    }, [loading]);
 
     const handleSendInvite = async () => {
         if (!inviteIdentifier.trim()) {
@@ -160,20 +191,82 @@ export default function AgencyDashboardScreen() {
         await fetchDashboardData();
         setRefreshing(false);
     };
+    const renderSkeleton = () => {
+        return (
+            <ScrollView
+                showsVerticalScrollIndicator={false}
+                contentContainerStyle={styles.scrollContent}
+            >
+                {/* Skeleton Balance Card */}
+                <Animated.View style={[styles.skeletonCard, { opacity: pulseAnim }]}>
+                    <View style={styles.skeletonTextTitle} />
+                    <View style={styles.skeletonTextBalance} />
+                    <View style={styles.skeletonTextSub} />
+                </Animated.View>
+
+                {/* Skeleton Stats Grid */}
+                <View style={styles.statsGrid}>
+                    <Animated.View style={[styles.skeletonMiniCard, { opacity: pulseAnim }]}>
+                        <View style={styles.skeletonIcon} />
+                        <View style={{ gap: 6, flex: 1 }}>
+                            <View style={styles.skeletonLineShort} />
+                            <View style={styles.skeletonLineMedium} />
+                        </View>
+                    </Animated.View>
+                    <Animated.View style={[styles.skeletonMiniCard, { opacity: pulseAnim }]}>
+                        <View style={styles.skeletonIcon} />
+                        <View style={{ gap: 6, flex: 1 }}>
+                            <View style={styles.skeletonLineShort} />
+                            <View style={styles.skeletonLineMedium} />
+                        </View>
+                    </Animated.View>
+                </View>
+
+                {/* Skeleton Section Header */}
+                <View style={[styles.sectionHeader, { marginTop: 25 }]}>
+                    <View style={{ gap: 6, flex: 1 }}>
+                        <View style={styles.skeletonLineShort} />
+                        <View style={styles.skeletonLineMedium} />
+                    </View>
+                </View>
+
+                {/* Skeleton Operators list */}
+                {[1, 2, 3].map((key) => (
+                    <Animated.View key={key} style={[styles.skeletonOperatorCard, { opacity: pulseAnim }]}>
+                        <View style={styles.skeletonAvatar} />
+                        <View style={{ gap: 6, flex: 1 }}>
+                            <View style={styles.skeletonLineMedium} />
+                            <View style={styles.skeletonLineShort} />
+                        </View>
+                        <View style={{ gap: 6, alignItems: 'flex-end' }}>
+                            <View style={styles.skeletonLineShort} />
+                            <View style={styles.skeletonLineMedium} />
+                        </View>
+                    </Animated.View>
+                ))}
+            </ScrollView>
+        );
+    };
 
     return (
         <View style={styles.container}>
             <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
             
-            {/* Ambient Violet/Pink Backdrop Layer */}
-            <LinearGradient
-                colors={['#4f46e5', '#9333ea', '#09021a']}
-                style={styles.headerBackdrop}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-            >
-                <Ionicons name="business" size={300} color="rgba(255, 255, 255, 0.02)" style={styles.watermark} />
-            </LinearGradient>
+            {/* Fiva Banner Backdrop Layer */}
+            <View style={styles.bgWrapper}>
+                <Image 
+                    source={require('../../assets/fiva_profile_banner.png')} 
+                    style={styles.backgroundImage}
+                />
+                <LinearGradient
+                    colors={
+                        themeMode === 'dark'
+                            ? ['rgba(9, 2, 26, 0.1)', 'rgba(9, 2, 26, 0.6)', '#09021a']
+                            : ['rgba(255, 255, 255, 0.1)', 'rgba(255, 255, 255, 0.6)', '#09021a']
+                    }
+                    style={StyleSheet.absoluteFill}
+                />
+            </View>
 
             <SafeAreaView style={styles.safeArea}>
                 {/* Header Row */}
@@ -186,19 +279,28 @@ export default function AgencyDashboardScreen() {
                     </TouchableOpacity>
                     <View style={styles.headerTitleContainer}>
                         <Text style={styles.headerLabel}>AJANS YÖNETİMİ</Text>
-                        <Text style={styles.headerTitle}>{dashboardData.agency?.name || 'Ajans Paneli'}</Text>
-                    </View>
-                    <View style={styles.statusBadge}>
-                        <View style={[styles.statusDot, { backgroundColor: dashboardData.agency?.status === 'active' ? '#10b981' : '#f43f5e' }]} />
-                        <Text style={styles.statusText}>{dashboardData.agency?.status === 'active' ? 'Aktif' : 'Pasif'}</Text>
+                        <View style={styles.titleWithBadgeRow}>
+                            <Text style={styles.headerTitle} numberOfLines={1} adjustsFontSizeToFit>
+                                {(dashboardData.agency?.name || 'Ajans Paneli').toUpperCase()}
+                            </Text>
+                            {dashboardData.agency?.name ? (
+                                <View style={[
+                                    styles.statusBadge,
+                                    { 
+                                        borderColor: dashboardData.agency?.status === 'active' ? 'rgba(16, 185, 129, 0.4)' : 'rgba(244, 63, 94, 0.4)',
+                                        shadowColor: dashboardData.agency?.status === 'active' ? '#10b981' : '#f43f5e'
+                                    }
+                                ]}>
+                                    <View style={[styles.statusDot, { backgroundColor: dashboardData.agency?.status === 'active' ? '#10b981' : '#f43f5e' }]} />
+                                    <Text style={styles.statusText}>{dashboardData.agency?.status === 'active' ? 'Aktif' : 'Pasif'}</Text>
+                                </View>
+                            ) : null}
+                        </View>
                     </View>
                 </View>
 
                 {loading ? (
-                    <View style={styles.loaderContainer}>
-                        <ActivityIndicator size="large" color="#9333ea" />
-                        <Text style={styles.loaderText}>Ajans verileri yükleniyor...</Text>
-                    </View>
+                    renderSkeleton()
                 ) : (
                     <ScrollView
                         showsVerticalScrollIndicator={false}
@@ -208,7 +310,12 @@ export default function AgencyDashboardScreen() {
                         }
                     >
                         {/* Summary Header Card */}
-                        <GlassCard intensity={30} tint="dark" style={styles.summaryCard}>
+                        <GlassCard 
+                            intensity={45} 
+                            tint="dark" 
+                            style={styles.summaryCard}
+                            colors={['rgba(255, 255, 255, 0.07)', 'rgba(255, 255, 255, 0.02)']}
+                        >
                             <Text style={styles.summaryTitle}>Toplam Bekleyen Hakediş</Text>
                             
                             <View style={styles.balanceContainer}>
@@ -219,31 +326,40 @@ export default function AgencyDashboardScreen() {
                                     ≈ ${(dashboardData.agency?.pending_balance / 2000).toFixed(2)} USDT
                                 </Text>
                             </View>
-
-                            <View style={styles.divider} />
-
-                            <View style={styles.statsRow}>
-                                <View style={styles.statBlock}>
-                                    <View style={styles.statIconWrapper}>
-                                        <Ionicons name="sparkles" size={16} color="#fbbf24" />
-                                    </View>
-                                    <View>
-                                        <Text style={styles.statLabel}>Bugün Kazanılan</Text>
-                                        <Text style={styles.statValue}>{dashboardData.stats?.today_diamonds?.toLocaleString()} Elmas</Text>
-                                    </View>
-                                </View>
-
-                                <View style={styles.statBlock}>
-                                    <View style={[styles.statIconWrapper, { backgroundColor: 'rgba(16, 185, 129, 0.1)' }]}>
-                                        <Ionicons name="pulse" size={16} color="#10b981" />
-                                    </View>
-                                    <View>
-                                        <Text style={styles.statLabel}>Aktif Yayıncı</Text>
-                                        <Text style={styles.statValue}>{dashboardData.stats?.active_operators} / {dashboardData.stats?.total_operators}</Text>
-                                    </View>
-                                </View>
-                            </View>
                         </GlassCard>
+
+                        {/* Stats Grid Layout */}
+                        <View style={styles.statsGrid}>
+                            <GlassCard 
+                                intensity={25} 
+                                tint="dark" 
+                                style={styles.miniStatCard}
+                                colors={['rgba(255, 255, 255, 0.05)', 'rgba(255, 255, 255, 0.01)']}
+                            >
+                                <View style={styles.statIconWrapper}>
+                                    <Ionicons name="sparkles" size={16} color="#fbbf24" />
+                                </View>
+                                <View style={styles.statInfo}>
+                                    <Text style={styles.statLabel}>Bugün Kazanılan</Text>
+                                    <Text style={styles.statValue}>{dashboardData.stats?.today_diamonds?.toLocaleString()} Elmas</Text>
+                                </View>
+                            </GlassCard>
+
+                            <GlassCard 
+                                intensity={25} 
+                                tint="dark" 
+                                style={styles.miniStatCard}
+                                colors={['rgba(255, 255, 255, 0.05)', 'rgba(255, 255, 255, 0.01)']}
+                            >
+                                <View style={[styles.statIconWrapper, { backgroundColor: 'rgba(16, 185, 129, 0.12)' }]}>
+                                    <Ionicons name="pulse" size={16} color="#10b981" />
+                                </View>
+                                <View style={styles.statInfo}>
+                                    <Text style={styles.statLabel}>Aktif Yayıncı</Text>
+                                    <Text style={styles.statValue}>{dashboardData.stats?.active_operators} / {dashboardData.stats?.total_operators}</Text>
+                                </View>
+                            </GlassCard>
+                        </View>
 
                         {/* Operators Section Header */}
                         <View style={styles.sectionHeader}>
@@ -251,29 +367,55 @@ export default function AgencyDashboardScreen() {
                                 <Text style={styles.sectionTitle}>Ajans Yayıncıları ({dashboardData.operators?.length || 0})</Text>
                                 <Text style={styles.commissionRateText}>Komisyon Oranı: %{parseFloat(dashboardData.agency?.commission_rate || 0.4) * 100}</Text>
                             </View>
-                            <TouchableOpacity 
-                                style={styles.inviteButton}
-                                activeOpacity={0.8}
-                                onPress={() => setIsInviteModalVisible(true)}
-                            >
-                                <LinearGradient
-                                    colors={['#8b5cf6', '#ec4899']}
-                                    style={styles.inviteGradient}
-                                    start={{ x: 0, y: 0 }}
-                                    end={{ x: 1, y: 1 }}
+                            {dashboardData.operators?.length > 0 && (
+                                <TouchableOpacity 
+                                    style={styles.inviteButton}
+                                    activeOpacity={0.8}
+                                    onPress={() => setIsInviteModalVisible(true)}
                                 >
-                                    <Ionicons name="person-add" size={12} color="#fff" style={{ marginRight: 5 }} />
-                                    <Text style={styles.inviteButtonText}>Davet Et</Text>
-                                </LinearGradient>
-                            </TouchableOpacity>
+                                    <LinearGradient
+                                        colors={['#8b5cf6', '#ec4899']}
+                                        style={styles.inviteGradient}
+                                        start={{ x: 0, y: 0 }}
+                                        end={{ x: 1, y: 1 }}
+                                    >
+                                        <Ionicons name="person-add" size={12} color="#fff" style={{ marginRight: 5 }} />
+                                        <Text style={styles.inviteButtonText}>Davet Et</Text>
+                                    </LinearGradient>
+                                </TouchableOpacity>
+                            )}
                         </View>
 
                         {/* Operators List */}
                         {dashboardData.operators?.length === 0 ? (
-                            <GlassCard intensity={15} tint="dark" style={styles.emptyCard}>
-                                <Ionicons name="people-outline" size={40} color="rgba(255, 255, 255, 0.2)" />
+                            <GlassCard intensity={20} tint="dark" style={styles.emptyCard}>
+                                <View style={styles.emptyAnimationContainer}>
+                                    <SafeLottie
+                                        source={require('../assets/lottie/rocket.json')}
+                                        style={styles.emptyLottie}
+                                        loop={true}
+                                        autoPlay={true}
+                                        fallback={<Ionicons name="people-outline" size={48} color="rgba(255, 255, 255, 0.15)" />}
+                                    />
+                                </View>
                                 <Text style={styles.emptyText}>Henüz ajansınıza bağlı bir yayıncı bulunmamaktadır.</Text>
                                 <Text style={styles.emptySub}>Yayıncılarınızı davet kodu ile ajansınıza atayabilirsiniz.</Text>
+                                
+                                {/* Glowing gradient invite button */}
+                                <TouchableOpacity
+                                    style={styles.largeInviteBtn}
+                                    activeOpacity={0.8}
+                                    onPress={() => setIsInviteModalVisible(true)}
+                                >
+                                    <LinearGradient
+                                        colors={['#8b5cf6', '#ec4899']}
+                                        style={styles.largeInviteGradient}
+                                        start={{ x: 0, y: 0 }}
+                                        end={{ x: 1, y: 1 }}
+                                    >
+                                        <Text style={styles.largeInviteBtnText}>✨ İlk Yayıncını Davet Et</Text>
+                                    </LinearGradient>
+                                </TouchableOpacity>
                             </GlassCard>
                         ) : (
                             dashboardData.operators.map((op) => (
@@ -419,18 +561,19 @@ const styles = StyleSheet.create({
     safeArea: {
         flex: 1
     },
-    headerBackdrop: {
+    bgWrapper: {
         position: 'absolute',
         top: 0,
         left: 0,
         right: 0,
-        height: 280,
-        zIndex: 0
+        height: 380,
+        zIndex: 0,
+        overflow: 'hidden'
     },
-    watermark: {
-        position: 'absolute',
-        top: -50,
-        right: -50
+    backgroundImage: {
+        width: '100%',
+        height: '100%',
+        resizeMode: 'cover',
     },
     headerRow: {
         flexDirection: 'row',
@@ -457,22 +600,31 @@ const styles = StyleSheet.create({
         fontWeight: '900',
         letterSpacing: 1.5
     },
+    titleWithBadgeRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginTop: 2,
+        flexWrap: 'wrap',
+        gap: 8,
+    },
     headerTitle: {
         color: '#fff',
-        fontSize: 18,
-        fontWeight: '900',
+        fontSize: 24, // Devasa ajans adı puntoları
+        fontWeight: '950',
         letterSpacing: -0.5,
-        marginTop: 2
     },
     statusBadge: {
         flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: 'rgba(0, 0, 0, 0.35)',
-        paddingHorizontal: 12,
-        paddingVertical: 6,
-        borderRadius: 15,
+        backgroundColor: 'rgba(0, 0, 0, 0.45)',
+        paddingHorizontal: 10,
+        paddingVertical: 4,
+        borderRadius: 12,
         borderWidth: 1,
-        borderColor: 'rgba(255, 255, 255, 0.1)'
+        shadowOffset: { width: 0, height: 0 },
+        shadowOpacity: 0.8,
+        shadowRadius: 6,
+        elevation: 4
     },
     statusDot: {
         width: 6,
@@ -504,9 +656,9 @@ const styles = StyleSheet.create({
     summaryCard: {
         padding: 24,
         borderRadius: 32,
-        marginBottom: 25,
+        marginBottom: 15,
         borderWidth: 1,
-        borderColor: 'rgba(255, 255, 255, 0.08)'
+        borderColor: 'rgba(255, 255, 255, 0.15)' // Parlayan cam sınırları
     },
     summaryTitle: {
         color: 'rgba(255, 255, 255, 0.5)',
@@ -520,51 +672,60 @@ const styles = StyleSheet.create({
     },
     balanceText: {
         color: '#fff',
-        fontSize: 34,
-        fontWeight: '900',
-        letterSpacing: -1
+        fontSize: 36, // Daha parıltılı ve devasa
+        fontWeight: '950',
+        letterSpacing: -1,
+        textShadowColor: 'rgba(255, 255, 255, 0.25)',
+        textShadowOffset: { width: 0, height: 0 },
+        textShadowRadius: 12,
     },
     usdtText: {
-        color: '#a855f7',
+        color: '#38bdf8', // Neon elektrik mavisi/cyan
         fontSize: 14,
         fontWeight: '800',
-        marginTop: 2
+        marginTop: 2,
+        textShadowColor: 'rgba(56, 189, 248, 0.3)',
+        textShadowOffset: { width: 0, height: 0 },
+        textShadowRadius: 6,
     },
-    divider: {
-        height: 1,
-        backgroundColor: 'rgba(255, 255, 255, 0.06)',
-        marginVertical: 18
-    },
-    statsRow: {
+    statsGrid: {
         flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center'
+        gap: 12,
+        marginBottom: 25,
     },
-    statBlock: {
+    miniStatCard: {
+        flex: 1,
         flexDirection: 'row',
         alignItems: 'center',
-        gap: 12,
-        flex: 1
+        padding: 16,
+        borderRadius: 20,
+        borderWidth: 1,
+        borderColor: 'rgba(255, 255, 255, 0.08)',
+        gap: 10,
     },
     statIconWrapper: {
-        width: 32,
-        height: 32,
-        borderRadius: 10,
-        backgroundColor: 'rgba(251, 191, 36, 0.1)',
+        width: 36,
+        height: 36,
+        borderRadius: 12,
+        backgroundColor: 'rgba(251, 191, 36, 0.12)',
         justifyContent: 'center',
         alignItems: 'center'
     },
+    statInfo: {
+        flex: 1,
+    },
     statLabel: {
-        color: 'rgba(255, 255, 255, 0.4)',
+        color: 'rgba(255, 255, 255, 0.5)',
         fontSize: 9,
         fontWeight: '800',
-        textTransform: 'uppercase'
+        textTransform: 'uppercase',
+        letterSpacing: 0.5
     },
     statValue: {
         color: '#fff',
         fontSize: 12,
         fontWeight: '900',
-        marginTop: 1
+        marginTop: 2
     },
     sectionHeader: {
         flexDirection: 'row',
@@ -585,27 +746,65 @@ const styles = StyleSheet.create({
     },
     emptyCard: {
         padding: 30,
+        paddingVertical: 40,
         borderRadius: 24,
         alignItems: 'center',
         borderWidth: 1,
-        borderColor: 'rgba(255, 255, 255, 0.04)',
+        borderColor: 'rgba(255, 255, 255, 0.06)',
         marginTop: 10
+    },
+    emptyAnimationContainer: {
+        width: 140,
+        height: 140,
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginBottom: 10,
+    },
+    emptyLottie: {
+        width: 140,
+        height: 140,
     },
     emptyText: {
         color: '#fff',
-        fontSize: 13,
-        fontWeight: '800',
+        fontSize: 14,
+        fontWeight: '900',
         textAlign: 'center',
         marginTop: 15,
-        lineHeight: 18
+        lineHeight: 20
     },
     emptySub: {
-        color: 'rgba(255, 255, 255, 0.4)',
+        color: 'rgba(255, 255, 255, 0.45)',
         fontSize: 11,
         fontWeight: '600',
         textAlign: 'center',
         marginTop: 6,
-        paddingHorizontal: 15
+        paddingHorizontal: 15,
+        lineHeight: 16
+    },
+    largeInviteBtn: {
+        marginTop: 24,
+        width: '100%',
+        maxWidth: 260,
+        borderRadius: 18,
+        overflow: 'hidden',
+        shadowColor: '#ec4899',
+        shadowOffset: { width: 0, height: 6 },
+        shadowOpacity: 0.4,
+        shadowRadius: 12,
+        elevation: 8,
+    },
+    largeInviteGradient: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingVertical: 14,
+        paddingHorizontal: 20,
+    },
+    largeInviteBtnText: {
+        color: '#fff',
+        fontSize: 14,
+        fontWeight: '900',
+        letterSpacing: 0.3,
     },
     operatorCard: {
         padding: 16,
@@ -826,5 +1025,81 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         alignItems: 'center',
         marginLeft: 6,
+    },
+    // Skeleton Placeholders
+    skeletonCard: {
+        padding: 24,
+        borderRadius: 32,
+        marginBottom: 15,
+        backgroundColor: 'rgba(255, 255, 255, 0.04)',
+        borderWidth: 1,
+        borderColor: 'rgba(255, 255, 255, 0.08)',
+        gap: 12
+    },
+    skeletonTextTitle: {
+        width: 120,
+        height: 12,
+        borderRadius: 6,
+        backgroundColor: 'rgba(255, 255, 255, 0.08)'
+    },
+    skeletonTextBalance: {
+        width: 180,
+        height: 36,
+        borderRadius: 10,
+        backgroundColor: 'rgba(255, 255, 255, 0.08)',
+        marginTop: 6
+    },
+    skeletonTextSub: {
+        width: 100,
+        height: 14,
+        borderRadius: 6,
+        backgroundColor: 'rgba(255, 255, 255, 0.05)',
+        marginTop: 4
+    },
+    skeletonMiniCard: {
+        flex: 1,
+        flexDirection: 'row',
+        alignItems: 'center',
+        padding: 16,
+        borderRadius: 20,
+        backgroundColor: 'rgba(255, 255, 255, 0.04)',
+        borderWidth: 1,
+        borderColor: 'rgba(255, 255, 255, 0.06)',
+        gap: 10
+    },
+    skeletonIcon: {
+        width: 36,
+        height: 36,
+        borderRadius: 12,
+        backgroundColor: 'rgba(255, 255, 255, 0.08)'
+    },
+    skeletonLineShort: {
+        width: '50%',
+        height: 10,
+        borderRadius: 5,
+        backgroundColor: 'rgba(255, 255, 255, 0.08)'
+    },
+    skeletonLineMedium: {
+        width: '80%',
+        height: 12,
+        borderRadius: 6,
+        backgroundColor: 'rgba(255, 255, 255, 0.05)'
+    },
+    skeletonOperatorCard: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        padding: 16,
+        borderRadius: 24,
+        backgroundColor: 'rgba(255, 255, 255, 0.03)',
+        borderWidth: 1,
+        borderColor: 'rgba(255, 255, 255, 0.05)',
+        marginBottom: 10,
+        gap: 12
+    },
+    skeletonAvatar: {
+        width: 46,
+        height: 46,
+        borderRadius: 16,
+        backgroundColor: 'rgba(255, 255, 255, 0.08)'
     }
 });

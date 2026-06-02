@@ -3571,21 +3571,7 @@ app.post('/api/admin/operators/:id/payout', authenticateToken, authorizeRole('ad
     }
 });
 
-// Get global payout stats
-app.get('/api/admin/payouts/summary', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
-    try {
-        const stats = await db.query(`
-            SELECT 
-                SUM(pending_balance) as total_pending,
-                SUM(lifetime_earnings) as total_lifetime,
-                (SELECT SUM(amount) FROM payouts WHERE status = 'processed') as total_paid
-            FROM operators
-        `);
-        res.json(stats.rows[0]);
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
-});
+// Global agency payout stats are handled in routes/agency.js under /api/admin/payouts/summary
 
 // --- VIP PROGRESSION SYSTEM ---
 

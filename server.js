@@ -3681,6 +3681,81 @@ app.get('/api/admin/operators/earnings', authenticateToken, authorizeRole('admin
     }
 });
 
+// GET ALL AGENCIES for earnings and list
+app.get('/api/admin/agencies/earnings', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
+    try {
+        const query = `
+            SELECT 
+                a.id, 
+                a.name, 
+                a.commission_rate, 
+                COALESCE(a.pending_balance, 0) as pending_balance, 
+                COALESCE(a.lifetime_earnings, 0) as lifetime_earnings, 
+                a.status, 
+                a.referral_code, 
+                a.created_at,
+                u.username as owner_username, 
+                u.email as owner_email, 
+                u.phone as owner_phone,
+                u.display_name as owner_display_name,
+                (SELECT COUNT(*) FROM users WHERE agency_id = a.id) as total_models
+            FROM agencies a
+            LEFT JOIN users u ON a.owner_id::text = u.id::text
+            ORDER BY a.pending_balance DESC;
+        `;
+        const result = await db.query(query);
+        res.json(result.rows);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Process a payout for an agency
+app.post('/api/admin/agencies/:id/payout', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
+    const { id } = req.params;
+    const { amount, method } = req.body;
+
+    try {
+        await db.query('BEGIN');
+
+        // 1. Get current pending balance
+        const agencyRes = await db.query('SELECT pending_balance FROM agencies WHERE id = $1 FOR UPDATE', [id]);
+        if (agencyRes.rows.length === 0) throw new Error('Ajans bulunamadı.');
+
+        const pending = parseFloat(agencyRes.rows[0].pending_balance || 0);
+        const payoutAmount = parseFloat(amount || pending);
+
+        if (payoutAmount <= 0) throw new Error('Ödenecek tutar 0 olamaz.');
+        if (payoutAmount > pending) throw new Error('Ödenmek istenen tutar bekleyen bakiyeden büyük olamaz.');
+
+        // 2. Ensure column exists
+        try {
+            await db.query('ALTER TABLE payouts ADD COLUMN IF NOT EXISTS agency_id TEXT');
+        } catch (e) {
+            console.log('[DB] Info: payouts column migration skipped or failed:', e.message);
+        }
+
+        // 3. Record payout
+        await db.query(
+            'INSERT INTO payouts (agency_id, amount, status, payment_method, processed_at) VALUES ($1, $2, $3, $4, NOW())',
+            [id, payoutAmount, 'processed', method || 'Manual']
+        );
+
+        // 4. Update balance
+        await db.query(
+            'UPDATE agencies SET pending_balance = pending_balance - $1 WHERE id = $2',
+            [payoutAmount, id]
+        );
+
+        await db.query('COMMIT');
+        res.json({ success: true, message: 'Ajans ödemesi başarıyla işlendi.' });
+
+    } catch (err) {
+        await db.query('ROLLBACK');
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // Process a payout for an operator
 app.post('/api/admin/operators/:id/payout', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
     const { id } = req.params;

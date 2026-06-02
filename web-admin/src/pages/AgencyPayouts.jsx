@@ -11,7 +11,8 @@ import {
     DollarSign,
     Search,
     Filter,
-    MoreHorizontal
+    MoreHorizontal,
+    Building2
 } from 'lucide-react';
 import axios from 'axios';
 import { useAuth } from '../context/AuthContext';
@@ -172,14 +173,12 @@ const AgencyPayouts = () => {
     const fetchData = async () => {
         try {
             setLoading(true);
-            const [statsRes, opsRes, appsRes] = await Promise.all([
+            const [statsRes, opsRes] = await Promise.all([
                 axios.get(`${API_URL}/admin/payouts/summary`, { headers: { Authorization: `Bearer ${token}` } }),
-                axios.get(`${API_URL}/admin/operators/earnings`, { headers: { Authorization: `Bearer ${token}` } }),
-                axios.get(`${API_URL}/admin/agency/applications`, { headers: { Authorization: `Bearer ${token}` } }).catch(() => ({ data: [] }))
+                axios.get(`${API_URL}/admin/agencies/earnings`, { headers: { Authorization: `Bearer ${token}` } })
             ]);
             setStats(statsRes.data);
             setOperators(opsRes.data);
-            setApplications(appsRes.data || []);
         } catch (err) {
             console.error('Veri çekme hatası:', err);
         } finally {
@@ -190,7 +189,7 @@ const AgencyPayouts = () => {
     const handlePayout = async () => {
         if (!selectedOperator) return;
         try {
-            await axios.post(`${API_URL}/admin/operators/${selectedOperator.id}/payout`, {
+            await axios.post(`${API_URL}/admin/agencies/${selectedOperator.id}/payout`, {
                 amount: payoutAmount || selectedOperator.pending_balance,
                 method: payoutMethod
             }, { headers: { Authorization: `Bearer ${token}` } });
@@ -203,43 +202,9 @@ const AgencyPayouts = () => {
         }
     };
 
-    const handleApproveApplication = async (appId) => {
-        if (!confirm('Bu başvuruyu onaylamak ve bu kullanıcı için otomatik ajans ve davet kodu oluşturmak istediğinize emin misiniz?')) return;
-        try {
-            const res = await axios.post(`${API_URL}/admin/agency/applications/${appId}/approve`, {}, {
-                headers: { Authorization: `Bearer ${token}` }
-            });
-            if (res.data && res.data.success) {
-                alert(`Başvuru başarıyla onaylandı! Davet Kodu: ${res.data.referralCode}`);
-                fetchData(); // Refresh lists
-            } else {
-                alert('Hata: ' + (res.data?.error || 'Başvuru onaylanamadı.'));
-            }
-        } catch (err) {
-            alert('Hata: ' + (err.response?.data?.error || err.message));
-        }
-    };
-
-    const handleRejectApplication = async (appId) => {
-        if (!confirm('Bu başvuruyu reddetmek istediğinize emin misiniz?')) return;
-        try {
-            const res = await axios.post(`${API_URL}/admin/agency/applications/${appId}/reject`, {}, {
-                headers: { Authorization: `Bearer ${token}` }
-            });
-            if (res.data && res.data.success) {
-                alert('Başvuru reddedildi.');
-                fetchData(); // Refresh lists
-            } else {
-                alert('Hata: ' + (res.data?.error || 'Başvuru reddedilemedi.'));
-            }
-        } catch (err) {
-            alert('Hata: ' + (err.response?.data?.error || err.message));
-        }
-    };
-
     const filteredOperators = operators.filter(op => 
-        op.username?.toLowerCase().includes(searchTerm.toLowerCase()) || 
-        op.display_name?.toLowerCase().includes(searchTerm.toLowerCase())
+        op.name?.toLowerCase().includes(searchTerm.toLowerCase()) || 
+        op.owner_username?.toLowerCase().includes(searchTerm.toLowerCase())
     );
 
     const StatCard = ({ title, value, icon: Icon, color, subValue }) => (
@@ -276,9 +241,9 @@ const AgencyPayouts = () => {
                         <span className="text-[10px] font-black uppercase tracking-[0.2em]">Finansal Yönetim</span>
                     </div>
                     <h1 className="text-4xl font-black text-white tracking-tighter">
-                        Personel <span className="text-blue-500">Yönetimi</span>
+                        Ajans <span className="text-blue-500">Yönetimi</span>
                     </h1>
-                    <p className="text-slate-500 text-sm font-medium mt-1">Personel performansını ve ödeme dengesini yönetin.</p>
+                    <p className="text-slate-500 text-sm font-medium mt-1">Ajans performansını, komisyon dağılımlarını ve ödeme dengelerini yönetin.</p>
                 </div>
                 <div className="flex items-center gap-3">
                     <button 
@@ -321,20 +286,20 @@ const AgencyPayouts = () => {
             />
         </div>
 
-            {/* Operator List Table */}
+            {/* Agency List Table */}
             <div className="bg-slate-900/50 backdrop-blur-3xl border border-white/5 rounded-[40px] overflow-hidden">
                 <div className="p-8 border-b border-white/5 flex flex-col md:flex-row md:items-center justify-between gap-4">
                     <div className="flex items-center gap-4">
-                        <h2 className="text-xl font-black text-white px-2">Personel Performansı</h2>
+                        <h2 className="text-xl font-black text-white px-2">Ajans Performansı ve Listesi</h2>
                         <span className="px-3 py-1 bg-blue-600/10 border border-blue-500/20 text-blue-400 text-[10px] font-black rounded-full uppercase">
-                            {operators.length} AKTİF OPERATÖR
+                            {operators.length} AKTİF AJANS
                         </span>
                     </div>
                     <div className="relative group">
                         <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 group-focus-within:text-blue-400 transition-colors" size={16} />
                         <input 
                             type="text" 
-                            placeholder="Personel veya Avatar Ara..."
+                            placeholder="Ajans veya Sahibi Ara..."
                             className="bg-white/5 border border-white/10 rounded-2xl py-3 pl-12 pr-6 text-sm text-white focus:outline-none focus:border-blue-500/50 focus:bg-white/10 transition-all w-full md:w-64"
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}
@@ -346,11 +311,11 @@ const AgencyPayouts = () => {
                     <table className="w-full text-left border-collapse">
                         <thead>
                             <tr className="border-b border-white/5">
-                                <th className="px-8 py-5 text-[10px] font-black text-slate-500 uppercase tracking-widest">Operatör / Personel</th>
-                                <th className="px-8 py-5 text-[10px] font-black text-slate-500 uppercase tracking-widest text-center">Zimmetli</th>
-                                <th className="px-8 py-5 text-[10px] font-black text-slate-500 uppercase tracking-widest">Bekleyen</th>
+                                <th className="px-8 py-5 text-[10px] font-black text-slate-500 uppercase tracking-widest">Ajans Adı / Sahibi</th>
+                                <th className="px-8 py-5 text-[10px] font-black text-slate-500 uppercase tracking-widest text-center">Referans Kodu</th>
+                                <th className="px-8 py-5 text-[10px] font-black text-slate-500 uppercase tracking-widest text-center">Yayıncı Sayısı</th>
+                                <th className="px-8 py-5 text-[10px] font-black text-slate-500 uppercase tracking-widest">Bekleyen Bakiye</th>
                                 <th className="px-8 py-5 text-[10px] font-black text-slate-500 uppercase tracking-widest">Toplam Kazanç</th>
-                                <th className="px-8 py-5 text-[10px] font-black text-slate-500 uppercase tracking-widest">Son Aktivite</th>
                                 <th className="px-8 py-5 text-[10px] font-black text-slate-500 uppercase tracking-widest text-right">İşlem</th>
                             </tr>
                         </thead>
@@ -358,30 +323,30 @@ const AgencyPayouts = () => {
                             {loading ? (
                                 <tr>
                                     <td colSpan="6" className="px-8 py-20 text-center text-slate-500 font-bold uppercase tracking-widest italic animate-pulse">
-                                        Finansal veriler yükleniyor...
+                                        Ajans verileri yükleniyor...
                                     </td>
                                 </tr>
                             ) : filteredOperators.length === 0 ? (
                                 <tr>
                                     <td colSpan="6" className="px-8 py-20 text-center text-slate-500 font-bold tracking-widest">
-                                        Hiç operatör bulunamadı.
+                                        Hiç ajans bulunamadı.
                                     </td>
                                 </tr>
                             ) : filteredOperators.map((op) => (
                                 <tr key={op.id} className="hover:bg-white/[0.02] transition-colors group">
                                     <td className="px-8 py-6">
                                         <div className="flex items-center gap-4">
-                                            <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 p-[2px]">
-                                                <div className="w-full h-full rounded-[14px] bg-slate-950 overflow-hidden">
-                                                    <img src={op.avatar_url || 'https://via.placeholder.com/150'} alt="" className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
+                                            <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-cyan-500 to-blue-600 p-[2px]">
+                                                <div className="w-full h-full rounded-[14px] bg-slate-950 flex items-center justify-center">
+                                                    <Building2 size={20} className="text-cyan-400" />
                                                 </div>
                                             </div>
                                             <div>
-                                                <p className="text-sm font-black text-white capitalize">{op.display_name || op.username}</p>
+                                                <p className="text-sm font-black text-white capitalize">{op.name}</p>
                                                 <div className="flex items-center gap-2 mt-0.5">
-                                                    <span className="text-[10px] font-bold text-slate-500 uppercase">{op.username}</span>
+                                                    <span className="text-[10px] font-bold text-slate-500">Sahip: @{op.owner_username || 'Bilinmiyor'}</span>
                                                     <div className="w-1 h-1 rounded-full bg-slate-700" />
-                                                    <span className={`text-[9px] font-black px-1.5 py-0.5 rounded-md ${op.pending_balance > 5000 ? 'bg-orange-500/10 text-orange-400' : 'bg-slate-800 text-slate-500'}`}>
+                                                    <span className="text-[9px] font-black px-1.5 py-0.5 rounded-md bg-slate-800 text-slate-500">
                                                         %{op.commission_rate * 100} KOMİSYON
                                                     </span>
                                                 </div>
@@ -390,14 +355,21 @@ const AgencyPayouts = () => {
                                     </td>
                                     <td className="px-8 py-6 text-center">
                                         <div className="flex justify-center">
+                                            <div className="px-3 py-1 bg-cyan-500/10 border border-cyan-500/20 rounded-xl text-xs font-black text-cyan-400 tracking-wider">
+                                                {op.referral_code || 'YOK'}
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td className="px-8 py-6 text-center">
+                                        <div className="flex justify-center">
                                             <div className="px-3 py-1 bg-white/5 border border-white/10 rounded-xl text-[10px] font-black text-slate-400">
-                                                {op.total_messages || 0} Mesaj
+                                                {op.total_models || 0} Model
                                             </div>
                                         </div>
                                     </td>
                                     <td className="px-8 py-6">
-                                        <p className={`text-sm font-black tracking-tighter ${op.pending_balance > 1000 ? 'text-blue-400' : 'text-white'}`}>
-                                            {op.pending_balance?.toLocaleString()} 
+                                        <p className={`text-sm font-black tracking-tighter ${op.pending_balance > 1000 ? 'text-cyan-400' : 'text-white'}`}>
+                                            {parseFloat(op.pending_balance)?.toLocaleString()} 
                                             <span className="text-[10px] text-slate-600 ml-1">ELMAS</span>
                                         </p>
                                         <p className="text-[10px] font-bold text-slate-500 mt-1 uppercase tracking-tight">
@@ -406,19 +378,8 @@ const AgencyPayouts = () => {
                                     </td>
                                     <td className="px-8 py-6">
                                         <p className="text-sm font-black text-slate-300 tracking-tighter">
-                                            {op.lifetime_earnings?.toLocaleString()} 
+                                            {parseFloat(op.lifetime_earnings)?.toLocaleString()} 
                                             <span className="text-[10px] text-slate-700 ml-1">ELMAS</span>
-                                        </p>
-                                    </td>
-                                    <td className="px-8 py-6">
-                                        <div className="flex items-center gap-2 text-slate-400">
-                                            <Clock size={12} className={op.last_active_at && (new Date() - new Date(op.last_active_at) < 5 * 60000) ? "text-emerald-500" : "text-slate-600"} />
-                                            <span className={`text-[11px] font-bold ${op.last_active_at && (new Date() - new Date(op.last_active_at) < 5 * 60000) ? "text-emerald-400" : "text-slate-400"}`}>
-                                                {op.last_active_at ? new Date(op.last_active_at).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' }) : 'Pasif'}
-                                            </span>
-                                        </div>
-                                        <p className="text-[9px] font-bold text-slate-600 mt-1 uppercase tracking-tight">
-                                           {op.last_active_at ? new Date(op.last_active_at).toLocaleDateString('tr-TR') : '-'}
                                         </p>
                                     </td>
                                     <td className="px-8 py-6 text-right">
@@ -428,7 +389,7 @@ const AgencyPayouts = () => {
                                                 setPayoutAmount(op.pending_balance);
                                                 setPayoutModal(true);
                                             }}
-                                            className="px-4 py-2 bg-blue-600/10 border border-blue-500/20 text-blue-400 text-[10px] font-black rounded-xl uppercase hover:bg-blue-600 hover:text-white transition-all"
+                                            className="px-4 py-2 bg-cyan-600/10 border border-cyan-500/20 text-cyan-400 text-[10px] font-black rounded-xl uppercase hover:bg-cyan-600 hover:text-white transition-all"
                                         >
                                             Hakediş Öde
                                         </button>
@@ -440,92 +401,7 @@ const AgencyPayouts = () => {
                 </div>
             </div>
 
-            {/* Agency Applications Console */}
-            <div className="bg-slate-900/50 backdrop-blur-3xl border border-white/5 rounded-[40px] overflow-hidden mt-8">
-                <div className="p-8 border-b border-white/5 flex flex-col md:flex-row md:items-center justify-between gap-4">
-                    <div className="flex items-center gap-4">
-                        <h2 className="text-xl font-black text-white px-2">Ajans Başvuruları</h2>
-                        <span className="px-3 py-1 bg-cyan-600/10 border border-cyan-500/20 text-cyan-400 text-[10px] font-black rounded-full uppercase">
-                            {applications.filter(a => a.status === 'pending').length} BEKLEYEN BAŞVURU
-                        </span>
-                    </div>
-                </div>
 
-                <div className="overflow-x-auto">
-                    <table className="w-full text-left border-collapse">
-                        <thead>
-                            <tr className="border-b border-white/5">
-                                <th className="px-8 py-5 text-[10px] font-black text-slate-500 uppercase tracking-widest">Kullanıcı</th>
-                                <th className="px-8 py-5 text-[10px] font-black text-slate-500 uppercase tracking-widest">Talep Edilen Ajans Adı</th>
-                                <th className="px-8 py-5 text-[10px] font-black text-slate-500 uppercase tracking-widest">Telefon</th>
-                                <th className="px-8 py-5 text-[10px] font-black text-slate-500 uppercase tracking-widest">Gerekçe / Ekip Bilgisi</th>
-                                <th className="px-8 py-5 text-[10px] font-black text-slate-500 uppercase tracking-widest">Tarih</th>
-                                <th className="px-8 py-5 text-[10px] font-black text-slate-500 uppercase tracking-widest">Durum</th>
-                                <th className="px-8 py-5 text-[10px] font-black text-slate-500 uppercase tracking-widest text-right">İşlem</th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-white/5">
-                            {applications.length === 0 ? (
-                                <tr>
-                                    <td colSpan="7" className="px-8 py-10 text-slate-500 font-bold tracking-widest uppercase text-xs text-center">
-                                        Bekleyen veya işlem yapılmamış ajans başvurusu bulunmuyor.
-                                    </td>
-                                </tr>
-                            ) : applications.map((app) => (
-                                <tr key={app.id} className="hover:bg-white/[0.02] transition-colors group">
-                                    <td className="px-8 py-6">
-                                        <div>
-                                            <p className="text-sm font-black text-white capitalize">{app.username}</p>
-                                            <p className="text-[10px] font-bold text-slate-500 uppercase mt-0.5">{app.email}</p>
-                                        </div>
-                                    </td>
-                                    <td className="px-8 py-6">
-                                        <p className="text-sm font-black text-cyan-400">{app.agency_name}</p>
-                                    </td>
-                                    <td className="px-8 py-6 text-sm font-medium text-slate-300">
-                                        {app.phone}
-                                    </td>
-                                    <td className="px-8 py-6 max-w-xs">
-                                        <p className="text-xs text-slate-400 line-clamp-2" title={app.reason}>
-                                            {app.reason || 'Belirtilmedi'}
-                                        </p>
-                                    </td>
-                                    <td className="px-8 py-6 text-xs text-slate-500">
-                                        {new Date(app.created_at).toLocaleDateString('tr-TR')}
-                                    </td>
-                                    <td className="px-8 py-6">
-                                        <span className={`text-[9px] font-black px-2 py-1 rounded-md uppercase border ${
-                                            app.status === 'pending' ? 'bg-amber-500/10 border-amber-500/20 text-amber-400' :
-                                            app.status === 'approved' ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' :
-                                            'bg-rose-500/10 border-rose-500/20 text-rose-400'
-                                        }`}>
-                                            {app.status === 'pending' ? 'Bekliyor' : app.status === 'approved' ? 'Onaylandı' : 'Reddedildi'}
-                                        </span>
-                                    </td>
-                                    <td className="px-8 py-6 text-right">
-                                        {app.status === 'pending' && (
-                                            <div className="flex justify-end gap-2">
-                                                <button 
-                                                    onClick={() => handleRejectApplication(app.id)}
-                                                    className="px-3 py-1.5 bg-rose-600/10 border border-rose-500/20 text-rose-400 text-[10px] font-black rounded-lg uppercase hover:bg-rose-600 hover:text-white transition-all"
-                                                >
-                                                    Reddet
-                                                </button>
-                                                <button 
-                                                    onClick={() => handleApproveApplication(app.id)}
-                                                    className="px-3 py-1.5 bg-emerald-600/10 border border-emerald-500/20 text-emerald-400 text-[10px] font-black rounded-lg uppercase hover:bg-emerald-600 hover:text-white transition-all"
-                                                >
-                                                    Onayla
-                                                </button>
-                                            </div>
-                                        )}
-                                    </td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                </div>
-            </div>
 
             {/* Payout Modal */}
             {payoutModal && (
@@ -534,18 +410,18 @@ const AgencyPayouts = () => {
                     <div className="bg-[#0f172a] border border-white/10 w-full max-w-md rounded-[40px] shadow-2xl relative z-10 overflow-hidden animate-in zoom-in-95 duration-300">
                         <div className="p-8 border-b border-white/5 bg-gradient-to-r from-blue-600/10 to-indigo-600/10">
                             <h2 className="text-2xl font-black text-white tracking-tighter">Ödeme İşlemi</h2>
-                            <p className="text-slate-400 text-xs font-bold mt-1 uppercase tracking-widest">{selectedOperator?.display_name || selectedOperator?.username}</p>
+                            <p className="text-slate-400 text-xs font-bold mt-1 uppercase tracking-widest">{selectedOperator?.name}</p>
                         </div>
                         <div className="p-8 space-y-6">
                             <div>
-                                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block mb-2">Ödenecek Tutar (COIN)</label>
+                                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block mb-2">Ödenecek Tutar (ELMAS)</label>
                                 <input 
                                     type="number" 
                                     className="w-full bg-white/5 border border-white/10 rounded-2xl py-4 px-6 text-2xl font-black text-white outline-none focus:border-blue-500/50 transition-all"
                                     value={payoutAmount}
                                     onChange={(e) => setPayoutAmount(e.target.value)}
                                 />
-                                <p className="text-[10px] text-slate-500 mt-2 font-bold uppercase tracking-tight">Kalan Borç: {Math.max(0, selectedOperator.pending_balance - payoutAmount).toLocaleString()} Coin</p>
+                                <p className="text-[10px] text-slate-500 mt-2 font-bold uppercase tracking-tight">Kalan Borç: {Math.max(0, selectedOperator.pending_balance - payoutAmount).toLocaleString()} Elmas</p>
                             </div>
                             <div>
                                 <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block mb-2">Ödeme Yöntemi</label>

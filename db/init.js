@@ -91,17 +91,33 @@ const initializeDatabase = async (db, app) => {
 
         // 5.1 Agency Invitations Table
         try {
-            await db.query(`
-                CREATE TABLE IF NOT EXISTS agency_invitations (
-                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-                    agency_id TEXT REFERENCES agencies(id) ON DELETE CASCADE,
-                    operator_id UUID REFERENCES users(id) ON DELETE CASCADE,
-                    status VARCHAR(20) DEFAULT 'pending',
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    UNIQUE(agency_id, operator_id, status)
-                )
-            `);
-            console.log('[DB] agency_invitations table verified');
+            try {
+                // Try creating with UUID references (matching UUID agencies.id)
+                await db.query(`
+                    CREATE TABLE IF NOT EXISTS agency_invitations (
+                        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                        agency_id UUID REFERENCES agencies(id) ON DELETE CASCADE,
+                        operator_id UUID REFERENCES users(id) ON DELETE CASCADE,
+                        status VARCHAR(20) DEFAULT 'pending',
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        UNIQUE(agency_id, operator_id, status)
+                    )
+                `);
+                console.log('[DB] agency_invitations table verified (UUID reference)');
+            } catch (uuidErr) {
+                // Fallback to TEXT references (matching TEXT agencies.id)
+                await db.query(`
+                    CREATE TABLE IF NOT EXISTS agency_invitations (
+                        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                        agency_id TEXT REFERENCES agencies(id) ON DELETE CASCADE,
+                        operator_id UUID REFERENCES users(id) ON DELETE CASCADE,
+                        status VARCHAR(20) DEFAULT 'pending',
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        UNIQUE(agency_id, operator_id, status)
+                    )
+                `);
+                console.log('[DB] agency_invitations table verified (TEXT reference)');
+            }
         } catch (tableErr) {
             console.error('[DB] Error creating agency_invitations table:', tableErr.message);
         }
@@ -187,11 +203,20 @@ const initializeDatabase = async (db, app) => {
         if (!payCols.includes('status')) await db.query('ALTER TABLE payments ADD COLUMN status VARCHAR(50) DEFAULT \'completed\'');
         if (!payCols.includes('created_at')) await db.query('ALTER TABLE payments ADD COLUMN created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP');
 
-        // --- OTPs Migrations ---
+        // --- OTPs Table & Migrations ---
         try {
+            await db.query(`
+                CREATE TABLE IF NOT EXISTS otps (
+                    id SERIAL PRIMARY KEY,
+                    identifier VARCHAR(255) NOT NULL,
+                    otp_code VARCHAR(10) NOT NULL,
+                    expires_at TIMESTAMP NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            `);
             await db.query('ALTER TABLE otps ADD COLUMN IF NOT EXISTS attempts INTEGER DEFAULT 0');
         } catch (e) {
-            console.error('[DB] Migration Error (otps attempts):', e.message);
+            console.error('[DB] Migration/Creation Error (otps):', e.message);
         }
 
         // Seed packages if none exist

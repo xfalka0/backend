@@ -16,6 +16,8 @@ const favoritesRoutes = require('./routes/favorites');
 const viewsRoutes = require('./routes/views');
 const boostsRoutes = require('./routes/boosts');
 const webhooksRoutes = require('./routes/webhooks');
+const adminOperatorsRoutes = require('./routes/adminOperators');
+const agencyRoutes = require('./routes/agency');
 const { sanitizeUser, logActivity } = require('./utils/helpers');
 const { sendPushNotification } = require('./utils/notificationUtils');
 
@@ -1030,6 +1032,8 @@ app.use('/api', webhooksRoutes); // Public Webhooks
 app.use('/api/favorites', favoritesRoutes);
 app.use('/api/views', viewsRoutes);
 app.use('/api/boosts', boostsRoutes);
+app.use('/api/operators', adminOperatorsRoutes);
+app.use('/api', agencyRoutes);
 
 // TEMPORARY: Fix Genders Route
 app.get('/api/admin/fix-genders', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
@@ -2500,7 +2504,7 @@ app.get('/api/users/balance', authenticateToken, async (req, res) => {
 });
 
 // GET USER BALANCE BY ID
-app.get('/api/users/:userId/balance', authenticateToken, async (req, res) => {
+app.get('/api/users/:userId/balance', async (req, res) => {
     const { userId } = req.params;
     try {
         const result = await db.query('SELECT balance FROM users WHERE id = $1', [userId]);
@@ -2807,203 +2811,7 @@ app.get('/api/chats/admin', authenticateToken, authorizeRole('admin', 'super_adm
     }
 });
 
-// --- AGENCY MANAGEMENT ---
-
-// GET ALL AGENCIES
-app.get('/api/admin/agencies', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
-    try {
-        const result = await db.query(`
-            SELECT a.*, u.username as owner_name 
-            FROM agencies a
-            LEFT JOIN users u ON a.owner_id = u.id
-            ORDER BY a.created_at DESC
-        `);
-        res.json(result.rows);
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
-});
-
-// CREATE AGENCY
-app.post('/api/admin/agencies', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
-    let { name, owner_id, commission_rate, status, referral_code } = req.body;
-    try {
-        let finalReferralCode = '';
-        if (referral_code && referral_code.trim()) {
-            finalReferralCode = referral_code.trim().toUpperCase();
-            // Check uniqueness
-            const dupCheck = await db.query('SELECT id FROM agencies WHERE UPPER(referral_code) = $1', [finalReferralCode]);
-            if (dupCheck.rows.length > 0) {
-                return res.status(400).json({ error: 'Bu referans kodu zaten başka bir ajans tarafından kullanılıyor.' });
-            }
-        } else {
-            // Auto generate
-            let isUnique = false;
-            while (!isUnique) {
-                const randomDigits = Math.floor(100 + Math.random() * 900);
-                finalReferralCode = `FLK${randomDigits}`;
-                const dupCheck = await db.query('SELECT id FROM agencies WHERE referral_code = $1', [finalReferralCode]);
-                if (dupCheck.rows.length === 0) {
-                    isUnique = true;
-                }
-            }
-        }
-
-        const result = await db.query(
-            'INSERT INTO agencies (name, owner_id, commission_rate, status, referral_code) VALUES ($1, $2, $3, $4, $5) RETURNING *',
-            [name, owner_id || null, commission_rate || 0.40, status || 'active', finalReferralCode]
-        );
-        if (owner_id) {
-            await db.query('UPDATE users SET is_agency_owner = true WHERE id = $1', [owner_id]);
-        }
-        res.json(result.rows[0]);
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
-});
-
-// UPDATE AGENCY
-app.put('/api/admin/agencies/:id', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
-    const { id } = req.params;
-    let { name, owner_id, commission_rate, status, referral_code } = req.body;
-    try {
-        let finalReferralCode = undefined;
-        if (referral_code !== undefined) {
-            if (referral_code && referral_code.trim()) {
-                finalReferralCode = referral_code.trim().toUpperCase();
-                // Check uniqueness excluding current
-                const dupCheck = await db.query('SELECT id FROM agencies WHERE UPPER(referral_code) = $1 AND id != $2', [finalReferralCode, id]);
-                if (dupCheck.rows.length > 0) {
-                    return res.status(400).json({ error: 'Bu referans kodu zaten başka bir ajans tarafından kullanılıyor.' });
-                }
-            } else {
-                return res.status(400).json({ error: 'Referans kodu boş olamaz.' });
-            }
-        }
-
-        const result = await db.query(
-            `UPDATE agencies 
-             SET name = COALESCE($1, name), 
-                 owner_id = COALESCE($2, owner_id), 
-                 commission_rate = COALESCE($3, commission_rate),
-                 status = COALESCE($4, status),
-                 referral_code = COALESCE($5, referral_code)
-             WHERE id = $6 RETURNING *`,
-            [name, owner_id, commission_rate, status, finalReferralCode, id]
-        );
-        res.json(result.rows[0]);
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
-});
-
-// DELETE AGENCY
-app.delete('/api/admin/agencies/:id', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
-    const { id } = req.params;
-    try {
-        await db.query('BEGIN');
-
-        // Get owner id to update flag later
-        const agencyRes = await db.query('SELECT owner_id FROM agencies WHERE id = $1', [id]);
-        if (agencyRes.rows.length === 0) {
-            await db.query('ROLLBACK');
-            return res.status(404).json({ error: 'Ajans bulunamadı.' });
-        }
-        const ownerId = agencyRes.rows[0].owner_id;
-
-        // 1. Unlink users
-        await db.query('UPDATE users SET agency_id = NULL WHERE agency_id = $1', [id]);
-
-        // 2. Delete agency
-        await db.query('DELETE FROM agencies WHERE id = $1', [id]);
-
-        // 3. Reset owner status if they do not own any other agency
-        if (ownerId) {
-            const ownCheck = await db.query('SELECT id FROM agencies WHERE owner_id = $1', [ownerId]);
-            if (ownCheck.rows.length === 0) {
-                await db.query('UPDATE users SET is_agency_owner = false WHERE id = $1', [ownerId]);
-            }
-        }
-
-        await db.query('COMMIT');
-        res.json({ success: true, message: 'Ajans başarıyla silindi ve tüm bağlı yayıncılar ajanstan ayrıldı.' });
-    } catch (err) {
-        await db.query('ROLLBACK');
-        res.status(500).json({ error: err.message });
-    }
-});
-
-// ASSIGN USER TO AGENCY
-app.post('/api/admin/users/:userId/assign-agency', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
-    const { userId } = req.params;
-    const { agencyId } = req.body;
-    try {
-        await db.query('UPDATE users SET agency_id = $1 WHERE id = $2', [agencyId || null, userId]);
-        res.json({ success: true, message: 'Kullanıcı ajansa başarıyla atandı.' });
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
-});
-
-// GET USER AGENCY INFO
-app.get('/api/users/:id/agency', authenticateToken, async (req, res) => {
-    try {
-        const result = await db.query(`
-            SELECT a.name, a.id, a.status
-            FROM users u
-            JOIN agencies a ON u.agency_id = a.id
-            WHERE u.id = $1
-        `, [req.params.id]);
-        
-        if (result.rows.length === 0) return res.json({ name: null });
-        res.json(result.rows[0]);
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
-});
-
-// JOIN AGENCY (User side)
-app.post('/api/agencies/join', authenticateToken, async (req, res) => {
-    const { agencyId } = req.body;
-    const userId = req.user.id;
-
-    if (!agencyId) return res.status(400).json({ error: 'Ajans kodu gerekli.' });
-
-    try {
-        // 1. Check if agency exists by ID or by Referral Code
-        let agencyRes;
-        const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(agencyId);
-        
-        if (isUuid) {
-            agencyRes = await db.query(
-                'SELECT id, name FROM agencies WHERE (id = $1 OR UPPER(referral_code) = UPPER($2)) AND status = \'active\'',
-                [agencyId, agencyId]
-            );
-        } else {
-            agencyRes = await db.query(
-                'SELECT id, name FROM agencies WHERE UPPER(referral_code) = UPPER($1) AND status = \'active\'',
-                [agencyId]
-            );
-        }
-
-        if (agencyRes.rows.length === 0) {
-            return res.status(404).json({ error: 'Geçersiz veya aktif olmayan ajans kodu.' });
-        }
-
-        const actualAgencyId = agencyRes.rows[0].id;
-        const agencyName = agencyRes.rows[0].name;
-
-        // 2. Update user's agency
-        await db.query('UPDATE users SET agency_id = $1 WHERE id = $2', [actualAgencyId, userId]);
-        
-        console.log(`[AGENCY] User ${userId} joined agency ${agencyName}`);
-        res.json({ success: true, message: `${agencyName} ajansına başarıyla katıldınız!`, agencyName });
-    } catch (err) {
-        console.error('[AGENCY] Join error:', err);
-        res.status(500).json({ error: 'Ajansa katılırken bir hata oluştu.' });
-    }
-});
-
+// --- AGENCY ROUTING MANAGED EXCLUSIVELY VIA ROUTES/AGENCY.JS ---
 // DEBUG PAYOUT TRACKER
 let payoutLogs = [];
 app.get('/api/debug/payout-logs', (req, res) => {
@@ -3635,7 +3443,7 @@ app.get('/api/debug/dump-users', async (req, res) => {
 });
 
 // GET CURRENT OPERATOR/STAFF STATS
-app.get('/api/operator/my-stats', authenticateToken, async (req, res) => {
+const getDetailedOperatorStats = async (req, res) => {
     try {
         const userId = req.user.id;
         console.log('[DEBUG] my-stats request for userId:', userId);
@@ -3651,6 +3459,10 @@ app.get('/api/operator/my-stats', authenticateToken, async (req, res) => {
                 
                 -- Today Stats
                 (SELECT COALESCE(SUM(coins_earned), 0) FROM operator_stats WHERE operator_id::text = $1::text AND date = CURRENT_DATE) as earned_today,
+                (SELECT COALESCE(SUM(messages_sent), 0) FROM operator_stats WHERE operator_id::text = $1::text AND date = CURRENT_DATE) as messages_sent,
+                (SELECT COALESCE(SUM(image_count), 0) FROM operator_stats WHERE operator_id::text = $1::text AND date = CURRENT_DATE) as image_count,
+                (SELECT COALESCE(SUM(gift_count), 0) FROM operator_stats WHERE operator_id::text = $1::text AND date = CURRENT_DATE) as gift_count,
+                (SELECT COALESCE(SUM(coins_earned), 0) FROM operator_stats WHERE operator_id::text = $1::text AND date = CURRENT_DATE) as coins_earned,
                 (SELECT COALESCE(SUM(text_count), 0) FROM operator_stats WHERE operator_id::text = $1::text AND date = CURRENT_DATE) as text_count_today,
                 (SELECT COALESCE(SUM(image_count), 0) FROM operator_stats WHERE operator_id::text = $1::text AND date = CURRENT_DATE) as image_count_today,
                 (SELECT COALESCE(SUM(audio_count), 0) FROM operator_stats WHERE operator_id::text = $1::text AND date = CURRENT_DATE) as audio_count_today,
@@ -3673,7 +3485,7 @@ app.get('/api/operator/my-stats', authenticateToken, async (req, res) => {
         
         // Fetch Weekly Stats separately for clarity
         const weeklyRes = await db.query(`
-            SELECT date, messages_sent, coins_earned, text_count, image_count, audio_count
+            SELECT date, messages_sent, coins_earned, text_count, image_count, audio_count, gift_count
             FROM operator_stats
             WHERE operator_id::text = $1::text
             AND date >= CURRENT_DATE - INTERVAL '7 days'
@@ -3690,7 +3502,10 @@ app.get('/api/operator/my-stats', authenticateToken, async (req, res) => {
         console.error('my-stats error:', err.message);
         res.status(500).json({ error: err.message });
     }
-});
+};
+
+app.get('/api/operator/my-stats', authenticateToken, getDetailedOperatorStats);
+app.get('/api/operators/my/stats', authenticateToken, getDetailedOperatorStats);
 
 // GET ALL PERSONNEL (Staff) for assignment and earnings
 app.get('/api/admin/operators/earnings', authenticateToken, authorizeRole('admin', 'super_admin', 'operator', 'moderator'), async (req, res) => {

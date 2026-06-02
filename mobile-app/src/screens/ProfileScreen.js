@@ -658,11 +658,19 @@ const ProfileScreen = ({ route }) => {
                 <View style={styles.glassCardWrapper}>
                     <LinearGradient colors={themeMode === 'dark' ? theme.gradients.card : ['#fff', '#f0f0f0']} style={styles.glassCard}>
                         <View style={styles.quickActionsGrid}>
-                            <TouchableOpacity style={styles.qaItem} onPress={() => navigation.navigate('AgencyJoin')}>
+                            <TouchableOpacity style={styles.qaItem} onPress={() => {
+                                if (user?.is_agency_owner) {
+                                    navigation.navigate('AgencyDashboard');
+                                } else {
+                                    navigation.navigate('AgencyJoin');
+                                }
+                            }}>
                                 <View style={styles.qaIconOnly}>
                                     <Ionicons name="business" size={26} color="#3b82f6" />
                                 </View>
-                                <Text style={styles.qaLabel}>Ajans</Text>
+                                <Text style={styles.qaLabel}>
+                                     {(user?.agency_id || user?.is_agency_owner) ? 'Ajansım' : 'Ajans'}
+                                 </Text>
                             </TouchableOpacity>
 
                             <TouchableOpacity style={styles.qaItem} onPress={() => navigation.navigate('ProfileVisitors')}>
@@ -808,36 +816,7 @@ const ProfileScreen = ({ route }) => {
                     </LinearGradient>
                 </TouchableOpacity>
 
-                {/* Agency Management Card (Glowing violet/indigo premium button) */}
-                {user?.is_agency_owner && (
-                    <TouchableOpacity 
-                        style={styles.glassCardWrapper} 
-                        activeOpacity={0.8}
-                        onPress={() => navigation.navigate('AgencyDashboard')}
-                    >
-                        <LinearGradient 
-                            colors={['#8b5cf6', '#ec4899']} 
-                            style={styles.boostCard} 
-                            start={{ x: 0, y: 0 }} 
-                            end={{ x: 1, y: 1 }}
-                        >
-                            <View style={styles.boostLeft}>
-                                <View style={[styles.boostIconCircle, { backgroundColor: 'rgba(255, 255, 255, 0.2)' }]}>
-                                    <Ionicons name="business" size={18} color="#fff" />
-                                </View>
-                                <View>
-                                    <Text style={[styles.boostMainText, { color: '#fff', textShadowColor: 'rgba(0,0,0,0.15)', textShadowOffset: {width: 0, height: 1}, textShadowRadius: 2 }]}>
-                                        Ajans Yönetimi ⚡
-                                    </Text>
-                                    <Text style={[styles.boostSubText, { color: 'rgba(255,255,255,0.85)' }]}>
-                                        Ajans kazançlarını ve yayıncı performanslarını yönetin
-                                    </Text>
-                                </View>
-                            </View>
-                            <Ionicons name="chevron-forward" size={16} color="#fff" />
-                        </LinearGradient>
-                    </TouchableOpacity>
-                )}
+
 
                 {/* Album Section */}
                 <View style={styles.glassCardWrapper}>

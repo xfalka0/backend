@@ -1,0 +1,485 @@
+const express = require('express');
+const router = express.Router();
+const db = require('../db');
+const { authenticateToken, authorizeRole } = require('../middleware/auth');
+
+// --- AGENCY MANAGEMENT ---
+
+// GET ALL AGENCIES
+router.get('/admin/agencies', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
+    try {
+        const result = await db.query(`
+            SELECT a.*, u.username as owner_name 
+            FROM agencies a
+            LEFT JOIN users u ON a.owner_id = u.id
+            ORDER BY a.created_at DESC
+        `);
+        res.json(result.rows);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// CREATE AGENCY
+router.post('/admin/agencies', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
+    let { name, owner_id, commission_rate, status, referral_code } = req.body;
+    try {
+        let finalReferralCode = '';
+        if (referral_code && referral_code.trim()) {
+            finalReferralCode = referral_code.trim().toUpperCase();
+            // Check uniqueness
+            const dupCheck = await db.query('SELECT id FROM agencies WHERE UPPER(referral_code) = $1', [finalReferralCode]);
+            if (dupCheck.rows.length > 0) {
+                return res.status(400).json({ error: 'Bu referans kodu zaten başka bir ajans tarafından kullanılıyor.' });
+            }
+        } else {
+            // Auto generate
+            let isUnique = false;
+            while (!isUnique) {
+                const randomDigits = Math.floor(100 + Math.random() * 900);
+                finalReferralCode = `FLK${randomDigits}`;
+                const dupCheck = await db.query('SELECT id FROM agencies WHERE referral_code = $1', [finalReferralCode]);
+                if (dupCheck.rows.length === 0) {
+                    isUnique = true;
+                }
+            }
+        }
+
+        const result = await db.query(
+            'INSERT INTO agencies (name, owner_id, commission_rate, status, referral_code) VALUES ($1, $2, $3, $4, $5) RETURNING *',
+            [name, owner_id || null, commission_rate || 0.40, status || 'active', finalReferralCode]
+        );
+        if (owner_id) {
+            await db.query('UPDATE users SET is_agency_owner = true WHERE id = $1', [owner_id]);
+        }
+        res.json(result.rows[0]);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// UPDATE AGENCY
+router.put('/admin/agencies/:id', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
+    const { id } = req.params;
+    let { name, owner_id, commission_rate, status, referral_code } = req.body;
+    try {
+        let finalReferralCode = undefined;
+        if (referral_code !== undefined) {
+            if (referral_code && referral_code.trim()) {
+                finalReferralCode = referral_code.trim().toUpperCase();
+                // Check uniqueness excluding current
+                const dupCheck = await db.query('SELECT id FROM agencies WHERE UPPER(referral_code) = $1 AND id != $2', [finalReferralCode, id]);
+                if (dupCheck.rows.length > 0) {
+                    return res.status(400).json({ error: 'Bu referans kodu zaten başka bir ajans tarafından kullanılıyor.' });
+                }
+            } else {
+                return res.status(400).json({ error: 'Referans kodu boş olamaz.' });
+            }
+        }
+
+        const result = await db.query(
+            `UPDATE agencies 
+             SET name = COALESCE($1, name), 
+                 owner_id = COALESCE($2, owner_id), 
+                 commission_rate = COALESCE($3, commission_rate),
+                 status = COALESCE($4, status),
+                 referral_code = COALESCE($5, referral_code)
+             WHERE id = $6 RETURNING *`,
+            [name, owner_id, commission_rate, status, finalReferralCode, id]
+        );
+        res.json(result.rows[0]);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// DELETE AGENCY
+router.delete('/admin/agencies/:id', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
+    const { id } = req.params;
+    try {
+        await db.query('BEGIN');
+
+        // Get owner id to update flag later
+        const agencyRes = await db.query('SELECT owner_id FROM agencies WHERE id = $1', [id]);
+        if (agencyRes.rows.length === 0) {
+            await db.query('ROLLBACK');
+            return res.status(404).json({ error: 'Ajans bulunamadı.' });
+        }
+        const ownerId = agencyRes.rows[0].owner_id;
+
+        // 1. Unlink users
+        await db.query('UPDATE users SET agency_id = NULL WHERE agency_id = $1', [id]);
+
+        // 2. Delete agency
+        await db.query('DELETE FROM agencies WHERE id = $1', [id]);
+
+        // 3. Reset owner status if they do not own any other agency
+        if (ownerId) {
+            const ownCheck = await db.query('SELECT id FROM agencies WHERE owner_id = $1', [ownerId]);
+            if (ownCheck.rows.length === 0) {
+                await db.query('UPDATE users SET is_agency_owner = false WHERE id = $1', [ownerId]);
+            }
+        }
+
+        await db.query('COMMIT');
+        res.json({ success: true, message: 'Ajans başarıyla silindi ve tüm bağlı yayıncılar ajanstan ayrıldı.' });
+    } catch (err) {
+        await db.query('ROLLBACK');
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// ASSIGN USER TO AGENCY
+router.post('/admin/users/:userId/assign-agency', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
+    const { userId } = req.params;
+    const { agencyId } = req.body;
+    try {
+        await db.query('UPDATE users SET agency_id = $1 WHERE id = $2', [agencyId || null, userId]);
+        res.json({ success: true, message: 'Kullanıcı ajansa başarıyla atandı.' });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// GET USER AGENCY INFO
+router.get('/users/:id/agency', authenticateToken, async (req, res) => {
+    try {
+        const result = await db.query(`
+            SELECT a.name, a.id, a.status, a.referral_code,
+                   COALESCE(u2.display_name, u2.username, 'Bilinmiyor') as owner_name
+            FROM users u
+            JOIN agencies a ON u.agency_id = a.id
+            LEFT JOIN users u2 ON a.owner_id = u2.id
+            WHERE u.id = $1
+        `, [req.params.id]);
+        
+        if (result.rows.length === 0) return res.json({ name: null });
+        res.json(result.rows[0]);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// JOIN AGENCY (User side)
+router.post('/agencies/join', authenticateToken, async (req, res) => {
+    const { agencyId } = req.body;
+    const userId = req.user.id;
+
+    if (!agencyId) return res.status(400).json({ error: 'Ajans kodu gerekli.' });
+
+    try {
+        // 1. Check if agency exists by ID or by Referral Code
+        let agencyRes;
+        const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(agencyId);
+        
+        if (isUuid) {
+            agencyRes = await db.query(
+                'SELECT id, name FROM agencies WHERE (id = $1 OR UPPER(referral_code) = UPPER($2)) AND status = \'active\'',
+                [agencyId, agencyId]
+            );
+        } else {
+            agencyRes = await db.query(
+                'SELECT id, name FROM agencies WHERE UPPER(referral_code) = UPPER($1) AND status = \'active\'',
+                [agencyId]
+            );
+        }
+
+        if (agencyRes.rows.length === 0) {
+            return res.status(404).json({ error: 'Geçersiz veya aktif olmayan ajans kodu.' });
+        }
+
+        const actualAgencyId = agencyRes.rows[0].id;
+        const agencyName = agencyRes.rows[0].name;
+
+        // 2. Update user's agency
+        await db.query('UPDATE users SET agency_id = $1 WHERE id = $2', [actualAgencyId, userId]);
+        
+        console.log(`[AGENCY] User ${userId} joined agency ${agencyName}`);
+        res.json({ success: true, message: `${agencyName} ajansına başarıyla katıldınız!`, agencyName });
+    } catch (err) {
+        console.error('[AGENCY] Join error:', err);
+        res.status(500).json({ error: 'Ajansa katılırken bir hata oluştu.' });
+    }
+});
+
+// ==========================================
+// AGENCY PORTAL ENDPOINTS
+// ==========================================
+
+// GET AGENCY OWNER DASHBOARD
+router.get('/agency/my-dashboard', authenticateToken, async (req, res) => {
+    try {
+        const userId = req.user.id;
+        
+        // 1. Fetch agency owned by this user
+        const agencyRes = await db.query('SELECT * FROM agencies WHERE owner_id = $1 LIMIT 1', [userId]);
+        if (agencyRes.rows.length === 0) {
+            return res.status(404).json({ error: 'Ajans bulunamadı.' });
+        }
+        
+        const agency = agencyRes.rows[0];
+        
+        // 2. Fetch operators belonging to this agency
+        const operatorsQuery = `
+            SELECT 
+                u.id, 
+                u.username, 
+                u.display_name, 
+                u.avatar_url,
+                o.is_online,
+                o.rating,
+                -- today_commission is operator's earned diamonds today
+                COALESCE((
+                    SELECT SUM(amount) 
+                    FROM commission_logs 
+                    WHERE operator_id::text = u.id::text 
+                      AND created_at >= CURRENT_DATE
+                ), 0) as today_commission,
+                -- check if operator has any low quality logs today
+                COALESCE((
+                    SELECT EXISTS(
+                        SELECT 1 
+                        FROM commission_logs 
+                        WHERE operator_id::text = u.id::text 
+                          AND created_at >= CURRENT_DATE 
+                          AND is_low_quality = true
+                    )
+                ), false) as is_low_quality
+            FROM users u
+            LEFT JOIN operators o ON u.id::text = o.user_id::text
+            WHERE u.agency_id::text = $1::text
+        `;
+        const operatorsRes = await db.query(operatorsQuery, [agency.id]);
+        const operators = operatorsRes.rows;
+        
+        // 3. Compute stats
+        // today_diamonds: Sum of coins_earned today across all operators in the agency * agency rate
+        const todayDiamondsQuery = `
+            SELECT COALESCE(SUM(amount * $2), 0) as today_diamonds
+            FROM commission_logs
+            WHERE agency_id::text = $1::text AND created_at >= CURRENT_DATE
+        `;
+        const todayDiamondsRes = await db.query(todayDiamondsQuery, [agency.id, parseFloat(agency.commission_rate || 0.40)]);
+        const today_diamonds = parseFloat(todayDiamondsRes.rows[0].today_diamonds);
+        
+        // active_operators: count of operators in this agency who are online
+        const activeOpsQuery = `
+            SELECT COUNT(*) as active_count
+            FROM users u
+            JOIN operators o ON u.id::text = o.user_id::text
+            WHERE u.agency_id::text = $1::text AND o.is_online = true
+        `;
+        const activeOpsRes = await db.query(activeOpsQuery, [agency.id]);
+        const active_operators = parseInt(activeOpsRes.rows[0].active_count || 0);
+        
+        const total_operators = operators.length;
+        
+        res.json({
+            agency: {
+                id: agency.id,
+                name: agency.name,
+                pending_balance: parseFloat(agency.pending_balance || 0),
+                lifetime_earnings: parseFloat(agency.lifetime_earnings || 0),
+                commission_rate: parseFloat(agency.commission_rate || 0.40),
+                status: agency.status
+            },
+            stats: {
+                today_diamonds,
+                active_operators,
+                total_operators
+            },
+            operators: operators.map(op => ({
+                id: op.id,
+                display_name: op.display_name,
+                username: op.username,
+                avatar_url: op.avatar_url,
+                is_online: !!op.is_online,
+                rating: parseFloat(op.rating || 5.0),
+                today_commission: parseFloat(op.today_commission || 0),
+                is_low_quality: !!op.is_low_quality
+            }))
+        });
+    } catch (err) {
+        console.error('[my-dashboard] Error:', err.message);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// POST SEND INVITATION
+router.post('/agency/invitations', authenticateToken, async (req, res) => {
+    const { targetIdentifier } = req.body;
+    const userId = req.user.id;
+    if (!targetIdentifier) {
+        return res.status(400).json({ error: 'Kullanıcı adı, ID veya Telefon girilmelidir.' });
+    }
+    try {
+        await db.query('BEGIN');
+        
+        // 1. Fetch agency owned by this user
+        const agencyRes = await db.query('SELECT id, name FROM agencies WHERE owner_id = $1 LIMIT 1', [userId]);
+        if (agencyRes.rows.length === 0) {
+            await db.query('ROLLBACK');
+            return res.status(403).json({ error: 'Ajans sahibi değilsiniz.' });
+        }
+        const agency = agencyRes.rows[0];
+        
+        // 2. Fetch target user
+        const targetRes = await db.query(
+            `SELECT id, username, display_name, role, gender, agency_id, is_agency_owner 
+             FROM users 
+             WHERE (id::text = $1 OR UPPER(username) = UPPER($1) OR phone = $1) LIMIT 1`,
+            [targetIdentifier]
+        );
+        if (targetRes.rows.length === 0) {
+            await db.query('ROLLBACK');
+            return res.status(404).json({ error: 'Yayıncı bulunamadı.' });
+        }
+        
+        const targetUser = targetRes.rows[0];
+        
+        // Validation rules
+        if (targetUser.is_agency_owner) {
+            await db.query('ROLLBACK');
+            return res.status(400).json({ error: 'Ajans sahipleri başka bir ajansa katılamaz.' });
+        }
+        if (targetUser.agency_id) {
+            await db.query('ROLLBACK');
+            return res.status(400).json({ error: 'Bu yayıncı zaten bir ajansa bağlı.' });
+        }
+        
+        // 3. Check for existing pending invitation
+        const existCheck = await db.query(
+            'SELECT id FROM agency_invitations WHERE agency_id = $1 AND operator_id = $2 AND status = \'pending\'',
+            [agency.id, targetUser.id]
+        );
+        if (existCheck.rows.length > 0) {
+            await db.query('ROLLBACK');
+            return res.status(400).json({ error: 'Bu yayıncıya zaten gönderilmiş bekleyen bir davet var.' });
+        }
+        
+        // 4. Insert invitation
+        await db.query(
+            'INSERT INTO agency_invitations (agency_id, operator_id, status) VALUES ($1, $2, \'pending\')',
+            [agency.id, targetUser.id]
+        );
+        
+        await db.query('COMMIT');
+        res.json({ success: true, message: 'Davet başarıyla gönderildi.' });
+    } catch (err) {
+        await db.query('ROLLBACK');
+        console.error('[agency-invitations] Error:', err.message);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// GET MY INVITATIONS (Operator side)
+router.get('/agency/my-invitations', authenticateToken, async (req, res) => {
+    const userId = req.user.id;
+    try {
+        const result = await db.query(
+            `SELECT ai.id, a.name as agency_name, ai.created_at
+             FROM agency_invitations ai
+             JOIN agencies a ON ai.agency_id::text = a.id::text
+             WHERE ai.operator_id = $1 AND ai.status = 'pending'
+             ORDER BY ai.created_at DESC`,
+            [userId]
+        );
+        res.json(result.rows);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// POST ACCEPT INVITATION
+router.post('/agency/invitations/:inviteId/accept', authenticateToken, async (req, res) => {
+    const { inviteId } = req.params;
+    const userId = req.user.id;
+    try {
+        await db.query('BEGIN');
+        
+        // 1. Fetch invitation
+        const inviteRes = await db.query(
+            'SELECT agency_id, operator_id FROM agency_invitations WHERE id = $1 AND operator_id = $2 AND status = \'pending\'',
+            [inviteId, userId]
+        );
+        if (inviteRes.rows.length === 0) {
+            await db.query('ROLLBACK');
+            return res.status(404).json({ error: 'Davet bulunamadı veya süresi geçmiş.' });
+        }
+        
+        const { agency_id } = inviteRes.rows[0];
+        
+        // 2. Set the operator's agency
+        await db.query('UPDATE users SET agency_id = $1 WHERE id = $2', [agency_id, userId]);
+        
+        // 3. Mark accepted
+        await db.query('UPDATE agency_invitations SET status = \'accepted\' WHERE id = $1', [inviteId]);
+        
+        // 4. Mark all other invitations as rejected
+        await db.query(
+            'UPDATE agency_invitations SET status = \'rejected\' WHERE operator_id = $1 AND id != $2 AND status = \'pending\'',
+            [userId, inviteId]
+        );
+        
+        await db.query('COMMIT');
+        res.json({ success: true, message: 'Ajans daveti kabul edildi.' });
+    } catch (err) {
+        await db.query('ROLLBACK');
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// POST REJECT INVITATION
+router.post('/agency/invitations/:inviteId/reject', authenticateToken, async (req, res) => {
+    const { inviteId } = req.params;
+    const userId = req.user.id;
+    try {
+        const result = await db.query(
+            'UPDATE agency_invitations SET status = \'rejected\' WHERE id = $1 AND operator_id = $2 AND status = \'pending\' RETURNING id',
+            [inviteId, userId]
+        );
+        if (result.rows.length === 0) {
+            return res.status(404).json({ error: 'Davet bulunamadı veya süresi geçmiş.' });
+        }
+        res.json({ success: true, message: 'Davet reddedildi.' });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// POST REMOVE OPERATOR FROM AGENCY
+router.post('/agency/remove-operator', authenticateToken, async (req, res) => {
+    const { operatorId } = req.body;
+    const userId = req.user.id;
+    if (!operatorId) {
+        return res.status(400).json({ error: 'Yayıncı ID gerekli.' });
+    }
+    try {
+        await db.query('BEGIN');
+        
+        // 1. Verify owner
+        const agencyRes = await db.query('SELECT id FROM agencies WHERE owner_id = $1 LIMIT 1', [userId]);
+        if (agencyRes.rows.length === 0) {
+            await db.query('ROLLBACK');
+            return res.status(403).json({ error: 'Ajans sahibi değilsiniz.' });
+        }
+        const agencyId = agencyRes.rows[0].id;
+        
+        const operatorCheck = await db.query('SELECT id FROM users WHERE id = $1 AND agency_id::text = $2::text', [operatorId, agencyId]);
+        if (operatorCheck.rows.length === 0) {
+            await db.query('ROLLBACK');
+            return res.status(404).json({ error: 'Yayıncı bu ajansa kayıtlı değil.' });
+        }
+        
+        // 2. Unlink
+        await db.query('UPDATE users SET agency_id = NULL WHERE id = $1', [operatorId]);
+        
+        await db.query('COMMIT');
+        res.json({ success: true, message: 'Yayıncı ajanstan başarıyla çıkarıldı.' });
+    } catch (err) {
+        await db.query('ROLLBACK');
+        res.status(500).json({ error: err.message });
+    }
+});
+
+module.exports = router;

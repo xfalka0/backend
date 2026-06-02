@@ -31,7 +31,10 @@ export const ChatProvider = ({ children }) => {
     const fetchBalance = async (userId) => {
         if (!userId) return;
         try {
-            const res = await axios.get(`${API_URL}/users/${userId}/balance`);
+            const token = await AsyncStorage.getItem('token');
+            const res = await axios.get(`${API_URL}/users/${userId}/balance`, {
+                headers: token ? { Authorization: `Bearer ${token}` } : {}
+            });
             setBalance(res.data.balance);
             useAppStore.getState().setBalance(res.data.balance);
         } catch (error) {

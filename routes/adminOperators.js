@@ -220,7 +220,13 @@ router.get('/my/stats', authenticateToken, async (req, res) => {
             SELECT u.id, u.username, u.display_name, u.avatar_url, u.role,
                 COALESCE(o.pending_balance, 0) as pending_balance, COALESCE(o.lifetime_earnings, 0) as lifetime_earnings,
                 COALESCE(o.commission_rate, 0.25) as commission_rate, o.last_payout_at, o.last_active_at,
+                -- Today Stats
                 (SELECT COALESCE(SUM(coins_earned), 0) FROM operator_stats WHERE operator_id::text = $1::text AND date = CURRENT_DATE) as earned_today,
+                (SELECT COALESCE(SUM(messages_sent), 0) FROM operator_stats WHERE operator_id::text = $1::text AND date = CURRENT_DATE) as messages_sent,
+                (SELECT COALESCE(SUM(image_count), 0) FROM operator_stats WHERE operator_id::text = $1::text AND date = CURRENT_DATE) as image_count,
+                (SELECT COALESCE(SUM(gift_count), 0) FROM operator_stats WHERE operator_id::text = $1::text AND date = CURRENT_DATE) as gift_count,
+                (SELECT COALESCE(SUM(coins_earned), 0) FROM operator_stats WHERE operator_id::text = $1::text AND date = CURRENT_DATE) as coins_earned,
+                -- Global Stats
                 (SELECT COALESCE(SUM(messages_sent), 0) FROM operator_stats WHERE operator_id::text = $1::text) as total_messages
             FROM users u
             LEFT JOIN operators o ON u.id::text = o.user_id::text
@@ -229,7 +235,7 @@ router.get('/my/stats', authenticateToken, async (req, res) => {
         const result = await db.query(query, [userId]);
         if (result.rows.length === 0) return res.status(404).json({ error: 'Stats not found' });
         const weeklyRes = await db.query(`
-            SELECT date, messages_sent, coins_earned FROM operator_stats
+            SELECT date, messages_sent, coins_earned, text_count, image_count, audio_count, gift_count FROM operator_stats
             WHERE operator_id::text = $1::text AND date >= CURRENT_DATE - INTERVAL '7 days' ORDER BY date DESC
         `, [userId]);
         res.json({ ...result.rows[0], weekly_stats: weeklyRes.rows });

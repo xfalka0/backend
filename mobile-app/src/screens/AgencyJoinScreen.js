@@ -34,6 +34,7 @@ export default function AgencyJoinScreen() {
     const [agencyCode, setAgencyCode] = useState('');
     const [linkedAgency, setLinkedAgency] = useState(null);
     const [fetchingAgency, setFetchingAgency] = useState(false);
+    const [isFocused, setIsFocused] = useState(false);
 
     // Sync profile and check if linked to agency
     const checkAgencyStatus = async () => {
@@ -136,9 +137,9 @@ export default function AgencyJoinScreen() {
         >
             <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
             
-            {/* Indigo/Violet Accent Backdrop Layer */}
+            {/* Ambient Pink-Purple Glowing Backdrop Layer */}
             <LinearGradient
-                colors={['#4f46e5', '#09021a']}
+                colors={['#7c3aed', '#db2777', '#09021a']}
                 style={styles.headerBackdrop}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 0, y: 1 }}
@@ -161,7 +162,7 @@ export default function AgencyJoinScreen() {
 
                 {fetchingAgency ? (
                     <View style={styles.loadingWrapper}>
-                        <ActivityIndicator size="large" color="#4f46e5" />
+                        <ActivityIndicator size="large" color="#db2777" />
                         <Text style={styles.loadingText}>Ajans bilgileri doğrulanıyor...</Text>
                     </View>
                 ) : (
@@ -173,13 +174,13 @@ export default function AgencyJoinScreen() {
                             /* User is already linked to an agency */
                             <GlassCard intensity={35} tint="dark" style={styles.statusCard}>
                                 <LinearGradient
-                                    colors={['rgba(79, 70, 229, 0.15)', 'rgba(99, 102, 241, 0.05)']}
+                                    colors={['rgba(219, 39, 119, 0.15)', 'rgba(124, 58, 237, 0.05)']}
                                     style={StyleSheet.absoluteFill}
                                     start={{ x: 0, y: 0 }}
                                     end={{ x: 1, y: 1 }}
                                 />
                                 <View style={styles.iconWrapperLinked}>
-                                    <Ionicons name="business" size={42} color="#818cf8" />
+                                    <Ionicons name="business" size={42} color="#db2777" />
                                     <View style={styles.badgeWrapper}>
                                         <Ionicons name="checkmark-circle" size={20} color="#10b981" />
                                     </View>
@@ -190,14 +191,26 @@ export default function AgencyJoinScreen() {
                                 </Text>
                                 
                                 <View style={styles.detailsContainer}>
-                                    <View style={styles.detailItem}>
-                                        <Text style={styles.detailLabel}>Ajans Adı:</Text>
-                                        <Text style={styles.detailValue}>{linkedAgency.name}</Text>
-                                    </View>
-                                    <View style={styles.detailItem}>
-                                        <Text style={styles.detailLabel}>Durum:</Text>
-                                        <Text style={[styles.detailValue, { color: '#10b981' }]}>Aktif Üye</Text>
-                                    </View>
+                                     <View style={styles.detailItem}>
+                                         <Text style={styles.detailLabel}>Ajans Adı:</Text>
+                                         <Text style={styles.detailValue}>{linkedAgency.name}</Text>
+                                     </View>
+                                     {linkedAgency.owner_name && (
+                                         <View style={styles.detailItem}>
+                                             <Text style={styles.detailLabel}>Ajans Sahibi:</Text>
+                                             <Text style={styles.detailValue}>{linkedAgency.owner_name}</Text>
+                                         </View>
+                                     )}
+                                     {linkedAgency.referral_code && (
+                                         <View style={styles.detailItem}>
+                                             <Text style={styles.detailLabel}>Ajans Kodu:</Text>
+                                             <Text style={[styles.detailValue, { color: '#db2777' }]}>{linkedAgency.referral_code}</Text>
+                                         </View>
+                                     )}
+                                     <View style={styles.detailItem}>
+                                         <Text style={styles.detailLabel}>Durum:</Text>
+                                         <Text style={[styles.detailValue, { color: '#10b981' }]}>Aktif Üye</Text>
+                                     </View>
                                 </View>
 
                                 <View style={styles.warningAlert}>
@@ -211,22 +224,27 @@ export default function AgencyJoinScreen() {
                             /* User needs to join an agency */
                             <View style={styles.formContainer}>
                                 <GlassCard intensity={25} tint="dark" style={styles.introCard}>
-                                    <Text style={styles.introTitle}>Bir Ajansta Yer Alın, Daha Fazla Kazanın! ⚡</Text>
-                                    <Text style={styles.introDesc}>
-                                        Bir ajansa katılarak özel görevlere erişebilir, performans takipleriyle gelirinizi optimize edebilir ve ödemelerinizi ajansınız aracılığıyla kolayca alabilirsiniz.
-                                    </Text>
+                                    <View style={styles.introAccentLine} />
+                                    <View style={styles.introTextContainer}>
+                                        <Text style={styles.introTitle}>Bir Ajansta Yer Alın, Daha Fazla Kazanın! ⚡</Text>
+                                        <Text style={styles.introDesc}>
+                                            Bir ajansa katılarak özel görevlere erişebilir, performans takipleriyle gelirinizi optimize edebilir ve ödemelerinizi ajansınız aracılığıyla kolayca alabilirsiniz.
+                                        </Text>
+                                    </View>
                                 </GlassCard>
 
                                 <Text style={styles.inputLabel}>Ajans Davet Kodu / Referans Kodu</Text>
                                 <TextInput
-                                    style={styles.input}
-                                    placeholder="Örn: FLK123 veya Ajans ID"
+                                    style={[styles.input, isFocused && styles.inputFocused]}
+                                    placeholder=""
                                     placeholderTextColor="rgba(255, 255, 255, 0.3)"
                                     value={agencyCode}
                                     onChangeText={setAgencyCode}
                                     autoCapitalize="characters"
                                     autoCorrect={false}
                                     editable={!loading}
+                                    onFocus={() => setIsFocused(true)}
+                                    onBlur={() => setIsFocused(false)}
                                 />
                                 <Text style={styles.inputHelper}>
                                     Ajans yöneticinizden aldığınız 6 haneli davet kodunu veya benzersiz ajans kodunu girin.
@@ -238,7 +256,7 @@ export default function AgencyJoinScreen() {
                                     disabled={loading}
                                 >
                                     <LinearGradient
-                                        colors={['#4f46e5', '#6366f1']}
+                                        colors={['#db2777', '#7c3aed']}
                                         style={styles.gradientButton}
                                         start={{ x: 0, y: 0 }}
                                         end={{ x: 1, y: 0 }}
@@ -339,7 +357,7 @@ const styles = StyleSheet.create({
         width: 80,
         height: 80,
         borderRadius: 24,
-        backgroundColor: 'rgba(79, 70, 229, 0.1)',
+        backgroundColor: 'rgba(219, 39, 119, 0.1)',
         justifyContent: 'center',
         alignItems: 'center',
         marginBottom: 16,
@@ -369,7 +387,7 @@ const styles = StyleSheet.create({
         paddingHorizontal: 5
     },
     agencyNameHighlight: {
-        color: '#818cf8',
+        color: '#db2777',
         fontWeight: '900'
     },
     detailsContainer: {
@@ -422,7 +440,20 @@ const styles = StyleSheet.create({
         padding: 20,
         marginBottom: 26,
         borderWidth: 1,
-        borderColor: 'rgba(255, 255, 255, 0.05)'
+        borderColor: 'rgba(255, 255, 255, 0.05)',
+        flexDirection: 'row',
+        alignItems: 'center',
+        overflow: 'hidden'
+    },
+    introAccentLine: {
+        width: 4,
+        borderRadius: 2,
+        backgroundColor: '#db2777',
+        marginRight: 16,
+        height: '80%'
+    },
+    introTextContainer: {
+        flex: 1
     },
     introTitle: {
         color: '#fff',
@@ -457,6 +488,10 @@ const styles = StyleSheet.create({
         fontSize: 15,
         fontWeight: '700'
     },
+    inputFocused: {
+        borderColor: '#db2777',
+        backgroundColor: 'rgba(255, 255, 255, 0.06)'
+    },
     inputHelper: {
         color: 'rgba(255, 255, 255, 0.35)',
         fontSize: 11,
@@ -472,7 +507,7 @@ const styles = StyleSheet.create({
         overflow: 'hidden',
         marginTop: 32,
         elevation: 8,
-        shadowColor: '#4f46e5',
+        shadowColor: '#db2777',
         shadowOffset: { width: 0, height: 4 },
         shadowOpacity: 0.3,
         shadowRadius: 10

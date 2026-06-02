@@ -2499,6 +2499,18 @@ app.get('/api/users/balance', authenticateToken, async (req, res) => {
     }
 });
 
+// GET USER BALANCE BY ID
+app.get('/api/users/:userId/balance', authenticateToken, async (req, res) => {
+    const { userId } = req.params;
+    try {
+        const result = await db.query('SELECT balance FROM users WHERE id = $1', [userId]);
+        if (result.rows.length === 0) return res.status(404).json({ error: 'User not found' });
+        res.json({ balance: result.rows[0].balance || 0 });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // SECURE PURCHASE ENDPOINT
 app.post('/api/purchase', authenticateToken, async (req, res) => {
     // Note: authenticateToken is safer, but ShopScreen currently might not send auth header?
@@ -2958,18 +2970,36 @@ app.post('/api/agencies/join', authenticateToken, async (req, res) => {
     if (!agencyId) return res.status(400).json({ error: 'Ajans kodu gerekli.' });
 
     try {
-        // 1. Check if agency exists
-        const agencyRes = await db.query('SELECT name FROM agencies WHERE id = $1 AND status = \'active\'', [agencyId]);
+        // 1. Check if agency exists by ID or by Referral Code
+        let agencyRes;
+        const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(agencyId);
+        
+        if (isUuid) {
+            agencyRes = await db.query(
+                'SELECT id, name FROM agencies WHERE (id = $1 OR UPPER(referral_code) = UPPER($2)) AND status = \'active\'',
+                [agencyId, agencyId]
+            );
+        } else {
+            agencyRes = await db.query(
+                'SELECT id, name FROM agencies WHERE UPPER(referral_code) = UPPER($1) AND status = \'active\'',
+                [agencyId]
+            );
+        }
+
         if (agencyRes.rows.length === 0) {
             return res.status(404).json({ error: 'Geçersiz veya aktif olmayan ajans kodu.' });
         }
 
+        const actualAgencyId = agencyRes.rows[0].id;
+        const agencyName = agencyRes.rows[0].name;
+
         // 2. Update user's agency
-        await db.query('UPDATE users SET agency_id = $1 WHERE id = $2', [agencyId, userId]);
+        await db.query('UPDATE users SET agency_id = $1 WHERE id = $2', [actualAgencyId, userId]);
         
-        console.log(`[AGENCY] User ${userId} joined agency ${agencyRes.rows[0].name}`);
-        res.json({ success: true, message: `${agencyRes.rows[0].name} ajansına başarıyla katıldınız!`, agencyName: agencyRes.rows[0].name });
+        console.log(`[AGENCY] User ${userId} joined agency ${agencyName}`);
+        res.json({ success: true, message: `${agencyName} ajansına başarıyla katıldınız!`, agencyName });
     } catch (err) {
+        console.error('[AGENCY] Join error:', err);
         res.status(500).json({ error: 'Ajansa katılırken bir hata oluştu.' });
     }
 });

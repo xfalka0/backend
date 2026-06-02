@@ -658,11 +658,7 @@ const ProfileScreen = ({ route }) => {
                 <View style={styles.glassCardWrapper}>
                     <LinearGradient colors={themeMode === 'dark' ? theme.gradients.card : ['#fff', '#f0f0f0']} style={styles.glassCard}>
                         <View style={styles.quickActionsGrid}>
-                            <TouchableOpacity style={styles.qaItem} onPress={() => {
-                                const phoneNumber = "905414738700";
-                                const message = "Merhaba, ajans işlemleri hakkında bilgi almak istiyorum.";
-                                require('react-native').Linking.openURL(`https://wa.me/${phoneNumber}?text=${encodeURIComponent(message)}`);
-                            }}>
+                            <TouchableOpacity style={styles.qaItem} onPress={() => navigation.navigate('AgencyJoin')}>
                                 <View style={styles.qaIconOnly}>
                                     <Ionicons name="business" size={26} color="#3b82f6" />
                                 </View>

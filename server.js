@@ -2761,6 +2761,7 @@ app.get('/api/chats/admin', authenticateToken, authorizeRole('admin', 'super_adm
                 c.*, 
                 COALESCE(u.display_name, u.username, 'Bilinmeyen Kullanıcı') as user_name, 
                 u.avatar_url as user_avatar,
+                u.balance as user_balance,
                 u.vip_level,
                 u.age,
                 u.gender,

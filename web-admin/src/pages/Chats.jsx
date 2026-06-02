@@ -19,6 +19,7 @@ const Chats = () => {
     const [uploading, setUploading] = useState(false);
     const [isLockedImage, setIsLockedImage] = useState(false);
     const [lockedImageCost, setLockedImageCost] = useState(50);
+    const [loadingMoreChats, setLoadingMoreChats] = useState(false);
     const socketRef = useRef(null);
     const messagesEndRef = useRef(null);
     const typingTimeoutRef = useRef(null);
@@ -26,6 +27,7 @@ const Chats = () => {
     const selectedChatIdRef = useRef(null);
     const chatListRef = useRef(null);
     const isSendingTypingRef = useRef(false);
+    const isFetchingChatsRef = useRef(false);
 
     const handleTyping = (e) => {
         const text = e.target.value;
@@ -180,7 +182,20 @@ const Chats = () => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     };
 
+    const handleChatListScroll = (e) => {
+        const { scrollTop, scrollHeight, clientHeight } = e.currentTarget;
+        // Trigger fetch when scrolled within 100px of bottom
+        if (scrollHeight - scrollTop - clientHeight < 100) {
+            if (chats.length >= 50 && !isFetchingChatsRef.current) {
+                fetchChats(chats.length, true);
+            }
+        }
+    };
+
     const fetchChats = async (offsetVal = 0, isLoadMore = false) => {
+        if (isFetchingChatsRef.current) return;
+        isFetchingChatsRef.current = true;
+        if (isLoadMore) setLoadingMoreChats(true);
         try {
             const list = chatListRef.current;
             const currentScroll = list ? list.scrollTop : 0;
@@ -209,6 +224,9 @@ const Chats = () => {
             }
         } catch (err) {
             console.error('Error fetching chats:', err);
+        } finally {
+            isFetchingChatsRef.current = false;
+            setLoadingMoreChats(false);
         }
     };
 
@@ -484,18 +502,14 @@ const Chats = () => {
                 </div>
                 <div 
                     ref={chatListRef}
+                    onScroll={handleChatListScroll}
                     className="flex-1 overflow-y-auto" 
                     style={{ overflowAnchor: 'none' }}
                 >
                     {memoizedChatList}
-                    {chats.length >= 50 && (
-                        <div className="p-4 flex justify-center">
-                            <button
-                                onClick={() => fetchChats(chats.length, true)}
-                                className="text-xs font-bold text-slate-400 hover:text-white bg-slate-800/50 hover:bg-slate-700 px-4 py-2 rounded-full transition-colors w-full border border-white/5 shadow-lg"
-                            >
-                                Daha Fazla Sohbet Yükle
-                            </button>
+                    {loadingMoreChats && (
+                        <div className="p-4 text-center text-xs font-bold text-slate-500 animate-pulse uppercase tracking-widest">
+                            Daha fazla sohbet yükleniyor...
                         </div>
                     )}
                 </div>

@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { BarChart2, Users, TrendingUp, TrendingDown, UserCheck, UserX, Calendar, Activity } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-
-const API_URL = '';
+const API_URL = import.meta.env.VITE_API_URL || 
+    ((window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+        ? 'http://localhost:5000/api'
+        : 'https://backend-kj17.onrender.com/api');
 
 export default function Retention() {
     const { token } = useAuth();

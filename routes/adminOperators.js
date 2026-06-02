@@ -245,8 +245,8 @@ router.post('/my/withdraw', authenticateToken, async (req, res) => {
 
     try {
         const withdrawAmount = parseInt(amount);
-        if (isNaN(withdrawAmount) || withdrawAmount < 5000) {
-            return res.status(400).json({ error: 'Minimum çekim limiti 5.000 elmastır.' });
+        if (isNaN(withdrawAmount) || withdrawAmount < 10000) {
+            return res.status(400).json({ error: 'Minimum çekim limiti 10.000 elmastır (5 USD).' });
         }
 
         // Validate IBAN: TR prefix and exactly 26 characters (or standard TR IBAN formatting)
@@ -314,6 +314,63 @@ router.get('/my/withdrawals', authenticateToken, async (req, res) => {
         );
         res.json(result.rows);
     } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// EXCHANGE DIAMONDS TO MESSAGE COINS (Operator/Female user)
+router.post('/my/exchange-coins', authenticateToken, async (req, res) => {
+    const { amount, coins } = req.body;
+    const userId = req.user.id;
+
+    try {
+        const diamondAmount = parseInt(amount);
+        const coinAmount = parseInt(coins);
+
+        if (isNaN(diamondAmount) || diamondAmount <= 0 || isNaN(coinAmount) || coinAmount <= 0) {
+            return res.status(400).json({ error: 'Geçersiz elmas veya altın para tutarı.' });
+        }
+
+        await db.query('BEGIN');
+
+        // Check pending balance lock
+        const opRes = await db.query('SELECT pending_balance FROM operators WHERE user_id = $1 FOR UPDATE', [userId]);
+        if (opRes.rows.length === 0) {
+            await db.query('ROLLBACK');
+            return res.status(404).json({ error: 'Kullanıcı cüzdanı bulunamadı.' });
+        }
+
+        const pending = parseFloat(opRes.rows[0].pending_balance || 0);
+        if (pending < diamondAmount) {
+            await db.query('ROLLBACK');
+            return res.status(400).json({ error: 'Yetersiz bakiye.' });
+        }
+
+        // Deduct diamonds from operator's pending_balance
+        await db.query(
+            'UPDATE operators SET pending_balance = pending_balance - $1 WHERE user_id = $2',
+            [diamondAmount, userId]
+        );
+
+        // Add coins to user's balance in users table
+        await db.query(
+            'UPDATE users SET balance = balance + $1 WHERE id = $2',
+            [coinAmount, userId]
+        );
+
+        // Record transaction log for the coin deposit
+        await db.query(
+            `INSERT INTO transactions (user_id, amount, type, description)
+             VALUES ($1, $2, 'bonus', $3)`,
+            [userId, coinAmount, `${diamondAmount} Elmas takası ile gelen altın para (+ bonus)`]
+        );
+
+        await db.query('COMMIT');
+        res.json({ success: true, newBalance: pending - diamondAmount });
+
+    } catch (err) {
+        await db.query('ROLLBACK');
+        console.error('[EXCHANGE-ERROR]', err.message);
         res.status(500).json({ error: err.message });
     }
 });

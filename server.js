@@ -4,8 +4,6 @@ const http = require('http');
 const { Server } = require('socket.io');
 const cors = require('cors');
 const db = require('./db');
-const { initializeDatabase } = require('./db/init');
-const { initializeSockets } = require('./socket/socketHandler');
 require('dotenv').config();
 const bcrypt = require('bcrypt');
 const { authenticateToken, authorizeRole, SECRET_KEY } = require('./middleware/auth');
@@ -14,61 +12,12 @@ const { recordOperatorCommission } = require('./utils/commissionUtils');
 const jwt = require('jsonwebtoken');
 const socialRoutes = require('./routes/socialRoutes');
 const authRoutes = require('./routes/authRoutes');
-const referralRoutes = require('./routes/referralRoutes');
 const favoritesRoutes = require('./routes/favorites');
 const viewsRoutes = require('./routes/views');
 const boostsRoutes = require('./routes/boosts');
 const webhooksRoutes = require('./routes/webhooks');
-const { sanitizeUser, logActivity, MALE_NAMES_ARRAY, MALE_NAME_PATTERN, assignFakeInteractions, triggerAutoEngagement } = require('./utils/helpers');
+const { sanitizeUser, logActivity } = require('./utils/helpers');
 const { sendPushNotification } = require('./utils/notificationUtils');
-
-const normalizeText = (value = '') => {
-    if (!value) return '';
-    let text = value.toString();
-    
-    // Manual Turkish character replacement for maximum reliability
-    text = text.replace(/İ/g, 'i')
-               .replace(/I/g, 'ı')
-               .replace(/ı/g, 'i')
-               .replace(/Ş/g, 's')
-               .replace(/ş/g, 's')
-               .replace(/Ğ/g, 'g')
-               .replace(/ğ/g, 'g')
-               .replace(/Ü/g, 'u')
-               .replace(/ü/g, 'u')
-               .replace(/Ö/g, 'o')
-               .replace(/ö/g, 'o')
-               .replace(/Ç/g, 'c')
-               .replace(/ç/g, 'c');
-
-    return text.toLowerCase()
-               .normalize('NFD')
-               .replace(/[\u0300-\u036f]/g, '')
-               .replace(/[^a-z0-9\s]/g, ' ')
-               .replace(/\s+/g, ' ')
-               .trim();
-};
-
-const normalizeGenderValue = (gender) => {
-    const raw = (gender || '').toString().trim().toLowerCase();
-    const value = normalizeText(raw);
-
-    if (value === 'coin_bayisi') return 'coin_bayisi';
-    if (value === 'erkek' || value === 'male' || value === 'man') return 'erkek';
-    if (value === 'kadin' || value === 'female' || value === 'woman') return 'kadin';
-    return null;
-};
-
-// --- NEW MODULAR ROUTES ---
-const adminUsersRoutes = require('./routes/adminUsers');
-const adminOperatorsRoutes = require('./routes/adminOperators');
-const adminPanelRoutes = require('./routes/adminPanel');
-const userRoutes = require('./routes/userRoutes');
-const chatRoutes = require('./routes/chatRoutes');
-const messageRoutes = require('./routes/messageRoutes');
-const packageRoutes = require('./routes/packageRoutes');
-const starterPackRoutes = require('./routes/starterPackRoutes');
-// --------------------------
 
 const app = express();
 const multer = require('multer');
@@ -93,7 +42,604 @@ cloudinary.config({
     api_secret: process.env.CLOUDINARY_API_SECRET
 });
 
-// Database initialization logic has been moved to db/init.js
+// --- DATABASE AUTO-MIGRATION & INITIALIZATION ---
+const initializeDatabase = async () => {
+    try {
+        console.log('[DB] VERIFYING SCHEMA AND INITIALIZING...');
+
+        // 1. Coin Packages Table
+        await db.query(`
+            CREATE TABLE IF NOT EXISTS coin_packages (
+                id SERIAL PRIMARY KEY,
+                name VARCHAR(100) NOT NULL,
+                description TEXT,
+                price DECIMAL(10, 2) NOT NULL,
+                coins INTEGER NOT NULL,
+                icon_url VARCHAR(255),
+                revenuecat_id VARCHAR(255),
+                is_active BOOLEAN DEFAULT TRUE,
+                is_popular BOOLEAN DEFAULT FALSE,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        `);
+
+        // 2. Payments Table
+        try {
+            await db.query(`
+                CREATE TABLE IF NOT EXISTS payments (
+                    id SERIAL PRIMARY KEY,
+                    user_id TEXT,
+                    package_id INTEGER REFERENCES coin_packages(id),
+                    transaction_id VARCHAR(255) UNIQUE,
+                    amount DECIMAL(10, 2) NOT NULL,
+                    status VARCHAR(50) DEFAULT 'completed',
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            `);
+            console.log('[DB] payments table verified');
+        } catch (e) { console.error('[DB] Error payments:', e.message); }
+
+
+        // 3. Transactions Table
+        try {
+            await db.query(`
+                CREATE TABLE IF NOT EXISTS transactions (
+                    id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+                    user_id TEXT,
+                    amount INTEGER NOT NULL,
+                    type VARCHAR(50) NOT NULL,
+                    description TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            `);
+            console.log('[DB] transactions table verified');
+        } catch (e) { console.error('[DB] Error transactions:', e.message); }
+
+        // 4. Commission Logs Table - FORCE CREATE IMMEDIATELY
+        try {
+            await db.query(`
+                CREATE TABLE IF NOT EXISTS commission_logs (
+                    id SERIAL PRIMARY KEY,
+                    operator_id TEXT,
+                    chat_id TEXT,
+                    amount DECIMAL(10, 2) NOT NULL,
+                    type VARCHAR(50) NOT NULL,
+                    agency_id TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            `);
+            console.log('[DB] commission_logs table verified');
+        } catch (tableErr) {
+            console.error('[DB] Error creating commission_logs table:', tableErr.message);
+        }
+
+        // 5. Agencies Table
+        try {
+            await db.query(`
+                CREATE TABLE IF NOT EXISTS agencies (
+                    id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+                    owner_id TEXT,
+                    name VARCHAR(255) NOT NULL,
+                    commission_rate DECIMAL(5, 2) DEFAULT 0.40,
+                    pending_balance DECIMAL(12, 2) DEFAULT 0,
+                    lifetime_earnings DECIMAL(12, 2) DEFAULT 0,
+                    status VARCHAR(50) DEFAULT 'active',
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            `);
+            console.log('[DB] agencies table verified');
+        } catch (tableErr) {
+            console.error('[DB] Error creating agencies table:', tableErr.message);
+        }
+
+        // Migration for existing table if types were wrong
+        try {
+            await db.query('ALTER TABLE commission_logs ALTER COLUMN operator_id TYPE TEXT');
+            await db.query('ALTER TABLE commission_logs ALTER COLUMN chat_id TYPE TEXT');
+            await db.query('ALTER TABLE commission_logs ADD COLUMN IF NOT EXISTS agency_id TEXT');
+        } catch (e) { /* ignore if column doesn't exist yet */ }
+
+        try {
+            await db.query('ALTER TABLE users ALTER COLUMN balance TYPE INTEGER USING balance::integer');
+        } catch (e) { 
+            console.error('[DB] Migration Error (users balance):', e.message);
+        }
+        const getColumns = async (table) => {
+            const res = await db.query("SELECT column_name FROM information_schema.columns WHERE table_name = $1", [table]);
+            return res.rows.map(c => c.column_name);
+        };
+
+        // --- Coin Packages Migrations ---
+        const pkgCols = await getColumns('coin_packages');
+        if (!pkgCols.includes('revenuecat_id')) await db.query('ALTER TABLE coin_packages ADD COLUMN revenuecat_id VARCHAR(255)');
+        if (!pkgCols.includes('is_popular')) await db.query('ALTER TABLE coin_packages ADD COLUMN is_popular BOOLEAN DEFAULT FALSE');
+        if (!pkgCols.includes('description')) await db.query('ALTER TABLE coin_packages ADD COLUMN description TEXT');
+
+        // --- Transactions Migrations ---
+        const txnCols = await getColumns('transactions');
+        if (!txnCols.includes('type')) {
+            console.log('[DB] Adding missing column: type to transactions');
+            await db.query('ALTER TABLE transactions ADD COLUMN type VARCHAR(50) NOT NULL DEFAULT \'unknown\'');
+            await db.query('ALTER TABLE transactions ALTER COLUMN type DROP DEFAULT');
+        }
+        if (!txnCols.includes('description')) await db.query('ALTER TABLE transactions ADD COLUMN description TEXT');
+        if (!txnCols.includes('user_id')) await db.query('ALTER TABLE transactions ADD COLUMN user_id UUID REFERENCES users(id)');
+        if (!txnCols.includes('amount')) await db.query('ALTER TABLE transactions ADD COLUMN amount INTEGER DEFAULT 0');
+        if (!txnCols.includes('created_at')) await db.query('ALTER TABLE transactions ADD COLUMN created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP');
+
+        // --- Payments Migrations ---
+        const payCols = await getColumns('payments');
+        if (!payCols.includes('user_id')) await db.query('ALTER TABLE payments ADD COLUMN user_id UUID REFERENCES users(id)');
+        if (!payCols.includes('package_id')) await db.query('ALTER TABLE payments ADD COLUMN package_id INTEGER REFERENCES coin_packages(id)');
+        if (!payCols.includes('transaction_id')) await db.query('ALTER TABLE payments ADD COLUMN transaction_id VARCHAR(255) UNIQUE');
+        if (!payCols.includes('amount')) await db.query('ALTER TABLE payments ADD COLUMN amount DECIMAL(10, 2) NOT NULL DEFAULT 0');
+        if (!payCols.includes('status')) await db.query('ALTER TABLE payments ADD COLUMN status VARCHAR(50) DEFAULT \'completed\'');
+        if (!payCols.includes('created_at')) await db.query('ALTER TABLE payments ADD COLUMN created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP');
+
+        // Seed packages if none exist
+        const result = await db.query('SELECT COUNT(*) FROM coin_packages');
+        if (parseInt(result.rows[0].count) === 0) {
+            console.log('[DB] Seeding default coin packages...');
+            const packages = [
+                { name: 'Başlangıç Paketi', price: 39.99, coins: 100, rc_id: 'coins_100' },
+                { name: 'Gümüş Paket', price: 69.99, coins: 200, rc_id: 'coins_200' },
+                { name: 'Altın Paket', price: 129.99, coins: 400, rc_id: 'coins_400' },
+                { name: 'VIP Paket', price: 249.99, coins: 700, rc_id: 'coins_700' },
+                { name: 'Platin Paket', price: 449.99, coins: 1200, rc_id: 'coins_1200' },
+                { name: 'Efsane Paket', price: 949.99, coins: 2500, rc_id: 'coins_2500' },
+                { name: 'Ultimate Paket', price: 1749.99, coins: 5000, rc_id: 'coins_5000' }
+            ];
+
+            for (const pkg of packages) {
+                await db.query(
+                    'INSERT INTO coin_packages (name, price, coins, revenuecat_id) VALUES ($1, $2, $3, $4)',
+                    [pkg.name, pkg.price, pkg.coins, pkg.rc_id]
+                );
+            }
+            console.log('[DB] Default coin packages seeded.');
+        }
+
+        // Check for users table columns
+        const columns = await db.query("SELECT column_name FROM information_schema.columns WHERE table_name = 'users'");
+        const columnNames = columns.rows.map(c => c.column_name);
+
+        if (!columnNames.includes('age')) {
+            console.log('[DB] Adding missing column: age');
+            await db.query('ALTER TABLE users ADD COLUMN age INTEGER DEFAULT 18');
+        }
+
+        if (!columnNames.includes('name')) {
+            console.log('[DB] Adding missing column: name');
+            await db.query('ALTER TABLE users ADD COLUMN name VARCHAR(255)');
+        }
+
+        if (!columnNames.includes('display_name')) {
+            console.log('[DB] Adding missing column: display_name');
+            await db.query('ALTER TABLE users ADD COLUMN display_name VARCHAR(255)');
+        }
+
+        if (!columnNames.includes('interests')) {
+            console.log('[DB] Adding missing column: interests');
+            await db.query('ALTER TABLE users ADD COLUMN interests TEXT');
+        }
+
+        if (!columnNames.includes('relationship')) {
+            console.log('[DB] Adding missing column: relationship');
+            await db.query('ALTER TABLE users ADD COLUMN relationship VARCHAR(50)');
+        }
+
+        if (!columnNames.includes('zodiac')) {
+            console.log('[DB] Adding missing column: zodiac');
+            await db.query('ALTER TABLE users ADD COLUMN zodiac VARCHAR(50)');
+        }
+
+        // --- NEW MIGRATION: Make password_hash nullable for social login ---
+        await db.query('ALTER TABLE users ALTER COLUMN password_hash DROP NOT NULL');
+
+
+        if (!columnNames.includes('job')) {
+            console.log('[DB] Adding missing column: job');
+            await db.query('ALTER TABLE users ADD COLUMN job VARCHAR(100)');
+        }
+
+        if (!columnNames.includes('edu')) {
+            console.log('[DB] Adding missing column: edu');
+            await db.query('ALTER TABLE users ADD COLUMN edu VARCHAR(100)');
+        }
+
+        if (!columnNames.includes('bio')) {
+            console.log('[DB] Adding missing column: bio');
+            await db.query('ALTER TABLE users ADD COLUMN bio TEXT');
+        }
+
+        if (!columnNames.includes('boy')) {
+            console.log('[DB] Adding missing column: boy');
+            await db.query('ALTER TABLE users ADD COLUMN boy VARCHAR(20)');
+        }
+
+        if (!columnNames.includes('push_token')) {
+            console.log('[DB] Adding missing column: push_token');
+            await db.query('ALTER TABLE users ADD COLUMN push_token VARCHAR(255)');
+        }
+
+        if (!columnNames.includes('kilo')) {
+            console.log('[DB] Adding missing column: kilo');
+            await db.query('ALTER TABLE users ADD COLUMN kilo VARCHAR(20)');
+        }
+
+        if (!columnNames.includes('avatar_url')) {
+            console.log('[DB] Adding missing column: avatar_url');
+            await db.query('ALTER TABLE users ADD COLUMN avatar_url TEXT');
+        }
+
+        if (!columnNames.includes('gender')) {
+            console.log('[DB] Adding missing column: gender');
+            await db.query('ALTER TABLE users ADD COLUMN gender VARCHAR(50)');
+        }
+
+        if (!columnNames.includes('onboarding_completed')) {
+            console.log('[DB] Adding missing column: onboarding_completed');
+            await db.query('ALTER TABLE users ADD COLUMN onboarding_completed BOOLEAN DEFAULT false');
+        }
+
+        if (!columnNames.includes('last_auto_message_at')) {
+            console.log('[DB] Adding missing column: last_auto_message_at');
+            await db.query('ALTER TABLE users ADD COLUMN last_auto_message_at TIMESTAMP');
+        }
+
+        // Fix pending_photos schema if it exists with wrong ID type or missing default
+        const photoCols = await db.query("SELECT column_name, data_type, column_default FROM information_schema.columns WHERE table_name = 'pending_photos'");
+        const photoColNames = photoCols.rows.map(c => c.column_name);
+        if (photoColNames.length > 0) {
+            const idCol = photoCols.rows.find(c => c.column_name === 'id');
+            if (idCol && idCol.data_type === 'uuid' && !idCol.column_default) {
+                console.log('[DB] Fixing pending_photos id default...');
+                await db.query('ALTER TABLE pending_photos ALTER COLUMN id SET DEFAULT gen_random_uuid()');
+            }
+        }
+
+        if (!columnNames.includes('vip_level')) {
+            console.log('[DB] Adding missing column: vip_level');
+            await db.query('ALTER TABLE users ADD COLUMN vip_level INTEGER DEFAULT 0');
+        }
+
+        if (!columnNames.includes('is_vip')) {
+            console.log('[DB] Adding missing column: is_vip');
+            await db.query('ALTER TABLE users ADD COLUMN is_vip BOOLEAN DEFAULT FALSE');
+        }
+
+        if (!columnNames.includes('photos')) {
+            console.log('[DB] Adding missing column: photos');
+            await db.query('ALTER TABLE users ADD COLUMN photos TEXT[] DEFAULT \'{}\'');
+        }
+
+        if (!columnNames.includes('is_verified')) {
+            console.log('[DB] Adding missing column: is_verified');
+            await db.query('ALTER TABLE users ADD COLUMN is_verified BOOLEAN DEFAULT FALSE');
+        }
+
+        if (!columnNames.includes('phone')) {
+            console.log('[DB] Adding missing column: phone');
+            await db.query('ALTER TABLE users ADD COLUMN phone VARCHAR(20) UNIQUE');
+        }
+
+        if (!columnNames.includes('last_login_at')) {
+            console.log('[DB] Adding missing column: last_login_at');
+            await db.query('ALTER TABLE users ADD COLUMN last_login_at TIMESTAMP');
+        }
+
+
+        if (!columnNames.includes('ban_expires_at')) {
+            console.log('[DB] Adding missing column: ban_expires_at');
+            await db.query('ALTER TABLE users ADD COLUMN ban_expires_at TIMESTAMP');
+        }
+
+        // --- RECOVERY FIX: Ensure all matching operator entries exist and are active ---
+        console.log('[RECOVERY] Checking for missing operator profiles...');
+
+        // 1. Force all staff roles to be active (to recover accidental soft-deletes/NULLs)
+        await db.query(`
+            UPDATE users 
+            SET account_status = 'active' 
+            WHERE role IN ('operator', 'moderator', 'admin', 'super_admin') 
+            AND (account_status IS NULL OR account_status = 'deleted' OR account_status = 'under_review')
+        `);
+
+        // 2. Fix missing operators table entries
+        const missingOps = await db.query(`
+            SELECT id FROM users 
+            WHERE role IN ('operator', 'moderator', 'admin', 'super_admin', 'staff')
+            AND id NOT IN (SELECT user_id FROM operators)
+        `);
+
+        if (missingOps.rows.length > 0) {
+            console.log(`[RECOVERY] Found ${missingOps.rows.length} users with operator role missing from operators table. Repairing...`);
+            for (const user of missingOps.rows) {
+                await db.query(
+                    "INSERT INTO operators (user_id, category, bio, photos, is_online, rating) VALUES ($1, 'Genel', 'Merhaba!', '{}', false, 5.0)",
+                    [user.id]
+                );
+            }
+            console.log('[RECOVERY] Repair complete.');
+        } else {
+            console.log('[RECOVERY] No synchronization issues found.');
+        }
+
+        // Detect users.id type to ensure FK compatibility
+        let userIdType = 'UUID';
+        const userTypeCheck = await db.query("SELECT data_type FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'id'");
+        if (userTypeCheck.rows.length > 0) {
+            userIdType = userTypeCheck.rows[0].data_type.toUpperCase() === 'INTEGER' ? 'INTEGER' : 'UUID';
+            console.log(`[DB] Detected users.id type: ${userIdType}`);
+        }
+        app.set('user_id_type', userIdType);
+
+        // Fix activities table user_id type if mismatched
+        const actCols = await db.query("SELECT column_name, data_type FROM information_schema.columns WHERE table_name = 'activities'");
+        const actColNames = actCols.rows.map(c => c.column_name);
+
+        if (actColNames.length > 0) {
+            const userIdCol = actCols.rows.find(c => c.column_name === 'user_id');
+            if (userIdCol && userIdCol.data_type.toUpperCase() !== userIdType) {
+                console.log(`[DB] Syncing activities.user_id type to ${userIdType}...`);
+                await db.query(`ALTER TABLE activities ALTER COLUMN user_id TYPE ${userIdType} USING user_id::${userIdType}`);
+            }
+        } else {
+            await db.query(`CREATE TABLE IF NOT EXISTS activities (
+                id SERIAL PRIMARY KEY,
+                user_id ${userIdType} REFERENCES users(id) ON DELETE CASCADE,
+                action_type VARCHAR(50),
+                description TEXT,
+                created_at TIMESTAMP DEFAULT NOW()
+            )`);
+        }
+
+        // Fix posts table operator_id type if mismatched
+        const postColsCheck = await db.query("SELECT column_name, data_type FROM information_schema.columns WHERE table_name = 'posts'");
+        const postColNames = postColsCheck.rows.map(c => c.column_name);
+        if (postColNames.length > 0) {
+            const opIdCol = postColsCheck.rows.find(c => c.column_name === 'operator_id');
+            if (opIdCol && opIdCol.data_type.toUpperCase() !== userIdType) {
+                console.log(`[DB] Syncing posts.operator_id type to ${userIdType}...`);
+                await db.query(`ALTER TABLE posts ALTER COLUMN operator_id TYPE ${userIdType} USING operator_id::TEXT::${userIdType}`);
+            }
+        }
+
+        // Fix stories table operator_id type if mismatched
+        const storyColsCheck = await db.query("SELECT column_name, data_type FROM information_schema.columns WHERE table_name = 'stories'");
+        const storyColNames = storyColsCheck.rows.map(c => c.column_name);
+        if (storyColNames.length > 0) {
+            const opIdCol = storyColsCheck.rows.find(c => c.column_name === 'operator_id');
+            if (opIdCol && opIdCol.data_type.toUpperCase() !== userIdType) {
+                console.log(`[DB] Syncing stories.operator_id type to ${userIdType}...`);
+                await db.query(`ALTER TABLE stories ALTER COLUMN operator_id TYPE ${userIdType} USING operator_id::TEXT::${userIdType}`);
+            }
+        }
+
+        // Fix story_likes table types
+        const storyLikeColsCheck = await db.query("SELECT column_name, data_type FROM information_schema.columns WHERE table_name = 'story_likes'");
+        if (storyLikeColsCheck.rows.length > 0) {
+            const userIdCol = storyLikeColsCheck.rows.find(c => c.column_name === 'user_id');
+            if (userIdCol && userIdCol.data_type.toUpperCase() !== userIdType) {
+                console.log(`[DB] Syncing story_likes.user_id type to ${userIdType}...`);
+                await db.query(`ALTER TABLE story_likes ALTER COLUMN user_id TYPE ${userIdType} USING user_id::TEXT::${userIdType}`);
+            }
+        }
+
+        // Fix post_comments table types
+        const commentColsCheck = await db.query("SELECT column_name, data_type FROM information_schema.columns WHERE table_name = 'post_comments'");
+        if (commentColsCheck.rows.length > 0) {
+            const userIdCol = commentColsCheck.rows.find(c => c.column_name === 'user_id');
+            if (userIdCol && userIdCol.data_type.toUpperCase() !== userIdType) {
+                console.log(`[DB] Syncing post_comments.user_id type to ${userIdType}...`);
+                await db.query(`ALTER TABLE post_comments ALTER COLUMN user_id TYPE ${userIdType} USING user_id::TEXT::${userIdType}`);
+            }
+        }
+
+        // Migration logic
+        // Messages table enhancements
+        await db.query('ALTER TABLE messages ADD COLUMN IF NOT EXISTS gift_id INT');
+        await db.query('ALTER TABLE messages ADD COLUMN IF NOT EXISTS unlock_cost INTEGER DEFAULT 0');
+        await db.query('ALTER TABLE messages ADD COLUMN IF NOT EXISTS is_unlocked BOOLEAN DEFAULT false');
+
+        // Users & Chats table enhancements
+        await db.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS device_id VARCHAR(255)');
+        await db.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS managed_by UUID REFERENCES users(id) ON DELETE SET NULL');
+        await db.query('ALTER TABLE chats ADD COLUMN IF NOT EXISTS last_message TEXT');
+        await db.query('ALTER TABLE payments ADD COLUMN IF NOT EXISTS coin_amount INTEGER');
+
+        // Operators table enhancements
+        await db.query('ALTER TABLE operators ADD COLUMN IF NOT EXISTS last_active_at TIMESTAMP');
+        await db.query('ALTER TABLE operators ADD COLUMN IF NOT EXISTS pending_balance INT DEFAULT 0');
+        await db.query('ALTER TABLE operators ADD COLUMN IF NOT EXISTS lifetime_earnings INT DEFAULT 0');
+        await db.query('ALTER TABLE operators ADD COLUMN IF NOT EXISTS last_payout_at TIMESTAMP');
+
+        // Create tables one by one to avoid one failure blocking all migrations
+        const runMigration = async (name, sql) => {
+            try {
+                await db.query(sql);
+            } catch (err) {
+                console.error(`[DB] Migration Error (${name}):`, err.message);
+                app.set('db_status', (app.get('db_status') || 'ready') + ` | Error ${name}: ${err.message}`);
+            }
+        };
+
+        await runMigration('Extensions', 'CREATE EXTENSION IF NOT EXISTS pgcrypto');
+
+        await runMigration('PostsTable', `CREATE TABLE IF NOT EXISTS posts (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            operator_id ${userIdType} REFERENCES users(id) ON DELETE CASCADE,
+            image_url TEXT NOT NULL,
+            content TEXT,
+            created_at TIMESTAMP DEFAULT NOW()
+        )`);
+
+        await runMigration('StoriesTable', `CREATE TABLE IF NOT EXISTS stories (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            operator_id ${userIdType} REFERENCES users(id) ON DELETE CASCADE,
+            image_url TEXT NOT NULL,
+            created_at TIMESTAMP DEFAULT NOW(),
+            expires_at TIMESTAMP DEFAULT (NOW() + INTERVAL '24 hours')
+        )`);
+
+        await runMigration('PostLikesTable', `CREATE TABLE IF NOT EXISTS post_likes (
+            post_id UUID REFERENCES posts(id) ON DELETE CASCADE,
+            user_id ${userIdType} REFERENCES users(id) ON DELETE CASCADE,
+            created_at TIMESTAMP DEFAULT NOW(),
+            PRIMARY KEY (post_id, user_id)
+        )`);
+
+        await runMigration('StoryLikesTable', `CREATE TABLE IF NOT EXISTS story_likes (
+            story_id UUID REFERENCES stories(id) ON DELETE CASCADE,
+            user_id ${userIdType} REFERENCES users(id) ON DELETE CASCADE,
+            created_at TIMESTAMP DEFAULT NOW(),
+            PRIMARY KEY (story_id, user_id)
+        )`);
+
+        await runMigration('PostCommentsTable', `CREATE TABLE IF NOT EXISTS post_comments (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            post_id UUID REFERENCES posts(id) ON DELETE CASCADE,
+            user_id ${userIdType} REFERENCES users(id) ON DELETE CASCADE,
+            content TEXT NOT NULL,
+            created_at TIMESTAMP DEFAULT NOW()
+        )`);
+
+        await runMigration('BoostsTable', `CREATE TABLE IF NOT EXISTS boosts (
+            id SERIAL PRIMARY KEY,
+            user_id ${userIdType} REFERENCES users(id) ON DELETE CASCADE,
+            start_time TIMESTAMP DEFAULT NOW(),
+            end_time TIMESTAMP NOT NULL,
+            created_at TIMESTAMP DEFAULT NOW()
+        )`);
+
+        // --- ADDED: Operator Stats Table (Core Startup Migration) ---
+        await runMigration("Create Operator Stats Table", `
+            CREATE TABLE IF NOT EXISTS operator_stats (
+                id SERIAL PRIMARY KEY,
+                operator_id ${userIdType},
+                date DATE DEFAULT CURRENT_DATE,
+                messages_sent INTEGER DEFAULT 0,
+                coins_earned NUMERIC DEFAULT 0,
+                UNIQUE(operator_id, date)
+            )
+        `);
+
+        await runMigration("Add granular stats columns", `
+            ALTER TABLE operator_stats 
+            ADD COLUMN IF NOT EXISTS text_count INTEGER DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS image_count INTEGER DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS audio_count INTEGER DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS gift_count INTEGER DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS text_earned NUMERIC DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS image_earned NUMERIC DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS audio_earned NUMERIC DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS gift_earned NUMERIC DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS total_user_spend NUMERIC DEFAULT 0
+        `);
+
+        await runMigration("Ensure coins_earned is NUMERIC", 'ALTER TABLE operator_stats ALTER COLUMN coins_earned TYPE NUMERIC');
+
+        await runMigration('FavoritesTable', `CREATE TABLE IF NOT EXISTS favorites (
+            id SERIAL PRIMARY KEY,
+            user_id ${userIdType} REFERENCES users(id) ON DELETE CASCADE,
+            target_user_id ${userIdType} REFERENCES users(id) ON DELETE CASCADE,
+            created_at TIMESTAMP DEFAULT NOW(),
+            UNIQUE (user_id, target_user_id)
+        )`);
+
+        await runMigration('ProfileViewsTable', `CREATE TABLE IF NOT EXISTS profile_views (
+            id SERIAL PRIMARY KEY,
+            viewer_id ${userIdType} REFERENCES users(id) ON DELETE CASCADE,
+            viewed_user_id ${userIdType} REFERENCES users(id) ON DELETE CASCADE,
+            created_at TIMESTAMP DEFAULT NOW()
+        )`);
+
+        await runMigration('PaymentsTable', `CREATE TABLE IF NOT EXISTS payments (
+            id SERIAL PRIMARY KEY,
+            user_id ${userIdType} REFERENCES users(id),
+            package_id INTEGER REFERENCES coin_packages(id),
+            transaction_id VARCHAR(255),
+            amount DECIMAL(10, 2) NOT NULL,
+            coin_amount INTEGER,
+            status VARCHAR(50) DEFAULT 'completed',
+            created_at TIMESTAMP DEFAULT NOW()
+        )`);
+
+        await runMigration('AdminNotificationsTable', `CREATE TABLE IF NOT EXISTS admin_notifications (
+            id SERIAL PRIMARY KEY,
+            title TEXT NOT NULL,
+            body TEXT NOT NULL,
+            target_group VARCHAR(50),
+            sent_count INTEGER DEFAULT 0,
+            sent_at TIMESTAMP DEFAULT NOW()
+        )`);
+
+        await runMigration('CampaignsTable', `CREATE TABLE IF NOT EXISTS campaigns (
+            id SERIAL PRIMARY KEY,
+            title VARCHAR(255) NOT NULL,
+            description TEXT,
+            bonus_percent INTEGER DEFAULT 0,
+            start_date TIMESTAMP NOT NULL,
+            end_date TIMESTAMP NOT NULL,
+            target VARCHAR(50) DEFAULT 'all',
+            is_active BOOLEAN DEFAULT true,
+            created_at TIMESTAMP DEFAULT NOW()
+        )`);
+
+        await runMigration('MessageSchedulesTable', `CREATE TABLE IF NOT EXISTS message_schedules (
+            id SERIAL PRIMARY KEY,
+            operator_id ${userIdType} REFERENCES users(id) ON DELETE CASCADE,
+            target VARCHAR(50) DEFAULT 'random',
+            target_user_id ${userIdType} REFERENCES users(id) ON DELETE CASCADE,
+            message_template TEXT NOT NULL,
+            send_at_hour INTEGER NOT NULL,
+            send_at_minute INTEGER NOT NULL,
+            days_of_week INTEGER[] DEFAULT ARRAY[0,1,2,3,4,5,6],
+            is_active BOOLEAN DEFAULT true,
+            created_at TIMESTAMP DEFAULT NOW()
+        )`);
+
+        await runMigration('QuickRepliesTable', `CREATE TABLE IF NOT EXISTS quick_replies (
+            id SERIAL PRIMARY KEY,
+            title TEXT NOT NULL,
+            content TEXT NOT NULL,
+            created_at TIMESTAMP DEFAULT NOW()
+        )`);
+
+        await runMigration('ReportsTable', `CREATE TABLE IF NOT EXISTS reports (
+            id SERIAL PRIMARY KEY,
+            reporter_id ${userIdType} REFERENCES users(id) ON DELETE SET NULL,
+            reported_id ${userIdType} REFERENCES users(id) ON DELETE SET NULL,
+            reason TEXT,
+            status VARCHAR(50) DEFAULT 'pending',
+            created_at TIMESTAMP DEFAULT NOW()
+        )`);
+
+        // Auto-fix genders on startup
+        const MALE_NAMES = ['Mustafa', 'Furkan', 'Ahmet', 'Mehmet', 'Ali', 'Veli', 'Can', 'Murat', 'Hakan', 'Emre', 'Burak', 'Volkan', 'Gökhan', 'Serkan', 'Ömer', 'Osman', 'İbrahim', 'Halil', 'Ramadan', 'Ramazan', 'Fırat', 'Mert', 'Yiğit', 'Arda'];
+        for (const name of MALE_NAMES) {
+            await db.query(
+                "UPDATE users SET gender = 'erkek' WHERE (display_name ILIKE $1 OR username ILIKE $1) AND gender != 'erkek' AND gender != 'coin_bayisi'",
+                [`%${name}%`]
+            );
+        }
+        
+        const FEMALE_NAMES = ['Ayşe', 'Fatma', 'Su', 'Esma', 'Emriye', 'Zeynep', 'Elif', 'Merve', 'Selin', 'Ece', 'Aslı', 'Deniz', 'Güneş', 'Buse', 'Hazal', 'Simge', 'İrem', 'Ceren', 'Ada', 'Dilan', 'Berfin', 'Seda', 'Ceyda'];
+        for (const name of FEMALE_NAMES) {
+            await db.query(
+                "UPDATE users SET gender = 'kadin' WHERE (display_name ILIKE $1 OR username ILIKE $1) AND gender != 'kadin' AND gender != 'coin_bayisi'",
+                [`%${name}%`]
+            );
+        }
+        console.log('[DB] Initial gender auto-fix completed');
+
+        console.log('[DB] SCHEMA VERIFICATION COMPLETE');
+        if (!app.get('db_status')) app.set('db_status', 'ready');
+    } catch (err) {
+        console.error('[DB] CRITICAL SCHEMA ERROR:', err.message);
+        app.set('db_status', 'error: ' + err.message);
+    }
+};
 
 // --- DIAGNOSTIC ENDPOINT ---
 app.get('/api/health-check', async (req, res) => {
@@ -118,7 +664,7 @@ app.get('/api/health-check', async (req, res) => {
             db_time: dbCheck.rows[0].now,
             db_status: app.get('db_status'),
             tables: tables.rows.map(t => t.table_name),
-            schema_info: schemaInfo,
+            schema_info: schemaDetails,
             env: {
                 has_cloudinary: !!process.env.CLOUDINARY_CLOUD_NAME,
                 has_jwt_secret: !!process.env.JWT_SECRET,
@@ -222,276 +768,37 @@ const authLimiter = rateLimit({
     message: { error: 'Çok fazla istek gönderildi, lütfen sonra tekrar deneyin.' }
 });
 
-// --- SMTP Email Setup ---
-const nodemailer = require('nodemailer');
-
-const transporter = nodemailer.createTransport(
-    process.env.SMTP_HOST 
-        ? {
-            host: process.env.SMTP_HOST,
-            port: parseInt(process.env.SMTP_PORT, 10) || 465,
-            secure: process.env.SMTP_SECURE !== 'false',
-            auth: {
-                user: process.env.EMAIL_USER || '',
-                pass: process.env.EMAIL_PASS || ''
-            },
-            connectionTimeout: 5000,
-            greetingTimeout: 5000,
-            socketTimeout: 5000,
-            family: 4
-          }
-        : {
-            host: 'smtp.gmail.com',
-            port: 587,
-            secure: false,
-            auth: {
-                user: process.env.EMAIL_USER || '',
-                pass: process.env.EMAIL_PASS || ''
-            },
-            connectionTimeout: 5000,
-            greetingTimeout: 5000,
-            socketTimeout: 5000,
-            family: 4
-          }
-);
-
-const getCleanedBrevoKey = () => {
-    const rawKey = process.env.BREVO_API_KEY || '';
-    const match = rawKey.match(/(xkeysib-[a-zA-Z0-9-]+)/);
-    return match ? match[1] : '';
-};
-
-let cachedBrevoSender = null;
-const getBrevoSender = async (apiKey) => {
-    if (cachedBrevoSender) return cachedBrevoSender;
-    try {
-        console.log('[EMAIL] Fetching verified senders from Brevo...');
-        const res = await axios.get('https://api.brevo.com/v3/senders', {
-            headers: { 'api-key': apiKey },
-            timeout: 5000
-        });
-        const activeSender = res.data.senders?.find(s => s.active);
-        if (activeSender) {
-            cachedBrevoSender = { name: 'Fiva', email: activeSender.email };
-            console.log(`[EMAIL] Cached Brevo sender: ${activeSender.email}`);
-            return cachedBrevoSender;
-        }
-    } catch (err) {
-        console.error('[EMAIL] Failed to fetch Brevo senders:', err.message);
-    }
-    return { name: 'Fiva', email: process.env.EMAIL_USER || 'fdnsmn00@gmail.com' };
-};
-
-const sendOtpEmail = async (email, otp) => {
-    const emailHtml = `
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <meta charset="utf-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>Fiva Giriş Kodu</title>
-        </head>
-        <body style="margin: 0; padding: 0; background-color: #0f172a; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; color: #ffffff;">
-            <table align="center" border="0" cellpadding="0" cellspacing="0" width="100%" style="max-width: 600px; margin: 40px auto; background-color: #1e1b4b; border-radius: 24px; overflow: hidden; border: 1.5px solid rgba(255, 255, 255, 0.08); box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.3);">
-                <tr>
-                    <td style="padding: 40px 40px 20px 40px; text-align: center;">
-                        <div style="display: inline-block; width: 70px; height: 70px; border-radius: 35px; background: linear-gradient(135deg, #8b5cf6, #ec4899); line-height: 70px; text-align: center; color: #ffffff; font-size: 32px; font-weight: bold; margin-bottom: 20px;">
-                            ♥
-                        </div>
-                        <h1 style="margin: 0; font-size: 28px; font-weight: 800; color: #ffffff; letter-spacing: -0.5px;">Fiva'ya Hoş Geldin!</h1>
-                    </td>
-                </tr>
-                <tr>
-                    <td style="padding: 20px 40px 30px 40px; text-align: center;">
-                        <p style="margin: 0 0 24px 0; font-size: 16px; color: rgba(255, 255, 255, 0.7); line-height: 24px;">Giriş yapmak veya hesap oluşturmak için kullanabileceğin tek kullanımlık doğrulama kodun aşağıdadır:</p>
-                        <div style="display: inline-block; background-color: rgba(139, 92, 246, 0.15); border: 2px solid #8b5cf6; border-radius: 16px; padding: 18px 40px; font-size: 36px; font-weight: 800; letter-spacing: 6px; color: #ffffff; text-shadow: 0 0 10px rgba(139, 92, 246, 0.5); margin-bottom: 24px;">
-                            ${otp}
-                        </div>
-                        <p style="margin: 0; font-size: 13px; color: rgba(255, 255, 255, 0.4); line-height: 20px;">Bu kod 10 dakika boyunca geçerlidir. Eğer bu talebi siz yapmadıysanız bu e-postayı güvenle görmezden gelebilirsiniz.</p>
-                    </td>
-                </tr>
-                <tr>
-                    <td style="padding: 30px 40px 40px 40px; border-top: 1px solid rgba(255, 255, 255, 0.05); text-align: center; background-color: rgba(0, 0, 0, 0.15);">
-                        <p style="margin: 0; font-size: 12px; color: rgba(255, 255, 255, 0.3);">Fiva Dating App &bull; Tüm Hakları Saklıdır.</p>
-                    </td>
-                </tr>
-            </table>
-        </body>
-        </html>
-    `;
-
-    // 1. Check if BREVO_API_KEY is configured (Highly recommended for Render cloud deployment)
-    const cleanedBrevoKey = getCleanedBrevoKey();
-    if (cleanedBrevoKey) {
-        try {
-            console.log(`[EMAIL] Sending verification mail to: ${email} via Brevo HTTP API...`);
-            const sender = await getBrevoSender(cleanedBrevoKey);
-            const response = await axios.post('https://api.brevo.com/v3/smtp/email', {
-                sender: sender,
-                to: [{ email: email }],
-                subject: 'Fiva Giriş Kodu',
-                htmlContent: emailHtml
-            }, {
-                headers: {
-                    'api-key': cleanedBrevoKey,
-                    'Content-Type': 'application/json'
-                },
-                timeout: 10000
-            });
-            console.log('[EMAIL] Mail sent successfully via Brevo. Message ID:', response.data.messageId);
-            return;
-        } catch (err) {
-            console.error('[EMAIL] Failed to send email via Brevo HTTP API:', err.response?.data || err.message);
-            console.log('[EMAIL] Attempting fallback to SMTP...');
-        }
-    }
-
-    // 2. Fallback to Nodemailer SMTP (Default local development)
-    if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
-        console.warn('[EMAIL] SMTP credentials (EMAIL_USER/EMAIL_PASS) are missing. Skipping mail delivery, but code is generated.');
-        return;
-    }
-
-    try {
-        console.log(`[EMAIL] Sending verification mail to: ${email} via SMTP...`);
-        const mailOptions = {
-            from: `"Fiva" <${process.env.EMAIL_USER}>`,
-            to: email,
-            subject: 'Fiva Giriş Kodu',
-            html: emailHtml
-        };
-
-        const info = await transporter.sendMail(mailOptions);
-        console.log('[EMAIL] Mail sent successfully via SMTP. Message ID:', info.messageId);
-    } catch (err) {
-        console.error('[EMAIL] Failed to send verification email via SMTP:', err.message);
-    }
-};
-
 app.post('/api/auth/request-otp', authLimiter, async (req, res) => {
-    let { email, phone } = req.body;
-    if (email) email = email.trim().toLowerCase();
+    const { email, phone } = req.body;
     const identifier = email || phone;
     if (!identifier) return res.status(400).json({ error: 'Email veya Telefon gerekli.' });
     try {
         const otp = Math.floor(100000 + Math.random() * 900000).toString();
         const expires = new Date(Date.now() + 10 * 60 * 1000);
-        
-        // Security: Clean up expired OTPs (Keeps database lightweight and fast)
-        await db.query('DELETE FROM otps WHERE expires_at < NOW()');
-
         await db.query('DELETE FROM otps WHERE identifier = $1', [identifier]);
-        await db.query('INSERT INTO otps (identifier, otp_code, expires_at) VALUES ($1, $2, $3)', [identifier, otp, expires]);
+        await db.query('INSERT INTO otps (identifier, code, expires_at) VALUES ($1, $2, $3)', [identifier, otp, expires]);
         console.log(`[AUTH] OTP for ${identifier}: ${otp}`);
-
-        // If it's an email, and SMTP is configured, send the mail!
-        if (email) {
-            sendOtpEmail(email, otp);
-        }
-
-        res.json({ success: true, message: 'OTP gönderildi (Konsol loguna bakınız).', dev_otp: otp });
+        res.json({ success: true, message: 'OTP gönderildi (Konsol loguna bakınız).' });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
 });
 
-app.get('/api/auth/smtp-diagnostics', async (req, res) => {
-    const cleanedBrevoKey = getCleanedBrevoKey();
-    const results = {
-        success: false,
-        brevo: {
-            configured: !!cleanedBrevoKey,
-            key_length: cleanedBrevoKey ? cleanedBrevoKey.length : 0,
-            status: 'NOT_TESTED'
-        },
-        smtp: {
-            configured: !!(process.env.EMAIL_USER && process.env.EMAIL_PASS),
-            EMAIL_USER: process.env.EMAIL_USER ? `${process.env.EMAIL_USER.substring(0, 4)}...` : 'MISSING',
-            EMAIL_PASS_LENGTH: process.env.EMAIL_PASS ? process.env.EMAIL_PASS.length : 0,
-            status: 'NOT_TESTED'
-        }
-    };
-
-    // Test Brevo if configured
-    if (cleanedBrevoKey) {
-        try {
-            console.log('[DIAGNOSTICS] Verifying Brevo API Key...');
-            const response = await axios.get('https://api.brevo.com/v3/smtp/templates', {
-                headers: { 'api-key': cleanedBrevoKey },
-                timeout: 5000
-            });
-            results.brevo.status = 'SUCCESS';
-            results.success = true;
-        } catch (err) {
-            results.brevo.status = 'FAILED';
-            results.brevo.error = err.response?.data || err.message;
-        }
-    }
-
-    // Test SMTP if configured
-    if (process.env.EMAIL_USER && process.env.EMAIL_PASS) {
-        try {
-            console.log('[DIAGNOSTICS] Verifying SMTP connection...');
-            await transporter.verify();
-            results.smtp.status = 'SUCCESS';
-            results.success = true;
-        } catch (err) {
-            results.smtp.status = 'FAILED';
-            results.smtp.error = err.message;
-            results.smtp.code = err.code;
-        }
-    }
-
-    if (results.success) {
-        res.json({ success: true, message: 'At least one email service is fully functional!', details: results });
-    } else {
-        res.status(500).json({ success: false, message: 'All email services failed connection verification.', details: results });
-    }
-});
-
 app.post('/api/auth/verify-otp', async (req, res) => {
-    let { email, phone, code, otp, deviceId } = req.body;
-    if (email) email = email.trim().toLowerCase();
-    const finalCode = code || otp;
+    const { email, phone, code, deviceId } = req.body;
     const identifier = email || phone;
     try {
         // --- GOOGLE REVIEWER BYPASS ---
-        if ((email === 'test@example.com' || phone === '+10000000000') && finalCode === '123456') {
+        if ((email === 'test@example.com' || phone === '+10000000000') && code === '123456') {
             console.log('[AUTH] Google Reviewer Bypass triggered for:', identifier);
         } else {
-            // Fetch OTP by identifier only to verify attempts and perform JS-level timezone safe expiration check
-            const otpRes = await db.query('SELECT * FROM otps WHERE identifier = $1', [identifier]);
-            if (otpRes.rows.length === 0) {
-                return res.status(401).json({ error: 'Geçersiz veya süresi dolmuş kod. Lütfen yeni bir kod isteyin.' });
-            }
-
-            const otpRow = otpRes.rows[0];
-            const now = new Date();
-            
-            // Timezone-safe expiration check in JS (completely immune to Postgres timezone casting differences!)
-            if (new Date(otpRow.expires_at) < now) {
-                await db.query('DELETE FROM otps WHERE identifier = $1', [identifier]);
-                return res.status(401).json({ error: 'Bu kodun süresi dolmuş. Lütfen yeni bir kod isteyin.' });
-            }
-
-            // Brute-force protection: Increment attempts on failure, lock after 5 attempts
-            if (otpRow.otp_code !== finalCode) {
-                const currentAttempts = (otpRow.attempts || 0) + 1;
-                if (currentAttempts >= 5) {
-                    await db.query('DELETE FROM otps WHERE identifier = $1', [identifier]);
-                    return res.status(401).json({ error: 'Çok fazla hatalı deneme yaptınız. Lütfen yeni bir kod isteyin.' });
-                } else {
-                    await db.query('UPDATE otps SET attempts = attempts + 1 WHERE identifier = $1', [identifier]);
-                    return res.status(401).json({ error: `Hatalı kod girdiniz. Kalan hakkınız: ${5 - currentAttempts}` });
-                }
-            }
-
-            // Successful verification: Delete OTP row
+            const otpRes = await db.query('SELECT * FROM otps WHERE identifier = $1 AND code = $2 AND expires_at > NOW()', [identifier, code]);
+            if (otpRes.rows.length === 0) return res.status(401).json({ error: 'Geçersiz veya süresi dolmuş kod.' });
             await db.query('DELETE FROM otps WHERE identifier = $1', [identifier]);
         }
         // --- END BYPASS ---
         let result;
-        if (email) result = await db.query('SELECT * FROM users WHERE LOWER(email) = $1', [email]);
+        if (email) result = await db.query('SELECT * FROM users WHERE email = $1', [email]);
         else result = await db.query('SELECT * FROM users WHERE phone = $1', [phone]);
         let user;
         if (result.rows.length === 0) {
@@ -500,10 +807,8 @@ app.post('/api/auth/verify-otp', async (req, res) => {
                 if (parseInt(limitCheck.rows[0].count, 10) >= 2) return res.status(403).json({ error: 'Bu cihazdan en fazla 2 hesap oluşturulabilir.' });
             }
             const username = email ? email.split('@')[0] : `user_${Math.floor(1000 + Math.random() * 9000)}`;
-            const insertResult = await db.query("INSERT INTO users (username, email, role, balance, avatar_url, display_name, device_id) VALUES ($1, $2, 'user', 50, 'https://via.placeholder.com/150', $3, $4) RETURNING *", [username, email || null, username, deviceId || null]);
+            const insertResult = await db.query("INSERT INTO users (username, email, role, balance, avatar_url, display_name, device_id) VALUES ($1, $2, 'user', 100, 'https://via.placeholder.com/150', $3, $4) RETURNING *", [username, email || null, username, deviceId || null]);
             user = insertResult.rows[0];
-            await assignFakeInteractions(user.id);
-            await triggerAutoEngagement(io, user.id);
             await logActivity(io, user.id, 'register', 'Yeni kullanıcı OTP ile kayıt oldu.');
             io.emit('new_user', sanitizeUser(user, req));
         } else {
@@ -512,14 +817,7 @@ app.post('/api/auth/verify-otp', async (req, res) => {
         }
         if (user.account_status === 'deleted') return res.status(403).json({ error: 'Bu hesap silinmiş.' });
         if (user.account_status !== 'active') return res.status(403).json({ error: 'Hesabınız askıya alınmış.' });
-        const token = jwt.sign({ 
-            id: user.id, 
-            username: user.username, 
-            role: user.role, 
-            display_name: user.display_name, 
-            avatar_url: user.avatar_url,
-            gender: user.gender 
-        }, SECRET_KEY, { expiresIn: '30d' });
+        const token = jwt.sign({ id: user.id, username: user.username, role: user.role, display_name: user.display_name, avatar_url: user.avatar_url }, SECRET_KEY, { expiresIn: '30d' });
         res.json({ user: sanitizeUser(user, req), token });
     } catch (err) {
         console.error("OTP Verify Error:", err.message);
@@ -527,14 +825,16 @@ app.post('/api/auth/verify-otp', async (req, res) => {
     }
 });
 
-app.get('/api/me', authenticateToken, async (req, res) => {
-    try {
-        const result = await db.query('SELECT id, username, email, role, avatar_url, display_name, gender, onboarding_completed, balance FROM users WHERE id = $1', [req.user.id]);
-        if (result.rows.length === 0) return res.status(404).json({ error: 'User not found' });
-        res.json(result.rows[0]);
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
+app.get('/api/me', authenticateToken, (req, res) => {
+    res.json({
+        id: req.user.id,
+        username: req.user.username,
+        email: req.user.email,
+        role: req.user.role,
+        avatar_url: req.user.avatar_url,
+        display_name: req.user.display_name,
+        onboarding_completed: req.user.onboarding_completed
+    });
 });
 
 app.get('/api/operators', async (req, res) => {
@@ -563,19 +863,11 @@ app.get('/api/operators', async (req, res) => {
         let params = [];
         let paramCount = 1;
 
-        if (gender && ['erkek', 'kadin', 'male', 'female', 'all'].includes(gender.toLowerCase())) {
-            const normalizedGender = (gender.toLowerCase() === 'male' || gender.toLowerCase() === 'erkek') ? 'erkek' : 'kadin';
-            if (gender.toLowerCase() !== 'all') {
-                query += ` AND (LOWER(u.gender) = $${paramCount} OR u.gender = 'coin_bayisi') `;
-                params.push(normalizedGender);
-                paramCount++;
-
-                if (normalizedGender === 'kadin') {
-                    query += ` AND NOT (translate(LOWER(COALESCE(u.display_name, '') || ' ' || COALESCE(u.name, '') || ' ' || COALESCE(u.username, '')), 'çğıöşü', 'cgiosu') ~* $${paramCount}) `;
-                    params.push(MALE_NAME_PATTERN);
-                    paramCount++;
-                }
-            }
+        if (gender === 'erkek' || gender === 'kadin' || gender === 'male' || gender === 'female') {
+            const normalizedGender = (gender === 'male' || gender === 'erkek') ? 'erkek' : 'kadin';
+            query += ` AND (u.gender = $${paramCount} OR u.gender = 'coin_bayisi') `;
+            params.push(normalizedGender);
+            paramCount++;
         }
 
         let orderByClause = '';
@@ -625,27 +917,28 @@ app.get('/api/operators/:id', async (req, res) => {
 // UNIFIED DISCOVERY (Operators + Users of opposite gender)
 app.get('/api/discovery', authenticateToken, async (req, res) => {
     try {
-        const { page = 1, limit = 10, tab = 'Önerilen' } = req.query;
-        const userId = req.user.id;
-        const pageNum = Math.max(1, parseInt(page, 10) || 1);
-        const limitNum = Math.max(1, parseInt(limit, 10) || 10);
+        const userGenderRaw = (req.user.gender || 'erkek').toLowerCase();
+        const userGender = (userGenderRaw === 'male' || userGenderRaw === 'erkek') ? 'erkek' : 'kadin';
+        let targetGender = userGender === 'kadin' ? 'erkek' : 'kadin';
+        
+        const { page = 1, limit = 10, tab = 'Önerilen', gender: filterGender } = req.query;
+        const pageNum = Math.max(1, parseInt(page) || 1);
+        const limitNum = Math.max(1, parseInt(limit) || 10);
         const offset = (pageNum - 1) * limitNum;
-        
-        let userGender = req.user.gender;
-        if (!userGender) {
-            // Fallback: Fetch from DB if not in token
-            const userRes = await db.query('SELECT gender FROM users WHERE id = $1', [req.user.id]);
-            userGender = userRes.rows[0]?.gender || 'erkek';
+        const userId = req.user.id;
+
+        if (filterGender && ['erkek', 'kadin', 'all'].includes(filterGender)) {
+            targetGender = filterGender;
         }
-        
-        const userGenderRaw = userGender.toLowerCase();
-        const normalizedUserGender = normalizeGenderValue(userGender) || 'erkek';
-        const targetGender = normalizedUserGender === 'kadin' ? 'erkek' : 'kadin';
 
-        console.log(`[DISCOVERY] User ${userId} (${userGenderRaw}) -> ${targetGender}. Tab: ${tab}`);
+        console.log(`[DISCOVERY] User ${userId} (${userGender}) -> ${targetGender}. Tab: ${tab}, Page: ${pageNum}`);
 
-        let whereClause = `WHERE (LOWER(u.gender) = $1 OR u.gender = 'coin_bayisi') AND u.role NOT IN ('admin', 'super_admin', 'moderator', 'staff')`;
-        let queryParams = [targetGender, userId];
+        let whereClause = '';
+        if (targetGender === 'all') {
+            whereClause = `WHERE u.role NOT IN ('admin', 'super_admin', 'moderator', 'staff')`;
+        } else {
+            whereClause = `WHERE (u.gender = $1 OR u.gender = 'coin_bayisi') AND u.role NOT IN ('admin', 'super_admin', 'moderator', 'staff')`;
+        }
 
         let orderByClause = '';
         if (tab === 'Yeni') {
@@ -681,11 +974,19 @@ app.get('/api/discovery', authenticateToken, async (req, res) => {
             FROM users u
             LEFT JOIN operators o ON u.id = o.user_id
             ${whereClause}
-              AND u.id != $2
+              AND u.id != ${targetGender === 'all' ? '$1' : '$2'}
               AND u.account_status = 'active'
-            ${orderByClause}`;
+            ${orderByClause}
+            LIMIT ${targetGender === 'all' ? '$2' : '$3'} OFFSET ${targetGender === 'all' ? '$3' : '$4'}
+        `;
 
-        const { rows } = await db.query(query, queryParams);
+        const queryParams = targetGender === 'all' ? [userId, limitNum, offset] : [targetGender, userId, limitNum, offset];
+        const result = await db.query(query, queryParams);
+
+        const rows = result.rows.map(row => {
+            return sanitizeUser(row, req);
+        });
+
         res.json(rows);
     } catch (err) {
         console.error("❌ [DISCOVERY ERROR]:", err);
@@ -720,39 +1021,60 @@ app.get('/api/health', async (req, res) => {
 });
 
 
-// --- STATIC FILE SERVING (Admin Panel) ---
-const adminPath = path.join(__dirname, 'public', 'admin');
-app.use(express.static(adminPath));
-// Explicitly serve assets folder
-app.use('/assets', express.static(path.join(adminPath, 'assets')));
-
 app.use('/api', socialRoutes);
 
 app.use('/api/auth', authRoutes);
 
 app.use('/api', authRoutes); // Proxy for /api/me /api/login etc
-app.use('/api', referralRoutes);
+app.use('/api', webhooksRoutes); // Public Webhooks
 app.use('/api/favorites', favoritesRoutes);
 app.use('/api/views', viewsRoutes);
 app.use('/api/boosts', boostsRoutes);
 
-// --- NEW MODULAR ROUTES (Override inline routes below) ---
-app.use('/api/admin', adminUsersRoutes);
-app.use('/api/admin', adminPanelRoutes);
-app.use('/api/operators', adminOperatorsRoutes);
-app.use('/api/users', userRoutes);
-app.use('/api/chats', chatRoutes);
-app.use('/api/messages', messageRoutes);
-app.use('/api/admin/packages', packageRoutes);
-app.use('/api/packages', packageRoutes);
-app.use('/api/starter-pack', starterPackRoutes);
-// NOTE: /api/purchase stays in the inline routes below (uses socket.io io reference)
-// ---------------------------------------------------------
+// TEMPORARY: Fix Genders Route
+app.get('/api/admin/fix-genders', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
+    try {
+        const MALE_NAMES = ['Mustafa', 'Furkan', 'Ahmet', 'Mehmet', 'Ali', 'Veli', 'Can', 'Murat', 'Hakan', 'Emre', 'Burak', 'Volkan', 'Gökhan', 'Serkan', 'Ömer', 'Osman', 'İbrahim', 'Halil', 'Ramadan', 'Ramazan', 'Fırat', 'Mert', 'Yiğit', 'Arda'];
+        const FEMALE_NAMES = ['Ayşe', 'Fatma', 'Su', 'Esma', 'Emriye', 'Zeynep', 'Elif', 'Merve', 'Selin', 'Ece', 'Aslı', 'Deniz', 'Güneş', 'Buse', 'Hazal', 'Simge', 'İrem', 'Ceren', 'Dilara', 'Bahar'];
 
+        let maleCount = 0;
+        let femaleCount = 0;
+
+        for (const name of MALE_NAMES) {
+            const r = await db.query(
+                "UPDATE users SET gender = 'erkek' WHERE (display_name ILIKE $1 OR username ILIKE $1) AND gender != 'erkek' AND gender != 'coin_bayisi'",
+                [`%${name}%`]
+            );
+            maleCount += r.rowCount;
+        }
+
+        for (const name of FEMALE_NAMES) {
+            const r = await db.query(
+                "UPDATE users SET gender = 'kadin' WHERE (display_name ILIKE $1 OR username ILIKE $1) AND gender != 'kadin' AND gender != 'coin_bayisi'",
+                [`%${name}%`]
+            );
+            femaleCount += r.rowCount;
+        }
+
+        res.json({ message: 'Genders fixed', updated_male: maleCount, updated_female: femaleCount });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
 
 app.get('/api/admin/payments', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
     try {
-        const query = "SELECT p.*, u.username as user_name, u.email, cp.name as package_name FROM payments p LEFT JOIN users u ON p.user_id = u.id LEFT JOIN coin_packages cp ON p.package_id = cp.id ORDER BY p.created_at DESC";
+        const query = `
+            SELECT 
+                p.*, 
+                u.username as user_name, 
+                u.email,
+                cp.name as package_name
+            FROM payments p
+            LEFT JOIN users u ON p.user_id = u.id
+            LEFT JOIN coin_packages cp ON p.package_id = cp.id
+            ORDER BY p.created_at DESC
+        `;
         const result = await db.query(query);
         res.json(result.rows);
     } catch (err) {
@@ -890,20 +1212,10 @@ app.get('/admin/*', (req, res) => {
 // GET USER PROFILE
 app.get('/api/users/:id', async (req, res) => {
     try {
-        const query = `
-            SELECT u.*, 
-                (SELECT COUNT(*)::int FROM favorites WHERE target_user_id = u.id) as followers_count,
-                (SELECT COUNT(*)::int FROM favorites WHERE user_id = u.id) as following_count,
-                (SELECT COUNT(*)::int FROM messages WHERE (receiver_id = u.id OR (chat_id IN (SELECT id FROM chats WHERE user_id = u.id) AND sender_id != u.id)) AND gift_id IS NOT NULL) as gifts_count,
-                EXISTS(SELECT 1 FROM boosts WHERE user_id = u.id AND end_time > CURRENT_TIMESTAMP) as is_boosted
-            FROM users u 
-            WHERE u.id = $1
-        `;
-        const result = await db.query(query, [req.params.id]);
+        const result = await db.query('SELECT * FROM users WHERE id = $1', [req.params.id]);
         if (result.rows.length === 0) return res.status(404).json({ error: 'User not found' });
         res.json(sanitizeUser(result.rows[0], req));
     } catch (err) {
-        console.error('[GET_USER_PROFILE_ERROR]:', err);
         res.status(500).json({ error: err.message });
     }
 });
@@ -962,7 +1274,6 @@ app.get('/api/admin/sync-albums', async (req, res) => {
 app.put('/api/users/:id', async (req, res) => {
     const { id } = req.params;
     const { name, display_name, age, gender, bio, job, edu } = req.body;
-    const normalizedGender = normalizeGenderValue(gender);
 
     // Synchronize name and display_name
     const finalName = name || display_name;
@@ -979,7 +1290,7 @@ app.put('/api/users/:id', async (req, res) => {
                  job = COALESCE($6, job),
                  edu = COALESCE($7, edu)
              WHERE id = $8 RETURNING *`,
-            [finalDisplayName || null, finalName || null, age ? parseInt(age) : null, normalizedGender || null, bio || null, job || null, edu || null, id]
+            [finalDisplayName || null, finalName || null, age ? parseInt(age) : null, gender || null, bio || null, job || null, edu || null, id]
         );
 
         if (result.rows.length === 0) return res.status(404).json({ error: 'User not found' });
@@ -992,8 +1303,7 @@ app.put('/api/users/:id', async (req, res) => {
 // UPDATE USER PROFILE (LEGACY / ONBOARDING)
 app.put('/api/users/:id/profile', async (req, res) => {
     const { id } = req.params;
-    const { display_name, name, bio, avatar_url, gender, interests, onboarding_completed, relationship, zodiac, age, push_token } = req.body;
-    const normalizedGender = normalizeGenderValue(gender);
+    const { display_name, name, bio, avatar_url, gender, interests, onboarding_completed, relationship, zodiac, age } = req.body;
 
     // Synchronize
     const finalDisplayName = req.body.display_name || req.body.name;
@@ -1032,15 +1342,14 @@ app.put('/api/users/:id/profile', async (req, res) => {
                 job = COALESCE($11, job),
                 edu = COALESCE($12, edu),
                 boy = COALESCE($13, boy),
-                kilo = COALESCE($14, kilo),
-                push_token = COALESCE($15, push_token)
-             WHERE id = $16 RETURNING *`,
+                kilo = COALESCE($14, kilo)
+             WHERE id = $15 RETURNING *`,
             [
                 req.body.display_name || null,
                 req.body.name || null,
                 req.body.bio || null,
                 req.body.avatar_url || null,
-                normalizedGender || null,
+                req.body.gender || null,
                 req.body.interests || null,
                 req.body.onboarding_completed !== undefined ? req.body.onboarding_completed : null,
                 (req.body.age && !isNaN(parseInt(req.body.age))) ? parseInt(req.body.age) : null,
@@ -1050,7 +1359,6 @@ app.put('/api/users/:id/profile', async (req, res) => {
                 req.body.edu || null,
                 req.body.boy || null,
                 req.body.kilo || null,
-                req.body.push_token || null,
                 id
             ]
         );
@@ -1705,7 +2013,7 @@ app.get('/api/admin/users', authenticateToken, authorizeRole('admin', 'super_adm
     try {
         console.log(`[ADMIN] Fetching users list for admin: ${req.user.id}`);
         const result = await db.query(`
-            SELECT id, username, email, role, phone, account_status, balance, 
+            SELECT id, username, email, role, account_status, balance, 
                    is_vip, created_at, last_login_at, ban_expires_at, avatar_url 
             FROM users 
             ORDER BY created_at DESC
@@ -1843,7 +2151,7 @@ app.get('/api/admin/my-stats', authenticateToken, async (req, res) => {
     }
 });
 app.post('/api/admin/users', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
-    const { username, email, password, role, phone } = req.body;
+    const { username, email, password, role } = req.body;
 
     // Validate role
     if (!['admin', 'moderator', 'operator', 'user', 'staff'].includes(role)) {
@@ -1856,8 +2164,8 @@ app.post('/api/admin/users', authenticateToken, authorizeRole('admin', 'super_ad
 
         // Include legacy 'password' field in INSERT for compatibility
         const result = await db.query(
-            "INSERT INTO users (username, email, password, password_hash, role, phone, balance) VALUES ($1, $2, $3, $3, $4, $5, 0) RETURNING id, username, email, phone, role",
-            [username, email, hashedPassword, role, phone || null]
+            "INSERT INTO users (username, email, password, password_hash, role, balance) VALUES ($1, $2, $3, $3, $4, 0) RETURNING id, username, email, role",
+            [username, email, hashedPassword, role]
         );
 
         res.status(201).json(result.rows[0]);
@@ -2078,7 +2386,7 @@ app.delete('/api/users/:id', authenticateToken, async (req, res) => {
 // UPDATE USER PROFILE
 app.put('/api/users/:id/profile', authenticateToken, async (req, res) => {
     const { id } = req.params;
-    const { name, bio, job, relationship, zodiac, interests, age, edu, boy, kilo, gender } = req.body;
+    const { name, bio, job, relationship, zodiac, interests, age, edu, boy, kilo } = req.body;
 
     // Authorization check: User can update own profile, Admins can update any
     if (req.user.id.toString() !== id.toString() && req.user.role !== 'admin' && req.user.role !== 'super_admin') {
@@ -2098,11 +2406,10 @@ app.put('/api/users/:id/profile', authenticateToken, async (req, res) => {
                  age = COALESCE($7, age),
                  edu = COALESCE($8, edu),
                  boy = COALESCE($9, boy),
-                 kilo = COALESCE($10, kilo),
-                 gender = COALESCE($11, gender)
-             WHERE id = $12 
+                 kilo = COALESCE($10, kilo)
+             WHERE id = $11 
              RETURNING *`,
-            [name, bio, job, relationship, zodiac, interests, age, edu, boy, kilo, gender, id]
+            [name, bio, job, relationship, zodiac, interests, age, edu, boy, kilo, id]
         );
 
         if (result.rows.length === 0) {
@@ -2184,7 +2491,7 @@ app.post('/api/block', authenticateToken, async (req, res) => {
 app.get('/api/users/balance', authenticateToken, async (req, res) => {
     try {
         const userId = req.user.id;
-        const result = await db.query('SELECT balance FROM users WHERE id::text = $1::text', [userId]);
+        const result = await db.query('SELECT balance FROM users WHERE id = $1', [userId]);
         if (result.rows.length === 0) return res.status(404).json({ error: 'User not found' });
         res.json({ balance: result.rows[0].balance || 0 });
     } catch (err) {
@@ -2340,7 +2647,7 @@ app.post('/api/messages/internal-fake', async (req, res) => {
         );
 
         // 4. Emit to user if online (using io.to(userId))
-        io.to(userId.toString()).emit('new_message', {
+        io.emit('new_message', {
             ...result.rows[0],
             chat_id: chatId.toString()
         });
@@ -2353,7 +2660,79 @@ app.post('/api/messages/internal-fake', async (req, res) => {
 });
 
 
-// Shadowed duplicate chats routes removed (Handled in chatRoutes.js and userRoutes.js)
+// GET CHATS FOR USER
+app.get('/api/users/:userId/chats', async (req, res) => {
+    const { userId } = req.params;
+    console.log(`GET /api/users/${userId}/chats requested`);
+    try {
+        const simpleQuery = `
+            SELECT 
+                c.id,
+                c.operator_id, 
+                c.last_message_at,
+                (SELECT content FROM messages WHERE chat_id = c.id ORDER BY created_at DESC LIMIT 1) as last_message,
+                (SELECT COUNT(*)::int FROM messages WHERE chat_id = c.id AND sender_id != $1 AND is_read = false) as unread_count,
+                COALESCE(u.display_name, u.username, 'Bilinmeyen Operatör') as name, 
+                COALESCE(u.avatar_url, 'https://via.placeholder.com/150') as avatar_url,
+                u.vip_level,
+                u.is_verified,
+                u.gender,
+                true as is_online 
+            FROM chats c
+            LEFT JOIN users u ON c.operator_id = u.id
+            WHERE c.user_id = $1
+            ORDER BY COALESCE((SELECT MAX(created_at) FROM messages WHERE chat_id = c.id), c.last_message_at) DESC
+        `;
+
+        const result = await db.query(simpleQuery, [userId]);
+        const processedRows = result.rows.map(row => sanitizeUser(row, req));
+        console.log(`GET /api/users/${userId}/chats - Found ${processedRows.length} chats`);
+        res.json(processedRows);
+    } catch (err) {
+        console.error("Get User Chats Error:", err.message);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// GET TOTAL UNREAD COUNT FOR USER
+app.get('/api/users/:userId/unread-count', async (req, res) => {
+    const { userId } = req.params;
+    try {
+        const query = `
+            SELECT COUNT(*)::int as total_unread
+            FROM messages m
+            JOIN chats c ON m.chat_id = c.id
+            WHERE c.user_id = $1 
+            AND m.sender_id != $1 
+            AND m.is_read = false
+        `;
+        const result = await db.query(query, [userId]);
+        res.json({ count: result.rows[0].total_unread || 0 });
+    } catch (err) {
+        console.error("Get Unread Count Error:", err.message);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// CREATE OR GET CHAT
+app.post('/api/chats', async (req, res) => {
+    const { userId, operatorId } = req.body;
+    try {
+        const existingChat = await db.query(
+            'SELECT * FROM chats WHERE user_id = $1 AND operator_id = $2',
+            [userId, operatorId]
+        );
+        if (existingChat.rows.length > 0) return res.json(existingChat.rows[0]);
+        const newChat = await db.query(
+            'INSERT INTO chats (user_id, operator_id, last_message_at) VALUES ($1, $2, NOW()) RETURNING *',
+            [userId, operatorId]
+        );
+        res.json(newChat.rows[0]);
+    } catch (err) {
+        console.error('Create Chat Error:', err.message);
+        res.status(500).json({ error: err.message });
+    }
+});
 
 // GET CHATS FOR ADMIN / OPERATORS (PERSONNEL)
 app.get('/api/chats/admin', authenticateToken, authorizeRole('admin', 'super_admin', 'operator', 'moderator', 'staff'), async (req, res) => {
@@ -2435,11 +2814,32 @@ app.get('/api/admin/agencies', authenticateToken, authorizeRole('admin', 'super_
 
 // CREATE AGENCY
 app.post('/api/admin/agencies', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
-    const { name, owner_id, commission_rate, status } = req.body;
+    let { name, owner_id, commission_rate, status, referral_code } = req.body;
     try {
+        let finalReferralCode = '';
+        if (referral_code && referral_code.trim()) {
+            finalReferralCode = referral_code.trim().toUpperCase();
+            // Check uniqueness
+            const dupCheck = await db.query('SELECT id FROM agencies WHERE UPPER(referral_code) = $1', [finalReferralCode]);
+            if (dupCheck.rows.length > 0) {
+                return res.status(400).json({ error: 'Bu referans kodu zaten başka bir ajans tarafından kullanılıyor.' });
+            }
+        } else {
+            // Auto generate
+            let isUnique = false;
+            while (!isUnique) {
+                const randomDigits = Math.floor(100 + Math.random() * 900);
+                finalReferralCode = `FLK${randomDigits}`;
+                const dupCheck = await db.query('SELECT id FROM agencies WHERE referral_code = $1', [finalReferralCode]);
+                if (dupCheck.rows.length === 0) {
+                    isUnique = true;
+                }
+            }
+        }
+
         const result = await db.query(
-            'INSERT INTO agencies (name, owner_id, commission_rate, status) VALUES ($1, $2, $3, $4) RETURNING *',
-            [name, owner_id || null, commission_rate || 0.40, status || 'active']
+            'INSERT INTO agencies (name, owner_id, commission_rate, status, referral_code) VALUES ($1, $2, $3, $4, $5) RETURNING *',
+            [name, owner_id || null, commission_rate || 0.40, status || 'active', finalReferralCode]
         );
         if (owner_id) {
             await db.query('UPDATE users SET is_agency_owner = true WHERE id = $1', [owner_id]);
@@ -2453,16 +2853,31 @@ app.post('/api/admin/agencies', authenticateToken, authorizeRole('admin', 'super
 // UPDATE AGENCY
 app.put('/api/admin/agencies/:id', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
     const { id } = req.params;
-    const { name, owner_id, commission_rate, status } = req.body;
+    let { name, owner_id, commission_rate, status, referral_code } = req.body;
     try {
+        let finalReferralCode = undefined;
+        if (referral_code !== undefined) {
+            if (referral_code && referral_code.trim()) {
+                finalReferralCode = referral_code.trim().toUpperCase();
+                // Check uniqueness excluding current
+                const dupCheck = await db.query('SELECT id FROM agencies WHERE UPPER(referral_code) = $1 AND id != $2', [finalReferralCode, id]);
+                if (dupCheck.rows.length > 0) {
+                    return res.status(400).json({ error: 'Bu referans kodu zaten başka bir ajans tarafından kullanılıyor.' });
+                }
+            } else {
+                return res.status(400).json({ error: 'Referans kodu boş olamaz.' });
+            }
+        }
+
         const result = await db.query(
             `UPDATE agencies 
              SET name = COALESCE($1, name), 
                  owner_id = COALESCE($2, owner_id), 
                  commission_rate = COALESCE($3, commission_rate),
-                 status = COALESCE($4, status)
-             WHERE id = $5 RETURNING *`,
-            [name, owner_id, commission_rate, status, id]
+                 status = COALESCE($4, status),
+                 referral_code = COALESCE($5, referral_code)
+             WHERE id = $6 RETURNING *`,
+            [name, owner_id, commission_rate, status, finalReferralCode, id]
         );
         res.json(result.rows[0]);
     } catch (err) {
@@ -2470,455 +2885,38 @@ app.put('/api/admin/agencies/:id', authenticateToken, authorizeRole('admin', 'su
     }
 });
 
-// GET AGENCY OWNER DASHBOARD
-app.get('/api/agency/my-dashboard', authenticateToken, async (req, res) => {
-    try {
-        // 1. Get Agency owned by current user
-        const agencyResult = await db.query(
-            'SELECT * FROM agencies WHERE owner_id = $1 LIMIT 1',
-            [req.user.id]
-        );
-        
-        if (agencyResult.rows.length === 0) {
-            return res.status(404).json({ error: 'Size ait aktif bir ajans bulunamadı.' });
-        }
-        
-        const agency = agencyResult.rows[0];
-        
-        // 2. Get Today's Total Diamonds/Commissions for this agency
-        const todayLogResult = await db.query(
-            `SELECT COALESCE(SUM(amount), 0) as today_diamonds 
-             FROM commission_logs 
-             WHERE agency_id = $1 AND created_at >= CURRENT_DATE`,
-            [agency.id]
-        );
-        const todayDiamondsRaw = parseFloat(todayLogResult.rows[0].today_diamonds || 0);
-        const todayDiamonds = Math.round(todayDiamondsRaw * parseFloat(agency.commission_rate || 0.40) * 100) / 100;
-        
-        // 3. Get all publishers/operators linked to this agency
-        const operatorsResult = await db.query(
-            `SELECT u.id, u.username, u.display_name, u.avatar_url, 
-                    COALESCE(o.is_online, false) as is_online,
-                    COALESCE(o.rating, 5.0) as rating
-             FROM users u
-             LEFT JOIN operators o ON u.id = o.user_id
-             WHERE u.agency_id = $1 AND u.role = 'operator'`,
-            [agency.id]
-        );
-        
-        // 4. Get today's commissions grouped by operator
-        const operatorCommissionsResult = await db.query(
-            `SELECT operator_id, COALESCE(SUM(amount), 0) as operator_today_commission
-             FROM commission_logs
-             WHERE agency_id = $1 AND created_at >= CURRENT_DATE
-             GROUP BY operator_id`,
-            [agency.id]
-        );
-        
-        // Map commission data to operator objects
-        const commissionMap = {};
-        operatorCommissionsResult.rows.forEach(row => {
-            commissionMap[row.operator_id] = parseFloat(row.operator_today_commission);
-        });
-
-        // 5. Get recent low-quality log metrics for all operators in the agency using window functions (High Performance)
-        const qualityChecksResult = await db.query(
-            `SELECT operator_id, 
-                    COUNT(CASE WHEN is_low_quality = true THEN 1 END) as low_quality_count,
-                    COUNT(*) as total_count
-             FROM (
-                 SELECT operator_id, is_low_quality,
-                        ROW_NUMBER() OVER (PARTITION BY operator_id ORDER BY created_at DESC) as rn
-                 FROM commission_logs
-                 WHERE agency_id = $1
-             ) sub
-             WHERE rn <= 10
-             GROUP BY operator_id`,
-            [agency.id]
-        );
-
-        const qualityMap = {};
-        qualityChecksResult.rows.forEach(row => {
-            const count = parseInt(row.low_quality_count || 0);
-            const total = parseInt(row.total_count || 0);
-            // Flag as low quality if 50% or more of recent chats (min 3 messages) are low quality
-            qualityMap[row.operator_id] = total >= 3 && (count / total) >= 0.50;
-        });
-        
-        let activeOperatorsCount = 0;
-        const operatorsList = operatorsResult.rows.map(op => {
-            if (op.is_online) activeOperatorsCount++;
-            const rawComm = commissionMap[op.id] || 0;
-            const agencyCut = rawComm * parseFloat(agency.commission_rate || 0.40);
-            return {
-                id: op.id,
-                username: op.username,
-                display_name: op.display_name,
-                avatar_url: op.avatar_url,
-                is_online: op.is_online,
-                rating: op.rating,
-                today_commission: Math.round(agencyCut * 100) / 100,
-                is_low_quality: !!qualityMap[op.id]
-            };
-        });
-        
-        res.json({
-            agency: {
-                id: agency.id,
-                name: agency.name,
-                pending_balance: parseFloat(agency.pending_balance || 0),
-                lifetime_earnings: parseFloat(agency.lifetime_earnings || 0),
-                commission_rate: parseFloat(agency.commission_rate || 0.40),
-                status: agency.status
-            },
-            stats: {
-                today_diamonds: todayDiamonds,
-                active_operators: activeOperatorsCount,
-                total_operators: operatorsList.length
-            },
-            operators: operatorsList
-        });
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
-});
-
-// POST /api/agency/invitations (Agency Owner Only)
-app.post('/api/agency/invitations', authenticateToken, async (req, res) => {
-    const { targetIdentifier } = req.body;
-    if (!targetIdentifier) return res.status(400).json({ error: 'Lütfen kullanıcı adı veya ID girin.' });
-
-    try {
-        // 1. Get current user's agency
-        const agencyRes = await db.query('SELECT id, name FROM agencies WHERE owner_id = $1 LIMIT 1', [req.user.id]);
-        if (agencyRes.rows.length === 0) {
-            return res.status(403).json({ error: 'Yetkisiz işlem. Ajans sahibi değilsiniz.' });
-        }
-        const agency = agencyRes.rows[0];
-
-        // 2. Find female operator by username, ID, or phone number
-        const userRes = await db.query(
-            `SELECT id, username, role, gender, agency_id FROM users 
-             WHERE (LOWER(username) = $1 OR id::text = $1 OR phone = $1) AND gender = 'kadin'`,
-            [targetIdentifier.trim().toLowerCase()]
-        );
-
-        if (userRes.rows.length === 0) {
-            return res.status(404).json({ error: 'Belirtilen kriterlerde kadın yayıncı bulunamadı.' });
-        }
-        const operator = userRes.rows[0];
-
-        // 3. Validation: is she already in another agency?
-        if (operator.agency_id) {
-            return res.status(400).json({ error: 'Bu yayıncı zaten bir ajansa bağlı.' });
-        }
-
-        // 4. Validation: check if a pending invitation already exists
-        const pendingCheck = await db.query(
-            "SELECT id FROM agency_invitations WHERE agency_id = $1 AND operator_id = $2 AND status = 'pending'",
-            [agency.id, operator.id]
-        );
-        if (pendingCheck.rows.length > 0) {
-            return res.status(400).json({ error: 'Bu yayıncıya gönderilmiş bekleyen bir davet zaten mevcut.' });
-        }
-
-        // 5. Create invitation
-        await db.query(
-            'INSERT INTO agency_invitations (agency_id, operator_id, status) VALUES ($1, $2, \'pending\')',
-            [agency.id, operator.id]
-        );
-
-        console.log(`[AGENCY-INVITE] Agency ${agency.name} invited operator ${operator.username}`);
-        res.json({ success: true, message: `${operator.username} adlı yayıncıya davet başarıyla gönderildi.` });
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
-});
-
-// GET /api/agency/my-invitations (Operator Only)
-app.get('/api/agency/my-invitations', authenticateToken, async (req, res) => {
-    try {
-        const result = await db.query(
-            `SELECT ai.id, ai.agency_id, a.name as agency_name, ai.status, ai.created_at
-             FROM agency_invitations ai
-             JOIN agencies a ON ai.agency_id = a.id
-             WHERE ai.operator_id = $1 AND ai.status = 'pending'
-             ORDER BY ai.created_at DESC`,
-            [req.user.id]
-        );
-        res.json(result.rows);
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
-});
-
-// POST /api/agency/invitations/:id/accept (Operator/Publisher Only)
-app.post('/api/agency/invitations/:id/accept', authenticateToken, async (req, res) => {
-    const { id } = req.params;
-    const operatorId = req.user.id;
-
-    try {
-        await db.query('BEGIN');
-
-        // 1. Fetch invitation and check ownership
-        const inviteRes = await db.query(
-            'SELECT agency_id, status FROM agency_invitations WHERE id = $1 AND operator_id = $2 FOR UPDATE',
-            [id, operatorId]
-        );
-
-        if (inviteRes.rows.length === 0) {
-            await db.query('ROLLBACK');
-            return res.status(404).json({ error: 'Geçersiz veya bulunamayan davet.' });
-        }
-
-        const invite = inviteRes.rows[0];
-        if (invite.status !== 'pending') {
-            await db.query('ROLLBACK');
-            return res.status(400).json({ error: 'Bu davet zaten yanıtlanmış.' });
-        }
-
-        // 2. Update invitation status
-        await db.query(
-            "UPDATE agency_invitations SET status = 'accepted' WHERE id = $1",
-            [id]
-        );
-
-        // 3. Assign operator to agency
-        await db.query(
-            "UPDATE users SET agency_id = $1, role = 'operator' WHERE id = $2",
-            [invite.agency_id, operatorId]
-        );
-
-        // 4. Ensure operator stats and profile exists
-        await db.query(`
-            INSERT INTO operators (user_id, category, bio, photos, is_online, rating)
-            VALUES ($1, 'Genel', 'Merhaba!', '{}', false, 5.0)
-            ON CONFLICT (user_id) DO NOTHING
-        `, [operatorId]);
-
-        // 5. Reject other pending invitations for this operator
-        await db.query(
-            "UPDATE agency_invitations SET status = 'rejected' WHERE operator_id = $1 AND id != $2 AND status = 'pending'",
-            [operatorId, id]
-        );
-
-        await db.query('COMMIT');
-        console.log(`[AGENCY-INVITE] Operator ${operatorId} accepted invitation ${id} for agency ${invite.agency_id}`);
-        res.json({ success: true, message: 'Ajans davetini başarıyla kabul ettiniz!' });
-    } catch (err) {
-        await db.query('ROLLBACK');
-        res.status(500).json({ error: err.message });
-    }
-});
-
-// POST /api/agency/invitations/:id/reject (Operator/Publisher Only)
-app.post('/api/agency/invitations/:id/reject', authenticateToken, async (req, res) => {
-    const { id } = req.params;
-    const operatorId = req.user.id;
-
-    try {
-        const result = await db.query(
-            "UPDATE agency_invitations SET status = 'rejected' WHERE id = $1 AND operator_id = $2 AND status = 'pending' RETURNING agency_id",
-            [id, operatorId]
-        );
-
-        if (result.rows.length === 0) {
-            return res.status(404).json({ error: 'Geçersiz veya aktif olmayan davet.' });
-        }
-
-        console.log(`[AGENCY-INVITE] Operator ${operatorId} rejected invitation ${id}`);
-        res.json({ success: true, message: 'Ajans daveti reddedildi.' });
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
-});
-
-// SUBMIT AGENCY APPLICATION (User Side)
-app.post('/api/agency/applications', authenticateToken, async (req, res) => {
-    const { agencyName, phone, reason } = req.body;
-    const userId = req.user.id;
-
-    if (!agencyName || !phone) {
-        return res.status(400).json({ error: 'Lütfen Ajans Adı ve Telefon numarası alanlarını doldurun.' });
-    }
-
-    try {
-        // Check if an application is already pending or approved for this user
-        const existingApp = await db.query(
-            "SELECT id, status FROM agency_applications WHERE user_id = $1 AND status IN ('pending', 'approved')",
-            [userId]
-        );
-
-        if (existingApp.rows.length > 0) {
-            const app = existingApp.rows[0];
-            if (app.status === 'approved') {
-                return res.status(400).json({ error: 'Zaten aktif bir ajansınız bulunmaktadır.' });
-            }
-            return res.status(400).json({ error: 'Zaten değerlendirme aşamasında olan aktif bir ajans başvurunuz mevcuttur.' });
-        }
-
-        // Create new application record
-        await db.query(
-            `INSERT INTO agency_applications (user_id, agency_name, phone, reason, status) 
-             VALUES ($1, $2, $3, $4, 'pending')`,
-            [userId, agencyName.trim(), phone.trim(), reason ? reason.trim() : '']
-        );
-
-        console.log(`[AGENCY-APP] User ${userId} submitted application for agency "${agencyName}"`);
-        res.json({ success: true, message: 'Ajans başvurunuz başarıyla alındı! Değerlendirme sonrasında tarafınıza bildirim yapılacaktır.' });
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
-});
-
-// GET MY AGENCY APPLICATION STATUS (User Side)
-app.get('/api/agency/my-application', authenticateToken, async (req, res) => {
-    try {
-        const result = await db.query(
-            `SELECT aa.id, aa.agency_name, aa.phone, aa.reason, aa.status, aa.created_at,
-                    a.referral_code, a.id as agency_id
-             FROM agency_applications aa
-             LEFT JOIN agencies a ON aa.user_id = a.owner_id
-             WHERE aa.user_id = $1
-             ORDER BY aa.created_at DESC LIMIT 1`,
-            [req.user.id]
-        );
-        if (result.rows.length === 0) {
-            return res.json(null);
-        }
-        res.json(result.rows[0]);
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
-});
-
-// GET ALL AGENCY APPLICATIONS (Super Admin Only)
-app.get('/api/admin/agency/applications', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
-    try {
-        const result = await db.query(
-            `SELECT aa.id, aa.user_id, aa.agency_name, aa.phone, aa.reason, aa.status, aa.created_at,
-                    u.username, u.email
-             FROM agency_applications aa
-             JOIN users u ON aa.user_id = u.id
-             ORDER BY aa.created_at DESC`
-        );
-        res.json(result.rows);
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
-});
-
-// APPROVE AGENCY APPLICATION (Super Admin Only)
-app.post('/api/admin/agency/applications/:id/approve', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
+// DELETE AGENCY
+app.delete('/api/admin/agencies/:id', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
     const { id } = req.params;
     try {
         await db.query('BEGIN');
 
-        // 1. Get application
-        const appRes = await db.query('SELECT * FROM agency_applications WHERE id = $1 FOR UPDATE', [id]);
-        if (appRes.rows.length === 0) {
+        // Get owner id to update flag later
+        const agencyRes = await db.query('SELECT owner_id FROM agencies WHERE id = $1', [id]);
+        if (agencyRes.rows.length === 0) {
             await db.query('ROLLBACK');
-            return res.status(404).json({ error: 'Başvuru bulunamadı.' });
+            return res.status(404).json({ error: 'Ajans bulunamadı.' });
         }
-        const application = appRes.rows[0];
-        if (application.status !== 'pending') {
-            await db.query('ROLLBACK');
-            return res.status(400).json({ error: 'Bu başvuru zaten sonuçlandırılmış.' });
-        }
+        const ownerId = agencyRes.rows[0].owner_id;
 
-        // 2. Generate unique referral code
-        let referralCode = '';
-        let isUnique = false;
-        while (!isUnique) {
-            const randomDigits = Math.floor(100 + Math.random() * 900);
-            referralCode = `FLK${randomDigits}`;
-            const dupCheck = await db.query('SELECT id FROM agencies WHERE referral_code = $1', [referralCode]);
-            if (dupCheck.rows.length === 0) {
-                isUnique = true;
+        // 1. Unlink users
+        await db.query('UPDATE users SET agency_id = NULL WHERE agency_id = $1', [id]);
+
+        // 2. Delete agency
+        await db.query('DELETE FROM agencies WHERE id = $1', [id]);
+
+        // 3. Reset owner status if they do not own any other agency
+        if (ownerId) {
+            const ownCheck = await db.query('SELECT id FROM agencies WHERE owner_id = $1', [ownerId]);
+            if (ownCheck.rows.length === 0) {
+                await db.query('UPDATE users SET is_agency_owner = false WHERE id = $1', [ownerId]);
             }
         }
 
-        // 3. Create agency
-        const agencyRes = await db.query(
-            `INSERT INTO agencies (owner_id, name, commission_rate, pending_balance, lifetime_earnings, status, referral_code) 
-             VALUES ($1, $2, 0.40, 0, 0, 'active', $3) RETURNING id`,
-            [application.user_id.toString(), application.agency_name, referralCode]
-        );
-        const newAgencyId = agencyRes.rows[0].id;
-
-        // 4. Update user role and agency_id
-        await db.query(
-            "UPDATE users SET is_agency_owner = true, role = 'operator', agency_id = $1 WHERE id = $2",
-            [newAgencyId, application.user_id]
-        );
-
-        // 5. Update application status
-        await db.query(
-            "UPDATE agency_applications SET status = 'approved', updated_at = CURRENT_TIMESTAMP WHERE id = $1",
-            [id]
-        );
-
         await db.query('COMMIT');
-        console.log(`[AGENCY-APPROVE] Approved application ${id}. Created Agency ${application.agency_name} (ID: ${newAgencyId}) with Referral Code: ${referralCode}`);
-        res.json({ success: true, message: 'Başvuru onaylandı, ajans başarıyla oluşturuldu.', referralCode });
+        res.json({ success: true, message: 'Ajans başarıyla silindi ve tüm bağlı yayıncılar ajanstan ayrıldı.' });
     } catch (err) {
         await db.query('ROLLBACK');
-        console.error('[AGENCY-APPROVE] Error:', err);
-        res.status(500).json({ error: err.message });
-    }
-});
-
-// REJECT AGENCY APPLICATION (Super Admin Only)
-app.post('/api/admin/agency/applications/:id/reject', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
-    const { id } = req.params;
-    try {
-        const result = await db.query(
-            "UPDATE agency_applications SET status = 'rejected', updated_at = CURRENT_TIMESTAMP WHERE id = $1 AND status = 'pending' RETURNING user_id",
-            [id]
-        );
-        if (result.rows.length === 0) {
-            return res.status(404).json({ error: 'Bulunamayan veya işlem yapılmış başvuru.' });
-        }
-        console.log(`[AGENCY-REJECT] Rejected application ${id}`);
-        res.json({ success: true, message: 'Ajans başvurusu reddedildi.' });
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
-});
-
-// REMOVE OPERATOR FROM AGENCY (Agency Owner Only)
-app.post('/api/agency/remove-operator', authenticateToken, async (req, res) => {
-    const { operatorId } = req.body;
-    const ownerId = req.user.id;
-
-    if (!operatorId) {
-        return res.status(400).json({ error: 'Lütfen çıkarılacak yayıncının ID bilgisini gönderin.' });
-    }
-
-    try {
-        // 1. Find the agency owned by current user
-        const agencyRes = await db.query('SELECT id, name FROM agencies WHERE owner_id = $1 LIMIT 1', [ownerId]);
-        if (agencyRes.rows.length === 0) {
-            return res.status(403).json({ error: 'Yetkisiz işlem: Size ait aktif bir ajans bulunamadı.' });
-        }
-        const agency = agencyRes.rows[0];
-
-        // 2. Verify target user is in this agency
-        const userRes = await db.query('SELECT username, agency_id FROM users WHERE id = $1', [operatorId]);
-        if (userRes.rows.length === 0) {
-            return res.status(404).json({ error: 'Yayıncı bulunamadı.' });
-        }
-        const operator = userRes.rows[0];
-        if (operator.agency_id !== agency.id) {
-            return res.status(400).json({ error: 'Bu yayıncı sizin ajansınıza bağlı değil.' });
-        }
-
-        // 3. Remove publisher from agency
-        await db.query('UPDATE users SET agency_id = NULL WHERE id = $1', [operatorId]);
-        
-        console.log(`[AGENCY-REMOVE] Owner ${ownerId} removed operator ${operator.username} from agency ${agency.name}`);
-        res.json({ success: true, message: `${operator.username} adlı yayıncı ajansınızdan başarıyla çıkarıldı.` });
-    } catch (err) {
         res.status(500).json({ error: err.message });
     }
 });
@@ -2935,38 +2933,43 @@ app.post('/api/admin/users/:userId/assign-agency', authenticateToken, authorizeR
     }
 });
 
+// GET USER AGENCY INFO
+app.get('/api/users/:id/agency', authenticateToken, async (req, res) => {
+    try {
+        const result = await db.query(`
+            SELECT a.name, a.id, a.status
+            FROM users u
+            JOIN agencies a ON u.agency_id = a.id
+            WHERE u.id = $1
+        `, [req.params.id]);
+        
+        if (result.rows.length === 0) return res.json({ name: null });
+        res.json(result.rows[0]);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // JOIN AGENCY (User side)
 app.post('/api/agencies/join', authenticateToken, async (req, res) => {
-    const { agencyId } = req.body; // Can be agency UUID or referral code (e.g. FLK123)
+    const { agencyId } = req.body;
     const userId = req.user.id;
 
-    if (!agencyId) return res.status(400).json({ error: 'Ajans kodu veya davet kodu gerekli.' });
+    if (!agencyId) return res.status(400).json({ error: 'Ajans kodu gerekli.' });
 
     try {
-        // 1. Double Join prevention check
-        const userCheck = await db.query('SELECT agency_id FROM users WHERE id = $1', [userId]);
-        if (userCheck.rows.length > 0 && userCheck.rows[0].agency_id) {
-            return res.status(400).json({ error: 'Zaten bir ajansa bağlısınız. Ajanstan ayrılmak için ajans yöneticiniz ile iletişime geçmelisiniz.' });
-        }
-
-        // 2. Find agency by ID or referral code
-        const agencyRes = await db.query(
-            "SELECT id, name FROM agencies WHERE (id = $1 OR UPPER(referral_code) = UPPER($1)) AND status = 'active'",
-            [agencyId.trim()]
-        );
+        // 1. Check if agency exists
+        const agencyRes = await db.query('SELECT name FROM agencies WHERE id = $1 AND status = \'active\'', [agencyId]);
         if (agencyRes.rows.length === 0) {
-            return res.status(404).json({ error: 'Geçersiz veya aktif olmayan ajans kodu / davet kodu.' });
+            return res.status(404).json({ error: 'Geçersiz veya aktif olmayan ajans kodu.' });
         }
 
-        const agency = agencyRes.rows[0];
-
-        // 3. Update user's agency
-        await db.query('UPDATE users SET agency_id = $1 WHERE id = $2', [agency.id, userId]);
+        // 2. Update user's agency
+        await db.query('UPDATE users SET agency_id = $1 WHERE id = $2', [agencyId, userId]);
         
-        console.log(`[AGENCY] User ${userId} joined agency ${agency.name} using code ${agencyId}`);
-        res.json({ success: true, message: `${agency.name} ajansına başarıyla katıldınız!`, agencyName: agency.name });
+        console.log(`[AGENCY] User ${userId} joined agency ${agencyRes.rows[0].name}`);
+        res.json({ success: true, message: `${agencyRes.rows[0].name} ajansına başarıyla katıldınız!`, agencyName: agencyRes.rows[0].name });
     } catch (err) {
-        console.error('[AGENCY-JOIN] Join error:', err);
         res.status(500).json({ error: 'Ajansa katılırken bir hata oluştu.' });
     }
 });
@@ -3556,6 +3559,8 @@ app.post('/api/admin/maintenance/cleanup', authenticateToken, authorizeRole('adm
             // Keep only latest 500 logs
             const result = await db.query(`
                 DELETE FROM activities 
+                WHERE id NOT IN (
+                    SELECT id FROM activities 
                     ORDER BY created_at DESC 
                     LIMIT 500
                 )
@@ -3563,6 +3568,7 @@ app.post('/api/admin/maintenance/cleanup', authenticateToken, authorizeRole('adm
             res.json({ success: true, count: result.rowCount });
         } else if (type === 'orphaned_files') {
             // Complex orphaned file cleanup could be added here
+            // For now, let's just clear rejected photos and their files
             const rejected = await db.query("SELECT url FROM pending_photos WHERE status = 'rejected'");
             let count = 0;
             for (const row of rejected.rows) {
@@ -3677,81 +3683,6 @@ app.get('/api/admin/operators/earnings', authenticateToken, authorizeRole('admin
         const result = await db.query(query);
         res.json(result.rows);
     } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
-});
-
-// GET ALL AGENCIES for earnings and list
-app.get('/api/admin/agencies/earnings', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
-    try {
-        const query = `
-            SELECT 
-                a.id, 
-                a.name, 
-                a.commission_rate, 
-                COALESCE(a.pending_balance, 0) as pending_balance, 
-                COALESCE(a.lifetime_earnings, 0) as lifetime_earnings, 
-                a.status, 
-                a.referral_code, 
-                a.created_at,
-                u.username as owner_username, 
-                u.email as owner_email, 
-                u.phone as owner_phone,
-                u.display_name as owner_display_name,
-                (SELECT COUNT(*) FROM users WHERE agency_id = a.id) as total_models
-            FROM agencies a
-            LEFT JOIN users u ON a.owner_id::text = u.id::text
-            ORDER BY a.pending_balance DESC;
-        `;
-        const result = await db.query(query);
-        res.json(result.rows);
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
-});
-
-// Process a payout for an agency
-app.post('/api/admin/agencies/:id/payout', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
-    const { id } = req.params;
-    const { amount, method } = req.body;
-
-    try {
-        await db.query('BEGIN');
-
-        // 1. Get current pending balance
-        const agencyRes = await db.query('SELECT pending_balance FROM agencies WHERE id = $1 FOR UPDATE', [id]);
-        if (agencyRes.rows.length === 0) throw new Error('Ajans bulunamadı.');
-
-        const pending = parseFloat(agencyRes.rows[0].pending_balance || 0);
-        const payoutAmount = parseFloat(amount || pending);
-
-        if (payoutAmount <= 0) throw new Error('Ödenecek tutar 0 olamaz.');
-        if (payoutAmount > pending) throw new Error('Ödenmek istenen tutar bekleyen bakiyeden büyük olamaz.');
-
-        // 2. Ensure column exists
-        try {
-            await db.query('ALTER TABLE payouts ADD COLUMN IF NOT EXISTS agency_id TEXT');
-        } catch (e) {
-            console.log('[DB] Info: payouts column migration skipped or failed:', e.message);
-        }
-
-        // 3. Record payout
-        await db.query(
-            'INSERT INTO payouts (agency_id, amount, status, payment_method, processed_at) VALUES ($1, $2, $3, $4, NOW())',
-            [id, payoutAmount, 'processed', method || 'Manual']
-        );
-
-        // 4. Update balance
-        await db.query(
-            'UPDATE agencies SET pending_balance = pending_balance - $1 WHERE id = $2',
-            [payoutAmount, id]
-        );
-
-        await db.query('COMMIT');
-        res.json({ success: true, message: 'Ajans ödemesi başarıyla işlendi.' });
-
-    } catch (err) {
-        await db.query('ROLLBACK');
         res.status(500).json({ error: err.message });
     }
 });
@@ -3980,7 +3911,7 @@ io.use(async (socket, next) => {
         }
 
         const decoded = jwt.verify(token, SECRET_KEY);
-        const result = await db.query('SELECT id, username, role, account_status, balance, vip_level, gender, agency_id FROM users WHERE id = $1', [decoded.id]);
+        const result = await db.query('SELECT id, username, role, account_status, balance, vip_level FROM users WHERE id = $1', [decoded.id]);
 
         if (result.rows.length === 0) {
             global.payoutLogs.push({ timestamp: new Date().toISOString(), type: 'AUTH_FAILED', reason: 'User not found', userId: decoded.id });
@@ -4004,8 +3935,311 @@ io.use(async (socket, next) => {
     }
 });
 
-// Initialize modular sockets
-initializeSockets(io);
+io.on('connection', (socket) => {
+    const connLog = {
+        timestamp: new Date().toISOString(),
+        type: 'CLIENT_CONNECTED',
+        socketId: socket.id,
+        user: socket.user ? { id: socket.user.id, username: socket.user.username } : 'ANONYMOUS'
+    };
+    if (!global.payoutLogs) global.payoutLogs = [];
+    global.payoutLogs.push(connLog);
+    
+    console.log(`[SOCKET] User connected: ${socket.id} (Authenticated: ${socket.user ? socket.user.username : 'NO'})`);
+
+    // Join their own room for global notifications
+    if (socket.user && socket.user.id) {
+        const userRoom = socket.user.id.toString();
+        socket.join(userRoom);
+        console.log(`[SOCKET] User ${socket.user.username} joined personal room: ${userRoom}`);
+    }
+    socket.on('join_room', (chatId) => {
+        if (!chatId) {
+            console.error(`[SOCKET] User ${socket.user?.username || socket.id} tried to join an empty room!`);
+            return;
+        }
+        const roomName = chatId.toString();
+        socket.join(roomName);
+        console.log(`[SOCKET] User ${socket.user?.username || socket.id} (${socket.id}) joined room: ${roomName}`);
+    });
+
+    // --- TYPING INDICATOR (YAZIYOR...) ---
+    socket.on('typing_start', (data) => {
+        const chatId = data.chatId ? data.chatId.toString() : null;
+        if (!chatId) return;
+
+        console.log(`[SOCKET] typing_start received from ${socket.user?.username || socket.id} for chatId: ${chatId}`);
+        // Broadcast to everyone in the room EXCEPT the sender
+        socket.to(chatId).emit('display_typing', {
+            userId: socket.user ? socket.user.id.toString() : null,
+            chatId: chatId
+        });
+    });
+
+    socket.on('typing_end', (data) => {
+        const chatId = data.chatId ? data.chatId.toString() : null;
+        if (!chatId) return;
+
+        console.log(`[SOCKET] typing_end received from ${socket.user?.username || socket.id} for chatId: ${chatId}`);
+        socket.to(chatId).emit('hide_typing', {
+            userId: socket.user ? socket.user.id.toString() : null,
+            chatId: chatId
+        });
+    });
+
+    // Send Message
+    socket.on('send_message', async (data) => {
+        console.log('[SOCKET] send_message received:', JSON.stringify(data, null, 2));
+        const { chatId, content, type, giftId, tempId, unlockCost } = data;
+        const senderId = socket.user.id;
+
+        console.log(`[DEBUG-SEND] chatId: ${chatId} (${typeof chatId}), senderId: ${senderId} (${typeof senderId}), type: ${type}`);
+        if (!global.payoutLogs) global.payoutLogs = [];
+        global.payoutLogs.push({ timestamp: new Date().toISOString(), type: 'DEBUG_SEND', data: { chatId, senderId, contentType: type, chatIdType: typeof chatId } });
+        global.payoutLogs.push({
+            timestamp: new Date().toISOString(),
+            type: 'SEND_MESSAGE_START',
+            chatId,
+            senderId,
+            contentType: type
+        });
+
+        let client;
+
+        try {
+            client = await db.pool.connect();
+            console.log(`[SOCKET] Starting send_message transaction for chatId: ${chatId}, senderId: ${senderId}`);
+            await client.query('BEGIN'); // Start Transaction
+
+            // Check if sender is an operator
+            // Optimization: We could check socket.user.role, but let's trust DB check for consistency
+            // Actually, we loaded role in middleware. 
+            // Let's use socket.user.role if it helps, but 'operator' role might be in 'users' table or 'operators' table check needed.
+            // The existing code checks 'operators' table existence. Let's keep it but use senderId (from auth).
+            const operatorCheck = await client.query('SELECT user_id FROM operators WHERE user_id = $1', [senderId]);
+            const isOperator = operatorCheck.rows.length > 0;
+
+            let cost = 0;
+            let userBalance = 0;
+            let currentBalance = 0;
+            let giftDetails = null;
+
+            // --- 1. COIN DEDUCTION LOGIC ---
+            // Management roles don't pay for messages
+            const userRole = (socket.user.role || '').toLowerCase();
+            const isManagement = ['admin', 'super_admin', 'moderator', 'staff', 'operator'].includes(userRole);
+            
+            let commissionDataToRunLater = null;
+            
+            if (!isManagement) {
+                cost = 10; // Default text
+                if (type === 'gift' && giftId) {
+                    const giftRes = await client.query('SELECT * FROM gifts WHERE id = $1', [giftId]);
+                    if (giftRes.rows.length > 0) {
+                        giftDetails = giftRes.rows[0];
+                        cost = giftDetails.cost;
+                    } else {
+                        throw new Error('Invalid Gift ID');
+                    }
+                } else if (type === 'image') {
+                    cost = 50;
+                } else if (type === 'audio') {
+                    cost = 30;
+                }
+
+                const userResult = await client.query('SELECT balance FROM users WHERE id = $1 FOR UPDATE', [senderId]);
+                if (userResult.rows.length === 0) throw new Error('User not found');
+
+                currentBalance = parseFloat(userResult.rows[0].balance || 0);
+                console.log(`[PAYOUT-DEBUG] Sender ${senderId} (Role: ${socket.user.role}) current balance: ${currentBalance}, cost: ${cost}`);
+
+                if (currentBalance < cost) {
+                    console.log(`[PAYOUT-DEBUG] Insufficient funds for ${senderId}. Has ${currentBalance}, needs ${cost}`);
+                    await client.query('ROLLBACK');
+                    io.to(socket.id).emit('message_error', {
+                        code: 'INSUFFICIENT_FUNDS',
+                        message: `Yetersiz bakiye. Bu işlem için ${cost} coin gerekli.`,
+                        required: cost,
+                        tempId: tempId
+                    });
+                    return;
+                }
+
+                const updateRes = await client.query('UPDATE users SET balance = balance - $2 WHERE id = $1 RETURNING balance', [senderId, cost]);
+                userBalance = parseFloat(updateRes.rows[0].balance);
+                io.emit('admin_balance_update', { userId: senderId, newBalance: userBalance });
+
+                if (type === 'gift') {
+                    const chatRes = await client.query('SELECT operator_id FROM chats WHERE id = $1', [chatId]);
+                    if (chatRes.rows.length > 0) {
+                        commissionDataToRunLater = { chatId, senderId: null, cost, type: 'gift' };
+                    }
+                }
+            } else {
+                // STAFF EARNS ON RESPONSE - But ONLY if they are NOT the "user" side of the chat
+                const chatCheck = await client.query('SELECT user_id FROM chats WHERE id = $1', [chatId]);
+                const chatUserId = chatCheck.rows.length > 0 ? chatCheck.rows[0].user_id : null;
+                
+                if (chatUserId && chatUserId.toString() !== senderId.toString()) {
+                    let commissionCost = 10;
+                    if (type === 'image') commissionCost = 50;
+                    else if (type === 'audio') commissionCost = 30;
+                    
+                    commissionDataToRunLater = { chatId, senderId, cost: commissionCost, type: type || 'text' };
+                }
+            }
+
+            console.log(`[SOCKET] Checking management status for role: ${socket.user.role}`);
+            // --- 2. SENDER MAPPING (Zimmetleme & Management Check) ---
+            let finalSenderId = senderId;
+            
+            // If sender is management, they should message AS the operator of this chat
+            if (isManagement) {
+                const chatRes = await client.query('SELECT operator_id FROM chats WHERE id = $1', [chatId]);
+                if (chatRes.rows.length > 0) {
+                    const avatarId = chatRes.rows[0].operator_id;
+                    
+                    // Zimmet Check: If it's a staff/moderator, check if they are allowed
+                    if (socket.user.role === 'staff' || socket.user.role === 'moderator') {
+                        const manageCheck = await client.query('SELECT managed_by FROM users WHERE id = $1', [avatarId]);
+                        const managerId = manageCheck.rows.length > 0 ? manageCheck.rows[0].managed_by : null;
+                        
+                        if (managerId && managerId.toString() !== senderId.toString() && socket.user.role !== 'admin' && socket.user.role !== 'super_admin') {
+                            console.warn(`[SOCKET] Blocked unauthorized message attempt by ${senderId} for avatar ${avatarId}`);
+                            throw new Error('BU_PROFIL_SIZE_ZIMMETLI_DEGIL');
+                        }
+                    }
+                    
+                    // All management roles message AS the avatar to keep chat consistent
+                    finalSenderId = avatarId;
+                }
+            }
+
+            // --- 3. SAVE MESSAGE ---
+            const res = await client.query(
+                'INSERT INTO messages (chat_id, sender_id, content, content_type, gift_id, unlock_cost, is_unlocked) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *',
+                [chatId, finalSenderId, content, type || 'text', giftId || null, type === 'locked_image' ? (unlockCost || 50) : 0, type === 'locked_image' ? false : true]
+            );
+            const savedMsg = res.rows[0];
+
+            let lastMsgPreview = content;
+            if (type === 'gift') lastMsgPreview = '🎁 Hediye Gönderildi';
+            else if (type === 'image') lastMsgPreview = '📷 Resim';
+            else if (type === 'locked_image') lastMsgPreview = '🔒 Kilitli Resim';
+            else if (type === 'audio') lastMsgPreview = '🎤 Ses Kaydı';
+
+            await client.query('UPDATE chats SET last_message_at = NOW(), last_message = $2 WHERE id = $1', [chatId, lastMsgPreview]);
+
+            await client.query('COMMIT');
+
+            // --- 3.5. EXECUTE COMMISSION LATER (SAFE ZONE) ---
+            if (commissionDataToRunLater) {
+                try {
+                    await recordOperatorCommission(
+                        client, 
+                        commissionDataToRunLater.chatId, 
+                        commissionDataToRunLater.senderId, 
+                        commissionDataToRunLater.cost, 
+                        commissionDataToRunLater.type
+                    );
+                } catch (commissionErr) {
+                    console.error('[COMMISSION-SAFE] Commission failed but message was sent:', commissionErr.message);
+                }
+            }
+
+            // --- 4. EMIT EVENTS ---
+            if (!isManagement) {
+                io.to(socket.id).emit('balance_update', { userId: senderId, newBalance: userBalance });
+            }
+
+            if (giftDetails) {
+                savedMsg.gift_name = giftDetails.name;
+                savedMsg.gift_cost = giftDetails.cost;
+                savedMsg.gift_icon = giftDetails.icon_url;
+            }
+
+            const msgToEmit = { 
+                ...savedMsg, 
+                chat_id: savedMsg.chat_id.toString(), 
+                type: savedMsg.content_type, // Alias for mobile app compatibility
+                tempId 
+            };
+            // EMIT ASAP
+            io.to(chatId.toString()).emit('receive_message', msgToEmit);
+            
+            // Notify recipient globally for unread badge updates
+            try {
+                const chatInfo = await client.query('SELECT user_id, operator_id FROM chats WHERE id = $1', [chatId]);
+                if (chatInfo.rows.length > 0) {
+                    const recipientId = finalSenderId.toString() === chatInfo.rows[0].user_id.toString() 
+                        ? chatInfo.rows[0].operator_id 
+                        : chatInfo.rows[0].user_id;
+                    io.to(recipientId.toString()).emit('new_message', msgToEmit);
+                }
+            } catch (notifyErr) {
+                console.error('[SOCKET] Global notify error:', notifyErr.message);
+            }
+            
+            io.emit('admin_notification', msgToEmit);
+
+            // --- 5. PUSH NOTIFICATION (Non-blocking) ---
+            (async () => {
+                try {
+                    const participantsRes = await client.query('SELECT user_id, operator_id FROM chats WHERE id = $1', [chatId]);
+                    if (participantsRes.rows.length > 0) {
+                        const { user_id, operator_id } = participantsRes.rows[0];
+                        const recipientId = finalSenderId.toString() === user_id.toString() ? operator_id : user_id;
+
+                        const senderRes = await client.query('SELECT display_name FROM users WHERE id = $1', [finalSenderId]);
+                        const senderName = senderRes.rows[0]?.display_name || 'Bir kullanıcı';
+
+                        await sendPushNotification(recipientId, {
+                            title: `Yeni Mesaj: ${senderName}`,
+                            body: type === 'text' ? content : (type === 'gift' ? '🎁 Sana bir hediye gönderdi!' : '📷 Bir medya dosyası gönderdi'),
+                            data: { chatId: chatId.toString(), type: 'message' }
+                        });
+                    }
+                } catch (pushErr) {
+                    console.error('[SOCKET] Push trigger error:', pushErr.message);
+                }
+            })();
+
+        } catch (err) {
+            if (client) {
+                try { await client.query('ROLLBACK'); } catch (e) { console.error('[SOCKET] Rollback Error:', e.message); }
+            }
+            console.error('[SOCKET] CRITICAL Send Message Error:', err.message);
+            console.error('[SOCKET] Error Stack:', err.stack);
+            console.error('[SOCKET] Failed Message Data:', JSON.stringify({ chatId, senderId, type, tempId }));
+            
+            // Add error to logs
+            if (!global.payoutLogs) global.payoutLogs = [];
+            global.payoutLogs.push({ timestamp: new Date().toISOString(), type: 'SEND_ERROR', error: err.message, stack: err.stack });
+            
+            // Send specific error message if it's a known one, otherwise generic
+            let errorMsg = (err.message === 'BU_PROFIL_SIZE_ZIMMETLI_DEGIL') 
+                ? 'Bu profil size zimmetli değil.' 
+                : 'Mesaj gönderilemedi.';
+            
+            // Append debug info directly to the message so it shows up in current APKs
+            errorMsg += ` (${err.message})`;
+
+            io.to(socket.id).emit('message_error', {
+                code: err.message === 'BU_PROFIL_SIZE_ZIMMETLI_DEGIL' ? 'UNAUTHORIZED' : 'SEND_FAILED',
+                message: errorMsg,
+                debug: err.message // Force show debug message to user for troubleshooting
+            });
+        } finally {
+            if (client) {
+                client.release();
+            }
+        }
+    });
+
+    socket.on('disconnect', () => {
+        console.log('User disconnected:', socket.id);
+    });
+});
 
 // MANUAL ADMIN CREATION: Chameleon Fix - DISABLED
 // app.get('/api/admin/force-create-admin', async (req, res) => {
@@ -4253,12 +4487,10 @@ app.get('/api/admin/notifications/history', authenticateToken, authorizeRole('ad
 app.post('/api/admin/notifications/send', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
     const { title, body, target } = req.body;
     try {
-        let userQuery = 'SELECT id FROM users';
-        if (target === 'kadin') userQuery += " WHERE gender = 'kadin' AND role = 'user'";
-        else if (target === 'erkek') userQuery += " WHERE gender = 'erkek' AND role = 'user'";
-        else if (target === 'inactive') userQuery += " WHERE last_login_at < NOW() - interval '7 days' AND role = 'user'";
-        else if (target === 'user_only') userQuery += " WHERE role = 'user'";
-        // Default (all) includes all roles now for testing purposes
+        let userQuery = 'SELECT id FROM users WHERE role = \'user\'';
+        if (target === 'kadin') userQuery += " AND gender = 'kadin'";
+        else if (target === 'erkek') userQuery += " AND gender = 'erkek'";
+        else if (target === 'inactive') userQuery += " AND last_login_at < NOW() - interval '7 days'";
 
         const usersRes = await db.query(userQuery);
         const userIds = usersRes.rows.map(r => r.id);
@@ -4393,14 +4625,14 @@ async function runMessageScheduler() {
             for (const u of users.rows) {
                 // Check if already has a chat
                 let chatRes = await db.query(
-                    'SELECT id FROM chats WHERE (user_id = $1 AND operator_id = $2) OR (user_id = $2 AND operator_id = $1)',
-                    [u.id, sch.operator_id]
+                    'SELECT id FROM chats WHERE (user1_id = $1 AND user2_id = $2) OR (user1_id = $2 AND user2_id = $1)',
+                    [sch.operator_id, u.id]
                 );
                 let chatId;
                 if (chatRes.rows.length === 0) {
                     const newChat = await db.query(
-                        'INSERT INTO chats (user_id, operator_id, last_message, last_message_at) VALUES ($1, $2, $3, NOW()) RETURNING id',
-                        [u.id, sch.operator_id, sch.message_template]
+                        'INSERT INTO chats (user1_id, user2_id) VALUES ($1, $2) RETURNING id',
+                        [sch.operator_id, u.id]
                     );
                     chatId = newChat.rows[0].id;
                 } else {
@@ -4421,7 +4653,7 @@ async function runMessageScheduler() {
 
                 // Send message
                 await db.query(
-                    'INSERT INTO messages (chat_id, sender_id, content, content_type) VALUES ($1, $2, $3, $4)',
+                    'INSERT INTO messages (chat_id, sender_id, content, type) VALUES ($1, $2, $3, $4)',
                     [chatId, sch.operator_id, sch.message_template, 'text']
                 );
                 
@@ -4544,7 +4776,7 @@ app.post('/api/messages/send-hi', async (req, res) => {
 // 1.5 Get Fresh User Balance
 app.get('/api/users/balance', authenticateToken, async (req, res) => {
     try {
-        const result = await db.query('SELECT balance FROM users WHERE id::text = $1::text', [req.user.id]);
+        const result = await db.query('SELECT balance FROM users WHERE id = $1', [req.user.id]);
         if (result.rows.length === 0) return res.status(404).json({ error: 'User not found' });
         res.json({ balance: result.rows[0].balance });
     } catch (err) {
@@ -4710,7 +4942,7 @@ server.listen(PORT, '0.0.0.0', async () => {
     console.log(`🚀 [BACKEND] Server listening on port ${PORT}`);
 
     // Initialize Database Schema and Packages
-    await initializeDatabase(db, app);
+    await initializeDatabase();
 
     startPinger();
 });

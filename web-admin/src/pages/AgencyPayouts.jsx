@@ -48,6 +48,7 @@ const AgencyPayouts = () => {
     const [agencyOwnerSearch, setAgencyOwnerSearch] = useState('');
     const [agencyStatus, setAgencyStatus] = useState(true); // true = 'active', false = 'inactive'
     const [agencyCommissionRate, setAgencyCommissionRate] = useState('0.40'); // Default %40
+    const [agencyReferralCode, setAgencyReferralCode] = useState('');
     
     // User search & creation states
     const [allUsersList, setAllUsersList] = useState([]);
@@ -144,7 +145,8 @@ const AgencyPayouts = () => {
                 name: agencyName.trim(),
                 owner_id: agencyOwnerId,
                 commission_rate: parseFloat(agencyCommissionRate || 0.40),
-                status: agencyStatus ? 'active' : 'inactive'
+                status: agencyStatus ? 'active' : 'inactive',
+                referral_code: agencyReferralCode.trim() || undefined
             }, { headers: { Authorization: `Bearer ${token}` } });
 
             alert('Yeni ajans başarıyla oluşturuldu!');
@@ -156,10 +158,27 @@ const AgencyPayouts = () => {
             setAgencyOwnerSearch('');
             setAgencyStatus(true);
             setAgencyCommissionRate('0.40');
+            setAgencyReferralCode('');
             
             fetchData();
         } catch (err) {
             alert('Ajans oluşturma hatası: ' + (err.response?.data?.error || err.message));
+        }
+    };
+
+    const handleDeleteAgency = async (agency) => {
+        if (!window.confirm(`"${agency.name}" ajansını tamamen silmek istediğinize emin misiniz? Bu işlem geri alınamaz ve bağlı tüm yayıncılar ajanstan çıkarılacaktır.`)) {
+            return;
+        }
+
+        try {
+            await axios.delete(`${API_URL}/admin/agencies/${agency.id}`, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            alert('Ajans başarıyla silindi!');
+            fetchData();
+        } catch (err) {
+            alert('Ajans silme hatası: ' + (err.response?.data?.error || err.message));
         }
     };
 
@@ -389,16 +408,24 @@ const AgencyPayouts = () => {
                                         </p>
                                     </td>
                                     <td className="px-8 py-6 text-right">
-                                        <button 
-                                            onClick={() => {
-                                                setSelectedOperator(op);
-                                                setPayoutAmount(op.pending_balance);
-                                                setPayoutModal(true);
-                                            }}
-                                            className="px-4 py-2 bg-cyan-600/10 border border-cyan-500/20 text-cyan-400 text-[10px] font-black rounded-xl uppercase hover:bg-cyan-600 hover:text-white transition-all"
-                                        >
-                                            Hakediş Öde
-                                        </button>
+                                        <div className="flex items-center justify-end gap-2">
+                                            <button 
+                                                onClick={() => {
+                                                    setSelectedOperator(op);
+                                                    setPayoutAmount(op.pending_balance);
+                                                    setPayoutModal(true);
+                                                }}
+                                                className="px-4 py-2 bg-cyan-600/10 border border-cyan-500/20 text-cyan-400 text-[10px] font-black rounded-xl uppercase hover:bg-cyan-600 hover:text-white transition-all"
+                                            >
+                                                Hakediş Öde
+                                            </button>
+                                            <button 
+                                                onClick={() => handleDeleteAgency(op)}
+                                                className="px-4 py-2 bg-rose-600/10 border border-rose-500/20 text-rose-400 text-[10px] font-black rounded-xl uppercase hover:bg-rose-600 hover:text-white transition-all"
+                                            >
+                                                Sil
+                                            </button>
+                                        </div>
                                     </td>
                                 </tr>
                             ))}
@@ -639,6 +666,19 @@ const AgencyPayouts = () => {
                                         </button>
                                     </div>
                                 )}
+                            </div>
+
+                            {/* Referral / Invite Code */}
+                            <div className="mb-6">
+                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-2">Ajans Referans / Davet Kodu (İsteğe Bağlı)</label>
+                                <input 
+                                    type="text" 
+                                    placeholder="Örn: ORNEK123 (Boş bırakılırsa otomatik üretilir)"
+                                    className="w-full bg-white/5 border border-white/10 rounded-2xl py-4 px-6 text-sm font-bold text-white outline-none focus:border-indigo-500/50 transition-all uppercase placeholder:text-slate-600"
+                                    value={agencyReferralCode}
+                                    onChange={(e) => setAgencyReferralCode(e.target.value)}
+                                />
+                                <p className="text-[9px] text-slate-500 font-bold mt-1.5">Yayıncılar ajansa katılırken bu davet kodunu kullanabilirler.</p>
                             </div>
 
                             {/* Status and Commission Rate in a responsive row */}

@@ -773,8 +773,8 @@ const authLimiter = rateLimit({
 
 const sendOtpEmail = async (email, otp) => {
     if (!process.env.BREVO_API_KEY) {
-        console.log(`[BREVO] API Key missing. OTP for ${email}: ${otp}`);
-        return;
+        console.error(`[BREVO ERROR] API Key (BREVO_API_KEY) missing from environment variables. OTP is: ${otp}`);
+        throw new Error('E-posta servisi yapılandırılmamış (BREVO_API_KEY eksik). Lütfen Render panelinden çevre değişkenini tanımlayın.');
     }
     try {
         await axios.post('https://api.brevo.com/v3/smtp/email', {
@@ -809,9 +809,12 @@ const sendOtpEmail = async (email, otp) => {
         });
         console.log(`[BREVO] OTP email successfully sent to ${email}`);
     } catch (error) {
-        console.error('[BREVO ERROR] Failed to send OTP email:', error.response?.data || error.message);
+        const errorMsg = error.response?.data?.message || error.response?.data || error.message;
+        console.error('[BREVO ERROR] Failed to send OTP email:', errorMsg);
+        throw new Error(`E-posta gönderimi başarısız: ${typeof errorMsg === 'object' ? JSON.stringify(errorMsg) : errorMsg}`);
     }
 };
+
 
 app.post('/api/auth/request-otp', authLimiter, async (req, res) => {
     const { email, phone } = req.body;

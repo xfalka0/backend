@@ -102,7 +102,7 @@ router.get('/admin/agencies', authenticateToken, authorizeRole('admin', 'super_a
         const result = await db.query(`
             SELECT a.*, u.username as owner_name 
             FROM agencies a
-            LEFT JOIN users u ON a.owner_id = u.id
+            LEFT JOIN users u ON a.owner_id::text = u.id::text
             ORDER BY a.created_at DESC
         `);
         res.json(result.rows);
@@ -239,9 +239,9 @@ router.get('/users/:id/agency', authenticateToken, async (req, res) => {
             SELECT a.name, a.id, a.status, a.referral_code,
                    COALESCE(u2.display_name, u2.username, 'Bilinmiyor') as owner_name
             FROM users u
-            JOIN agencies a ON u.agency_id = a.id
-            LEFT JOIN users u2 ON a.owner_id = u2.id
-            WHERE u.id = $1
+            JOIN agencies a ON u.agency_id::text = a.id::text
+            LEFT JOIN users u2 ON a.owner_id::text = u2.id::text
+            WHERE u.id::text = $1::text
         `, [req.params.id]);
         
         if (result.rows.length === 0) return res.json({ name: null });
@@ -440,7 +440,7 @@ router.post('/agency/invitations', authenticateToken, async (req, res) => {
         
         // 3. Check for existing pending invitation
         const existCheck = await db.query(
-            'SELECT id FROM agency_invitations WHERE agency_id = $1 AND operator_id = $2 AND status = \'pending\'',
+            "SELECT id FROM agency_invitations WHERE agency_id::text = $1::text AND operator_id::text = $2::text AND status = 'pending'",
             [agency.id, targetUser.id]
         );
         if (existCheck.rows.length > 0) {
@@ -471,7 +471,7 @@ router.get('/agency/my-invitations', authenticateToken, async (req, res) => {
             `SELECT ai.id, a.name as agency_name, ai.created_at
              FROM agency_invitations ai
              JOIN agencies a ON ai.agency_id::text = a.id::text
-             WHERE ai.operator_id = $1 AND ai.status = 'pending'
+             WHERE ai.operator_id::text = $1::text AND ai.status = 'pending'
              ORDER BY ai.created_at DESC`,
             [userId]
         );
@@ -490,7 +490,7 @@ router.post('/agency/invitations/:inviteId/accept', authenticateToken, async (re
         
         // 1. Fetch invitation
         const inviteRes = await db.query(
-            'SELECT agency_id, operator_id FROM agency_invitations WHERE id = $1 AND operator_id = $2 AND status = \'pending\'',
+            "SELECT agency_id, operator_id FROM agency_invitations WHERE id::text = $1::text AND operator_id::text = $2::text AND status = 'pending'",
             [inviteId, userId]
         );
         if (inviteRes.rows.length === 0) {
@@ -501,14 +501,14 @@ router.post('/agency/invitations/:inviteId/accept', authenticateToken, async (re
         const { agency_id } = inviteRes.rows[0];
         
         // 2. Set the operator's agency
-        await db.query('UPDATE users SET agency_id = $1 WHERE id = $2', [agency_id, userId]);
+        await db.query('UPDATE users SET agency_id = $1 WHERE id::text = $2::text', [agency_id, userId]);
         
         // 3. Mark accepted
-        await db.query('UPDATE agency_invitations SET status = \'accepted\' WHERE id = $1', [inviteId]);
+        await db.query("UPDATE agency_invitations SET status = 'accepted' WHERE id::text = $1::text", [inviteId]);
         
         // 4. Mark all other invitations as rejected
         await db.query(
-            'UPDATE agency_invitations SET status = \'rejected\' WHERE operator_id = $1 AND id != $2 AND status = \'pending\'',
+            "UPDATE agency_invitations SET status = 'rejected' WHERE operator_id::text = $1::text AND id::text != $2::text AND status = 'pending'",
             [userId, inviteId]
         );
         
@@ -526,7 +526,7 @@ router.post('/agency/invitations/:inviteId/reject', authenticateToken, async (re
     const userId = req.user.id;
     try {
         const result = await db.query(
-            'UPDATE agency_invitations SET status = \'rejected\' WHERE id = $1 AND operator_id = $2 AND status = \'pending\' RETURNING id',
+            "UPDATE agency_invitations SET status = 'rejected' WHERE id::text = $1::text AND operator_id::text = $2::text AND status = 'pending' RETURNING id",
             [inviteId, userId]
         );
         if (result.rows.length === 0) {
@@ -556,14 +556,14 @@ router.post('/agency/remove-operator', authenticateToken, async (req, res) => {
         }
         const agencyId = agencyRes.rows[0].id;
         
-        const operatorCheck = await db.query('SELECT id FROM users WHERE id = $1 AND agency_id::text = $2::text', [operatorId, agencyId]);
+        const operatorCheck = await db.query('SELECT id FROM users WHERE id::text = $1::text AND agency_id::text = $2::text', [operatorId, agencyId]);
         if (operatorCheck.rows.length === 0) {
             await db.query('ROLLBACK');
             return res.status(404).json({ error: 'Yayıncı bu ajansa kayıtlı değil.' });
         }
         
         // 2. Unlink
-        await db.query('UPDATE users SET agency_id = NULL WHERE id = $1', [operatorId]);
+        await db.query('UPDATE users SET agency_id = NULL WHERE id::text = $1::text', [operatorId]);
         
         await db.query('COMMIT');
         res.json({ success: true, message: 'Yayıncı ajanstan başarıyla çıkarıldı.' });

@@ -18,6 +18,7 @@ const boostsRoutes = require('./routes/boosts');
 const webhooksRoutes = require('./routes/webhooks');
 const adminOperatorsRoutes = require('./routes/adminOperators');
 const agencyRoutes = require('./routes/agency');
+const starterPackRoutes = require('./routes/starterPackRoutes');
 const { sanitizeUser, logActivity } = require('./utils/helpers');
 const { sendPushNotification } = require('./utils/notificationUtils');
 
@@ -1034,6 +1035,7 @@ app.use('/api/views', viewsRoutes);
 app.use('/api/boosts', boostsRoutes);
 app.use('/api/operators', adminOperatorsRoutes);
 app.use('/api', agencyRoutes);
+app.use('/api/starter-pack', starterPackRoutes);
 
 // TEMPORARY: Fix Genders Route
 app.get('/api/admin/fix-genders', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {

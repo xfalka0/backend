@@ -81,8 +81,78 @@ export default function ChatScreen({ route, navigation }) {
     const [showImageLockModal, setShowImageLockModal] = useState(false);
     const [unlockCostSelection, setUnlockCostSelection] = useState(50);
     const [chatId, setChatId] = useState(existingChatId || null);
-    const [selectedImage, setSelectedImage] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
+    const [selectedImage, setSelectedImage] = useState(null);
+    const [pendingAgencyInvite, setPendingAgencyInvite] = useState(null);
+
+    useEffect(() => {
+        const checkPendingInvitations = async () => {
+            try {
+                const token = await AsyncStorage.getItem('token');
+                if (!token) return;
+                
+                const inviteRes = await axios.get(`${API_URL}/agency/my-invitations`, {
+                    headers: { Authorization: `Bearer ${token}` }
+                });
+                
+                if (inviteRes.data && inviteRes.data.length > 0) {
+                    const matchingInvite = inviteRes.data.find(inv => inv.owner_id?.toString() === operatorId?.toString());
+                    if (matchingInvite) {
+                        setPendingAgencyInvite(matchingInvite);
+                    }
+                }
+            } catch (err) {
+                console.log('[ChatScreen] Error checking pending invitations:', err.message);
+            }
+        };
+        if (operatorId) {
+            checkPendingInvitations();
+        }
+    }, [operatorId]);
+
+    const handleAcceptInvitation = async (inviteId) => {
+        try {
+            const token = await AsyncStorage.getItem('token');
+            if (!token) return;
+
+            const res = await axios.post(`${API_URL}/agency/invitations/${inviteId}/accept`, {}, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+
+            if (res.data && res.data.success) {
+                Alert.alert('Başarılı', res.data.message || 'Ajans davetini başarıyla kabul ettiniz!');
+                setPendingAgencyInvite(null);
+            } else {
+                Alert.alert('Hata', res.data?.error || 'Davet kabul edilemedi.');
+            }
+        } catch (error) {
+            console.error('[ChatScreen] Accept invite error:', error);
+            const errMsg = error.response?.data?.error || 'Davet kabul edilirken bir hata oluştu.';
+            Alert.alert('Hata', errMsg);
+        }
+    };
+
+    const handleRejectInvitation = async (inviteId) => {
+        try {
+            const token = await AsyncStorage.getItem('token');
+            if (!token) return;
+
+            const res = await axios.post(`${API_URL}/agency/invitations/${inviteId}/reject`, {}, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+
+            if (res.data && res.data.success) {
+                Alert.alert('Başarılı', 'Ajans davetini reddettiniz.');
+                setPendingAgencyInvite(null);
+            } else {
+                Alert.alert('Hata', res.data?.error || 'Davet reddedilemedi.');
+            }
+        } catch (error) {
+            console.error('[ChatScreen] Reject invite error:', error);
+            const errMsg = error.response?.data?.error || 'Davet reddedilirken bir hata oluştu.';
+            Alert.alert('Hata', errMsg);
+        }
+    };
 
     // UI Toggles
     const [showOptions, setShowOptions] = useState(false);
@@ -1218,6 +1288,79 @@ export default function ChatScreen({ route, navigation }) {
                 keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 20}
                 style={{ flex: 1 }}
             >
+                {/* Pending Agency Invitation Banner */}
+                {pendingAgencyInvite && (
+                    <View style={{ marginTop: insets.top + 50, marginHorizontal: 16, marginBottom: 8, zIndex: 999 }}>
+                        <GlassCard
+                            intensity={50}
+                            tint="dark"
+                            style={{
+                                padding: 14,
+                                borderRadius: 16,
+                                borderColor: 'rgba(236, 72, 153, 0.4)',
+                                borderWidth: 1.5,
+                                overflow: 'hidden'
+                            }}
+                        >
+                            <LinearGradient
+                                colors={['rgba(139, 92, 246, 0.15)', 'rgba(236, 72, 153, 0.15)']}
+                                style={StyleSheet.absoluteFill}
+                                start={{ x: 0, y: 0 }}
+                                end={{ x: 1, y: 1 }}
+                            />
+                            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
+                                <Ionicons name="business" size={18} color="#ec4899" style={{ marginRight: 8 }} />
+                                <Text style={{ color: 'white', fontSize: 13, fontWeight: '700', flex: 1 }}>
+                                    Ajans Daveti ⚡
+                                </Text>
+                            </View>
+                            <Text style={{ color: 'rgba(255,255,255,0.8)', fontSize: 12, marginBottom: 12 }}>
+                                <Text style={{ fontWeight: 'bold', color: '#ec4899' }}>{pendingAgencyInvite.agency_name}</Text> sizi ajansına katılmaya davet ediyor!
+                            </Text>
+                            <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 10 }}>
+                                <TouchableOpacity 
+                                    style={{
+                                        paddingHorizontal: 14,
+                                        paddingVertical: 6,
+                                        borderRadius: 8,
+                                        borderWidth: 1,
+                                        borderColor: 'rgba(255,255,255,0.2)',
+                                        alignItems: 'center',
+                                        justifyContent: 'center'
+                                    }} 
+                                    onPress={() => handleRejectInvitation(pendingAgencyInvite.id)}
+                                    activeOpacity={0.8}
+                                >
+                                    <Text style={{ color: 'white', fontSize: 11, fontWeight: '600' }}>Reddet</Text>
+                                </TouchableOpacity>
+                                
+                                <TouchableOpacity 
+                                    style={{
+                                        borderRadius: 8,
+                                        overflow: 'hidden'
+                                    }}
+                                    onPress={() => handleAcceptInvitation(pendingAgencyInvite.id)}
+                                    activeOpacity={0.8}
+                                >
+                                    <LinearGradient
+                                        colors={['#10b981', '#059669']}
+                                        style={{
+                                            paddingHorizontal: 18,
+                                            paddingVertical: 6,
+                                            alignItems: 'center',
+                                            justifyContent: 'center'
+                                        }}
+                                        start={{ x: 0, y: 0 }}
+                                        end={{ x: 1, y: 1 }}
+                                    >
+                                        <Text style={{ color: 'white', fontSize: 11, fontWeight: '700' }}>Kabul Et</Text>
+                                    </LinearGradient>
+                                </TouchableOpacity>
+                            </View>
+                        </GlassCard>
+                    </View>
+                )}
+
                 <FlatList
                     ref={flatListRef}
                     data={messages}

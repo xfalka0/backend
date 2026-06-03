@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, FlatList, Image, TouchableOpacity, ActivityIndicator, TextInput } from 'react-native';
+import { View, Text, StyleSheet, FlatList, Image, TouchableOpacity, ActivityIndicator, TextInput, Alert } from 'react-native';
 import Animated, {
     FadeInDown,
     Layout,
@@ -15,6 +15,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import axios from 'axios';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '../contexts/ThemeContext';
 import { API_URL } from '../config';
 import VipFrame from '../components/ui/VipFrame';
@@ -79,6 +80,7 @@ export default function MessagesScreen({ navigation, route }) {
     const [page, setPage] = useState(0);
     const [loadingMore, setLoadingMore] = useState(false);
     const [hasMore, setHasMore] = useState(true);
+    const [pendingInvitations, setPendingInvitations] = useState([]);
 
     useFocusEffect(
         React.useCallback(() => {
@@ -86,11 +88,72 @@ export default function MessagesScreen({ navigation, route }) {
                 fetchChats(0, true);
                 fetchUnreadCount(user.id);
                 fetchBalance(user.id);
+                fetchInvitations();
             } else {
                 setLoading(false);
             }
         }, [user?.id])
     );
+
+    const fetchInvitations = async () => {
+        try {
+            const token = await AsyncStorage.getItem('token');
+            if (!token) return;
+            const inviteRes = await axios.get(`${API_URL}/agency/my-invitations`, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            if (inviteRes.data) {
+                setPendingInvitations(inviteRes.data);
+            }
+        } catch (error) {
+            console.log('Error fetching pending invitations in MessagesScreen:', error.message);
+        }
+    };
+
+    const handleAcceptInvitation = async (inviteId) => {
+        try {
+            const token = await AsyncStorage.getItem('token');
+            if (!token) return;
+
+            const res = await axios.post(`${API_URL}/agency/invitations/${inviteId}/accept`, {}, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+
+            if (res.data && res.data.success) {
+                Alert.alert('Başarılı', res.data.message || 'Ajans davetini başarıyla kabul ettiniz!');
+                setPendingInvitations(prev => prev.filter(inv => inv.id !== inviteId));
+                fetchChats(0, true);
+            } else {
+                Alert.alert('Hata', res.data?.error || 'Davet kabul edilemedi.');
+            }
+        } catch (error) {
+            console.error('[MessagesScreen] Accept invite error:', error);
+            const errMsg = error.response?.data?.error || 'Davet kabul edilirken bir hata oluştu.';
+            Alert.alert('Hata', errMsg);
+        }
+    };
+
+    const handleRejectInvitation = async (inviteId) => {
+        try {
+            const token = await AsyncStorage.getItem('token');
+            if (!token) return;
+
+            const res = await axios.post(`${API_URL}/agency/invitations/${inviteId}/reject`, {}, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+
+            if (res.data && res.data.success) {
+                Alert.alert('Başarılı', 'Ajans davetini reddettiniz.');
+                setPendingInvitations(prev => prev.filter(inv => inv.id !== inviteId));
+            } else {
+                Alert.alert('Hata', res.data?.error || 'Davet reddedilemedi.');
+            }
+        } catch (error) {
+            console.error('[MessagesScreen] Reject invite error:', error);
+            const errMsg = error.response?.data?.error || 'Davet reddedilirken bir hata oluştu.';
+            Alert.alert('Hata', errMsg);
+        }
+    };
 
     const fetchChats = async (pageNum = 0, isRefresh = false) => {
         if (!isRefresh && !hasMore) return;
@@ -278,6 +341,87 @@ export default function MessagesScreen({ navigation, route }) {
         );
     };
 
+    const renderInvitationItem = (invite, index) => {
+        return (
+            <Animated.View
+                entering={FadeInDown.delay(index * 100).springify().damping(12)}
+                layout={Layout.springify()}
+                key={`invite-${invite.id}`}
+            >
+                <TouchableOpacity
+                    onPress={() => {
+                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                        navigation.navigate('Chat', {
+                            operatorId: invite.owner_id,
+                            chatId: null,
+                            name: invite.owner_name || invite.owner_username || 'Ajans Sahibi',
+                            avatar_url: invite.owner_avatar,
+                            user
+                        });
+                    }}
+                    style={{ marginBottom: 12, marginHorizontal: 16 }}
+                    activeOpacity={0.8}
+                >
+                    <GlassCard
+                        intensity={45}
+                        tint={themeMode === 'dark' ? 'dark' : 'light'}
+                        style={[
+                            styles.chatItem,
+                            { borderColor: 'rgba(236, 72, 153, 0.4)', borderWidth: 1.5 }
+                        ]}
+                    >
+                        <View style={styles.avatarContainer}>
+                            <VipFrame
+                                level={0}
+                                avatar={invite.owner_avatar || 'https://via.placeholder.com/150'}
+                                size={48}
+                                isStatic={true}
+                            />
+                            <View style={[styles.onlineBadge, { backgroundColor: '#ec4899', width: 14, height: 14, borderRadius: 7, alignItems: 'center', justifyContent: 'center' }]}>
+                                <Ionicons name="flash" size={8} color="white" />
+                            </View>
+                        </View>
+
+                        <View style={styles.content}>
+                            <View style={styles.mainContent}>
+                                <View style={styles.textContainer}>
+                                    <View style={styles.nameRow}>
+                                        <Text style={[styles.name, { color: theme.colors.text }]} numberOfLines={1}>
+                                            {invite.owner_name || invite.owner_username || 'Ajans Sahibi'}
+                                        </Text>
+                                        <LinearGradient
+                                            colors={['#ec4899', '#8b5cf6']}
+                                            start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+                                            style={[styles.vipBadge, { marginLeft: 6 }]}
+                                        >
+                                            <Text style={styles.vipText}>AJANS DAVETİ</Text>
+                                        </LinearGradient>
+                                    </View>
+                                    <Text
+                                        style={[
+                                            styles.lastMsg,
+                                            {
+                                                color: theme.colors.text,
+                                                fontWeight: '500',
+                                            }
+                                        ]}
+                                    >
+                                        <Text style={{ fontWeight: 'bold', color: '#ec4899' }}>{invite.agency_name}</Text> ajansına katılmanız için davet gönderdi.
+                                    </Text>
+                                </View>
+                                <View style={styles.metaContainer}>
+                                    <Text style={[styles.time, { color: theme.colors.textSecondary, opacity: 0.6 }]}>
+                                        {invite.created_at ? new Date(invite.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
+                                    </Text>
+                                </View>
+                            </View>
+                        </View>
+                    </GlassCard>
+                </TouchableOpacity>
+            </Animated.View>
+        );
+    };
+
     return (
         <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
             {themeMode === 'dark' && (
@@ -360,6 +504,13 @@ export default function MessagesScreen({ navigation, route }) {
                                             </TouchableOpacity>
                                         )}
                                     </View>
+                                </View>
+                            )}
+
+                            {/* Pending Agency Invitations */}
+                            {pendingInvitations && pendingInvitations.length > 0 && (
+                                <View style={{ marginBottom: 15 }}>
+                                    {pendingInvitations.map((invite, index) => renderInvitationItem(invite, index))}
                                 </View>
                             )}
                         </>

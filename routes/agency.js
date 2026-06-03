@@ -493,9 +493,11 @@ router.get('/agency/my-invitations', authenticateToken, async (req, res) => {
     const userId = req.user.id;
     try {
         const result = await db.query(
-            `SELECT ai.id, a.name as agency_name, ai.created_at
+            `SELECT ai.id, a.name as agency_name, ai.created_at,
+                    u.avatar_url as owner_avatar, u.display_name as owner_name, u.username as owner_username, u.id as owner_id
              FROM agency_invitations ai
              JOIN agencies a ON ai.agency_id::text = a.id::text
+             LEFT JOIN users u ON a.owner_id::text = u.id::text
              WHERE ai.operator_id::text = $1::text AND ai.status = 'pending'
              ORDER BY ai.created_at DESC`,
             [userId]

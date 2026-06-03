@@ -137,8 +137,8 @@ router.post('/admin/agencies', authenticateToken, authorizeRole('admin', 'super_
         }
 
         const result = await db.query(
-            'INSERT INTO agencies (name, owner_id, commission_rate, status, referral_code) VALUES ($1, $2, $3, $4, $5) RETURNING *',
-            [name, owner_id || null, commission_rate || 0.40, status || 'active', finalReferralCode]
+            'INSERT INTO agencies (id, name, owner_id, commission_rate, status, referral_code) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *',
+            [finalReferralCode, name, owner_id || null, commission_rate || 0.40, status || 'active', finalReferralCode]
         );
         if (owner_id) {
             await db.query('UPDATE users SET is_agency_owner = true WHERE id = $1', [owner_id]);
@@ -168,18 +168,43 @@ router.put('/admin/agencies/:id', authenticateToken, authorizeRole('admin', 'sup
             }
         }
 
-        const result = await db.query(
-            `UPDATE agencies 
-             SET name = COALESCE($1, name), 
-                 owner_id = COALESCE($2, owner_id), 
-                 commission_rate = COALESCE($3, commission_rate),
-                 status = COALESCE($4, status),
-                 referral_code = COALESCE($5, referral_code)
-             WHERE id = $6 RETURNING *`,
-            [name, owner_id, commission_rate, status, finalReferralCode, id]
-        );
-        res.json(result.rows[0]);
+        await db.query('BEGIN');
+        if (finalReferralCode && finalReferralCode !== id) {
+            // Cascade ID change to related tables manually to prevent FK constraint violations
+            await db.query('UPDATE users SET agency_id = $1 WHERE agency_id = $2', [finalReferralCode, id]);
+            await db.query('UPDATE agency_invitations SET agency_id = $1 WHERE agency_id = $2', [finalReferralCode, id]);
+            await db.query('UPDATE agency_payouts SET agency_id = $1 WHERE agency_id = $2', [finalReferralCode, id]);
+            await db.query('UPDATE commission_logs SET agency_id = $1 WHERE agency_id = $2', [finalReferralCode, id]);
+
+            const result = await db.query(
+                `UPDATE agencies 
+                 SET id = $1,
+                     name = COALESCE($2, name), 
+                     owner_id = COALESCE($3, owner_id), 
+                     commission_rate = COALESCE($4, commission_rate),
+                     status = COALESCE($5, status),
+                     referral_code = $1
+                 WHERE id = $6 RETURNING *`,
+                [finalReferralCode, name, owner_id, commission_rate, status, id]
+            );
+            await db.query('COMMIT');
+            res.json(result.rows[0]);
+        } else {
+            const result = await db.query(
+                `UPDATE agencies 
+                 SET name = COALESCE($1, name), 
+                     owner_id = COALESCE($2, owner_id), 
+                     commission_rate = COALESCE($3, commission_rate),
+                     status = COALESCE($4, status),
+                     referral_code = COALESCE($5, referral_code)
+                 WHERE id = $6 RETURNING *`,
+                [name, owner_id, commission_rate, status, finalReferralCode, id]
+            );
+            await db.query('COMMIT');
+            res.json(result.rows[0]);
+        }
     } catch (err) {
+        await db.query('ROLLBACK').catch(() => {});
         res.status(500).json({ error: err.message });
     }
 });

@@ -14,7 +14,8 @@ import {
     Modal,
     TextInput,
     Alert,
-    Animated
+    Animated,
+    Platform
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
@@ -44,6 +45,7 @@ export default function AgencyDashboardScreen() {
         agency: {
             id: '',
             name: '', // Empty default so it uses the 'Ajans Paneli' placeholder while loading
+            referral_code: '',
             pending_balance: 0,
             lifetime_earnings: 0,
             commission_rate: 0.40,
@@ -60,6 +62,8 @@ export default function AgencyDashboardScreen() {
     const [isInviteModalVisible, setIsInviteModalVisible] = useState(false);
     const [inviteIdentifier, setInviteIdentifier] = useState('');
     const [inviting, setInviting] = useState(false);
+    const [isPublishersModalVisible, setIsPublishersModalVisible] = useState(false);
+    const [searchQuery, setSearchQuery] = useState('');
 
     // Pulse animation for skeleton loading state
     const [pulseAnim] = useState(new Animated.Value(0.3));
@@ -191,6 +195,15 @@ export default function AgencyDashboardScreen() {
         await fetchDashboardData();
         setRefreshing(false);
     };
+
+    const filteredOperators = (dashboardData.operators || []).filter(op => {
+        const query = searchQuery.toLowerCase().trim();
+        if (!query) return true;
+        const name = (op.display_name || op.username || '').toLowerCase();
+        const shortId = String(op.id).slice(-9).toUpperCase().toLowerCase();
+        const fullId = String(op.id).toLowerCase();
+        return name.includes(query) || shortId.includes(query) || fullId.includes(query);
+    });
     const renderSkeleton = () => {
         return (
             <ScrollView
@@ -296,6 +309,11 @@ export default function AgencyDashboardScreen() {
                                 </View>
                             ) : null}
                         </View>
+                        {dashboardData.agency?.id ? (
+                            <Text style={styles.headerAgencyIdText}>
+                                ID: {dashboardData.agency.id} {dashboardData.agency.referral_code ? ` | Ajans Kodu: ${dashboardData.agency.referral_code}` : ''}
+                            </Text>
+                        ) : null}
                     </View>
                 </View>
 
@@ -361,120 +379,44 @@ export default function AgencyDashboardScreen() {
                             </GlassCard>
                         </View>
 
-                        {/* Operators Section Header */}
-                        <View style={styles.sectionHeader}>
-                            <View>
-                                <Text style={styles.sectionTitle}>Ajans Yayıncıları ({dashboardData.operators?.length || 0})</Text>
-                                <Text style={styles.commissionRateText}>Komisyon Oranı: %{parseFloat(dashboardData.agency?.commission_rate || 0.4) * 100}</Text>
-                            </View>
-                            {dashboardData.operators?.length > 0 && (
-                                <TouchableOpacity 
-                                    style={styles.inviteButton}
-                                    activeOpacity={0.8}
-                                    onPress={() => setIsInviteModalVisible(true)}
-                                >
-                                    <LinearGradient
-                                        colors={['#8b5cf6', '#ec4899']}
-                                        style={styles.inviteGradient}
-                                        start={{ x: 0, y: 0 }}
-                                        end={{ x: 1, y: 1 }}
-                                    >
-                                        <Ionicons name="person-add" size={12} color="#fff" style={{ marginRight: 5 }} />
-                                        <Text style={styles.inviteButtonText}>Davet Et</Text>
-                                    </LinearGradient>
-                                </TouchableOpacity>
-                            )}
-                        </View>
-
-                        {/* Operators List */}
-                        {dashboardData.operators?.length === 0 ? (
-                            <GlassCard intensity={20} tint="dark" style={styles.emptyCard}>
-                                <View style={styles.emptyAnimationContainer}>
-                                    <SafeLottie
-                                        source={require('../assets/lottie/rocket.json')}
-                                        style={styles.emptyLottie}
-                                        loop={true}
-                                        autoPlay={true}
-                                        fallback={<Ionicons name="people-outline" size={48} color="rgba(255, 255, 255, 0.15)" />}
-                                    />
+                        {/* Yayıncılar Listesi Butonu */}
+                        <TouchableOpacity
+                            style={styles.publishersListBtn}
+                            activeOpacity={0.8}
+                            onPress={() => setIsPublishersModalVisible(true)}
+                        >
+                            <LinearGradient
+                                colors={['#8b5cf6', '#ec4899']}
+                                style={styles.publishersListGradient}
+                                start={{ x: 0, y: 0 }}
+                                end={{ x: 1, y: 0 }}
+                            >
+                                <View style={styles.publishersListLeft}>
+                                    <Ionicons name="people" size={20} color="#fff" style={{ marginRight: 10 }} />
+                                    <Text style={styles.publishersListBtnText}>Yayıncılar Listesi</Text>
                                 </View>
-                                <Text style={styles.emptyText}>Henüz ajansınıza bağlı bir yayıncı bulunmamaktadır.</Text>
-                                <Text style={styles.emptySub}>Yayıncılarınızı davet kodu ile ajansınıza atayabilirsiniz.</Text>
-                                
-                                {/* Glowing gradient invite button */}
-                                <TouchableOpacity
-                                    style={styles.largeInviteBtn}
-                                    activeOpacity={0.8}
-                                    onPress={() => setIsInviteModalVisible(true)}
-                                >
-                                    <LinearGradient
-                                        colors={['#8b5cf6', '#ec4899']}
-                                        style={styles.largeInviteGradient}
-                                        start={{ x: 0, y: 0 }}
-                                        end={{ x: 1, y: 1 }}
-                                    >
-                                        <Text style={styles.largeInviteBtnText}>✨ İlk Yayıncını Davet Et</Text>
-                                    </LinearGradient>
-                                </TouchableOpacity>
-                            </GlassCard>
-                        ) : (
-                            dashboardData.operators.map((op) => (
-                                <GlassCard key={op.id} intensity={20} tint="dark" style={styles.operatorCard}>
-                                    <View style={styles.operatorRow}>
-                                        
-                                        {/* Avatar Container */}
-                                        <View style={styles.avatarWrapper}>
-                                            <Image 
-                                                source={{ uri: op.avatar_url || 'https://via.placeholder.com/150' }} 
-                                                style={styles.avatar} 
-                                            />
-                                            {/* Online Glow Indicator */}
-                                            <View style={[styles.onlineIndicator, { backgroundColor: op.is_online ? '#10b981' : '#64748b' }]} />
-                                        </View>
-
-                                        {/* Performance Info */}
-                                        <View style={styles.opInfo}>
-                                            <View style={styles.nameBadgeContainer}>
-                                                <Text style={styles.opName} numberOfLines={1}>{op.display_name || op.username}</Text>
-                                                {op.is_low_quality && (
-                                                    <View style={styles.lowQualityBadge}>
-                                                        <Ionicons name="warning" size={10} color="#fbbf24" style={{ marginRight: 3 }} />
-                                                        <Text style={styles.lowQualityText}>Düşük Kalite</Text>
-                                                    </View>
-                                                )}
-                                            </View>
-                                            <View style={styles.metaRow}>
-                                                <Text style={styles.opRole}>Yayıncı</Text>
-                                                <View style={styles.metaDivider} />
-                                                <Ionicons name="star" size={10} color="#fbbf24" style={{ marginRight: 2 }} />
-                                                <Text style={styles.opRating}>{parseFloat(op.rating || 5.0).toFixed(1)}</Text>
-                                            </View>
-                                        </View>
-
-                                        {/* Contributed Commissions */}
-                                        <View style={styles.commissionSection}>
-                                            <Text style={styles.todayCommissionLabel}>Bugünkü Gelir</Text>
-                                            <Text style={styles.todayCommissionValue}>
-                                                +{op.today_commission?.toLocaleString()} Elmas
-                                            </Text>
-                                            <Text style={styles.todayCommissionTl}>
-                                                ≈ ₺{(op.today_commission * 0.023).toFixed(2)} TL
-                                            </Text>
-                                        </View>
-
-                                        {/* Remove Operator Button */}
-                                        <TouchableOpacity
-                                            style={styles.removeOperatorBtn}
-                                            activeOpacity={0.7}
-                                            onPress={() => handleRemoveOperator(op.id, op.display_name || op.username)}
-                                        >
-                                            <Ionicons name="trash-outline" size={15} color="#ef4444" />
-                                        </TouchableOpacity>
-
+                                <View style={styles.publishersListRight}>
+                                    <View style={styles.publisherCountBadge}>
+                                        <Text style={styles.publisherCountBadgeText}>
+                                            {dashboardData.operators?.length || 0}
+                                        </Text>
                                     </View>
-                                </GlassCard>
-                            ))
-                        )}
+                                    <Ionicons name="chevron-forward" size={18} color="#fff" />
+                                </View>
+                            </LinearGradient>
+                        </TouchableOpacity>
+
+                        {/* Yeni Yayıncı Davet Et Butonu */}
+                        <TouchableOpacity
+                            style={styles.quickInviteBtn}
+                            activeOpacity={0.8}
+                            onPress={() => setIsInviteModalVisible(true)}
+                        >
+                            <View style={styles.quickInviteContent}>
+                                <Ionicons name="person-add" size={18} color="#a855f7" style={{ marginRight: 8 }} />
+                                <Text style={styles.quickInviteText}>Yeni Yayıncı Davet Et</Text>
+                            </View>
+                        </TouchableOpacity>
 
                         <View style={{ height: 120 }} />
                     </ScrollView>
@@ -547,6 +489,158 @@ export default function AgencyDashboardScreen() {
                             </TouchableOpacity>
                         </View>
                     </GlassCard>
+                </View>
+            </Modal>
+
+            {/* Publishers List Modal */}
+            <Modal
+                visible={isPublishersModalVisible}
+                animationType="slide"
+                onRequestClose={() => setIsPublishersModalVisible(false)}
+            >
+                <View style={styles.publishersModalContainer}>
+                    <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
+                    
+                    {/* Header Row */}
+                    <View style={styles.modalHeaderRow}>
+                        <TouchableOpacity 
+                            style={styles.modalCloseButton}
+                            onPress={() => setIsPublishersModalVisible(false)}
+                        >
+                            <Ionicons name="close" size={24} color="#fff" />
+                        </TouchableOpacity>
+                        <View style={styles.modalHeaderTitleContainer}>
+                            <Text style={styles.modalHeaderTitle}>YAYINCILAR LİSTESİ</Text>
+                            <Text style={styles.modalHeaderSubtitle}>
+                                Komisyon Oranı: %{parseFloat(dashboardData.agency?.commission_rate || 0.4) * 100}
+                            </Text>
+                        </View>
+                        <TouchableOpacity 
+                            style={styles.modalAddButton}
+                            onPress={() => {
+                                setIsInviteModalVisible(true);
+                            }}
+                        >
+                            <Ionicons name="person-add" size={20} color="#fff" />
+                        </TouchableOpacity>
+                    </View>
+
+                    {/* Search Bar */}
+                    <View style={styles.searchBarContainer}>
+                        <Ionicons name="search" size={18} color="rgba(255, 255, 255, 0.4)" style={{ marginRight: 8 }} />
+                        <TextInput
+                            style={styles.searchBarInput}
+                            placeholder="Yayıncı adı veya ID ile ara..."
+                            placeholderTextColor="rgba(255, 255, 255, 0.4)"
+                            value={searchQuery}
+                            onChangeText={setSearchQuery}
+                            autoCapitalize="none"
+                            autoCorrect={false}
+                        />
+                        {searchQuery.length > 0 && (
+                            <TouchableOpacity onPress={() => setSearchQuery('')}>
+                                <Ionicons name="close-circle" size={18} color="rgba(255, 255, 255, 0.4)" />
+                            </TouchableOpacity>
+                        )}
+                    </View>
+
+                    {/* List Content */}
+                    <ScrollView 
+                        showsVerticalScrollIndicator={false}
+                        contentContainerStyle={styles.modalScrollContent}
+                    >
+                        {filteredOperators.length === 0 ? (
+                            <View style={styles.modalEmptyState}>
+                                <Ionicons name="people-outline" size={64} color="rgba(255, 255, 255, 0.15)" />
+                                <Text style={styles.modalEmptyText}>
+                                    {searchQuery ? 'Arama sonucu yayıncı bulunamadı.' : 'Henüz ajansınıza bağlı bir yayıncı bulunmamaktadır.'}
+                                </Text>
+                                {!searchQuery && (
+                                    <TouchableOpacity
+                                        style={styles.modalInviteBtn}
+                                        activeOpacity={0.8}
+                                        onPress={() => setIsInviteModalVisible(true)}
+                                    >
+                                        <LinearGradient
+                                            colors={['#8b5cf6', '#ec4899']}
+                                            style={styles.modalInviteGradient}
+                                            start={{ x: 0, y: 0 }}
+                                            end={{ x: 1, y: 1 }}
+                                        >
+                                            <Text style={styles.modalInviteBtnText}>Yayıncı Davet Et</Text>
+                                        </LinearGradient>
+                                    </TouchableOpacity>
+                                )}
+                            </View>
+                        ) : (
+                            filteredOperators.map((op) => {
+                                const shortId = String(op.id).slice(-9).toUpperCase();
+                                return (
+                                    <View key={op.id} style={styles.opCardNew}>
+                                        <View style={styles.opRowNew}>
+                                            {/* Avatar Left */}
+                                            <View style={styles.avatarWrapperNew}>
+                                                <Image 
+                                                    source={{ uri: op.avatar_url || 'https://via.placeholder.com/150' }} 
+                                                    style={styles.avatarNew} 
+                                                />
+                                                <View style={[styles.onlineIndicatorNew, { backgroundColor: op.is_online ? '#10b981' : '#64748b' }]} />
+                                            </View>
+
+                                            {/* Details Right */}
+                                            <View style={styles.detailsColNew}>
+                                                <View style={styles.detailRowNew}>
+                                                    <Text style={styles.detailLabelNew}>Ad :</Text>
+                                                    <Text style={styles.detailValueNew}>{op.display_name || op.username}</Text>
+                                                </View>
+                                                <View style={styles.detailRowNew}>
+                                                    <Text style={styles.detailLabelNew}>Gelir :</Text>
+                                                    <Text style={styles.detailValueNew}>{op.today_commission || 0}</Text>
+                                                </View>
+                                                <View style={styles.detailRowNew}>
+                                                    <Text style={styles.detailLabelNew}>Etkili zaman :</Text>
+                                                    <Text style={styles.detailValueNew}>00:00:00</Text>
+                                                </View>
+                                                <View style={styles.detailRowNew}>
+                                                    <Text style={styles.detailLabelNew}>Etkili gün :</Text>
+                                                    <Text style={styles.detailValueNew}>0</Text>
+                                                </View>
+
+                                                {/* Bottom Action Row */}
+                                                <View style={styles.bottomRowNew}>
+                                                    <View style={styles.idBadgeNew}>
+                                                        <Text style={styles.idBadgeTextNew}>ID:{shortId}</Text>
+                                                    </View>
+                                                    <TouchableOpacity 
+                                                        style={styles.detailsBtnNew}
+                                                        activeOpacity={0.8}
+                                                        onPress={() => {
+                                                            Alert.alert(
+                                                                'Yayıncı Detayları',
+                                                                `Adı: ${op.display_name || op.username}\nID: ${op.id}\nBugünkü Gelir: ${op.today_commission || 0} Elmas\nRating: ${parseFloat(op.rating || 5.0).toFixed(1)}\nDurum: ${op.is_online ? 'Çevrimiçi' : 'Çevrimdışı'}${op.is_low_quality ? '\n\n⚠️ Uyarı: Yayıncı kalitesi düşük!' : ''}`,
+                                                                [
+                                                                    { text: 'Kapat', style: 'cancel' },
+                                                                    { 
+                                                                        text: 'Ajans Dışı Bırak (Çıkar)', 
+                                                                        style: 'destructive',
+                                                                        onPress: () => {
+                                                                            handleRemoveOperator(op.id, op.display_name || op.username);
+                                                                        }
+                                                                    }
+                                                                ]
+                                                            );
+                                                        }}
+                                                    >
+                                                        <Text style={styles.detailsBtnTextNew}>Detaylar</Text>
+                                                    </TouchableOpacity>
+                                                </View>
+                                            </View>
+                                        </View>
+                                    </View>
+                                );
+                            })
+                        )}
+                    </ScrollView>
                 </View>
             </Modal>
         </View>
@@ -1101,5 +1195,94 @@ const styles = StyleSheet.create({
         height: 46,
         borderRadius: 16,
         backgroundColor: 'rgba(255, 255, 255, 0.08)'
+    },
+    opCardNew: {
+        backgroundColor: '#eaeaea',
+        borderRadius: 16,
+        padding: 16,
+        marginBottom: 12,
+        marginHorizontal: 4,
+        elevation: 2,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+    },
+    opRowNew: {
+        flexDirection: 'row',
+        gap: 16,
+        alignItems: 'flex-start',
+    },
+    avatarWrapperNew: {
+        position: 'relative',
+        marginTop: 4,
+    },
+    avatarNew: {
+        width: 70,
+        height: 70,
+        borderRadius: 35,
+        borderWidth: 2,
+        borderColor: '#fff',
+    },
+    onlineIndicatorNew: {
+        position: 'absolute',
+        bottom: 2,
+        right: 2,
+        width: 14,
+        height: 14,
+        borderRadius: 7,
+        borderWidth: 2,
+        borderColor: '#eaeaea',
+    },
+    detailsColNew: {
+        flex: 1,
+        gap: 4,
+    },
+    detailRowNew: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        paddingVertical: 1,
+    },
+    detailLabelNew: {
+        fontSize: 14,
+        color: '#555555',
+        fontWeight: '500',
+    },
+    detailValueNew: {
+        fontSize: 14,
+        color: '#1f2937',
+        fontWeight: '600',
+        textAlign: 'right',
+    },
+    bottomRowNew: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginTop: 10,
+    },
+    idBadgeNew: {
+        backgroundColor: '#ffffff',
+        borderWidth: 1,
+        borderColor: '#dddddd',
+        borderRadius: 8,
+        paddingHorizontal: 8,
+        paddingVertical: 3,
+    },
+    idBadgeTextNew: {
+        fontSize: 11,
+        color: '#666666',
+        fontWeight: '700',
+    },
+    detailsBtnNew: {
+        backgroundColor: '#000000',
+        borderRadius: 8,
+        paddingHorizontal: 16,
+        paddingVertical: 6,
+    },
+    detailsBtnTextNew: {
+        color: '#ffffff',
+        fontSize: 12,
+        fontWeight: '800',
     }
 });

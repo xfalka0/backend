@@ -838,14 +838,15 @@ app.post('/api/auth/request-otp', authLimiter, async (req, res) => {
 });
 
 app.post('/api/auth/verify-otp', async (req, res) => {
-    const { email, phone, code, deviceId } = req.body;
+    const { email, phone, code, otp, deviceId } = req.body;
+    const verifyCode = code || otp;
     const identifier = email || phone;
     try {
         // --- GOOGLE REVIEWER BYPASS ---
-        if ((email === 'test@example.com' || phone === '+10000000000') && code === '123456') {
+        if ((email === 'test@example.com' || phone === '+10000000000') && verifyCode === '123456') {
             console.log('[AUTH] Google Reviewer Bypass triggered for:', identifier);
         } else {
-            const otpRes = await db.query('SELECT * FROM otps WHERE identifier = $1 AND otp_code = $2 AND expires_at > NOW()', [identifier, code]);
+            const otpRes = await db.query('SELECT * FROM otps WHERE identifier = $1 AND otp_code = $2 AND expires_at > NOW()', [identifier, verifyCode]);
             if (otpRes.rows.length === 0) return res.status(401).json({ error: 'Geçersiz veya süresi dolmuş kod.' });
             await db.query('DELETE FROM otps WHERE identifier = $1', [identifier]);
         }

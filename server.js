@@ -771,6 +771,39 @@ const authLimiter = rateLimit({
     message: { error: 'Çok fazla istek gönderildi, lütfen sonra tekrar deneyin.' }
 });
 
+const sendOtpEmail = async (email, otp) => {
+    if (!process.env.BREVO_API_KEY) {
+        console.log(`[BREVO] API Key missing. OTP for ${email}: ${otp}`);
+        return;
+    }
+    try {
+        await axios.post('https://api.brevo.com/v3/smtp/email', {
+            sender: { name: 'Fiva', email: 'fdnsmn00@gmail.com' },
+            to: [{ email: email }],
+            subject: 'Fiva E-posta Doğrulama Kodu',
+            htmlContent: `
+                <div style="font-family: Arial, sans-serif; padding: 20px; color: #110C24; max-width: 500px; margin: auto; border: 1px solid #e5e7eb; border-radius: 12px;">
+                    <h2 style="color: #8b5cf6; text-align: center;">Fiva Doğrulama Kodu</h2>
+                    <p style="font-size: 14px;">Merhaba,</p>
+                    <p style="font-size: 14px;">Fiva uygulamasına giriş yapmak veya kayıt olmak için kullanacağınız tek kullanımlık doğrulama kodunuz:</p>
+                    <div style="background-color: #f3f4f6; padding: 15px; border-radius: 8px; font-size: 28px; font-weight: bold; letter-spacing: 4px; text-align: center; margin: 20px 0; color: #110C24;">
+                        ${otp}
+                    </div>
+                    <p style="font-size: 12px; color: #6b7280; text-align: center; margin-top: 20px;">Bu kod 10 dakika boyunca geçerlidir. Güvenliğiniz için lütfen bu kodu kimseyle paylaşmayın.</p>
+                </div>
+            `
+        }, {
+            headers: {
+                'api-key': process.env.BREVO_API_KEY,
+                'Content-Type': 'application/json'
+            }
+        });
+        console.log(`[BREVO] OTP email successfully sent to ${email}`);
+    } catch (error) {
+        console.error('[BREVO ERROR] Failed to send OTP email:', error.response?.data || error.message);
+    }
+};
+
 app.post('/api/auth/request-otp', authLimiter, async (req, res) => {
     const { email, phone } = req.body;
     const identifier = email || phone;
@@ -781,7 +814,12 @@ app.post('/api/auth/request-otp', authLimiter, async (req, res) => {
         await db.query('DELETE FROM otps WHERE identifier = $1', [identifier]);
         await db.query('INSERT INTO otps (identifier, otp_code, expires_at) VALUES ($1, $2, $3)', [identifier, otp, expires]);
         console.log(`[AUTH] OTP for ${identifier}: ${otp}`);
-        res.json({ success: true, message: 'OTP gönderildi (Konsol loguna bakınız).' });
+        
+        if (email) {
+            await sendOtpEmail(email, otp);
+        }
+
+        res.json({ success: true, message: 'OTP gönderildi.' });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }

@@ -730,32 +730,7 @@ const ProfileScreen = ({ route }) => {
                 </View>
 
                 {/* Wallet Glass Card */}
-                {['operator', 'moderator', 'admin', 'super_admin', 'staff'].includes(user?.role) || user?.gender === 'kadin' ? (
-                    <TouchableOpacity style={styles.glassCardWrapper} onPress={() => navigation.navigate('Wallet')} activeOpacity={0.8}>
-                        <LinearGradient colors={['rgba(139, 92, 246, 0.15)', 'rgba(34, 211, 238, 0.15)']} style={styles.walletCard}>
-                            <View style={styles.walletLeft}>
-                                <View style={[styles.coinIconBox, { backgroundColor: 'rgba(34, 211, 238, 0.2)' }]}>
-                                    <Ionicons name="diamond" size={20} color="#22d3ee" />
-                                </View>
-                                <View>
-                                    <Text style={[styles.walletTitle, { color: '#22d3ee' }]}>CÜZDANIM</Text>
-                                    <Text style={styles.walletValue}>{(operatorStats?.pending_balance || 0).toLocaleString()} Elmas</Text>
-                                    <Text style={{ color: 'rgba(255,255,255,0.4)', fontSize: 10, fontWeight: '700', marginTop: 2 }}>
-                                        Tahmini: {((operatorStats?.pending_balance || 0) / 2000 * 46).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} TL
-                                    </Text>
-                                </View>
-                            </View>
-                            <LinearGradient
-                                colors={['#a855f7', '#22d3ee']}
-                                style={styles.depositBtn}
-                                start={{ x: 0, y: 0 }}
-                                end={{ x: 1, y: 1 }}
-                            >
-                                <Text style={styles.depositBtnText}>Çek</Text>
-                            </LinearGradient>
-                        </LinearGradient>
-                    </TouchableOpacity>
-                ) : (
+                {!isShowWallet && (
                     <TouchableOpacity style={styles.glassCardWrapper} onPress={() => navigation.navigate('Shop')} activeOpacity={0.8}>
                         <LinearGradient colors={themeMode === 'dark' ? theme.gradients.card : ['#fff', '#f0f0f0']} style={styles.walletCard}>
                             <View style={styles.walletLeft}>

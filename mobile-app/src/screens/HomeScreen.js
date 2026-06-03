@@ -179,34 +179,77 @@ export default function HomeScreen({ navigation, route }) {
     const [currentFilters, setCurrentFilters] = useState({ gender: 'all', ageGroup: 'all' });
     const [showFilterModal, setShowFilterModal] = useState(false);
 
+    // Pagination states
+    const [page, setPage] = useState(1);
+    const [hasMore, setHasMore] = useState(true);
+    const [loadingMore, setLoadingMore] = useState(false);
+
     useEffect(() => {
-        fetchOperators();
+        fetchOperators(1);
     }, [activeTab]);
 
-    const fetchOperators = async () => {
-        if (!refreshing) setLoading(true);
+    const fetchOperators = async (pageNum = 1, isRefreshing = false) => {
+        if (isRefreshing) {
+            setRefreshing(true);
+        } else if (pageNum === 1) {
+            setLoading(true);
+        } else {
+            setLoadingMore(true);
+        }
+
         try {
             const token = await AsyncStorage.getItem('token');
-            const res = await axios.get(`${API_URL}/discovery?tab=${activeTab}`, {
+            // Fetch 20 profiles per page to fill the screen and support smooth scrolling
+            const res = await axios.get(`${API_URL}/discovery?tab=${activeTab}&page=${pageNum}&limit=20`, {
                 headers: { Authorization: `Bearer ${token}` }
             });
             const data = res.data?.data || res.data || [];
-            setOperators(data);
             
-            // Extract boosted/featured operators for the horizontal list
-            const featured = data.filter(op => op.is_boosted || op.vip_level > 0).slice(0, 15);
-            setFeaturedOperators(featured);
+            if (pageNum === 1) {
+                setOperators(data);
+                // Extract boosted/featured operators for the horizontal list
+                const featured = data.filter(op => op.is_boosted || op.vip_level > 0).slice(0, 15);
+                setFeaturedOperators(featured);
+                setPage(1);
+                setHasMore(data.length >= 20);
+            } else {
+                if (data.length > 0) {
+                    setOperators(prev => {
+                        const existingIds = new Set(prev.map(item => item.id));
+                        const uniqueNewData = data.filter(item => !existingIds.has(item.id));
+                        return [...prev, ...uniqueNewData];
+                    });
+                    setPage(pageNum);
+                    setHasMore(data.length >= 20);
+                } else {
+                    setHasMore(false);
+                }
+            }
         } catch (e) {
             console.error('Fetch operators error:', e);
         } finally {
             setLoading(false);
             setRefreshing(false);
+            setLoadingMore(false);
         }
     };
 
     const onRefresh = () => {
-        setRefreshing(true);
-        fetchOperators();
+        fetchOperators(1, true);
+    };
+
+    const handleLoadMore = () => {
+        if (loading || loadingMore || !hasMore) return;
+        fetchOperators(page + 1);
+    };
+
+    const renderFooter = () => {
+        if (!loadingMore) return null;
+        return (
+            <View style={{ paddingVertical: 20, alignItems: 'center' }}>
+                <ActivityIndicator size="small" color="#ec4899" />
+            </View>
+        );
     };
 
     const handleHiPress = React.useCallback(async (operator) => {
@@ -370,6 +413,7 @@ export default function HomeScreen({ navigation, route }) {
                 keyExtractor={item => item.id.toString()}
                 renderItem={renderItem}
                 ListHeaderComponent={headerComponent}
+                ListFooterComponent={renderFooter}
                 ListEmptyComponent={loading ? (
                     <View style={{ padding: 20 }}>
                         <SkeletonCard />
@@ -387,6 +431,8 @@ export default function HomeScreen({ navigation, route }) {
                 contentContainerStyle={{ paddingBottom: 120 }}
                 onRefresh={onRefresh}
                 refreshing={refreshing}
+                onEndReached={handleLoadMore}
+                onEndReachedThreshold={0.4}
                 showsVerticalScrollIndicator={false}
                 removeClippedSubviews={Platform.OS === 'android'}
                 maxToRenderPerBatch={10}

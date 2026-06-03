@@ -4,6 +4,7 @@ const bcrypt = require('bcrypt');
 const db = require('../db');
 const { authenticateToken, authorizeRole } = require('../middleware/auth');
 const { sanitizeUser, MALE_NAME_PATTERN } = require('../utils/helpers');
+const { initiatePayout } = require('../utils/payermax');
 
 // GET ALL OPERATORS (Public listing)
 router.get('/', async (req, res) => {
@@ -411,8 +412,12 @@ router.post('/admin/payouts/:payoutId/approve', authenticateToken, authorizeRole
     try {
         await db.query('BEGIN');
 
-        // Check if request exists and is pending
-        const payoutRes = await db.query('SELECT status, operator_id, amount FROM payouts WHERE id = $1 FOR UPDATE', [payoutId]);
+        // Check if request exists and is pending, select details for PayerMax
+        const payoutRes = await db.query(
+            'SELECT status, operator_id, amount, iban, account_holder, cash_amount FROM payouts WHERE id = $1 FOR UPDATE', 
+            [payoutId]
+        );
+        
         if (payoutRes.rows.length === 0) {
             await db.query('ROLLBACK');
             return res.status(404).json({ error: 'Ödeme talebi bulunamadı.' });
@@ -424,12 +429,28 @@ router.post('/admin/payouts/:payoutId/approve', authenticateToken, authorizeRole
             return res.status(400).json({ error: `Bu talep zaten işlem görmüş. Durumu: ${payout.status}` });
         }
 
-        // Approve and set processed_at
+        // Call PayerMax to automate disbursement
+        const payermaxRes = await initiatePayout({
+            payoutId: payoutId,
+            amountTry: payout.cash_amount,
+            iban: payout.iban,
+            accountHolder: payout.account_holder
+        });
+
+        if (!payermaxRes.success) {
+            await db.query('ROLLBACK');
+            return res.status(400).json({ error: payermaxRes.message });
+        }
+
+        // Payout succeeded via PayerMax, update status and store PayerMax order details
         await db.query(
             `UPDATE payouts 
-             SET status = 'processed', processed_at = NOW() 
+             SET status = 'processed', 
+                 processed_at = NOW(),
+                 payermax_order_no = $2,
+                 payment_details = $3
              WHERE id = $1`,
-            [payoutId]
+            [payoutId, payermaxRes.transactionId || null, JSON.stringify(payermaxRes)]
         );
 
         // Also increase operator lifetime earnings
@@ -441,7 +462,10 @@ router.post('/admin/payouts/:payoutId/approve', authenticateToken, authorizeRole
         );
 
         await db.query('COMMIT');
-        res.json({ success: true, message: 'Ödeme talebi başarıyla onaylandı ve ödendi olarak işaretlendi.' });
+        res.json({ 
+            success: true, 
+            message: `Ödeme talebi başarıyla onaylandı ve PayerMax üzerinden otomatik olarak ödendi. ${payermaxRes.transactionId ? '(PayerMax No: ' + payermaxRes.transactionId + ')' : ''}` 
+        });
 
     } catch (err) {
         await db.query('ROLLBACK');

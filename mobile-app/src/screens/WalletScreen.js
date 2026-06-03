@@ -317,7 +317,7 @@ const WalletScreen = () => {
                         <Ionicons name="chevron-back" size={28} color="white" />
                     </TouchableOpacity>
                     <View style={styles.headerTitleContainer}>
-                        <Text style={styles.headerTitle}>Gelir</Text>
+                        <Text style={styles.headerTitle}>Cüzdanım</Text>
                         <TouchableOpacity onPress={() => setActiveTab('history')}>
                             <Text style={styles.headerLink}>Elmas detayları</Text>
                         </TouchableOpacity>

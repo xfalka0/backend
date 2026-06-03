@@ -368,12 +368,14 @@ const AgencyPayouts = () => {
                                             </div>
                                             <div>
                                                 <p className="text-sm font-black text-white capitalize">{op.name}</p>
-                                                <div className="flex items-center gap-2 mt-0.5">
-                                                    <span className="text-[10px] font-bold text-slate-500">Sahip: @{op.owner_username || 'Bilinmiyor'}</span>
-                                                    <div className="w-1 h-1 rounded-full bg-slate-700" />
-                                                    <span className="text-[9px] font-black px-1.5 py-0.5 rounded-md bg-slate-800 text-slate-500">
-                                                        %{op.commission_rate * 100} KOMİSYON
-                                                    </span>
+                                                <div className="flex flex-col gap-1 mt-1 text-[11px] font-medium text-slate-500">
+                                                    <span className="text-slate-400 font-bold">Ajans ID: <span className="font-mono text-cyan-400 select-all">{op.id}</span></span>
+                                                    <span>Sahip: <span className="text-slate-300 font-black">@{op.owner_username || 'Bilinmiyor'}</span> (ID: <span className="font-mono text-slate-400 select-all">{op.owner_id || 'YOK'}</span>)</span>
+                                                    <div className="flex items-center gap-2 mt-0.5">
+                                                        <span className="text-[9px] font-black px-1.5 py-0.5 rounded-md bg-slate-800 text-slate-400 border border-white/5">
+                                                            %{op.commission_rate * 100} KOMİSYON
+                                                        </span>
+                                                    </div>
                                                 </div>
                                             </div>
                                         </div>

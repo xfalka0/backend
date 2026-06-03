@@ -30,6 +30,7 @@ router.get('/admin/agencies/earnings', authenticateToken, authorizeRole('admin',
                 a.lifetime_earnings, 
                 a.status, 
                 a.referral_code,
+                a.owner_id,
                 u.username as owner_username, 
                 u.display_name as owner_display_name,
                 (SELECT COUNT(*)::int FROM users u2 WHERE u2.agency_id = a.id) as total_models

@@ -727,7 +727,7 @@ const ProfileScreen = ({ route }) => {
                                     <Ionicons name="diamond" size={20} color="#22d3ee" />
                                 </View>
                                 <View>
-                                    <Text style={[styles.walletTitle, { color: '#22d3ee' }]}>ELMAS KAZANÇ BAKİYESİ</Text>
+                                    <Text style={[styles.walletTitle, { color: '#22d3ee' }]}>CÜZDANIM</Text>
                                     <Text style={styles.walletValue}>{(operatorStats?.pending_balance || 0).toLocaleString()} Elmas</Text>
                                     <Text style={{ color: 'rgba(255,255,255,0.4)', fontSize: 10, fontWeight: '700', marginTop: 2 }}>
                                         Tahmini: {((operatorStats?.pending_balance || 0) / 2000 * 46).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} TL

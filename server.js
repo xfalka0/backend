@@ -780,16 +780,25 @@ const sendOtpEmail = async (email, otp) => {
         await axios.post('https://api.brevo.com/v3/smtp/email', {
             sender: { name: 'Fiva', email: 'fdnsmn00@gmail.com' },
             to: [{ email: email }],
-            subject: 'Fiva E-posta Doğrulama Kodu',
+            subject: "Fiva'ya Hoş Geldin!",
             htmlContent: `
-                <div style="font-family: Arial, sans-serif; padding: 20px; color: #110C24; max-width: 500px; margin: auto; border: 1px solid #e5e7eb; border-radius: 12px;">
-                    <h2 style="color: #8b5cf6; text-align: center;">Fiva Doğrulama Kodu</h2>
-                    <p style="font-size: 14px;">Merhaba,</p>
-                    <p style="font-size: 14px;">Fiva uygulamasına giriş yapmak veya kayıt olmak için kullanacağınız tek kullanımlık doğrulama kodunuz:</p>
-                    <div style="background-color: #f3f4f6; padding: 15px; border-radius: 8px; font-size: 28px; font-weight: bold; letter-spacing: 4px; text-align: center; margin: 20px 0; color: #110C24;">
-                        ${otp}
+                <div style="background-color: #0b071e; padding: 40px 20px; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; text-align: center; color: #ffffff;">
+                    <div style="background-color: #161132; max-width: 500px; margin: 0 auto; padding: 40px 30px; border-radius: 24px; border: 1px solid rgba(255,255,255,0.05); box-shadow: 0 20px 40px rgba(0,0,0,0.5);">
+                        <div style="margin-bottom: 20px; font-size: 32px;">❤️</div>
+                        <h2 style="color: #ffffff; margin-bottom: 20px; font-weight: 800; font-size: 24px; letter-spacing: -0.5px;">Fiva'ya Hoş Geldin!</h2>
+                        <p style="color: #94a3b8; font-size: 14px; line-height: 1.6; margin-bottom: 30px;">
+                            Giriş yapmak veya hesap oluşturmak için kullanabileceğiniz tek kullanımlık doğrulama kodunuz aşağıdadır:
+                        </p>
+                        <div style="background-color: #0b071e; border: 2px solid #6366f1; padding: 18px; border-radius: 16px; font-size: 36px; font-weight: 800; letter-spacing: 6px; color: #ffffff; text-align: center; display: inline-block; min-width: 200px; margin-bottom: 30px; box-shadow: inset 0 2px 4px rgba(0,0,0,0.3);">
+                            ${otp}
+                        </div>
+                        <p style="color: #64748b; font-size: 12px; line-height: 1.6; margin-bottom: 0;">
+                            Bu kod 10 dakika boyunca geçerlidir. Eğer bu talebi siz yapmadıysanız bu e-postayı güvenle görmezden gelebilirsiniz.
+                        </p>
                     </div>
-                    <p style="font-size: 12px; color: #6b7280; text-align: center; margin-top: 20px;">Bu kod 10 dakika boyunca geçerlidir. Güvenliğiniz için lütfen bu kodu kimseyle paylaşmayın.</p>
+                    <div style="margin-top: 24px; color: #475569; font-size: 11px; font-weight: 600; letter-spacing: 0.5px;">
+                        Fiva Dating App • Tüm Hakları Saklıdır
+                    </div>
                 </div>
             `
         }, {

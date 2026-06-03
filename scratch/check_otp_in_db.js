@@ -10,8 +10,8 @@ const client = new Client({
 async function run() {
     try {
         await client.connect();
-        const res = await client.query("SELECT * FROM otps WHERE identifier = 'fdnsmn00@gmail.com' ORDER BY created_at DESC LIMIT 5");
-        console.log('OTPs in PROD for fdnsmn00@gmail.com:', res.rows);
+        const res = await client.query("SELECT * FROM otps WHERE identifier = 'furkandn012@gmail.com' ORDER BY created_at DESC LIMIT 5");
+        console.log('OTPs in PROD for furkandn012@gmail.com:', res.rows);
     } catch (err) {
         console.error('Error:', err.message);
     } finally {

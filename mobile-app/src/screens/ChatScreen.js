@@ -443,28 +443,50 @@ export default function ChatScreen({ route, navigation }) {
                         const exists = prev.some(m => m.id === msg.id);
                         if (exists) return prev;
 
+                        let newMessages = [...prev];
+                        let updated = false;
+
                         if (msg.tempId) {
-                            const optimisticIndex = prev.findIndex(m => m.id === msg.tempId);
+                            const optimisticIndex = newMessages.findIndex(m => m.id === msg.tempId);
                             if (optimisticIndex !== -1) {
-                                const newMessages = [...prev];
                                 newMessages[optimisticIndex] = msg;
-                                return newMessages;
+                                updated = true;
                             }
                         } else {
-                            const optimisticIndex = prev.findIndex(m =>
+                            const optimisticIndex = newMessages.findIndex(m =>
                                 m.is_optimistic &&
                                 m.content === msg.content &&
                                 m.type === msg.type &&
                                 Math.abs(new Date(m.created_at) - new Date(msg.created_at)) < 5000
                             );
                             if (optimisticIndex !== -1) {
-                                const newMessages = [...prev];
                                 newMessages[optimisticIndex] = msg;
-                                return newMessages;
+                                updated = true;
                             }
                         }
 
-                        return [msg, ...prev];
+                        if (!updated) {
+                            newMessages = [msg, ...newMessages];
+                        }
+
+                        // Optimistic Reply Update: If the operator sent a message, mark the customer's last message as replied
+                        const isFromMe = msg.sender_id === user.id;
+                        if (isFromMe && isOperator) {
+                            const lastCustomerIndex = newMessages.findIndex(m => m.sender_id !== user.id && m.content_type !== 'gift');
+                            if (lastCustomerIndex !== -1 && !newMessages[lastCustomerIndex].is_replied) {
+                                let potential = 43.5;
+                                if (msg.type === 'image' || msg.content_type === 'image') potential = 217.5;
+                                else if (msg.type === 'audio' || msg.content_type === 'audio') potential = 130.5;
+
+                                newMessages[lastCustomerIndex] = {
+                                    ...newMessages[lastCustomerIndex],
+                                    is_replied: true,
+                                    earned_diamonds: potential
+                                };
+                            }
+                        }
+
+                        return newMessages;
                     });
                 });
 
@@ -497,9 +519,13 @@ export default function ChatScreen({ route, navigation }) {
 
                 socket.on('message_updated', (data) => {
                     console.log('[SOCKET] Message Update received:', data);
-                    setMessages(prev => prev.map(m => 
-                        m.id === data.id ? { ...m, ...data } : m
-                    ));
+                    if (data && data.id) {
+                        setMessages(prev => prev.map(m => 
+                            (m.id && m.id.toString().toLowerCase() === data.id.toString().toLowerCase()) 
+                                ? { ...m, is_replied: data.is_replied, earned_diamonds: data.earned_diamonds } 
+                                : m
+                        ));
+                    }
                 });
 
                 socket.on('display_typing', (data) => {

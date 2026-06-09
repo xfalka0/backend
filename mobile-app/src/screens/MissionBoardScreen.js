@@ -9,7 +9,8 @@ import {
     SafeAreaView,
     StatusBar,
     RefreshControl,
-    ActivityIndicator
+    ActivityIndicator,
+    Image
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
@@ -321,6 +322,22 @@ export default function MissionBoardScreen() {
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 1 }}
             />
+
+            {/* Fiva Banner Backdrop Layer */}
+            <View style={styles.bgWrapper}>
+                <Image 
+                    source={require('../../assets/fiva_profile_banner.png')} 
+                    style={styles.backgroundImage}
+                />
+                <LinearGradient
+                    colors={
+                        themeMode === 'dark'
+                            ? ['rgba(30, 27, 75, 0.15)', 'rgba(30, 27, 75, 0.75)', '#1e1b4b']
+                            : ['rgba(255, 255, 255, 0.15)', 'rgba(255, 255, 255, 0.75)', '#1e1b4b']
+                    }
+                    style={StyleSheet.absoluteFill}
+                />
+            </View>
 
             <SafeAreaView style={styles.safeArea}>
                 {/* Header Section */}
@@ -826,5 +843,15 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         borderWidth: 1,
         borderColor: 'rgba(236, 72, 153, 0.2)'
+    },
+    bgWrapper: {
+        position: 'absolute',
+        width: '100%',
+        height: 260,
+    },
+    backgroundImage: {
+        width: '100%',
+        height: '100%',
+        resizeMode: 'cover',
     }
 });

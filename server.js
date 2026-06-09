@@ -1,3 +1,18 @@
+const Sentry = require("@sentry/node");
+const logger = require('./utils/logger');
+
+// Initialize Sentry before any other imports
+if (process.env.SENTRY_DSN) {
+    Sentry.init({
+        dsn: process.env.SENTRY_DSN,
+        environment: process.env.NODE_ENV || 'production',
+        tracesSampleRate: 0.1,
+    });
+    logger.info("⚡ [SENTRY] Error tracking successfully initialized.");
+} else {
+    logger.warn("⚠️ [SENTRY] SENTRY_DSN is missing in environment variables. Error tracking is disabled.");
+}
+
 const express = require('express');
 const axios = require('axios');
 const http = require('http');
@@ -738,6 +753,24 @@ const io = new Server(server, {
     transports: ['websocket', 'polling']
 });
 app.set('io', io);
+
+// Redis Adapter Configuration for Socket.io (Horizontal Scaling support)
+if (process.env.REDIS_URL) {
+    const { createClient } = require('redis');
+    const { createAdapter } = require('@socket.io/redis-adapter');
+    
+    const pubClient = createClient({ url: process.env.REDIS_URL });
+    const subClient = pubClient.duplicate();
+    
+    Promise.all([pubClient.connect(), subClient.connect()]).then(() => {
+        io.adapter(createAdapter(pubClient, subClient));
+        logger.info("📡 [SOCKET.IO] Redis adapter successfully connected for horizontal scaling.");
+    }).catch(err => {
+        logger.error("❌ [SOCKET.IO] Redis adapter connection failed: " + err.message);
+    });
+} else {
+    logger.info("ℹ️ [SOCKET.IO] REDIS_URL missing in environment variables. Falling back to in-memory adapter.");
+}
 
 app.use(cors());
 app.use(express.json());
@@ -4308,10 +4341,25 @@ io.on('connection', (socket) => {
                 savedMsg.gift_icon = giftDetails.icon_url;
             }
 
+            // Fetch sender details for real-time notifications
+            let senderName = 'Bir Kullanıcı';
+            let senderAvatar = '';
+            try {
+                const senderDetails = await client.query('SELECT COALESCE(display_name, username) as name, avatar_url FROM users WHERE id = $1', [finalSenderId]);
+                if (senderDetails.rows.length > 0) {
+                    senderName = senderDetails.rows[0].name;
+                    senderAvatar = senderDetails.rows[0].avatar_url;
+                }
+            } catch (senderErr) {
+                console.error('[SOCKET] Error fetching sender details for emit:', senderErr.message);
+            }
+
             const msgToEmit = { 
                 ...savedMsg, 
                 chat_id: savedMsg.chat_id.toString(), 
                 type: savedMsg.content_type, // Alias for mobile app compatibility
+                sender_name: senderName,
+                sender_avatar: senderAvatar,
                 tempId 
             };
             // EMIT ASAP
@@ -5074,12 +5122,19 @@ app.get('*', (req, res) => {
     }
 });
 
+// Sentry Error Handler (must be registered before other error handlers)
+if (process.env.SENTRY_DSN) {
+    Sentry.setupExpressErrorHandler(app);
+}
+
 // Basic Global Error Handler (Phase 2 Stability)
 app.use((err, req, res, next) => {
-    const errorLog = `[${new Date().toISOString()}] ${req.method} ${req.url} - ERROR: ${err.message}\n${err.stack}\n`;
-    console.error(errorLog);
-    // In actual production, this would send to Sentry:
-    // Sentry.captureException(err);
+    const errorLog = `${req.method} ${req.url} - ERROR: ${err.message}\n${err.stack}`;
+    logger.error(errorLog);
+    
+    if (process.env.SENTRY_DSN) {
+        Sentry.captureException(err);
+    }
 
     res.status(err.status || 500).json({
         error: 'Bir iç sunucu hatası oluştu.',
@@ -5088,11 +5143,15 @@ app.use((err, req, res, next) => {
 });
 
 const PORT = process.env.PORT || 5000;
-server.listen(PORT, '0.0.0.0', async () => {
-    console.log(`🚀 [BACKEND] Server listening on port ${PORT}`);
+if (require.main === module) {
+    server.listen(PORT, '0.0.0.0', async () => {
+        logger.info(`🚀 [BACKEND] Server listening on port ${PORT}`);
 
-    // Initialize Database Schema and Packages
-    await initializeDatabase();
+        // Initialize Database Schema and Packages
+        await initializeDatabase();
 
-    startPinger();
-});
+        startPinger();
+    });
+}
+
+module.exports = { app, server };

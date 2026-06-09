@@ -25,7 +25,7 @@ const REACTION_EMOJIS = [
     { type: 'like', icon: '👍' },
 ];
 
-const MessageBubble = React.memo(({ children, isMine, index, isRead, avatar, vipLevel = 0, timestamp, reaction, onReaction, isReplied, earnedDiamonds }) => {
+const MessageBubble = React.memo(({ children, isMine, index, isRead, avatar, vipLevel = 0, timestamp, reaction, onReaction, isReplied, earnedDiamonds, isOperator }) => {
     const { theme, themeMode } = useTheme();
     const translateX = useSharedValue(isMine ? 50 : -50);
     const opacity = useSharedValue(0);
@@ -201,6 +201,15 @@ const MessageBubble = React.memo(({ children, isMine, index, isRead, avatar, vip
                             <Ionicons name="checkmark-circle" size={10} color="#10b981" />
                             <Text style={styles.earningBadgeText}>
                                 Yanıtlandı (+{parseFloat(earnedDiamonds)} Elmas)
+                            </Text>
+                        </View>
+                    )}
+
+                    {!isMine && !isReplied && isOperator && (
+                        <View style={styles.earningBadge}>
+                            <Ionicons name="sparkles" size={10} color="#eab308" />
+                            <Text style={[styles.earningBadgeText, { color: '#eab308' }]}>
+                                Yanıtla ve 43.5 Elmas kazan
                             </Text>
                         </View>
                     )}

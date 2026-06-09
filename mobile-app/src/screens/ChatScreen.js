@@ -1301,6 +1301,7 @@ export default function ChatScreen({ route, navigation }) {
                 reaction={item.reaction}
                 isReplied={item.is_replied}
                 earnedDiamonds={item.earned_diamonds}
+                isOperator={isOperator}
                 onReaction={(type) => {
                     socketRef.current?.emit('message_reaction', { messageId: item.id, reaction: type, chatId });
                     setMessages(prev => prev.map(m => m.id === item.id ? { ...m, reaction: type } : m));

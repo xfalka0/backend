@@ -111,10 +111,13 @@ function initializeSockets(io) {
 
                     const senderGender = isSenderUser ? chat.user_gender : chat.operator_gender;
                     const receiverGender = isSenderUser ? chat.operator_gender : chat.user_gender;
+                    
+                    isFemaleSender = (senderGender || '').toLowerCase() === 'kadin';
+                    const isFemaleReceiver = (receiverGender || '').toLowerCase() === 'kadin';
 
-                    if ((senderGender || '').toLowerCase() === 'kadin' && (receiverGender || '').toLowerCase() === 'kadin') {
+                    if (isFemaleSender && isFemaleReceiver) {
                         isFemaleToFemale = true;
-                        console.log(`[SOCKET] Female-to-Female messaging detected in chat ${chatId} (Sender: ${senderId}, Receiver: ${receiverId}). Coins will be charged and no commission earned.`);
+                        console.log(`[SOCKET] Female-to-Female messaging detected in chat ${chatId} (Sender: ${senderId}, Receiver: ${receiverId}). Coins will be charged.`);
                     }
                 }
 
@@ -125,13 +128,12 @@ function initializeSockets(io) {
 
                 // --- 1. COIN DEDUCTION LOGIC ---
                 const userRole = (socket.user.role || '').toLowerCase();
-                const userGender = (socket.user.gender || '').toLowerCase();
                 
-                // Strictly role-based management check (staff/operators)
+                // Strictly role-based management check (staff/operators), disabled if female-to-female conversation
                 const isManagement = !isFemaleToFemale && ['admin', 'super_admin', 'moderator', 'staff', 'operator'].includes(userRole);
                 
-                // Free sender: Management OR any female messaging a male
-                const isFreeSender = isManagement || (userGender === 'kadin' && !isFemaleToFemale);
+                // Free sender: Management OR any female messaging a male (not female-to-female)
+                const isFreeSender = isManagement || (isFemaleSender && !isFemaleToFemale);
                 
                 let commissionDataToRunLater = null;
                 
@@ -181,9 +183,10 @@ function initializeSockets(io) {
                         }
                     }
                 } else {
-                    // Only female users (gender === 'kadin') earn commission on response!
-                    if (userGender === 'kadin' && !isFemaleToFemale) {
-                        // CHECK: Only give commission if the LAST message in the chat was from the other user (male)
+                    // Free sender (Female to Male or Operator/Staff)
+                    // If it is a female operator/staff responding to a male, she earns commission on response
+                    // BUT only if she is NOT the "user" (customer/male) side of the chat, AND if the last message in chat was from the other user.
+                    if (isFemaleSender && !isFemaleToFemale) {
                         let shouldGiveCommission = true;
                         if (chatReceiverId) {
                             const lastMsgRes = await client.query('SELECT sender_id FROM messages WHERE chat_id = $1 ORDER BY created_at DESC LIMIT 1', [chatId]);
@@ -237,7 +240,7 @@ function initializeSockets(io) {
                 // --- 3. SAVE MESSAGE ---
                 const res = await client.query(
                     'INSERT INTO messages (chat_id, sender_id, content, content_type, gift_id, unlock_cost, is_unlocked, duration) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *',
-                    [chatId, finalSenderId, content, type || 'text', giftId || null, type === 'locked_image' ? (unlockCost || 50) : 0, type === 'locked_image' ? false : true, duration || null]
+                    [chatId, finalSenderId, content, type || 'text', giftId || null, type === 'locked_image' ? (unlockCost || 200) : 0, type === 'locked_image' ? false : true, duration || null]
                 );
                 const savedMsg = res.rows[0];
 

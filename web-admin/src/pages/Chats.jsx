@@ -18,7 +18,7 @@ const Chats = () => {
     const [input, setInput] = useState('');
     const [uploading, setUploading] = useState(false);
     const [isLockedImage, setIsLockedImage] = useState(false);
-    const [lockedImageCost, setLockedImageCost] = useState(50);
+    const [lockedImageCost, setLockedImageCost] = useState(200);
     const [loadingMoreChats, setLoadingMoreChats] = useState(false);
     const socketRef = useRef(null);
     const messagesEndRef = useRef(null);
@@ -619,12 +619,7 @@ const Chats = () => {
                                         <span className="text-[9px] font-black uppercase text-slate-500 group-hover:text-yellow-500 transition-colors">Ücretli</span>
                                     </label>
                                     {isLockedImage && (
-                                        <input
-                                            type="number"
-                                            value={lockedImageCost}
-                                            onChange={(e) => setLockedImageCost(e.target.value)}
-                                            className="w-10 bg-slate-800 text-[10px] text-yellow-500 border border-yellow-500/30 rounded text-center py-0.5 outline-none focus:border-yellow-500"
-                                        />
+                                        <span className="text-[10px] font-black text-yellow-500 bg-yellow-500/10 border border-yellow-500/20 px-2 py-0.5 rounded ml-1">200 Coin</span>
                                     )}
                                 </div>
                             </div>

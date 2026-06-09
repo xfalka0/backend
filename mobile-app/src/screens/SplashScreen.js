@@ -14,6 +14,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import axios from 'axios';
 import { API_URL } from '../config';
+import { useAppStore } from '../store/useAppStore';
 
 const { width, height } = Dimensions.get('window');
 
@@ -88,6 +89,7 @@ export default function SplashScreen({ navigation }) {
 
                         const freshUser = res.data;
                         await AsyncStorage.setItem('user', JSON.stringify(freshUser));
+                        useAppStore.getState().setUser(freshUser);
                         console.log('[Splash] Session valid, navigating to Main');
 
                         if (freshUser.onboarding_completed !== false) {

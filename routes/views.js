@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const pool = require('../db');
+const { sendPushNotification } = require('../utils/notificationUtils');
 
 // Track a profile view
 router.post('/', async (req, res) => {
@@ -20,6 +21,47 @@ router.post('/', async (req, res) => {
             'INSERT INTO profile_views (viewer_id, viewed_user_id) VALUES ($1, $2)',
             [viewerId, viewedUserId]
         );
+
+        // Fetch viewer's details
+        const viewerRes = await pool.query(
+            'SELECT display_name, username, avatar_url FROM users WHERE id = $1',
+            [viewerId]
+        );
+        const viewer = viewerRes.rows[0];
+        const viewerName = viewer ? (viewer.display_name || viewer.username) : 'Birisi';
+        const viewerAvatar = viewer ? viewer.avatar_url : null;
+
+        // Count unique visitors
+        const countRes = await pool.query(
+            'SELECT COUNT(DISTINCT viewer_id) FROM profile_views WHERE viewed_user_id = $1',
+            [viewedUserId]
+        );
+        const uniqueVisitorCount = parseInt(countRes.rows[0]?.count || 0);
+
+        // Emit socket event to the recipient if they are online
+        const io = req.app.get('io');
+        if (io) {
+            console.log(`[VIEWS] Emitting socket profile_viewed to room: ${viewedUserId}`);
+            io.to(viewedUserId.toString()).emit('profile_viewed', {
+                viewerId: viewerId,
+                viewerName: viewerName,
+                viewerAvatar: viewerAvatar,
+                totalViews: uniqueVisitorCount
+            });
+        }
+
+        // Trigger a push notification (non-blocking)
+        sendPushNotification(viewedUserId, {
+            title: 'Birisi profilini ziyaret etti',
+            body: `${uniqueVisitorCount} kullanıcısı profilini ziyaret etti, gidip göz at ~`,
+            data: {
+                type: 'profile_view',
+                viewerId: viewerId,
+                viewerName: viewerName,
+                viewerAvatar: viewerAvatar,
+                totalViews: uniqueVisitorCount
+            }
+        }).catch(err => console.error('[VIEWS] Push notification send error:', err.message));
 
         res.status(201).json({ message: 'Profile view tracked' });
     } catch (err) {

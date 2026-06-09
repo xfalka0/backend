@@ -139,7 +139,7 @@ router.post('/:messageId/unlock', authenticateToken, async (req, res) => {
             return res.json({ success: true, message: msg });
         }
 
-        const unlockCost = msg.unlock_cost || 50;
+        const unlockCost = msg.unlock_cost || 200;
         const userRes = await client.query('SELECT balance FROM users WHERE id = $1', [userId]);
         if (userRes.rows[0].balance < unlockCost) {
             await client.query('ROLLBACK');

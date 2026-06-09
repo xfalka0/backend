@@ -160,8 +160,7 @@ export default function MessagesScreen({ navigation, route }) {
 
         try {
             if (isRefresh) {
-                // Keep the current chats but show loading indicator if desired, or just silent refresh.
-                // setLoading(true); is omitted here to avoid skeleton flashing on every focus
+                // Keep current chats but show loading if desired
             } else if (pageNum > 0) {
                 setLoadingMore(true);
             }
@@ -193,9 +192,58 @@ export default function MessagesScreen({ navigation, route }) {
     };
 
     const filteredChats = React.useMemo(() => {
+        // Create a copy of existing chats and merge pending invitations into them
+        let mergedChats = chats.map(chat => {
+            if (!pendingInvitations || pendingInvitations.length === 0) return chat;
+            
+            // Find if there is a pending invitation from this operator
+            const invite = pendingInvitations.find(inv => inv.owner_id?.toString() === chat.operator_id?.toString());
+            if (invite) {
+                const inviteTime = invite.created_at ? new Date(invite.created_at).getTime() : 0;
+                const lastMsgTime = chat.last_message_at ? new Date(chat.last_message_at).getTime() : 0;
+                
+                return {
+                    ...chat,
+                    is_agency_invite: true,
+                    agency_invite_id: invite.id,
+                    agency_name: invite.agency_name,
+                    // If invitation is newer or no messages exist, show invitation text
+                    last_message: `${invite.agency_name} ajansına katılmanız için davet gönderdi.`,
+                    last_message_at: inviteTime > lastMsgTime ? invite.created_at : chat.last_message_at
+                };
+            }
+            return chat;
+        });
+
+        // Add virtual chat items for invitations that don't match any existing chat
+        if (pendingInvitations && pendingInvitations.length > 0) {
+            pendingInvitations.forEach(invite => {
+                const exists = chats.some(chat => chat.operator_id?.toString() === invite.owner_id?.toString());
+                if (!exists) {
+                    mergedChats.push({
+                        id: `virtual-invite-${invite.id}`,
+                        operator_id: invite.owner_id,
+                        user_id: user.id,
+                        last_message_at: invite.created_at,
+                        last_message: `${invite.agency_name} ajansına katılmanız için davet gönderdi.`,
+                        unread_count: 0,
+                        name: invite.owner_name || invite.owner_username || 'Ajans Sahibi',
+                        avatar_url: invite.owner_avatar,
+                        vip_level: 0,
+                        is_verified: true,
+                        gender: 'kadin',
+                        is_online: true,
+                        is_agency_invite: true,
+                        agency_invite_id: invite.id,
+                        agency_name: invite.agency_name
+                    });
+                }
+            });
+        }
+
         let result = searchText 
-            ? chats.filter(chat => chat.name.toLowerCase().includes(searchText.toLowerCase()))
-            : [...chats];
+            ? mergedChats.filter(chat => chat.name.toLowerCase().includes(searchText.toLowerCase()))
+            : [...mergedChats];
 
         // Sort: Strictly by date (Newest First) - with NaN protection
         return [...result].sort((a, b) => {
@@ -208,7 +256,7 @@ export default function MessagesScreen({ navigation, route }) {
             
             return finalB - finalA;
         });
-    }, [chats, searchText]);
+    }, [chats, pendingInvitations, searchText, user?.id]);
 
     const renderChatItem = ({ item, index }) => {
         const hasUnread = item.unread_count > 0;
@@ -242,8 +290,8 @@ export default function MessagesScreen({ navigation, route }) {
                     onPress={() => {
                         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                         navigation.navigate('Chat', {
-                            operatorId: item.operator_id,
-                            chatId: item.id,
+                            operatorId: item.operator_id === user.id ? item.user_id : item.operator_id,
+                            chatId: item.id.toString().startsWith('virtual-invite-') ? null : item.id,
                             name: item.name,
                             gender: item.gender,
                             avatar_url: item.avatar_url,
@@ -254,11 +302,11 @@ export default function MessagesScreen({ navigation, route }) {
                     activeOpacity={0.8}
                 >
                     <GlassCard
-                        intensity={hasUnread ? 50 : 35}
+                        intensity={(hasUnread || item.is_agency_invite) ? 50 : 35}
                         tint={themeMode === 'dark' ? 'dark' : 'light'}
                         style={[
                             styles.chatItem,
-                            hasUnread 
+                            (hasUnread || item.is_agency_invite)
                                 ? { borderColor: 'rgba(236, 72, 153, 0.5)', borderWidth: 1.5 }
                                 : { borderColor: 'rgba(255, 255, 255, 0.1)', borderWidth: 1 }
                         ]}
@@ -267,12 +315,16 @@ export default function MessagesScreen({ navigation, route }) {
                             <VipFrame
                                 level={item.gender === 'coin_bayisi' ? 'dealer' : (item.vip_level || 0)}
                                 avatar={item.avatar_url}
-                                size={48} // Reduced from 56
+                                size={48}
                                 isStatic={true}
                             />
-                            {item.is_online && (
+                            {item.is_agency_invite ? (
+                                <View style={[styles.onlineBadge, { backgroundColor: '#ec4899', width: 14, height: 14, borderRadius: 7, alignItems: 'center', justifyContent: 'center', borderColor: themeMode === 'dark' ? '#0f172a' : theme.colors.background }]}>
+                                    <Ionicons name="flash" size={8} color="white" />
+                                </View>
+                            ) : item.is_online ? (
                                 <OnlinePulse themeMode={themeMode} theme={theme} />
-                            )}
+                            ) : null}
                         </View>
  
                         <View style={styles.content}>
@@ -283,7 +335,15 @@ export default function MessagesScreen({ navigation, route }) {
                                             {item.name}
                                         </Text>
  
-                                        {item.vip_level > 0 && (
+                                        {item.is_agency_invite ? (
+                                            <LinearGradient
+                                                colors={['#ec4899', '#8b5cf6']}
+                                                start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+                                                style={[styles.vipBadge, { marginLeft: 6 }]}
+                                            >
+                                                <Text style={styles.vipText}>AJANS DAVETİ</Text>
+                                            </LinearGradient>
+                                        ) : item.vip_level > 0 ? (
                                             <LinearGradient
                                                 colors={
                                                     item.vip_level >= 6 ? ['#1a1a1b', '#000000'] :
@@ -295,21 +355,36 @@ export default function MessagesScreen({ navigation, route }) {
                                                 <Ionicons name="star" size={8} color="white" />
                                                 <Text style={styles.vipText}>VIP {item.vip_level}</Text>
                                             </LinearGradient>
-                                        )}
+                                        ) : null}
                                         <Ionicons name="checkmark-circle" size={14} color="#3b82f6" />
                                     </View>
-                                    <Text
-                                        style={[
-                                            styles.lastMsg,
-                                            {
-                                                color: hasUnread ? theme.colors.text : theme.colors.textSecondary,
-                                                fontWeight: hasUnread ? '700' : '400',
-                                            }
-                                        ]}
-                                        numberOfLines={1}
-                                    >
-                                        {formatLastMessage(item.last_message, item.last_message_type)}
-                                    </Text>
+                                    {item.is_agency_invite ? (
+                                        <Text
+                                            style={[
+                                                styles.lastMsg,
+                                                {
+                                                    color: themeMode === 'dark' ? '#f472b6' : '#db2777',
+                                                    fontWeight: '600',
+                                                }
+                                            ]}
+                                            numberOfLines={1}
+                                        >
+                                            {item.last_message}
+                                        </Text>
+                                    ) : (
+                                        <Text
+                                            style={[
+                                                styles.lastMsg,
+                                                {
+                                                    color: hasUnread ? theme.colors.text : theme.colors.textSecondary,
+                                                    fontWeight: hasUnread ? '700' : '400',
+                                                }
+                                            ]}
+                                            numberOfLines={1}
+                                        >
+                                            {formatLastMessage(item.last_message, item.last_message_type)}
+                                        </Text>
+                                    )}
                                 </View>
 
                                 <View style={styles.metaContainer}>
@@ -332,87 +407,6 @@ export default function MessagesScreen({ navigation, route }) {
                                             <Text style={styles.unreadText}>{item.unread_count}</Text>
                                         </LinearGradient>
                                     )}
-                                </View>
-                            </View>
-                        </View>
-                    </GlassCard>
-                </TouchableOpacity>
-            </Animated.View>
-        );
-    };
-
-    const renderInvitationItem = (invite, index) => {
-        return (
-            <Animated.View
-                entering={FadeInDown.delay(index * 100).springify().damping(12)}
-                layout={Layout.springify()}
-                key={`invite-${invite.id}`}
-            >
-                <TouchableOpacity
-                    onPress={() => {
-                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                        navigation.navigate('Chat', {
-                            operatorId: invite.owner_id,
-                            chatId: null,
-                            name: invite.owner_name || invite.owner_username || 'Ajans Sahibi',
-                            avatar_url: invite.owner_avatar,
-                            user
-                        });
-                    }}
-                    style={{ marginBottom: 12, marginHorizontal: 16 }}
-                    activeOpacity={0.8}
-                >
-                    <GlassCard
-                        intensity={45}
-                        tint={themeMode === 'dark' ? 'dark' : 'light'}
-                        style={[
-                            styles.chatItem,
-                            { borderColor: 'rgba(236, 72, 153, 0.4)', borderWidth: 1.5 }
-                        ]}
-                    >
-                        <View style={styles.avatarContainer}>
-                            <VipFrame
-                                level={0}
-                                avatar={invite.owner_avatar || 'https://via.placeholder.com/150'}
-                                size={48}
-                                isStatic={true}
-                            />
-                            <View style={[styles.onlineBadge, { backgroundColor: '#ec4899', width: 14, height: 14, borderRadius: 7, alignItems: 'center', justifyContent: 'center' }]}>
-                                <Ionicons name="flash" size={8} color="white" />
-                            </View>
-                        </View>
-
-                        <View style={styles.content}>
-                            <View style={styles.mainContent}>
-                                <View style={styles.textContainer}>
-                                    <View style={styles.nameRow}>
-                                        <Text style={[styles.name, { color: theme.colors.text }]} numberOfLines={1}>
-                                            {invite.owner_name || invite.owner_username || 'Ajans Sahibi'}
-                                        </Text>
-                                        <LinearGradient
-                                            colors={['#ec4899', '#8b5cf6']}
-                                            start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
-                                            style={[styles.vipBadge, { marginLeft: 6 }]}
-                                        >
-                                            <Text style={styles.vipText}>AJANS DAVETİ</Text>
-                                        </LinearGradient>
-                                    </View>
-                                    <Text
-                                        style={[
-                                            styles.lastMsg,
-                                            {
-                                                color: theme.colors.text,
-                                                fontWeight: '500',
-                                            }
-                                        ]}
-                                    >
-                                        <Text style={{ fontWeight: 'bold', color: '#ec4899' }}>{invite.agency_name}</Text> ajansına katılmanız için davet gönderdi.
-                                    </Text>
-                                </View>
-                                <View style={styles.metaContainer}>
-                                    <Text style={[styles.time, { color: theme.colors.textSecondary, opacity: 0.6 }]}>
-                                        {invite.created_at ? new Date(invite.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
-                                    </Text>
                                 </View>
                             </View>
                         </View>
@@ -504,13 +498,6 @@ export default function MessagesScreen({ navigation, route }) {
                                             </TouchableOpacity>
                                         )}
                                     </View>
-                                </View>
-                            )}
-
-                            {/* Pending Agency Invitations */}
-                            {pendingInvitations && pendingInvitations.length > 0 && (
-                                <View style={{ marginBottom: 15 }}>
-                                    {pendingInvitations.map((invite, index) => renderInvitationItem(invite, index))}
                                 </View>
                             )}
                         </>

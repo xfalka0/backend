@@ -27,7 +27,7 @@ import { useAppStore } from '../store/useAppStore';
 
 export default function AgencyJoinScreen() {
     const navigation = useNavigation();
-    const { theme } = useTheme();
+    const { theme, themeMode } = useTheme();
     const { user, setUser } = useAppStore();
 
     const [loading, setLoading] = useState(false);
@@ -48,7 +48,7 @@ export default function AgencyJoinScreen() {
             const profileRes = await axios.get(`${API_URL}/users/${user.id}`, {
                 headers: { Authorization: `Bearer ${token}` }
             });
-            
+
             if (profileRes.data) {
                 const updatedUser = { ...user, ...profileRes.data };
                 setUser(updatedUser);
@@ -103,7 +103,7 @@ export default function AgencyJoinScreen() {
             if (res.data && res.data.success) {
                 Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
                 Alert.alert('Başarılı', res.data.message || 'Ajansa başarıyla katıldınız!');
-                
+
                 // Refresh profile data to sync agency_id and new roles
                 const profileRes = await axios.get(`${API_URL}/users/${user.id}`, {
                     headers: { Authorization: `Bearer ${token}` }
@@ -131,24 +131,25 @@ export default function AgencyJoinScreen() {
     };
 
     return (
-        <KeyboardAvoidingView 
-            style={styles.container}
+        <KeyboardAvoidingView
+            style={[styles.container, { backgroundColor: theme.colors.background }]}
             behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         >
             <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
-            
-            {/* Ambient Pink-Purple Glowing Backdrop Layer */}
-            <LinearGradient
-                colors={['#7c3aed', '#db2777', '#09021a']}
-                style={styles.headerBackdrop}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 0, y: 1 }}
-            />
+
+            {themeMode === 'dark' && (
+                <View pointerEvents="none" style={StyleSheet.absoluteFill}>
+                    <LinearGradient
+                        colors={theme.gradients.dark}
+                        style={StyleSheet.absoluteFill}
+                    />
+                </View>
+            )}
 
             <SafeAreaView style={styles.safeArea}>
                 {/* Header Row */}
                 <View style={styles.headerRow}>
-                    <TouchableOpacity 
+                    <TouchableOpacity
                         style={styles.backButton}
                         onPress={() => navigation.goBack()}
                     >
@@ -166,7 +167,7 @@ export default function AgencyJoinScreen() {
                         <Text style={styles.loadingText}>Ajans bilgileri doğrulanıyor...</Text>
                     </View>
                 ) : (
-                    <ScrollView 
+                    <ScrollView
                         showsVerticalScrollIndicator={false}
                         contentContainerStyle={styles.scrollContent}
                     >
@@ -187,30 +188,30 @@ export default function AgencyJoinScreen() {
                                 </View>
                                 <Text style={styles.statusTitle}>Ajansa Bağlısınız</Text>
                                 <Text style={styles.statusDescription}>
-                                    Tebrikler! Şu anda aktif olarak <Text style={styles.agencyNameHighlight}>"{linkedAgency.name}"</Text> ajansının bünyesinde yer almaktasınız.
+                                    Şu anda aktif olarak <Text style={styles.agencyNameHighlight}>"{linkedAgency.name}"</Text> ajansının bünyesinde yer almaktasınız.
                                 </Text>
-                                
+
                                 <View style={styles.detailsContainer}>
-                                     <View style={styles.detailItem}>
-                                         <Text style={styles.detailLabel}>Ajans Adı:</Text>
-                                         <Text style={styles.detailValue}>{linkedAgency.name}</Text>
-                                     </View>
-                                     {linkedAgency.owner_name && (
-                                         <View style={styles.detailItem}>
-                                             <Text style={styles.detailLabel}>Ajans Sahibi:</Text>
-                                             <Text style={styles.detailValue}>{linkedAgency.owner_name}</Text>
-                                         </View>
-                                     )}
-                                     {linkedAgency.referral_code && (
-                                         <View style={styles.detailItem}>
-                                             <Text style={styles.detailLabel}>Ajans Kodu:</Text>
-                                             <Text style={[styles.detailValue, { color: '#db2777' }]}>{linkedAgency.referral_code}</Text>
-                                         </View>
-                                     )}
-                                     <View style={styles.detailItem}>
-                                         <Text style={styles.detailLabel}>Durum:</Text>
-                                         <Text style={[styles.detailValue, { color: '#10b981' }]}>Aktif Üye</Text>
-                                     </View>
+                                    <View style={styles.detailItem}>
+                                        <Text style={styles.detailLabel}>Ajans Adı:</Text>
+                                        <Text style={styles.detailValue}>{linkedAgency.name}</Text>
+                                    </View>
+                                    {linkedAgency.owner_name && (
+                                        <View style={styles.detailItem}>
+                                            <Text style={styles.detailLabel}>Ajans Sahibi:</Text>
+                                            <Text style={styles.detailValue}>{linkedAgency.owner_name}</Text>
+                                        </View>
+                                    )}
+                                    {linkedAgency.referral_code && (
+                                        <View style={styles.detailItem}>
+                                            <Text style={styles.detailLabel}>Ajans Kodu:</Text>
+                                            <Text style={[styles.detailValue, { color: '#db2777' }]}>{linkedAgency.referral_code}</Text>
+                                        </View>
+                                    )}
+                                    <View style={styles.detailItem}>
+                                        <Text style={styles.detailLabel}>Durum:</Text>
+                                        <Text style={[styles.detailValue, { color: '#10b981' }]}>Aktif Üye</Text>
+                                    </View>
                                 </View>
 
                                 <View style={styles.warningAlert}>
@@ -250,7 +251,7 @@ export default function AgencyJoinScreen() {
                                     Ajans yöneticinizden aldığınız 6 haneli davet kodunu veya benzersiz ajans kodunu girin.
                                 </Text>
 
-                                <TouchableOpacity 
+                                <TouchableOpacity
                                     style={styles.submitButton}
                                     onPress={handleJoin}
                                     disabled={loading}

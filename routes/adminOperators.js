@@ -38,7 +38,7 @@ router.get('/', async (req, res) => {
         let orderByClause = '';
         if (tab === 'Yeni') orderByClause = 'ORDER BY u.created_at DESC, u.id DESC';
         else if (tab === 'Popüler') orderByClause = 'ORDER BY u.vip_level DESC, o.rating DESC NULLS LAST, u.created_at DESC, u.id DESC';
-        else orderByClause = 'ORDER BY o.is_online DESC, u.created_at DESC, u.id DESC';
+        else orderByClause = 'ORDER BY o.is_online DESC NULLS LAST, (coalesce(cardinality(o.photos), 0) > 0) DESC, u.created_at DESC, u.id DESC';
 
         query += ` ${orderByClause} LIMIT $${paramCount} OFFSET $${paramCount + 1}`;
         params.push(limitNum, offset);

@@ -10,11 +10,14 @@ import GradientButton from '../components/ui/GradientButton';
 import GlassCard from '../components/ui/GlassCard';
 import { Motion } from '../components/motion/MotionSystem';
 import { GoogleSignin, GoogleSigninButton, statusCodes } from '@react-native-google-signin/google-signin';
+import { useAppStore } from '../store/useAppStore';
+import { useChat } from '../contexts/ChatContext';
 
 const { width } = Dimensions.get('window');
 
 export default function LoginScreen({ navigation }) {
     const { showAlert } = useAlert();
+    const { refreshUser } = useChat();
     const [email, setEmail] = useState('user@test.com');
     const [password, setPassword] = useState('pass123');
     const [loading, setLoading] = useState(false);
@@ -63,6 +66,10 @@ export default function LoginScreen({ navigation }) {
                 await AsyncStorage.setItem('token', token);
                 await AsyncStorage.setItem('user', JSON.stringify(userData));
 
+                // Sync store and chat session
+                useAppStore.getState().setUser(userData);
+                await refreshUser();
+
                 setLoading(false);
                 if (userData.onboarding_completed) {
                     navigation.replace('Main', { user: { ...userData, token } });
@@ -97,6 +104,10 @@ export default function LoginScreen({ navigation }) {
                 // Save to AsyncStorage
                 await AsyncStorage.setItem('token', token);
                 await AsyncStorage.setItem('user', JSON.stringify(userData));
+
+                // Sync store and chat session
+                useAppStore.getState().setUser(userData);
+                await refreshUser();
 
                 if (userData.onboarding_completed) {
                     navigation.replace('Main', { user: { ...userData, token } });

@@ -26,6 +26,7 @@ import { API_URL } from '../config';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAlert } from '../contexts/AlertContext';
 import GlassCard from '../components/ui/GlassCard';
+import { useAppStore } from '../store/useAppStore';
 
 const { width } = Dimensions.get('window');
 
@@ -33,6 +34,19 @@ const WalletScreen = () => {
     const navigation = useNavigation();
     const { theme } = useTheme();
     const { showAlert } = useAlert();
+    const user = useAppStore(state => state.user);
+
+    // Redirect standard male users/non-operators away from this screen immediately
+    useEffect(() => {
+        if (user) {
+            const isFemale = (user.gender || '').toLowerCase() === 'kadin';
+            const isOperatorRole = ['operator', 'moderator', 'admin', 'super_admin', 'staff'].includes(user.role);
+            if (!isFemale && !isOperatorRole) {
+                console.log('[Wallet] Unauthorized user, redirecting back.');
+                navigation.goBack();
+            }
+        }
+    }, [user, navigation]);
 
     // Stats from server
     const [pendingBalance, setPendingBalance] = useState(0);

@@ -5,6 +5,8 @@ import { API_URL, SOCKET_URL } from '../config';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useInAppNotification } from './InAppNotificationContext';
 import { useAppStore } from '../store/useAppStore';
+import { resolveImageUrl } from '../utils/imageUtils';
+import * as RootNavigation from '../services/navigationRef';
 
 const ChatContext = createContext();
 
@@ -86,11 +88,34 @@ export const ChatProvider = ({ children }) => {
                     showNotification({
                         title: data.sender_name || 'Yeni Mesaj',
                         body: data.content_type === 'text' ? data.content : (data.content_type === 'gift' ? '🎁 Hediye gönderdi' : '📷 Medya gönderdi'),
-                        icon: data.sender_avatar,
-                        data: { chatId: incomingChatId }
+                        icon: resolveImageUrl(data.sender_avatar),
+                        data: { chatId: incomingChatId },
+                        onPress: () => {
+                            RootNavigation.navigate('Chat', {
+                                chatId: incomingChatId,
+                                operatorId: data.sender_id,
+                                name: data.sender_name,
+                                avatar_url: data.sender_avatar,
+                                user: user
+                            });
+                        }
                     });
                 }
             }
+        });
+
+        // Listen for profile views
+        newSocket.on('profile_viewed', (data) => {
+            console.log('[ChatContext] Profile viewed event:', data);
+            showNotification({
+                title: 'Birisi profilini ziyaret etti',
+                body: `${data.totalViews} kullanıcısı profilini ziyaret etti, gidip göz at ~`,
+                icon: resolveImageUrl(data.viewerAvatar),
+                data: { type: 'profile_view', viewerId: data.viewerId },
+                onPress: () => {
+                    RootNavigation.navigate('ProfileVisitors', { user: user });
+                }
+            });
         });
 
         socketRef.current.on('chats_updated', () => {
@@ -133,8 +158,17 @@ export const ChatProvider = ({ children }) => {
                         showNotification({
                             title: data.sender_name || 'Yeni Mesaj',
                             body: data.content_type === 'text' ? data.content : (data.content_type === 'gift' ? '🎁 Hediye gönderdi' : '📷 Medya gönderdi'),
-                            icon: data.sender_avatar,
-                            data: { chatId: incomingChatId }
+                            icon: resolveImageUrl(data.sender_avatar),
+                            data: { chatId: incomingChatId },
+                            onPress: () => {
+                                RootNavigation.navigate('Chat', {
+                                    chatId: incomingChatId,
+                                    operatorId: data.sender_id,
+                                    name: data.sender_name,
+                                    avatar_url: data.sender_avatar,
+                                    user: user
+                                });
+                            }
                         });
                     }
                 }

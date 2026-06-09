@@ -15,9 +15,12 @@ export const useAppStore = create((set, get) => ({
             return;
         }
         
-        // Derive role: If gender === 'kadin' or role is operator/staff, they are an operator
-        const isOperator = (user.gender || '').toLowerCase() === 'kadin' || 
-                           ['operator', 'staff', 'moderator', 'admin', 'super_admin'].includes(user.role);
+        // Derive role: If gender === 'kadin' or role is operator/staff, they are an operator, unless they are male
+        const isMale = (user.gender || '').toLowerCase() === 'erkek';
+        const isOperator = !isMale && (
+            (user.gender || '').toLowerCase() === 'kadin' || 
+            ['operator', 'staff', 'moderator', 'admin', 'super_admin'].includes(user.role)
+        );
         const role = isOperator ? 'operator' : 'customer';
         
         // Balance: operators use pending_balance/diamonds, customers use coins/balance

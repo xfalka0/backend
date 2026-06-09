@@ -930,7 +930,7 @@ app.get('/api/operators', async (req, res) => {
         } else if (tab === 'Popüler') {
             orderByClause = 'ORDER BY u.vip_level DESC, o.rating DESC NULLS LAST, u.created_at DESC, u.id DESC';
         } else {
-            orderByClause = 'ORDER BY o.is_online DESC, u.created_at DESC, u.id DESC';
+            orderByClause = 'ORDER BY o.is_online DESC NULLS LAST, (coalesce(cardinality(o.photos), 0) > 0) DESC, u.created_at DESC, u.id DESC';
         }
 
         query += ` ${orderByClause} LIMIT $${paramCount} OFFSET $${paramCount + 1}`;
@@ -1001,7 +1001,7 @@ app.get('/api/discovery', authenticateToken, async (req, res) => {
             orderByClause = 'ORDER BY u.vip_level DESC, o.rating DESC NULLS LAST, u.created_at DESC, u.id DESC';
         } else {
             // "Önerilen" or Default
-            orderByClause = 'ORDER BY (EXISTS(SELECT 1 FROM boosts b WHERE b.user_id = u.id AND b.end_time > NOW())) DESC, o.is_online DESC NULLS LAST, u.created_at DESC, u.id DESC';
+            orderByClause = 'ORDER BY o.is_online DESC NULLS LAST, (coalesce(cardinality(o.photos), 0) > 0) DESC, (EXISTS(SELECT 1 FROM boosts b WHERE b.user_id = u.id AND b.end_time > NOW())) DESC, u.created_at DESC, u.id DESC';
         }
 
         const query = `
@@ -2738,18 +2738,19 @@ app.get('/api/users/:userId/chats', async (req, res) => {
             SELECT 
                 c.id,
                 c.operator_id, 
+                c.user_id,
                 c.last_message_at,
                 (SELECT content FROM messages WHERE chat_id = c.id ORDER BY created_at DESC LIMIT 1) as last_message,
                 (SELECT COUNT(*)::int FROM messages WHERE chat_id = c.id AND sender_id != $1 AND is_read = false) as unread_count,
-                COALESCE(u.display_name, u.username, 'Bilinmeyen Operatör') as name, 
+                COALESCE(u.display_name, u.username, 'Bilinmeyen Kullanıcı') as name, 
                 COALESCE(u.avatar_url, 'https://via.placeholder.com/150') as avatar_url,
                 u.vip_level,
                 u.is_verified,
                 u.gender,
                 true as is_online 
             FROM chats c
-            LEFT JOIN users u ON c.operator_id = u.id
-            WHERE c.user_id = $1
+            LEFT JOIN users u ON u.id = CASE WHEN c.user_id = $1 THEN c.operator_id ELSE c.user_id END
+            WHERE c.user_id = $1 OR c.operator_id = $1
             ORDER BY COALESCE((SELECT MAX(created_at) FROM messages WHERE chat_id = c.id), c.last_message_at) DESC
         `;
 
@@ -2771,7 +2772,7 @@ app.get('/api/users/:userId/unread-count', async (req, res) => {
             SELECT COUNT(*)::int as total_unread
             FROM messages m
             JOIN chats c ON m.chat_id = c.id
-            WHERE c.user_id = $1 
+            WHERE (c.user_id = $1 OR c.operator_id = $1)
             AND m.sender_id != $1 
             AND m.is_read = false
         `;
@@ -2881,6 +2882,7 @@ app.get('/api/admin/fix-database-final', async (req, res) => {
         
         // 1. Add missing column first if it doesn't exist, then change types
         await db.query('ALTER TABLE operator_stats ADD COLUMN IF NOT EXISTS total_user_spend DECIMAL(12,2) DEFAULT 0');
+        await db.query('ALTER TABLE operator_stats ADD COLUMN IF NOT EXISTS gift_coins_received NUMERIC DEFAULT 0');
         await db.query('ALTER TABLE operator_stats ALTER COLUMN coins_earned TYPE DECIMAL(12,2)');
         
         // 2. Ensure operators table is also updated (just in case)
@@ -2963,6 +2965,7 @@ app.get('/api/debug/admin-chats', async (req, res) => {
             ADD COLUMN IF NOT EXISTS image_earned NUMERIC DEFAULT 0,
             ADD COLUMN IF NOT EXISTS audio_earned NUMERIC DEFAULT 0,
             ADD COLUMN IF NOT EXISTS gift_earned NUMERIC DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS gift_coins_received NUMERIC DEFAULT 0,
             ADD COLUMN IF NOT EXISTS total_user_spend NUMERIC DEFAULT 0
         `);
         
@@ -3496,10 +3499,134 @@ app.get('/api/debug/dump-users', async (req, res) => {
     }
 });
 
+// Auto-claim any reached but unclaimed daily mission rewards from the past 7 days
+async function autoClaimPendingMissions(userId) {
+    try {
+        const statsRes = await db.query(
+            `SELECT date::text, 
+                    COALESCE(coins_earned, 0) as coins_earned, 
+                    COALESCE(image_count, 0) as image_count, 
+                    COALESCE(gift_coins_received, 0) as gift_coins_received
+             FROM operator_stats 
+             WHERE operator_id::text = $1::text 
+               AND date < CURRENT_DATE 
+               AND date >= CURRENT_DATE - INTERVAL '7 days'`,
+            [userId]
+        );
+
+        if (statsRes.rows.length === 0) return;
+
+        const MISSION_TARGETS_MAP = {
+            chat_earnings: [
+                { value: 5000, reward: 1000 },
+                { value: 10000, reward: 2000 },
+                { value: 20000, reward: 6000 },
+                { value: 30000, reward: 9000 },
+                { value: 40000, reward: 14000 },
+                { value: 50000, reward: 18000 }
+            ],
+            photo_unlocks: [
+                { value: 10, reward: 1800 },
+                { value: 20, reward: 5000 },
+                { value: 30, reward: 8000 },
+                { value: 40, reward: 12000 },
+                { value: 50, reward: 16000 }
+            ],
+            gift_received: [
+                { value: 2000, reward: 2000 },
+                { value: 5000, reward: 5000 },
+                { value: 10000, reward: 12000 },
+                { value: 20000, reward: 26000 },
+                { value: 40000, reward: 55000 },
+                { value: 60000, reward: 85000 },
+                { value: 100000, reward: 150000 }
+            ]
+        };
+
+        for (const row of statsRes.rows) {
+            const dateStr = row.date;
+            
+            const checks = [
+                { id: 'chat_earnings', val: parseFloat(row.coins_earned) },
+                { id: 'photo_unlocks', val: parseInt(row.image_count) },
+                { id: 'gift_received', val: parseFloat(row.gift_coins_received) }
+            ];
+
+            for (const check of checks) {
+                const targets = MISSION_TARGETS_MAP[check.id];
+                if (!targets) continue;
+
+                // Find the highest reached milestone
+                const reachedTargets = targets.filter(t => check.val >= t.value);
+                if (reachedTargets.length === 0) continue;
+
+                const maxTarget = reachedTargets.reduce((max, t) => t.value > max.value ? t : max, reachedTargets[0]);
+                const logType = `mission_reward_${check.id}_${maxTarget.value}`;
+
+                // Calculate already claimed amount for this day
+                const claimedRes = await db.query(
+                    `SELECT COALESCE(SUM(amount), 0) as total_claimed 
+                     FROM commission_logs 
+                     WHERE operator_id::text = $1::text 
+                       AND type LIKE $2 
+                       AND created_at::date = $3::date`,
+                    [userId, `mission_reward_${check.id}_%`, dateStr]
+                );
+                const totalClaimedForDay = parseFloat(claimedRes.rows[0].total_claimed || 0);
+                const netReward = maxTarget.reward - totalClaimedForDay;
+
+                if (netReward > 0) {
+                    await db.query('BEGIN');
+                    
+                    await db.query(
+                        'INSERT INTO commission_logs (operator_id, amount, type, created_at) VALUES ($1, $2, $3, $4)',
+                        [userId, netReward, logType, dateStr + ' 12:00:00']
+                    );
+
+                    const opRes = await db.query('SELECT user_id FROM operators WHERE user_id::text = $1::text', [userId]);
+                    if (opRes.rows.length === 0) {
+                        await db.query(
+                            'INSERT INTO operators (user_id, pending_balance, lifetime_earnings, is_online, rating) VALUES ($1, $2, $2, true, 5.0)',
+                            [userId, netReward]
+                        );
+                    } else {
+                        await db.query(
+                            'UPDATE operators SET pending_balance = COALESCE(pending_balance, 0) + $1, lifetime_earnings = COALESCE(lifetime_earnings, 0) + $1 WHERE user_id::text = $2::text',
+                            [netReward, userId]
+                        );
+                    }
+
+                    await db.query('COMMIT');
+                    console.log(`[AUTO-CLAIM] Automatically claimed ${netReward} diamonds for operator ${userId} (${logType}) for date ${dateStr}`);
+                }
+            }
+        }
+    } catch (err) {
+        console.error('[AUTO-CLAIM-ERROR] Failed to auto-claim missions:', err.message);
+    }
+}
+
 // GET CURRENT OPERATOR/STAFF STATS
 const getDetailedOperatorStats = async (req, res) => {
     try {
         const userId = req.user.id;
+        
+        // Check if the user is an operator or female
+        const userRes = await db.query('SELECT role, gender FROM users WHERE id = $1', [userId]);
+        if (userRes.rows.length === 0) {
+            return res.status(404).json({ error: 'Kullanıcı bulunamadı.' });
+        }
+        
+        const user = userRes.rows[0];
+        const isOperator = ['operator', 'moderator', 'admin', 'super_admin', 'staff'].includes(user.role) || user.gender === 'kadin';
+        
+        if (!isOperator) {
+            return res.status(403).json({ error: 'Yetkiniz yok.' });
+        }
+        
+        // Auto-claim reached but unclaimed rewards from the past 7 days
+        await autoClaimPendingMissions(userId);
+
         console.log('[DEBUG] my-stats request for userId:', userId);
         
         const query = `
@@ -3525,6 +3652,7 @@ const getDetailedOperatorStats = async (req, res) => {
                 (SELECT COALESCE(SUM(image_earned), 0) FROM operator_stats WHERE operator_id::text = $1::text AND date = CURRENT_DATE) as image_earned_today,
                 (SELECT COALESCE(SUM(audio_earned), 0) FROM operator_stats WHERE operator_id::text = $1::text AND date = CURRENT_DATE) as audio_earned_today,
                 (SELECT COALESCE(SUM(gift_earned), 0) FROM operator_stats WHERE operator_id::text = $1::text AND date = CURRENT_DATE) as gift_earned_today,
+                (SELECT COALESCE(SUM(gift_coins_received), 0) FROM operator_stats WHERE operator_id::text = $1::text AND date = CURRENT_DATE) as gift_coins_received_today,
                 
                 -- Global Stats
                 (SELECT COALESCE(COUNT(*), 0) FROM chats WHERE managed_by::text = $1::text) as active_chats,
@@ -3546,9 +3674,36 @@ const getDetailedOperatorStats = async (req, res) => {
             ORDER BY date DESC
         `, [userId]);
 
+        // Fetch today's claimed mission rewards to determine claimable thresholds
+        const claimsRes = await db.query(`
+            SELECT type, amount 
+            FROM commission_logs 
+            WHERE operator_id::text = $1::text 
+              AND type LIKE 'mission_reward_%' 
+              AND created_at::date = CURRENT_DATE
+        `, [userId]);
+
+        const todayClaims = {
+            chat_earnings: 0,
+            photo_unlocks: 0,
+            gift_received: 0
+        };
+
+        for (const row of claimsRes.rows) {
+            const amount = parseFloat(row.amount || 0);
+            if (row.type.startsWith('mission_reward_chat_earnings_')) {
+                todayClaims.chat_earnings += amount;
+            } else if (row.type.startsWith('mission_reward_photo_unlocks_')) {
+                todayClaims.photo_unlocks += amount;
+            } else if (row.type.startsWith('mission_reward_gift_received_')) {
+                todayClaims.gift_received += amount;
+            }
+        }
+
         const responseData = {
             ...result.rows[0],
-            weekly_stats: weeklyRes.rows
+            weekly_stats: weeklyRes.rows,
+            today_claims: todayClaims
         };
         
         res.json(responseData);
@@ -3560,6 +3715,74 @@ const getDetailedOperatorStats = async (req, res) => {
 
 app.get('/api/operator/my-stats', authenticateToken, getDetailedOperatorStats);
 app.get('/api/operators/my/stats', authenticateToken, getDetailedOperatorStats);
+
+app.post('/api/operators/my/claim-mission', authenticateToken, async (req, res) => {
+    const { missionId, milestoneValue, rewardAmount } = req.body;
+    const userId = req.user.id;
+
+    if (!missionId || milestoneValue === undefined || !rewardAmount) {
+        return res.status(400).json({ error: 'Eksik parametreler.' });
+    }
+
+    try {
+        await db.query('BEGIN');
+
+        // Check if the user is an operator or female
+        const userRes = await db.query('SELECT role, gender FROM users WHERE id = $1', [userId]);
+        if (userRes.rows.length === 0) {
+            throw new Error('Kullanıcı bulunamadı.');
+        }
+        
+        const user = userRes.rows[0];
+        const isOperator = ['operator', 'moderator', 'admin', 'super_admin', 'staff'].includes(user.role) || user.gender === 'kadin';
+        
+        if (!isOperator) {
+            throw new Error('Yetkiniz yok.');
+        }
+
+        // Non-cumulative reward calculation: get sum of already claimed rewards for this mission today
+        const claimedRes = await db.query(
+            `SELECT COALESCE(SUM(amount), 0) as total_claimed 
+             FROM commission_logs 
+             WHERE operator_id::text = $1::text 
+               AND type LIKE $2 
+               AND created_at::date = CURRENT_DATE`,
+            [userId, `mission_reward_${missionId}_%`]
+        );
+        const totalClaimedToday = parseFloat(claimedRes.rows[0].total_claimed || 0);
+        const netReward = Math.max(0, parseFloat(rewardAmount) - totalClaimedToday);
+
+        if (netReward > 0) {
+            // Add to operator's pending_balance and lifetime_earnings
+            const opRes = await db.query('SELECT user_id FROM operators WHERE user_id::text = $1::text', [userId]);
+            if (opRes.rows.length === 0) {
+                await db.query(
+                    'INSERT INTO operators (user_id, pending_balance, lifetime_earnings, is_online, rating) VALUES ($1, $2, $2, true, 5.0)',
+                    [userId, netReward]
+                );
+            } else {
+                await db.query(
+                    'UPDATE operators SET pending_balance = COALESCE(pending_balance, 0) + $1, lifetime_earnings = COALESCE(lifetime_earnings, 0) + $1 WHERE user_id::text = $2::text',
+                    [netReward, userId]
+                );
+            }
+
+            // Log this to commission_logs with the actual netReward
+            await db.query(
+                "INSERT INTO commission_logs (operator_id, amount, type) VALUES ($1, $2, $3)",
+                [userId, netReward, `mission_reward_${missionId}_${milestoneValue}`]
+            );
+        }
+
+        await db.query('COMMIT');
+        res.json({ success: true, message: 'Ödül başarıyla eklendi!', claimedAmount: netReward });
+    } catch (err) {
+        await db.query('ROLLBACK');
+        console.error('Claim mission reward error:', err.message);
+        res.status(500).json({ error: err.message });
+    }
+});
+
 
 // GET ALL PERSONNEL (Staff) for assignment and earnings
 app.get('/api/admin/operators/earnings', authenticateToken, authorizeRole('admin', 'super_admin', 'operator', 'moderator'), async (req, res) => {
@@ -3896,13 +4119,41 @@ io.on('connection', (socket) => {
             console.log(`[SOCKET] Starting send_message transaction for chatId: ${chatId}, senderId: ${senderId}`);
             await client.query('BEGIN'); // Start Transaction
 
-            // Check if sender is an operator
-            // Optimization: We could check socket.user.role, but let's trust DB check for consistency
-            // Actually, we loaded role in middleware. 
-            // Let's use socket.user.role if it helps, but 'operator' role might be in 'users' table or 'operators' table check needed.
-            // The existing code checks 'operators' table existence. Let's keep it but use senderId (from auth).
-            const operatorCheck = await client.query('SELECT user_id FROM operators WHERE user_id = $1', [senderId]);
-            const isOperator = operatorCheck.rows.length > 0;
+            // Load chat details, user genders, roles, and managers in ONE query
+            const chatRes = await client.query(`
+                SELECT c.user_id, c.operator_id, 
+                       u1.gender as user_gender, u2.gender as operator_gender,
+                       u1.role as user_role, u2.role as operator_role,
+                       u2.managed_by as operator_managed_by
+                FROM chats c
+                LEFT JOIN users u1 ON c.user_id = u1.id
+                LEFT JOIN users u2 ON c.operator_id = u2.id
+                WHERE c.id = $1
+            `, [chatId]);
+
+            let isFemaleToFemale = false;
+            let isFemaleSender = false;
+            let chatReceiverId = null;
+            let operatorManagedBy = null;
+
+            if (chatRes.rows.length > 0) {
+                const chat = chatRes.rows[0];
+                const isSenderUser = senderId.toString() === chat.user_id.toString();
+                const receiverId = isSenderUser ? chat.operator_id : chat.user_id;
+                chatReceiverId = receiverId;
+                operatorManagedBy = chat.operator_managed_by;
+
+                const senderGender = isSenderUser ? chat.user_gender : chat.operator_gender;
+                const receiverGender = isSenderUser ? chat.operator_gender : chat.user_gender;
+                
+                isFemaleSender = (senderGender || '').toLowerCase() === 'kadin';
+                const isFemaleReceiver = (receiverGender || '').toLowerCase() === 'kadin';
+
+                if (isFemaleSender && isFemaleReceiver) {
+                    isFemaleToFemale = true;
+                    console.log(`[SOCKET] Female-to-Female messaging detected in chat ${chatId} (Sender: ${senderId}, Receiver: ${receiverId}). Coins will be charged.`);
+                }
+            }
 
             let cost = 0;
             let userBalance = 0;
@@ -3910,13 +4161,17 @@ io.on('connection', (socket) => {
             let giftDetails = null;
 
             // --- 1. COIN DEDUCTION LOGIC ---
-            // Management roles don't pay for messages
             const userRole = (socket.user.role || '').toLowerCase();
-            const isManagement = ['admin', 'super_admin', 'moderator', 'staff', 'operator'].includes(userRole);
+            
+            // Strictly role-based management check (staff/operators), disabled if female-to-female conversation
+            const isManagement = !isFemaleToFemale && ['admin', 'super_admin', 'moderator', 'staff', 'operator'].includes(userRole);
+            
+            // Free sender: Management OR any female messaging a male (not female-to-female)
+            const isFreeSender = isManagement || (isFemaleSender && !isFemaleToFemale);
             
             let commissionDataToRunLater = null;
             
-            if (!isManagement) {
+            if (!isFreeSender) {
                 cost = 10; // Default text
                 if (type === 'gift' && giftId) {
                     const giftRes = await client.query('SELECT * FROM gifts WHERE id = $1', [giftId]);
@@ -3953,24 +4208,38 @@ io.on('connection', (socket) => {
                 const updateRes = await client.query('UPDATE users SET balance = balance - $2 WHERE id = $1 RETURNING balance', [senderId, cost]);
                 userBalance = parseFloat(updateRes.rows[0].balance);
                 io.emit('admin_balance_update', { userId: senderId, newBalance: userBalance });
+                socket.emit('balance_update', { userId: senderId, newBalance: userBalance }); // Notify current socket
 
-                if (type === 'gift') {
-                    const chatRes = await client.query('SELECT operator_id FROM chats WHERE id = $1', [chatId]);
-                    if (chatRes.rows.length > 0) {
+                if (type === 'gift' && !isFemaleToFemale) {
+                    const chatResInner = await client.query('SELECT operator_id FROM chats WHERE id = $1', [chatId]);
+                    if (chatResInner.rows.length > 0) {
                         commissionDataToRunLater = { chatId, senderId: null, cost, type: 'gift' };
                     }
                 }
             } else {
-                // STAFF EARNS ON RESPONSE - But ONLY if they are NOT the "user" side of the chat
-                const chatCheck = await client.query('SELECT user_id FROM chats WHERE id = $1', [chatId]);
-                const chatUserId = chatCheck.rows.length > 0 ? chatCheck.rows[0].user_id : null;
-                
-                if (chatUserId && chatUserId.toString() !== senderId.toString()) {
-                    let commissionCost = 10;
-                    if (type === 'image') commissionCost = 50;
-                    else if (type === 'audio') commissionCost = 30;
-                    
-                    commissionDataToRunLater = { chatId, senderId, cost: commissionCost, type: type || 'text' };
+                // Free sender (Female to Male or Operator/Staff)
+                // If it is a female operator/staff responding to a male, she earns commission on response
+                // BUT only if she is NOT the "user" (customer/male) side of the chat, AND if the last message in chat was from the other user.
+                if (isFemaleSender && !isFemaleToFemale) {
+                    let shouldGiveCommission = true;
+                    if (chatReceiverId) {
+                        const lastMsgRes = await client.query('SELECT sender_id FROM messages WHERE chat_id = $1 ORDER BY created_at DESC LIMIT 1', [chatId]);
+                        if (lastMsgRes.rows.length > 0) {
+                            const lastSenderId = lastMsgRes.rows[0].sender_id;
+                            if (lastSenderId && lastSenderId.toString() !== chatReceiverId.toString()) {
+                                shouldGiveCommission = false;
+                                console.log(`[SOCKET] Commission denied for ${senderId} in chat ${chatId}: Last message was not from the user ${chatReceiverId}.`);
+                            }
+                        }
+                    }
+
+                    if (shouldGiveCommission) {
+                        let commissionCost = 10;
+                        if (type === 'image') commissionCost = 50;
+                        else if (type === 'audio') commissionCost = 30;
+                        
+                        commissionDataToRunLater = { chatId, senderId, cost: commissionCost, type: type || 'text' };
+                    }
                 }
             }
 
@@ -3979,31 +4248,27 @@ io.on('connection', (socket) => {
             let finalSenderId = senderId;
             
             // If sender is management, they should message AS the operator of this chat
-            if (isManagement) {
-                const chatRes = await client.query('SELECT operator_id FROM chats WHERE id = $1', [chatId]);
-                if (chatRes.rows.length > 0) {
-                    const avatarId = chatRes.rows[0].operator_id;
+            if (isManagement && chatRes.rows.length > 0) {
+                const avatarId = chatRes.rows[0].operator_id;
+                
+                // Zimmet Check: If it's a staff/moderator, check if they are allowed
+                if (socket.user.role === 'staff' || socket.user.role === 'moderator') {
+                    const managerId = operatorManagedBy;
                     
-                    // Zimmet Check: If it's a staff/moderator, check if they are allowed
-                    if (socket.user.role === 'staff' || socket.user.role === 'moderator') {
-                        const manageCheck = await client.query('SELECT managed_by FROM users WHERE id = $1', [avatarId]);
-                        const managerId = manageCheck.rows.length > 0 ? manageCheck.rows[0].managed_by : null;
-                        
-                        if (managerId && managerId.toString() !== senderId.toString() && socket.user.role !== 'admin' && socket.user.role !== 'super_admin') {
-                            console.warn(`[SOCKET] Blocked unauthorized message attempt by ${senderId} for avatar ${avatarId}`);
-                            throw new Error('BU_PROFIL_SIZE_ZIMMETLI_DEGIL');
-                        }
+                    if (managerId && managerId.toString() !== senderId.toString() && socket.user.role !== 'admin' && socket.user.role !== 'super_admin') {
+                        console.warn(`[SOCKET] Blocked unauthorized message attempt by ${senderId} for avatar ${avatarId}`);
+                        throw new Error('BU_PROFIL_SIZE_ZIMMETLI_DEGIL');
                     }
-                    
-                    // All management roles message AS the avatar to keep chat consistent
-                    finalSenderId = avatarId;
                 }
+                
+                // All management roles message AS the avatar to keep chat consistent
+                finalSenderId = avatarId;
             }
 
             // --- 3. SAVE MESSAGE ---
             const res = await client.query(
                 'INSERT INTO messages (chat_id, sender_id, content, content_type, gift_id, unlock_cost, is_unlocked) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *',
-                [chatId, finalSenderId, content, type || 'text', giftId || null, type === 'locked_image' ? (unlockCost || 50) : 0, type === 'locked_image' ? false : true]
+                [chatId, finalSenderId, content, type || 'text', giftId || null, type === 'locked_image' ? (unlockCost || 200) : 0, type === 'locked_image' ? false : true]
             );
             const savedMsg = res.rows[0];
 
@@ -4033,7 +4298,7 @@ io.on('connection', (socket) => {
             }
 
             // --- 4. EMIT EVENTS ---
-            if (!isManagement) {
+            if (!isFreeSender) {
                 io.to(socket.id).emit('balance_update', { userId: senderId, newBalance: userBalance });
             }
 

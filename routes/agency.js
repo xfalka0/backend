@@ -307,8 +307,23 @@ router.post('/agencies/join', authenticateToken, async (req, res) => {
         const actualAgencyId = agencyRes.rows[0].id;
         const agencyName = agencyRes.rows[0].name;
 
-        // 2. Update user's agency
-        await db.query('UPDATE users SET agency_id = $1 WHERE id = $2', [actualAgencyId, userId]);
+        // 2. Update user's agency and automatically elevate role to 'operator' if female
+        const isFemale = (req.user.gender || '').toLowerCase() === 'kadin';
+        if (isFemale) {
+            await db.query("UPDATE users SET agency_id = $1, role = 'operator' WHERE id = $2", [actualAgencyId, userId]);
+            
+            // Ensure operator entry exists
+            const opCheck = await db.query('SELECT 1 FROM operators WHERE user_id::text = $1::text', [userId]);
+            if (opCheck.rows.length === 0) {
+                await db.query(
+                    "INSERT INTO operators (user_id, category, bio, photos, is_online, rating) VALUES ($1, 'Genel', 'Merhaba!', '{}', false, 5.0)",
+                    [userId]
+                );
+            }
+            console.log(`[AGENCY] Elevated user ${userId} to operator upon joining agency.`);
+        } else {
+            await db.query('UPDATE users SET agency_id = $1 WHERE id = $2', [actualAgencyId, userId]);
+        }
         
         console.log(`[AGENCY] User ${userId} joined agency ${agencyName}`);
         res.json({ success: true, message: `${agencyName} ajansına başarıyla katıldınız!`, agencyName });
@@ -326,6 +341,7 @@ router.post('/agencies/join', authenticateToken, async (req, res) => {
 router.get('/agency/my-dashboard', authenticateToken, async (req, res) => {
     try {
         const userId = req.user.id;
+        const weekOffset = parseInt(req.query.weekOffset || 0, 10);
         
         // 1. Fetch agency owned by this user
         const agencyRes = await db.query('SELECT * FROM agencies WHERE owner_id = $1 LIMIT 1', [userId]);
@@ -342,6 +358,7 @@ router.get('/agency/my-dashboard', authenticateToken, async (req, res) => {
                 u.username, 
                 u.display_name, 
                 u.avatar_url,
+                u.created_at as joined_at,
                 o.is_online,
                 o.rating,
                 -- today_commission is operator's earned diamonds today
@@ -349,14 +366,25 @@ router.get('/agency/my-dashboard', authenticateToken, async (req, res) => {
                     SELECT SUM(amount) 
                     FROM commission_logs 
                     WHERE operator_id::text = u.id::text 
+                      AND agency_id::text = $1::text
                       AND created_at >= CURRENT_DATE
                 ), 0) as today_commission,
+                -- weekly_commission is operator's earned diamonds in the selected week
+                COALESCE((
+                    SELECT SUM(amount) 
+                    FROM commission_logs 
+                    WHERE operator_id::text = u.id::text 
+                      AND agency_id::text = $1::text
+                      AND created_at >= date_trunc('week', CURRENT_DATE) - ($2::integer * interval '1 week')
+                      AND created_at < date_trunc('week', CURRENT_DATE) - (($2::integer - 1) * interval '1 week')
+                ), 0) as weekly_commission,
                 -- check if operator has any low quality logs today
                 COALESCE((
                     SELECT EXISTS(
                         SELECT 1 
                         FROM commission_logs 
                         WHERE operator_id::text = u.id::text 
+                          AND agency_id::text = $1::text
                           AND created_at >= CURRENT_DATE 
                           AND is_low_quality = true
                     )
@@ -365,7 +393,7 @@ router.get('/agency/my-dashboard', authenticateToken, async (req, res) => {
             LEFT JOIN operators o ON u.id::text = o.user_id::text
             WHERE u.agency_id::text = $1::text
         `;
-        const operatorsRes = await db.query(operatorsQuery, [agency.id]);
+        const operatorsRes = await db.query(operatorsQuery, [agency.id, weekOffset]);
         const operators = operatorsRes.rows;
         
         // 3. Compute stats
@@ -377,6 +405,17 @@ router.get('/agency/my-dashboard', authenticateToken, async (req, res) => {
         `;
         const todayDiamondsRes = await db.query(todayDiamondsQuery, [agency.id, parseFloat(agency.commission_rate || 0.40)]);
         const today_diamonds = parseFloat(todayDiamondsRes.rows[0].today_diamonds);
+
+        // weekly_diamonds: Sum of coins_earned in the selected week * agency rate
+        const weeklyDiamondsQuery = `
+            SELECT COALESCE(SUM(amount * $2), 0) as weekly_diamonds
+            FROM commission_logs
+            WHERE agency_id::text = $1::text 
+              AND created_at >= date_trunc('week', CURRENT_DATE) - ($3::integer * interval '1 week')
+              AND created_at < date_trunc('week', CURRENT_DATE) - (($3::integer - 1) * interval '1 week')
+        `;
+        const weeklyDiamondsRes = await db.query(weeklyDiamondsQuery, [agency.id, parseFloat(agency.commission_rate || 0.40), weekOffset]);
+        const weekly_diamonds = parseFloat(weeklyDiamondsRes.rows[0].weekly_diamonds);
         
         // active_operators: count of operators in this agency who are online
         const activeOpsQuery = `
@@ -401,6 +440,7 @@ router.get('/agency/my-dashboard', authenticateToken, async (req, res) => {
             },
             stats: {
                 today_diamonds,
+                weekly_diamonds,
                 active_operators,
                 total_operators
             },
@@ -409,9 +449,11 @@ router.get('/agency/my-dashboard', authenticateToken, async (req, res) => {
                 display_name: op.display_name,
                 username: op.username,
                 avatar_url: op.avatar_url,
+                joined_at: op.joined_at,
                 is_online: !!op.is_online,
                 rating: parseFloat(op.rating || 5.0),
                 today_commission: parseFloat(op.today_commission || 0),
+                weekly_commission: parseFloat(op.weekly_commission || 0),
                 is_low_quality: !!op.is_low_quality
             }))
         });
@@ -527,8 +569,23 @@ router.post('/agency/invitations/:inviteId/accept', authenticateToken, async (re
         
         const { agency_id } = inviteRes.rows[0];
         
-        // 2. Set the operator's agency
-        await db.query('UPDATE users SET agency_id = $1 WHERE id::text = $2::text', [agency_id, userId]);
+        // 2. Set the operator's agency and automatically elevate role to 'operator' if female
+        const isFemale = (req.user.gender || '').toLowerCase() === 'kadin';
+        if (isFemale) {
+            await db.query("UPDATE users SET agency_id = $1, role = 'operator' WHERE id::text = $2::text", [agency_id, userId]);
+            
+            // Ensure operator entry exists
+            const opCheck = await db.query('SELECT 1 FROM operators WHERE user_id::text = $1::text', [userId]);
+            if (opCheck.rows.length === 0) {
+                await db.query(
+                    "INSERT INTO operators (user_id, category, bio, photos, is_online, rating) VALUES ($1, 'Genel', 'Merhaba!', '{}', false, 5.0)",
+                    [userId]
+                );
+            }
+            console.log(`[AGENCY] Elevated user ${userId} to operator upon accepting invitation.`);
+        } else {
+            await db.query('UPDATE users SET agency_id = $1 WHERE id::text = $2::text', [agency_id, userId]);
+        }
         
         // 3. Mark accepted
         await db.query("UPDATE agency_invitations SET status = 'accepted' WHERE id::text = $1::text", [inviteId]);
@@ -596,6 +653,79 @@ router.post('/agency/remove-operator', authenticateToken, async (req, res) => {
         res.json({ success: true, message: 'Yayıncı ajanstan başarıyla çıkarıldı.' });
     } catch (err) {
         await db.query('ROLLBACK');
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// GET AGENCY APPLICATION STATUS (User side)
+router.get('/agency/my-application', authenticateToken, async (req, res) => {
+    const userId = req.user.id;
+    try {
+        // 1. First check if the user is already an agency owner
+        const userRes = await db.query('SELECT is_agency_owner FROM users WHERE id::text = $1::text', [userId]);
+        if (userRes.rows.length > 0 && userRes.rows[0].is_agency_owner) {
+            // Get agency details
+            const agencyRes = await db.query('SELECT id, name, referral_code FROM agencies WHERE owner_id::text = $1::text LIMIT 1', [userId]);
+            if (agencyRes.rows.length > 0) {
+                return res.json({
+                    status: 'approved',
+                    agency_name: agencyRes.rows[0].name,
+                    referral_code: agencyRes.rows[0].referral_code || agencyRes.rows[0].id,
+                    created_at: new Date()
+                });
+            }
+        }
+
+        // 2. If not owner, check if there is an application in DB
+        const result = await db.query(
+            'SELECT * FROM agency_applications WHERE user_id::text = $1::text ORDER BY created_at DESC LIMIT 1',
+            [userId]
+        );
+
+        if (result.rows.length === 0) {
+            return res.json(null);
+        }
+
+        res.json(result.rows[0]);
+    } catch (err) {
+        console.error('[my-application] Error:', err.message);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// POST AGENCY APPLICATION (User side)
+router.post('/agency/applications', authenticateToken, async (req, res) => {
+    const { agencyName, phone, reason } = req.body;
+    const userId = req.user.id;
+
+    if (!agencyName || !phone) {
+        return res.status(400).json({ error: 'Ajans adı ve telefon numarası gerekli.' });
+    }
+
+    try {
+        // Check if already owns an agency
+        const userRes = await db.query('SELECT is_agency_owner FROM users WHERE id::text = $1::text', [userId]);
+        if (userRes.rows.length > 0 && userRes.rows[0].is_agency_owner) {
+            return res.status(400).json({ error: 'Zaten aktif bir ajansınız bulunmaktadır.' });
+        }
+
+        // Check if already has a pending application
+        const existCheck = await db.query(
+            "SELECT id FROM agency_applications WHERE user_id::text = $1::text AND status = 'pending'",
+            [userId]
+        );
+        if (existCheck.rows.length > 0) {
+            return res.status(400).json({ error: 'Zaten bekleyen bir başvurunuz bulunmaktadır.' });
+        }
+
+        await db.query(
+            'INSERT INTO agency_applications (user_id, agency_name, phone, reason, status) VALUES ($1, $2, $3, $4, \'pending\')',
+            [userId, agencyName, phone, reason || '']
+        );
+
+        res.json({ success: true, message: 'Başvurunuz başarıyla alındı. Değerlendirme süreci başladı.' });
+    } catch (err) {
+        console.error('[applications] Error:', err.message);
         res.status(500).json({ error: err.message });
     }
 });

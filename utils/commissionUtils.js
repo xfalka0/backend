@@ -78,11 +78,17 @@ async function recordOperatorCommission(client, chatId, senderId, cost, type) {
     const payeeGender = payeeData.gender;
 
     // Ensure operator entry exists for the payee so that pending_balance updates succeed
-    await client.query(`
-        INSERT INTO operators (user_id, category, bio, photos, is_online, rating, commission_rate)
-        VALUES ($1, 'Genel', 'Merhaba!', '{}', false, 5.0, 0.30)
-        ON CONFLICT (user_id) DO NOTHING
-    `, [actualPayeeId]);
+    const opCheck = await client.query('SELECT 1 FROM operators WHERE user_id::text = $1::text', [actualPayeeId]);
+    if (opCheck.rows.length === 0) {
+        try {
+            await client.query(`
+                INSERT INTO operators (user_id, category, bio, photos, is_online, rating, commission_rate)
+                VALUES ($1, 'Genel', 'Merhaba!', '{}', false, 5.0, 0.30)
+            `, [actualPayeeId]);
+        } catch (insertErr) {
+            console.log('[COMMISSION-OP-INSERT] Concurrent insert ignored:', insertErr.message);
+        }
+    }
 
     // RULE: Bypassed if not female
     if (payeeGender !== 'kadin') {
@@ -202,9 +208,10 @@ async function recordOperatorCommission(client, chatId, senderId, cost, type) {
             operator_id, date, 
             messages_sent, coins_earned, total_user_spend,
             text_count, image_count, audio_count, gift_count,
-            text_earned, image_earned, audio_earned, gift_earned
+            text_earned, image_earned, audio_earned, gift_earned,
+            gift_coins_received
         )
-        VALUES ($1, CURRENT_DATE, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+        VALUES ($1::text, CURRENT_DATE, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
         ON CONFLICT (operator_id, date) DO UPDATE SET
             messages_sent = COALESCE(operator_stats.messages_sent, 0) + EXCLUDED.messages_sent,
             coins_earned = COALESCE(operator_stats.coins_earned, 0) + EXCLUDED.coins_earned,
@@ -216,20 +223,22 @@ async function recordOperatorCommission(client, chatId, senderId, cost, type) {
             text_earned = COALESCE(operator_stats.text_earned, 0) + EXCLUDED.text_earned,
             image_earned = COALESCE(operator_stats.image_earned, 0) + EXCLUDED.image_earned,
             audio_earned = COALESCE(operator_stats.audio_earned, 0) + EXCLUDED.audio_earned,
-            gift_earned = COALESCE(operator_stats.gift_earned, 0) + EXCLUDED.gift_earned
+            gift_earned = COALESCE(operator_stats.gift_earned, 0) + EXCLUDED.gift_earned,
+            gift_coins_received = COALESCE(operator_stats.gift_coins_received, 0) + EXCLUDED.gift_coins_received
     `, [
         actualPayeeId, 
         type === 'text' ? 1 : 0, 
         earned, 
         cost,
         type === 'text' ? 1 : 0,
-        type === 'image' ? 1 : 0,
+        (type === 'image' || type === 'locked_image') ? 1 : 0,
         type === 'audio' ? 1 : 0,
         type === 'gift' ? 1 : 0,
         type === 'text' ? earned : 0,
-        type === 'image' ? earned : 0,
+        (type === 'image' || type === 'locked_image') ? earned : 0,
         type === 'audio' ? earned : 0,
-        type === 'gift' ? earned : 0
+        type === 'gift' ? earned : 0,
+        type === 'gift' ? cost : 0
     ]);
     return updatedMessageInfo;
 }

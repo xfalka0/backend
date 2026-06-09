@@ -60,6 +60,7 @@ import MissionBoardScreen from './src/screens/MissionBoardScreen';
 import AgencyDashboardScreen from './src/screens/AgencyDashboardScreen';
 import AgencyApplicationScreen from './src/screens/AgencyApplicationScreen';
 import AgencyJoinScreen from './src/screens/AgencyJoinScreen';
+import AgencyOperatorsScreen from './src/screens/AgencyOperatorsScreen';
 import AnimatedTabBar from './src/components/animated/AnimatedTabBar';
 import { useAppStore } from './src/store/useAppStore';
 import { trackPurchase } from './src/utils/analytics';
@@ -74,8 +75,15 @@ function MainTabs({ route }) {
     const user = paramsUser ? paramsUser : { id: TEST_USER_ID, name: 'Test Kullanıcı', hearts: 100 };
 
     // Read role dynamically from Zustand global store
-    const role = useAppStore(state => state.role);
-    const isOperator = role === 'operator';
+    const storeUser = useAppStore(state => state.user);
+    const storeRole = useAppStore(state => state.role);
+    const activeUser = storeUser || user;
+    const isMale = (activeUser?.gender || '').toLowerCase() === 'erkek';
+    const isOperator = !isMale && (
+                       storeRole === 'operator' || 
+                       (activeUser?.gender || '').toLowerCase() === 'kadin' || 
+                       ['operator', 'staff', 'moderator', 'admin', 'super_admin'].includes(activeUser?.role)
+    );
 
     return (
         <Tab.Navigator
@@ -118,11 +126,13 @@ function MainTabs({ route }) {
     );
 }
 
+import { navigationRef } from './src/services/navigationRef';
+
 function AppContent() {
     const { theme, themeMode } = useTheme();
 
     return (
-        <NavigationContainer>
+        <NavigationContainer ref={navigationRef}>
             <StarterPackProvider>
                 <StatusBar style={themeMode === 'dark' ? 'light' : 'dark'} translucent backgroundColor="transparent" />
                 <Stack.Navigator
@@ -161,8 +171,10 @@ function AppContent() {
                     <Stack.Screen name="Invite" component={InviteScreen} />
                     <Stack.Screen name="Wallet" component={WalletScreen} />
                     <Stack.Screen name="AgencyDashboard" component={AgencyDashboardScreen} />
+                    <Stack.Screen name="AgencyOperators" component={AgencyOperatorsScreen} />
                     <Stack.Screen name="AgencyApplication" component={AgencyApplicationScreen} />
                     <Stack.Screen name="AgencyJoin" component={AgencyJoinScreen} />
+                    <Stack.Screen name="MissionBoard" component={MissionBoardScreen} />
                 </Stack.Navigator>
             </StarterPackProvider>
         </NavigationContainer>

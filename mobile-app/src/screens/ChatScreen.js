@@ -79,7 +79,7 @@ export default function ChatScreen({ route, navigation }) {
     const isOperator = role === 'operator';
     const [selectedImageUri, setSelectedImageUri] = useState(null);
     const [showImageLockModal, setShowImageLockModal] = useState(false);
-    const [unlockCostSelection, setUnlockCostSelection] = useState(50);
+    const [unlockCostSelection, setUnlockCostSelection] = useState(200);
     const [chatId, setChatId] = useState(existingChatId || null);
     const [isLoading, setIsLoading] = useState(true);
     const [selectedImage, setSelectedImage] = useState(null);
@@ -374,10 +374,11 @@ export default function ChatScreen({ route, navigation }) {
                 const token = await AsyncStorage.getItem('token');
                 const authHeader = { headers: { Authorization: `Bearer ${token}` } };
 
-                const [balanceRes, historyRes] = await Promise.all([
+                const [balanceRes, historyRes, readRes, inviteRes] = await Promise.all([
                     axios.get(`${API_URL}/users/${user.id}`, authHeader),
                     axios.get(`${API_URL}/messages/${chatId}`, authHeader),
-                    axios.put(`${API_URL}/chats/${chatId}/read`, { userId: user.id }, authHeader)
+                    axios.put(`${API_URL}/chats/${chatId}/read`, { userId: user.id }, authHeader),
+                    axios.get(`${API_URL}/agency/my-invitations`, authHeader).catch(e => ({ data: [] }))
                 ]);
 
                 if (!active) return;
@@ -388,8 +389,30 @@ export default function ChatScreen({ route, navigation }) {
                     setCurrentBalance(balanceRes.data.balance);
                 }
                 
-                // Keep messages in newest-first order directly in the state
-                setMessages(historyRes.data.reverse());
+                let chatMessages = historyRes.data.reverse();
+
+                // Check pending invitations
+                if (inviteRes && inviteRes.data && inviteRes.data.length > 0) {
+                    const matchingInvite = inviteRes.data.find(inv => inv.owner_id?.toString() === operatorId?.toString());
+                    if (matchingInvite) {
+                        setPendingAgencyInvite(matchingInvite);
+                        const fakeMsg = {
+                            id: `agency-invite-${matchingInvite.id}`,
+                            chat_id: chatId,
+                            sender_id: operatorId,
+                            content: matchingInvite.agency_name,
+                            agency_name: matchingInvite.agency_name,
+                            invite_id: matchingInvite.id,
+                            type: 'agency_invite',
+                            is_agency_invite: true,
+                            created_at: matchingInvite.created_at || new Date().toISOString()
+                        };
+                        chatMessages = [fakeMsg, ...chatMessages];
+                        chatMessages.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+                    }
+                }
+
+                setMessages(chatMessages);
                 setIsLoading(false);
 
                 // Bind Socket
@@ -748,7 +771,7 @@ export default function ChatScreen({ route, navigation }) {
             if (isOperator) {
                 // Operators choose pricing via locked image sheet before upload
                 setSelectedImageUri(uri);
-                setUnlockCostSelection(50); // Default pricing
+                setUnlockCostSelection(200); // Default pricing
                 setShowImageLockModal(true);
             } else {
                 uploadAndSendImage(uri, false, 0);
@@ -1062,6 +1085,100 @@ export default function ChatScreen({ route, navigation }) {
     const renderMessage = ({ item, index }) => {
         const isUser = item.sender_id === user.id;
 
+        if (item.type === 'agency_invite' || item.is_agency_invite) {
+            return (
+                <MessageBubble
+                    isMine={false}
+                    index={index}
+                    isRead={item.is_read}
+                    avatar={resolveImageUrl(avatar_url)}
+                    vipLevel={vip_level}
+                    timestamp={item.created_at}
+                    reaction={item.reaction}
+                    onReaction={(type) => {
+                        socketRef.current?.emit('message_reaction', { messageId: item.id, reaction: type, chatId });
+                        setMessages(prev => prev.map(m => m.id === item.id ? { ...m, reaction: type } : m));
+                    }}
+                >
+                    <GlassCard
+                        intensity={45}
+                        tint="dark"
+                        style={{
+                            width: 240,
+                            padding: 14,
+                            borderRadius: 16,
+                            borderColor: 'rgba(236, 72, 153, 0.4)',
+                            borderWidth: 1.5,
+                            overflow: 'hidden'
+                        }}
+                    >
+                        <LinearGradient
+                            colors={['rgba(139, 92, 246, 0.15)', 'rgba(236, 72, 153, 0.15)']}
+                            style={StyleSheet.absoluteFill}
+                            start={{ x: 0, y: 0 }}
+                            end={{ x: 1, y: 1 }}
+                        />
+                        <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
+                            <Ionicons name="business" size={18} color="#ec4899" style={{ marginRight: 8 }} />
+                            <Text style={{ color: 'white', fontSize: 13, fontWeight: '700', flex: 1 }}>
+                                Ajans Daveti ⚡
+                            </Text>
+                        </View>
+                        <Text style={{ color: 'rgba(255,255,255,0.8)', fontSize: 12, marginBottom: 12 }}>
+                            <Text style={{ fontWeight: 'bold', color: '#ec4899' }}>{item.agency_name}</Text> sizi ajansına katılmaya davet ediyor!
+                        </Text>
+                        {pendingAgencyInvite && pendingAgencyInvite.id === item.invite_id ? (
+                            <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 10 }}>
+                                <TouchableOpacity 
+                                    style={{
+                                        paddingHorizontal: 14,
+                                        paddingVertical: 6,
+                                        borderRadius: 8,
+                                        borderWidth: 1,
+                                        borderColor: 'rgba(255,255,255,0.2)',
+                                        alignItems: 'center',
+                                        justifyContent: 'center'
+                                    }} 
+                                    onPress={() => handleRejectInvitation(item.invite_id)}
+                                    activeOpacity={0.8}
+                                >
+                                    <Text style={{ color: 'white', fontSize: 11, fontWeight: '600' }}>Reddet</Text>
+                                </TouchableOpacity>
+                                
+                                <TouchableOpacity 
+                                    style={{
+                                        borderRadius: 8,
+                                        overflow: 'hidden'
+                                    }}
+                                    onPress={() => handleAcceptInvitation(item.invite_id)}
+                                    activeOpacity={0.8}
+                                >
+                                    <LinearGradient
+                                        colors={['#10b981', '#059669']}
+                                        style={{
+                                            paddingHorizontal: 18,
+                                            paddingVertical: 6,
+                                            alignItems: 'center',
+                                            justifyContent: 'center'
+                                        }}
+                                        start={{ x: 0, y: 0 }}
+                                        end={{ x: 1, y: 1 }}
+                                    >
+                                        <Text style={{ color: 'white', fontSize: 11, fontWeight: '700' }}>Kabul Et</Text>
+                                    </LinearGradient>
+                                </TouchableOpacity>
+                            </View>
+                        ) : (
+                            <View style={{ flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center' }}>
+                                <Ionicons name="checkmark-circle" size={16} color="#10b981" style={{ marginRight: 4 }} />
+                                <Text style={{ color: '#10b981', fontSize: 11, fontWeight: '700' }}>İşlem Yapıldı</Text>
+                            </View>
+                        )}
+                    </GlassCard>
+                </MessageBubble>
+            );
+        }
+
         if (item.type === 'gift' || item.content_type === 'gift') {
             const giftId = parseInt(item.gift_id || item.giftId);
             const gift = GIFTS.find(g => g.id === giftId) || { name: item.content || 'Hediye', price: '?' };
@@ -1227,7 +1344,7 @@ export default function ChatScreen({ route, navigation }) {
                         )}
 
                         <View style={styles.pricingPillContainer}>
-                            {[0, 50, 100, 200, 500].map((cost) => (
+                            {[0, 200].map((cost) => (
                                 <TouchableOpacity
                                     key={cost}
                                     style={[
@@ -1288,79 +1405,6 @@ export default function ChatScreen({ route, navigation }) {
                 keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 20}
                 style={{ flex: 1 }}
             >
-                {/* Pending Agency Invitation Banner */}
-                {pendingAgencyInvite && (
-                    <View style={{ marginTop: insets.top + 50, marginHorizontal: 16, marginBottom: 8, zIndex: 999 }}>
-                        <GlassCard
-                            intensity={50}
-                            tint="dark"
-                            style={{
-                                padding: 14,
-                                borderRadius: 16,
-                                borderColor: 'rgba(236, 72, 153, 0.4)',
-                                borderWidth: 1.5,
-                                overflow: 'hidden'
-                            }}
-                        >
-                            <LinearGradient
-                                colors={['rgba(139, 92, 246, 0.15)', 'rgba(236, 72, 153, 0.15)']}
-                                style={StyleSheet.absoluteFill}
-                                start={{ x: 0, y: 0 }}
-                                end={{ x: 1, y: 1 }}
-                            />
-                            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
-                                <Ionicons name="business" size={18} color="#ec4899" style={{ marginRight: 8 }} />
-                                <Text style={{ color: 'white', fontSize: 13, fontWeight: '700', flex: 1 }}>
-                                    Ajans Daveti ⚡
-                                </Text>
-                            </View>
-                            <Text style={{ color: 'rgba(255,255,255,0.8)', fontSize: 12, marginBottom: 12 }}>
-                                <Text style={{ fontWeight: 'bold', color: '#ec4899' }}>{pendingAgencyInvite.agency_name}</Text> sizi ajansına katılmaya davet ediyor!
-                            </Text>
-                            <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 10 }}>
-                                <TouchableOpacity 
-                                    style={{
-                                        paddingHorizontal: 14,
-                                        paddingVertical: 6,
-                                        borderRadius: 8,
-                                        borderWidth: 1,
-                                        borderColor: 'rgba(255,255,255,0.2)',
-                                        alignItems: 'center',
-                                        justifyContent: 'center'
-                                    }} 
-                                    onPress={() => handleRejectInvitation(pendingAgencyInvite.id)}
-                                    activeOpacity={0.8}
-                                >
-                                    <Text style={{ color: 'white', fontSize: 11, fontWeight: '600' }}>Reddet</Text>
-                                </TouchableOpacity>
-                                
-                                <TouchableOpacity 
-                                    style={{
-                                        borderRadius: 8,
-                                        overflow: 'hidden'
-                                    }}
-                                    onPress={() => handleAcceptInvitation(pendingAgencyInvite.id)}
-                                    activeOpacity={0.8}
-                                >
-                                    <LinearGradient
-                                        colors={['#10b981', '#059669']}
-                                        style={{
-                                            paddingHorizontal: 18,
-                                            paddingVertical: 6,
-                                            alignItems: 'center',
-                                            justifyContent: 'center'
-                                        }}
-                                        start={{ x: 0, y: 0 }}
-                                        end={{ x: 1, y: 1 }}
-                                    >
-                                        <Text style={{ color: 'white', fontSize: 11, fontWeight: '700' }}>Kabul Et</Text>
-                                    </LinearGradient>
-                                </TouchableOpacity>
-                            </View>
-                        </GlassCard>
-                    </View>
-                )}
-
                 <FlatList
                     ref={flatListRef}
                     data={messages}

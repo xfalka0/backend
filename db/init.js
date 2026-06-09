@@ -111,7 +111,7 @@ const initializeDatabase = async (db, app) => {
             await db.query(`
                 CREATE TABLE IF NOT EXISTS agency_applications (
                     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-                    user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+                    user_id TEXT,
                     agency_name VARCHAR(255) NOT NULL,
                     phone VARCHAR(50) NOT NULL,
                     reason TEXT,
@@ -682,6 +682,9 @@ const initializeDatabase = async (db, app) => {
         await runMigration('idx_chats_user_id', 'CREATE INDEX IF NOT EXISTS idx_chats_user_id ON chats(user_id)');
         await runMigration('idx_chats_operator_id', 'CREATE INDEX IF NOT EXISTS idx_chats_operator_id ON chats(operator_id)');
         await runMigration('idx_messages_chat_unread', 'CREATE INDEX IF NOT EXISTS idx_messages_chat_unread ON messages(chat_id, sender_id) WHERE is_read = false');
+        await runMigration('idx_users_agency_id', 'CREATE INDEX IF NOT EXISTS idx_users_agency_id ON users(agency_id)');
+        await runMigration('idx_commission_logs_agency_id', 'CREATE INDEX IF NOT EXISTS idx_commission_logs_agency_id ON commission_logs(agency_id)');
+        await runMigration('idx_commission_logs_operator_id', 'CREATE INDEX IF NOT EXISTS idx_commission_logs_operator_id ON commission_logs(operator_id)');
 
         // One-time production correction for affected virtual operators and user "Aysel demir" back to 'kadin'
         await db.query("UPDATE users SET gender = 'kadin' WHERE (id::text IN ('41', '44', '51') OR display_name ILIKE '%Aysel%' OR username ILIKE '%Aysel%') AND gender != 'kadin'");

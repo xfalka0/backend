@@ -501,7 +501,10 @@ const ProfileScreen = ({ route }) => {
         { label: 'Hediye', value: user?.gifts_count || '0' }
     ];
 
-    const isShowWallet = ['operator', 'moderator', 'admin', 'super_admin', 'staff'].includes(user?.role) || user?.gender === 'kadin';
+    const isMale = (user?.gender || '').toLowerCase() === 'erkek';
+    const isShowWallet = !isMale && (['operator', 'moderator', 'admin', 'super_admin', 'staff'].includes(user?.role) || (user?.gender || '').toLowerCase() === 'kadin');
+    const isFemaleOrOperator = !isMale && (isOperator || (user?.gender || '').toLowerCase() === 'kadin' || ['operator', 'moderator', 'admin', 'super_admin', 'staff'].includes(user?.role));
+    const todayCoins = operatorStats ? parseFloat(operatorStats.earned_today || operatorStats.coins_earned || 0) : 0;
 
     return (
         <View style={[styles.mainContainer, { backgroundColor: theme.colors.background }]}>
@@ -801,6 +804,56 @@ const ProfileScreen = ({ route }) => {
                         <Ionicons name="chevron-forward" size={16} color="#fff" />
                     </LinearGradient>
                 </TouchableOpacity>
+
+                {/* Görevler (Missions) Card - Visible to female users and operators */}
+                {isFemaleOrOperator && (
+                    <TouchableOpacity 
+                        style={styles.glassCardWrapper} 
+                        activeOpacity={0.8}
+                        onPress={() => navigation.navigate('MissionBoard')}
+                    >
+                        <LinearGradient 
+                            colors={themeMode === 'dark' ? ['rgba(236, 72, 153, 0.15)', 'rgba(124, 58, 237, 0.15)'] : ['#fff0f6', '#f3e8ff']} 
+                            style={[styles.boostCard, { borderColor: 'rgba(236, 72, 153, 0.3)', borderWidth: 1 }]} 
+                            start={{x:0, y:0}} 
+                            end={{x:1, y:1}}
+                        >
+                            <View style={{ flex: 1 }}>
+                                <View style={styles.boostLeft}>
+                                    <View style={[styles.boostIconCircle, { backgroundColor: 'rgba(236, 72, 153, 0.2)' }]}>
+                                        <Ionicons name="trophy" size={18} color="#ec4899" />
+                                    </View>
+                                    <View style={{ flex: 1, marginRight: 8 }}>
+                                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                                            <Text style={styles.boostMainText}>Günlük Görevler</Text>
+                                            <Text style={[styles.boostSubText, { color: '#ec4899', fontWeight: '800' }]}>
+                                                {Math.round(todayCoins)} / 5000 💎
+                                            </Text>
+                                        </View>
+                                        <Text style={styles.boostSubText}>
+                                            Bugün sohbet ederek hedeflere ulaş, ekstra elmas kazan!
+                                        </Text>
+                                    </View>
+                                </View>
+                                
+                                {/* Progress Bar */}
+                                <View style={[styles.miniProgressTrack, { marginTop: 10 }]}>
+                                    <View 
+                                        style={[
+                                            styles.miniProgressBar, 
+                                            { 
+                                                width: `${Math.min(100, (todayCoins / 5000) * 100)}%`,
+                                                backgroundColor: '#ec4899'
+                                            }
+                                        ]} 
+                                    />
+                                </View>
+                            </View>
+                            <Ionicons name="chevron-forward" size={16} color={themeMode === 'dark' ? '#ec4899' : '#4b5563'} style={{ marginLeft: 8 }} />
+                        </LinearGradient>
+                    </TouchableOpacity>
+                )}
+
 
 
 
@@ -1925,6 +1978,16 @@ const styles = StyleSheet.create({
         color: '#fff',
         fontSize: 12,
         fontWeight: '900',
+    },
+    miniProgressTrack: {
+        height: 6,
+        backgroundColor: 'rgba(255, 255, 255, 0.08)',
+        borderRadius: 3,
+        overflow: 'hidden'
+    },
+    miniProgressBar: {
+        height: '100%',
+        borderRadius: 3
     }
 });
 

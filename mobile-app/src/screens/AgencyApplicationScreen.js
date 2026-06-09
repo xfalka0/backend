@@ -28,7 +28,7 @@ import { useAppStore } from '../store/useAppStore';
 
 export default function AgencyApplicationScreen() {
     const navigation = useNavigation();
-    const { theme } = useTheme();
+    const { theme, themeMode } = useTheme();
 
     const [loading, setLoading] = useState(true);
     const [submitting, setSubmitting] = useState(false);
@@ -123,18 +123,19 @@ export default function AgencyApplicationScreen() {
 
     return (
         <KeyboardAvoidingView 
-            style={styles.container}
+            style={[styles.container, { backgroundColor: theme.colors.background }]}
             behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         >
             <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
             
-            {/* Cyan Accent Backdrop Layer */}
-            <LinearGradient
-                colors={['#0891b2', '#09021a']}
-                style={styles.headerBackdrop}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 0, y: 1 }}
-            />
+            {themeMode === 'dark' && (
+                <View pointerEvents="none" style={StyleSheet.absoluteFill}>
+                    <LinearGradient
+                        colors={theme.gradients.dark}
+                        style={StyleSheet.absoluteFill}
+                    />
+                </View>
+            )}
 
             <SafeAreaView style={styles.safeArea}>
                 {/* Header Row */}

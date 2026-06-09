@@ -349,7 +349,7 @@ export default function ExploreScreen({ navigation, route }) {
         }
     };
 
-    const renderStory = ({ item, index }) => {
+    const renderStory = React.useCallback(({ item, index }) => {
         if (item.id === 'add') {
             const hasStory = !!user?.hasStory;
             return (
@@ -403,7 +403,7 @@ export default function ExploreScreen({ navigation, route }) {
                 </TouchableOpacity>
             </View>
         );
-    };
+    }, [user, navigation, stories, handleStoryCreation]);
 
     const dailyFavorites = useMemo(() => {
         if (!operators || operators.length === 0) return [];
@@ -504,7 +504,7 @@ export default function ExploreScreen({ navigation, route }) {
         setIsLightboxVisible(true);
     };
 
-    const renderPost = ({ item, index }) => (
+    const renderPost = React.useCallback(({ item, index }) => (
         <AnimatedPostCard index={index} scrollY={scrollY}>
             <TouchableOpacity 
                 activeOpacity={0.9} 
@@ -610,7 +610,7 @@ export default function ExploreScreen({ navigation, route }) {
                 />
             </TouchableOpacity>
         </AnimatedPostCard>
-    );
+    ), [scrollY, navigation, user, theme, likePost, fetchComments, handleDoubleTapLike, handleImagePress]);
 
     return (
         <View style={[styles.container, { backgroundColor: theme.colors.background }]}>

@@ -1082,7 +1082,7 @@ export default function ChatScreen({ route, navigation }) {
         });
     };
 
-    const renderMessage = ({ item, index }) => {
+    const renderMessage = React.useCallback(({ item, index }) => {
         const isUser = item.sender_id === user.id;
 
         if (item.type === 'agency_invite' || item.is_agency_invite) {
@@ -1310,7 +1310,7 @@ export default function ChatScreen({ route, navigation }) {
                 {content}
             </MessageBubble>
         );
-    };
+    }, [user.id, avatar_url, vip_level, pendingAgencyInvite, currentPlayingUri, playAudio, confirmUnlock, setSelectedImage, isOperator, socketRef, chatId, setMessages, theme]);
 
     return (
         <View style={styles.container}>

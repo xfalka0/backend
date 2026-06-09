@@ -258,7 +258,7 @@ export default function MessagesScreen({ navigation, route }) {
         });
     }, [chats, pendingInvitations, searchText, user?.id]);
 
-    const renderChatItem = ({ item, index }) => {
+    const renderChatItem = React.useCallback(({ item, index }) => {
         const hasUnread = item.unread_count > 0;
         const formatLastMessage = (msg, type) => {
             if (!msg) return 'Sohbet Başladı 💬';
@@ -386,7 +386,7 @@ export default function MessagesScreen({ navigation, route }) {
                                         </Text>
                                     )}
                                 </View>
-
+ 
                                 <View style={styles.metaContainer}>
                                     <Text style={[
                                         styles.time,
@@ -414,7 +414,7 @@ export default function MessagesScreen({ navigation, route }) {
                 </TouchableOpacity>
             </Animated.View>
         );
-    };
+    }, [user, navigation, themeMode, theme]);
 
     return (
         <View style={[styles.container, { backgroundColor: theme.colors.background }]}>

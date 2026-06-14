@@ -138,4 +138,41 @@ describe('Party Rooms REST API Tests', () => {
             expect(res.body[0]).toHaveProperty('seat_number', 1);
         });
     });
+
+    describe('GET /api/party-rooms/:roomId (Tek Oda Detayı)', () => {
+        it('should return 404 if room does not exist', async () => {
+            db.query
+                .mockResolvedValueOnce({
+                    rows: [{
+                        id: 'c917f7d6-cc44-4b04-8917-1dbbed0b1e9b',
+                        username: 'testuser',
+                        email: 'test@example.com',
+                        role: 'user',
+                        account_status: 'active',
+                        display_name: 'Test User',
+                        avatar_url: 'https://via.placeholder.com/150',
+                        gender: 'erkek',
+                        onboarding_completed: true
+                    }]
+                })
+                .mockResolvedValueOnce({ rows: [] });
+
+            const res = await request(app)
+                .get('/api/party-rooms/non-existent-room')
+                .set('Authorization', `Bearer ${mockToken}`);
+
+            expect(res.status).toBe(404);
+            expect(res.body).toHaveProperty('error', 'Parti odası bulunamadı.');
+        });
+
+        it('should return room details if room exists', async () => {
+            const res = await request(app)
+                .get('/api/party-rooms/room-1')
+                .set('Authorization', `Bearer ${mockToken}`);
+
+            expect(res.status).toBe(200);
+            expect(res.body).toHaveProperty('id', 'room-1');
+            expect(res.body).toHaveProperty('title', 'Geyik Odası');
+        });
+    });
 });

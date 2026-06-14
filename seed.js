@@ -88,6 +88,28 @@ async function seed() {
             console.log('[Seed] Created Fake Videos stubs');
         }
 
+        // 7. Create Default Party Room for the Host
+        if (hostId) {
+            const checkRoom = await db.query(`SELECT id FROM party_rooms WHERE host_id = $1::text`, [hostId]);
+            if (checkRoom.rows.length === 0) {
+                const roomRes = await db.query(`
+                    INSERT INTO party_rooms (title, host_id, background_url, room_level, is_private)
+                    VALUES ('Sarah ile Kahve Sohbeti ☕', $1::text, null, 1, false)
+                    RETURNING id;
+                `, [hostId]);
+                const roomId = roomRes.rows[0].id;
+
+                // Create seats for this seeded room
+                for (let seatNum = 1; seatNum <= 16; seatNum++) {
+                    await db.query(`
+                        INSERT INTO party_room_seats (room_id, seat_number, user_id)
+                        VALUES ($1, $2, NULL)
+                    `, [roomId, seatNum]);
+                }
+                console.log('[Seed] Created default party room and seats for Sarah');
+            }
+        }
+
         console.log('--- Seeding Complete ---');
         process.exit(0);
 

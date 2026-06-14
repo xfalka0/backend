@@ -845,6 +845,7 @@ const rateLimit = require('express-rate-limit');
 const authLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
     max: 10,
+    validate: { trustProxy: false },
     message: { error: 'Çok fazla istek gönderildi, lütfen sonra tekrar deneyin.' }
 });
 

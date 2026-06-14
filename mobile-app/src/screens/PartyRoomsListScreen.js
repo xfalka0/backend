@@ -1,23 +1,26 @@
 import React, { useState, useCallback } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, RefreshControl, Modal, TextInput, ActivityIndicator, Dimensions, Image, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, FlatList, RefreshControl, Modal, TextInput, ActivityIndicator, Dimensions, TouchableOpacity } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
-import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { API_URL } from '../config';
-import { useTheme } from '../contexts/ThemeContext';
 import { useAlert } from '../contexts/AlertContext';
 import GlassCard from '../components/ui/GlassCard';
-import { resolveImageUrl } from '../utils/imageUtils';
+
+// Import New Modular Components
+import RoomListHeader from '../components/rooms/RoomListHeader';
+import RoomCategoryTabs from '../components/rooms/RoomCategoryTabs';
+import RoomCard from '../components/rooms/RoomCard';
+import CreateRoomFloatingButton from '../components/rooms/CreateRoomFloatingButton';
+import EmptyRoomState from '../components/rooms/EmptyRoomState';
 
 const { width } = Dimensions.get('window');
 
-const SUB_TABS = ['Önerilen', 'Video', 'Eğlence', 'Etkileşimli', 'Oyun'];
-
 export default function PartyRoomsListScreen({ navigation }) {
-    const { theme, themeMode } = useTheme();
     const { showAlert } = useAlert();
+    const insets = useSafeAreaInsets();
     
     const [rooms, setRooms] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -83,220 +86,66 @@ export default function PartyRoomsListScreen({ navigation }) {
         fetchRooms();
     };
 
-    const renderRoomItem = ({ item }) => {
-        const hasParticipants = item.participants && item.participants.length > 0;
-        // Display up to 6 participant avatars in the pile
-        const facePile = hasParticipants ? item.participants.slice(0, 6) : [];
-        const isDark = themeMode === 'dark';
-
-        return (
-            <TouchableOpacity
-                activeOpacity={0.9}
-                style={styles.cardContainer}
-                onPress={() => navigation.navigate('PartyRoom', { room: item })}
-            >
-                <View style={[
-                    styles.roomCard,
-                    { 
-                        backgroundColor: isDark ? 'rgba(255, 255, 255, 0.05)' : '#ffffff',
-                        borderColor: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.05)',
-                        shadowColor: '#000',
-                        shadowOpacity: isDark ? 0.3 : 0.05,
-                        shadowRadius: 10,
-                        elevation: 3
-                    }
-                ]}>
-                    {isDark && (
-                        <LinearGradient
-                            colors={['rgba(255, 255, 255, 0.03)', 'rgba(255, 255, 255, 0.005)']}
-                            style={StyleSheet.absoluteFill}
-                        />
-                    )}
-
-                    {/* Left Rounded Square Thumbnail */}
-                    <View style={styles.thumbnailContainer}>
-                        <Image
-                            source={{ uri: resolveImageUrl(item.host_avatar || 'https://via.placeholder.com/100') }}
-                            style={styles.thumbnail}
-                        />
-                    </View>
-
-                    {/* Right Info Section */}
-                    <View style={styles.infoSection}>
-                        {/* Title & Level Badge Row */}
-                        <View style={styles.titleRow}>
-                            <Text style={[styles.roomTitle, { color: theme.colors.text }]} numberOfLines={1}>
-                                {item.title}
-                            </Text>
-                            <LinearGradient
-                                colors={['#f43f5e', '#ec4899']}
-                                style={styles.levelBadge}
-                                start={{ x: 0, y: 0 }}
-                                end={{ x: 1, y: 1 }}
-                            >
-                                <Text style={styles.levelText}>Lv.{item.room_level || 6}</Text>
-                            </LinearGradient>
-                        </View>
-
-                        {/* Country Flag & Tag Row */}
-                        <View style={styles.tagRow}>
-                            <Text style={styles.flag}>🇹🇷</Text>
-                            <View style={styles.categoryBadge}>
-                                <Text style={styles.categoryText}>👍 Video Etkileşimi</Text>
-                            </View>
-                        </View>
-
-                        {/* Avatars pile, user count & Soundwave Indicator */}
-                        <View style={styles.footerRow}>
-                            {/* Pile of avatars & Count side by side */}
-                            <View style={styles.avatarAndCount}>
-                                <View style={styles.avatarPile}>
-                                    {facePile.length > 0 ? (
-                                        facePile.map((p, index) => (
-                                            <Image
-                                                key={p.id || index}
-                                                source={{ uri: resolveImageUrl(p.avatar_url || 'https://via.placeholder.com/50') }}
-                                                style={[styles.pileAvatar, { marginLeft: index === 0 ? 0 : -8, zIndex: 10 - index }]}
-                                            />
-                                        ))
-                                    ) : (
-                                        <Image
-                                            source={{ uri: resolveImageUrl(item.host_avatar || 'https://via.placeholder.com/50') }}
-                                            style={styles.pileAvatar}
-                                        />
-                                    )}
-                                </View>
-                                <View style={styles.countBadge}>
-                                    <Ionicons name="person" size={10} color="rgba(156, 163, 175, 0.8)" style={{ marginRight: 2 }} />
-                                    <Text style={styles.countText}>{item.active_speakers || 1}</Text>
-                                </View>
-                            </View>
-
-                            {/* Soundwave equalizer indicator */}
-                            <View style={styles.soundwaveContainer}>
-                                <View style={[styles.soundwaveBar, { height: 14 }]} />
-                                <View style={[styles.soundwaveBar, { height: 8 }]} />
-                                <View style={[styles.soundwaveBar, { height: 18 }]} />
-                                <View style={[styles.soundwaveBar, { height: 11 }]} />
-                            </View>
-                        </View>
-                    </View>
-                </View>
-            </TouchableOpacity>
-        );
-    };
-
-    const isDark = themeMode === 'dark';
-
     return (
-        <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
-            {isDark && (
-                <LinearGradient
-                    colors={['#0D1429', '#151A36', '#111730']}
-                    style={StyleSheet.absoluteFill}
-                />
-            )}
+        <View style={styles.container}>
+            {/* Background Premium Dark Gradient */}
+            <LinearGradient
+                colors={['#0B1028', '#101632', '#0B1028']}
+                style={StyleSheet.absoluteFill}
+            />
 
             {/* Top Navigation & Tabs (Follow / Party) */}
-            <View style={styles.header}>
-                <TouchableOpacity onPress={() => navigation.goBack()} style={[styles.backButton, { backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)' }]}>
-                    <Ionicons name="chevron-back" size={24} color={theme.colors.text} />
-                </TouchableOpacity>
-
-                <View style={styles.mainTabsContainer}>
-                    {['Takip et', 'Parti'].map(tab => {
-                        const isActive = mainTab === tab;
-                        return (
-                            <TouchableOpacity
-                                key={tab}
-                                style={styles.mainTabItem}
-                                onPress={() => setMainTab(tab)}
-                            >
-                                <Text style={[
-                                    styles.mainTabText,
-                                    isActive && styles.mainTabTextActive
-                                ]}>
-                                    {tab}
-                                </Text>
-                                {isActive && (
-                                    <View style={styles.mainTabIndicator} />
-                                )}
-                            </TouchableOpacity>
-                        );
-                    })}
-                </View>
-                
-                {/* Crown Icon on Right */}
-                <TouchableOpacity style={[styles.backButton, { backgroundColor: 'transparent' }]}>
-                    <Ionicons name="ribbon-outline" size={22} color="#fbbf24" />
-                </TouchableOpacity>
-            </View>
+            <RoomListHeader
+                activeTab={mainTab}
+                onTabChange={setMainTab}
+                onBack={() => navigation.goBack()}
+                insets={insets}
+            />
 
             {/* Sub Categories Horizontal Bar */}
-            <View style={[styles.subTabsContainer, { borderColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)' }]}>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.subTabsScroll}>
-                    {SUB_TABS.map(tab => {
-                        const isActive = subTab === tab;
-                        return (
-                            <TouchableOpacity
-                                key={tab}
-                                style={styles.subTabItem}
-                                onPress={() => setSubTab(tab)}
-                            >
-                                <Text style={[
-                                    styles.subTabText,
-                                    isActive && styles.subTabTextActive
-                                ]}>
-                                    {tab}
-                                </Text>
-                                {isActive && (
-                                    <View style={styles.subTabIndicator} />
-                                )}
-                            </TouchableOpacity>
-                        );
-                    })}
-                </ScrollView>
-            </View>
+            <RoomCategoryTabs
+                activeCategory={subTab}
+                onCategoryChange={setSubTab}
+            />
 
             {/* Party Rooms List */}
             {loading ? (
                 <View style={styles.loadingContainer}>
-                    <ActivityIndicator size="large" color="#ec4899" />
+                    <ActivityIndicator size="large" color="#FF3F86" />
                 </View>
             ) : (
                 <FlatList
                     data={rooms}
-                    keyExtractor={item => item.id}
-                    renderItem={renderRoomItem}
-                    contentContainerStyle={styles.listContent}
+                    keyExtractor={item => item.id?.toString()}
+                    renderItem={({ item }) => (
+                        <RoomCard
+                            room={item}
+                            onPress={() => navigation.navigate('PartyRoom', { room: item })}
+                        />
+                    )}
+                    contentContainerStyle={[styles.listContent, { paddingBottom: insets.bottom + 85 }]}
                     refreshControl={
-                        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#ec4899" />
+                        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#FF3F86" />
+                    }
+                    ListFooterComponent={
+                        rooms.length === 1 ? (
+                            <EmptyRoomState 
+                                roomCount={rooms.length} 
+                                onCreatePress={() => setCreateModalVisible(true)} 
+                            />
+                        ) : null
                     }
                     ListEmptyComponent={
-                        <View style={styles.emptyContainer}>
-                            <Ionicons name="mic-off-outline" size={64} color="rgba(255,255,255,0.2)" />
-                            <Text style={styles.emptyText}>Aktif parti odası bulunamadı.</Text>
-                        </View>
+                        <EmptyRoomState 
+                            roomCount={0} 
+                            onCreatePress={() => setCreateModalVisible(true)} 
+                        />
                     }
                 />
             )}
 
             {/* Pill-shaped FAB: Oda Oluştur */}
-            <TouchableOpacity
-                style={styles.fabButton}
-                activeOpacity={0.85}
-                onPress={() => setCreateModalVisible(true)}
-            >
-                <LinearGradient
-                    colors={['#ec4899', '#f43f5e']}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 1 }}
-                    style={styles.fabGradient}
-                >
-                    <Ionicons name="add-circle" size={20} color="#fff" style={{ marginRight: 6 }} />
-                    <Text style={styles.fabText}>Oda Oluştur</Text>
-                </LinearGradient>
-            </TouchableOpacity>
+            <CreateRoomFloatingButton onPress={() => setCreateModalVisible(true)} />
 
             {/* Create Room Modal */}
             <Modal
@@ -351,71 +200,7 @@ export default function PartyRoomsListScreen({ navigation }) {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-    },
-    header: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        paddingHorizontal: 15,
-        paddingTop: 50,
-        paddingBottom: 10,
-    },
-    backButton: {
-        width: 38,
-        height: 38,
-        borderRadius: 19,
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
-    mainTabsContainer: {
-        flexDirection: 'row',
-        gap: 20,
-    },
-    mainTabItem: {
-        alignItems: 'center',
-        paddingVertical: 6,
-    },
-    mainTabText: {
-        fontSize: 16,
-        color: 'rgba(156, 163, 175, 0.6)',
-        fontWeight: 'bold',
-    },
-    mainTabTextActive: {
-        color: '#22c55e', // Green active tab matching screenshot
-    },
-    mainTabIndicator: {
-        width: 12,
-        height: 3,
-        borderRadius: 1.5,
-        backgroundColor: '#22c55e',
-        marginTop: 4,
-    },
-    subTabsContainer: {
-        borderBottomWidth: 1,
-        paddingBottom: 8,
-    },
-    subTabsScroll: {
-        paddingHorizontal: 15,
-        gap: 24,
-    },
-    subTabItem: {
-        alignItems: 'center',
-        paddingVertical: 6,
-    },
-    subTabText: {
-        fontSize: 14,
-        color: 'rgba(156, 163, 175, 0.5)',
-        fontWeight: 'bold',
-    },
-    subTabTextActive: {
-        color: '#22c55e', // Green active subtab
-    },
-    subTabIndicator: {
-        width: 14,
-        height: 3,
-        borderRadius: 1.5,
-        backgroundColor: '#22c55e',
-        marginTop: 4,
+        backgroundColor: '#0B1028',
     },
     loadingContainer: {
         flex: 1,
@@ -423,193 +208,45 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
     },
     listContent: {
-        padding: 15,
-        paddingBottom: 120,
-    },
-    cardContainer: {
-        marginBottom: 12,
-    },
-    roomCard: {
-        flexDirection: 'row',
-        borderRadius: 20,
-        padding: 12,
-        borderWidth: 1,
-        alignItems: 'center',
-        position: 'relative',
-        overflow: 'hidden',
-    },
-    thumbnailContainer: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.15,
-        shadowRadius: 6,
-        elevation: 4,
-    },
-    thumbnail: {
-        width: 76,
-        height: 76,
-        borderRadius: 16,
-    },
-    infoSection: {
-        flex: 1,
-        marginLeft: 14,
-        justifyContent: 'space-between',
-        height: 76,
-    },
-    titleRow: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-    },
-    roomTitle: {
-        fontSize: 15,
-        fontWeight: 'bold',
-        flex: 1,
-        marginRight: 10,
-    },
-    levelBadge: {
-        paddingHorizontal: 6,
-        paddingVertical: 2,
-        borderRadius: 6,
-        borderWidth: 0.5,
-        borderColor: 'rgba(255,255,255,0.25)',
-    },
-    levelText: {
-        fontSize: 9,
-        fontWeight: 'bold',
-        color: '#fff',
-    },
-    tagRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 6,
-        marginTop: 2,
-    },
-    flag: {
-        fontSize: 14,
-    },
-    categoryBadge: {
-        backgroundColor: 'rgba(245, 158, 11, 0.12)',
-        borderWidth: 0.5,
-        borderColor: 'rgba(245, 158, 11, 0.25)',
-        borderRadius: 6,
-        paddingHorizontal: 6,
-        paddingVertical: 1.5,
-    },
-    categoryText: {
-        fontSize: 10,
-        color: '#fbbf24',
-        fontWeight: '600',
-    },
-    footerRow: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginTop: 4,
-    },
-    avatarAndCount: {
-        flexDirection: 'row',
-        alignItems: 'center',
-    },
-    avatarPile: {
-        flexDirection: 'row',
-        alignItems: 'center',
-    },
-    pileAvatar: {
-        width: 20,
-        height: 20,
-        borderRadius: 10,
-        borderWidth: 1,
-        borderColor: '#151A36',
-    },
-    countBadge: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: 'rgba(156, 163, 175, 0.1)',
-        borderRadius: 8,
-        paddingHorizontal: 6,
-        paddingVertical: 2,
-        marginLeft: 8,
-    },
-    countText: {
-        fontSize: 10,
-        color: 'rgba(156, 163, 175, 0.9)',
-        fontWeight: 'bold',
-    },
-    soundwaveContainer: {
-        flexDirection: 'row',
-        alignItems: 'flex-end',
-        gap: 2,
-        height: 18,
-    },
-    soundwaveBar: {
-        width: 2.2,
-        backgroundColor: '#ec4899',
-        borderRadius: 1,
-    },
-    fabButton: {
-        position: 'absolute',
-        bottom: 30,
-        right: 20,
-        borderRadius: 28,
-        shadowColor: '#ec4899',
-        shadowOffset: { width: 0, height: 6 },
-        shadowOpacity: 0.3,
-        shadowRadius: 10,
-        elevation: 8,
-        overflow: 'hidden',
-    },
-    fabGradient: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        paddingHorizontal: 20,
-        paddingVertical: 12,
-    },
-    fabText: {
-        color: '#fff',
-        fontSize: 14,
-        fontWeight: 'bold',
-    },
-    emptyContainer: {
-        alignItems: 'center',
-        justifyContent: 'center',
-        paddingVertical: 120,
-    },
-    emptyText: {
-        color: 'rgba(255,255,255,0.35)',
-        marginTop: 15,
-        fontSize: 14,
+        paddingTop: 10,
     },
     modalOverlay: {
         flex: 1,
-        backgroundColor: 'rgba(0,0,0,0.6)',
+        backgroundColor: 'rgba(0, 0, 0, 0.72)',
         alignItems: 'center',
         justifyContent: 'center',
     },
     createModal: {
-        width: width - 40,
+        width: width - 36,
         borderRadius: 28,
         padding: 24,
-        borderWidth: 1,
-        borderColor: 'rgba(255,255,255,0.15)',
+        borderWidth: 1.2,
+        borderColor: 'rgba(255, 255, 255, 0.12)',
+        backgroundColor: '#171D3A',
+        shadowColor: '#FF3F86',
+        shadowOffset: { width: 0, height: 8 },
+        shadowOpacity: 0.15,
+        shadowRadius: 16,
     },
     modalTitle: {
         fontSize: 18,
         fontWeight: 'bold',
-        color: '#fff',
+        color: '#FFFFFF',
         marginBottom: 20,
         textAlign: 'center',
+        letterSpacing: 0.5,
     },
     input: {
-        backgroundColor: 'rgba(255,255,255,0.06)',
+        backgroundColor: 'rgba(255, 255, 255, 0.05)',
         borderWidth: 1,
-        borderColor: 'rgba(255,255,255,0.12)',
+        borderColor: 'rgba(255, 255, 255, 0.1)',
         borderRadius: 16,
         paddingHorizontal: 16,
         paddingVertical: 14,
-        color: '#fff',
-        fontSize: 15,
-        marginBottom: 20,
+        color: '#FFFFFF',
+        fontSize: 14.5,
+        marginBottom: 22,
+        fontWeight: '500',
     },
     modalActions: {
         flexDirection: 'row',
@@ -617,7 +254,7 @@ const styles = StyleSheet.create({
     },
     modalBtn: {
         flex: 1,
-        height: 48,
+        height: 46,
         borderRadius: 16,
         overflow: 'hidden',
     },
@@ -627,19 +264,21 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
     },
     cancelBtn: {
-        backgroundColor: 'rgba(255,255,255,0.08)',
+        backgroundColor: 'rgba(255, 255, 255, 0.08)',
         alignItems: 'center',
         justifyContent: 'center',
-        borderWidth: 1,
-        borderColor: 'rgba(255,255,255,0.12)',
+        borderWidth: 1.2,
+        borderColor: 'rgba(255, 255, 255, 0.08)',
     },
     cancelBtnText: {
-        color: 'rgba(255,255,255,0.7)',
+        color: '#9DA3B8',
         fontWeight: 'bold',
+        fontSize: 13,
     },
     confirmBtnText: {
-        color: '#fff',
+        color: '#FFFFFF',
         fontWeight: 'bold',
+        fontSize: 13,
     },
 });
 

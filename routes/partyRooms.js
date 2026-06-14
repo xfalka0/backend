@@ -84,6 +84,27 @@ router.get('/', authenticateToken, async (req, res) => {
     }
 });
 
+// GET /api/party-rooms/:roomId - Get detail of a single voice room
+router.get('/:roomId', authenticateToken, async (req, res) => {
+    const { roomId } = req.params;
+    try {
+        const result = await db.query(`
+            SELECT pr.*, u.display_name as host_name, u.avatar_url as host_avatar, u.vip_level as host_vip
+            FROM party_rooms pr
+            LEFT JOIN users u ON pr.host_id = u.id::text
+            WHERE pr.id = $1
+        `, [roomId]);
+
+        if (result.rows.length === 0) {
+            return res.status(404).json({ error: 'Parti odası bulunamadı.' });
+        }
+        res.json(result.rows[0]);
+    } catch (err) {
+        console.error('[API] Get party room detail error:', err.message);
+        res.status(500).json({ error: 'Parti odası bilgileri alınırken hata oluştu.' });
+    }
+});
+
 // POST /api/party-rooms - Create a new voice room
 router.post('/', authenticateToken, async (req, res) => {
     const { title, background_url, is_private, password } = req.body;

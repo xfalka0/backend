@@ -314,27 +314,15 @@ export default function MissionBoardScreen() {
     return (
         <View style={styles.container}>
             <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
-            
-            {/* Dark Purple Gradient Backdrop */}
-            <LinearGradient
-                colors={['#4c1d95', '#2e1065', '#1e1b4b']}
-                style={StyleSheet.absoluteFill}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-            />
 
-            {/* Fiva Banner Backdrop Layer */}
+            {/* Fiva Banner Backdrop Layer - same as ProfileScreen */}
             <View style={styles.bgWrapper}>
                 <Image 
                     source={require('../../assets/fiva_profile_banner.png')} 
                     style={styles.backgroundImage}
                 />
                 <LinearGradient
-                    colors={
-                        themeMode === 'dark'
-                            ? ['rgba(30, 27, 75, 0.15)', 'rgba(30, 27, 75, 0.75)', '#1e1b4b']
-                            : ['rgba(255, 255, 255, 0.15)', 'rgba(255, 255, 255, 0.75)', '#1e1b4b']
-                    }
+                    colors={['rgba(9, 2, 26, 0.1)', 'rgba(9, 2, 26, 0.7)', '#09021a']}
                     style={StyleSheet.absoluteFill}
                 />
             </View>
@@ -525,7 +513,7 @@ export default function MissionBoardScreen() {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#1e1b4b'
+        backgroundColor: '#09021a'
     },
     safeArea: {
         flex: 1
@@ -621,8 +609,8 @@ const styles = StyleSheet.create({
         borderRadius: 24,
         marginBottom: 16,
         borderWidth: 1,
-        borderColor: 'rgba(255, 255, 255, 0.06)',
-        backgroundColor: 'rgba(255, 255, 255, 0.02)'
+        borderColor: 'rgba(236, 72, 153, 0.25)',
+        backgroundColor: 'rgba(139, 46, 120, 0.18)'
     },
     missionCardHeader: {
         flexDirection: 'row',
@@ -847,7 +835,7 @@ const styles = StyleSheet.create({
     bgWrapper: {
         position: 'absolute',
         width: '100%',
-        height: 260,
+        height: 400,
     },
     backgroundImage: {
         width: '100%',

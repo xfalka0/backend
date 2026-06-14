@@ -807,49 +807,49 @@ const ProfileScreen = ({ route }) => {
 
                 {/* Görevler (Missions) Card - Visible to female users and operators */}
                 {isFemaleOrOperator && (
-                    <TouchableOpacity 
-                        style={styles.glassCardWrapper} 
-                        activeOpacity={0.8}
+                    <TouchableOpacity
+                        style={styles.glassCardWrapper}
+                        activeOpacity={0.82}
                         onPress={() => navigation.navigate('MissionBoard')}
                     >
-                        <LinearGradient 
-                            colors={themeMode === 'dark' ? ['rgba(236, 72, 153, 0.15)', 'rgba(124, 58, 237, 0.15)'] : ['#fff0f6', '#f3e8ff']} 
-                            style={[styles.boostCard, { borderColor: 'rgba(236, 72, 153, 0.3)', borderWidth: 1 }]} 
-                            start={{x:0, y:0}} 
-                            end={{x:1, y:1}}
+                        <LinearGradient
+                            colors={['#ff2d55', '#ff6b9d', '#c026d3', '#7c3aed']}
+                            start={{ x: 0, y: 0 }}
+                            end={{ x: 1, y: 0 }}
+                            style={styles.missionCard}
                         >
-                            <View style={{ flex: 1 }}>
-                                <View style={styles.boostLeft}>
-                                    <View style={[styles.boostIconCircle, { backgroundColor: 'rgba(236, 72, 153, 0.2)' }]}>
-                                        <Ionicons name="trophy" size={18} color="#ec4899" />
+                            {/* Left: label + count */}
+                            <View style={styles.missionLeftPanel}>
+                                <Text style={styles.missionLeftLabel}>GÜNLÜK</Text>
+                                <Text style={styles.missionLeftCount}>
+                                    {Math.round(todayCoins).toLocaleString()}
+                                </Text>
+                                <Text style={styles.missionLeftUnit}>💎 kazandın</Text>
+                            </View>
+
+                            {/* Divider */}
+                            <View style={styles.missionDivider} />
+
+                            {/* Right content */}
+                            <View style={styles.missionRightPanel}>
+                                <Text style={styles.missionCardTitle}>Günlük Görevler</Text>
+                                <Text style={styles.missionCardSubtitle}>
+                                    Sohbet et, elmas kazan!
+                                </Text>
+                                <View style={{ marginTop: 10 }}>
+                                    <View style={styles.missionProgressTrack}>
+                                        <View style={[styles.missionProgressFill, {
+                                            width: `${Math.min(100, (todayCoins / 5000) * 100)}%`,
+                                            backgroundColor: 'rgba(255,255,255,0.95)'
+                                        }]} />
                                     </View>
-                                    <View style={{ flex: 1, marginRight: 8 }}>
-                                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                                            <Text style={styles.boostMainText}>Günlük Görevler</Text>
-                                            <Text style={[styles.boostSubText, { color: '#ec4899', fontWeight: '800' }]}>
-                                                {Math.round(todayCoins)} / 5000 💎
-                                            </Text>
-                                        </View>
-                                        <Text style={styles.boostSubText}>
-                                            Bugün sohbet ederek hedeflere ulaş, ekstra elmas kazan!
-                                        </Text>
-                                    </View>
-                                </View>
-                                
-                                {/* Progress Bar */}
-                                <View style={[styles.miniProgressTrack, { marginTop: 10 }]}>
-                                    <View 
-                                        style={[
-                                            styles.miniProgressBar, 
-                                            { 
-                                                width: `${Math.min(100, (todayCoins / 5000) * 100)}%`,
-                                                backgroundColor: '#ec4899'
-                                            }
-                                        ]} 
-                                    />
+                                    <Text style={styles.missionProgressLabel}>
+                                        {Math.round(todayCoins).toLocaleString()} / 5.000 💎
+                                    </Text>
                                 </View>
                             </View>
-                            <Ionicons name="chevron-forward" size={16} color={themeMode === 'dark' ? '#ec4899' : '#4b5563'} style={{ marginLeft: 8 }} />
+
+                            <Ionicons name="chevron-forward" size={16} color="rgba(255,255,255,0.6)" style={{ alignSelf: 'center', marginRight: 4 }} />
                         </LinearGradient>
                     </TouchableOpacity>
                 )}
@@ -1988,7 +1988,77 @@ const styles = StyleSheet.create({
     miniProgressBar: {
         height: '100%',
         borderRadius: 3
-    }
+    },
+    missionCard: {
+        flexDirection: 'row',
+        borderRadius: 20,
+        overflow: 'hidden',
+    },
+    missionLeftPanel: {
+        width: 90,
+        paddingVertical: 18,
+        paddingHorizontal: 10,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    missionLeftLabel: {
+        color: 'rgba(255,255,255,0.85)',
+        fontSize: 8,
+        fontWeight: '900',
+        letterSpacing: 1.5,
+        marginBottom: 6,
+    },
+    missionLeftCount: {
+        color: '#fff',
+        fontSize: 24,
+        fontWeight: '900',
+        letterSpacing: -1,
+    },
+    missionLeftUnit: {
+        color: 'rgba(255,255,255,0.8)',
+        fontSize: 9,
+        fontWeight: '600',
+        marginTop: 3,
+    },
+    missionDivider: {
+        width: 1,
+        backgroundColor: 'rgba(255,255,255,0.25)',
+        marginVertical: 12,
+    },
+    missionRightPanel: {
+        flex: 1,
+        paddingVertical: 16,
+        paddingHorizontal: 14,
+        justifyContent: 'center',
+    },
+    missionCardTitle: {
+        color: '#fff',
+        fontSize: 15,
+        fontWeight: '900',
+        letterSpacing: -0.3,
+    },
+    missionCardSubtitle: {
+        color: 'rgba(255, 255, 255, 0.75)',
+        fontSize: 11,
+        fontWeight: '500',
+        marginTop: 3,
+    },
+    missionProgressTrack: {
+        height: 4,
+        backgroundColor: 'rgba(255, 255, 255, 0.3)',
+        borderRadius: 2,
+        overflow: 'hidden',
+    },
+    missionProgressFill: {
+        height: '100%',
+        borderRadius: 2,
+    },
+    missionProgressLabel: {
+        color: 'rgba(255, 255, 255, 0.75)',
+        fontSize: 10,
+        fontWeight: '700',
+        marginTop: 5,
+    },
 });
 
 export default ProfileScreen;

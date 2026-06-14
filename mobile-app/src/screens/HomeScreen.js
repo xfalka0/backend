@@ -33,8 +33,10 @@ const normalizeText = (value = '') => {
     return text.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
 };
 
-const getProfileGender = (profile = {}) => {
-    const raw = (profile.gender || '').toString().trim().toLowerCase();
+const getProfileGender = (profile) => {
+    if (!profile) return 'kadin';
+    let raw = (profile.gender || '').toString().trim().toLowerCase();
+    raw = raw.replace(/ı/g, 'i').replace(/ş/g, 's').replace(/ğ/g, 'g').replace(/ü/g, 'u').replace(/ö/g, 'o').replace(/ç/g, 'c');
     if (raw === 'coin_bayisi' || raw.includes('bayi')) return 'coin_bayisi';
     if (raw === 'erkek' || raw.includes('erkek') || raw.includes('male') || raw === 'man') return 'erkek';
     return 'kadin';

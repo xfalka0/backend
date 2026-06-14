@@ -50,8 +50,10 @@ const normalizeText = (value = '') => {
                .trim();
 };
 
-const getProfileGender = (profile = {}) => {
-    const raw = (profile.gender || '').toString().trim().toLowerCase();
+const getProfileGender = (profile) => {
+    if (!profile) return '';
+    let raw = (profile.gender || '').toString().trim().toLowerCase();
+    raw = raw.replace(/ı/g, 'i').replace(/ş/g, 's').replace(/ğ/g, 'g').replace(/ü/g, 'u').replace(/ö/g, 'o').replace(/ç/g, 'c');
     if (raw === 'coin_bayisi') return 'coin_bayisi';
     if (raw === 'erkek' || raw === 'male' || raw === 'man') return 'erkek';
     if (raw === 'kadin' || raw === 'female' || raw === 'woman') return 'kadin';
@@ -99,6 +101,7 @@ export default function ExploreScreen({ navigation, route }) {
     const [isOptionsVisible, setOptionsVisible] = useState(false);
     const [selectedPostForOptions, setSelectedPostForOptions] = useState(null);
     const scrollY = useSharedValue(0);
+    const lastFetchedUserId = useRef(null);
 
     const handleOpenOptions = (post) => {
         setSelectedPostForOptions(post);
@@ -163,12 +166,25 @@ export default function ExploreScreen({ navigation, route }) {
 
     useFocusEffect(
         React.useCallback(() => {
-            fetchUser();
-            // Only fetch if we have no posts yet, to prevent lag on every tab switch
-            if (posts.length === 0) {
-                fetchExploreData();
-            }
-        }, [posts.length])
+            const loadAndFetch = async () => {
+                try {
+                    let currentUser = user;
+                    const userStr = await AsyncStorage.getItem('user');
+                    if (userStr) {
+                        currentUser = JSON.parse(userStr);
+                        setUser(currentUser);
+                    }
+                    
+                    if (posts.length === 0 || (currentUser && currentUser.id !== lastFetchedUserId.current)) {
+                        await fetchExploreData(currentUser);
+                    }
+                } catch (e) {
+                    console.error('Error in focus effect:', e);
+                }
+            };
+
+            loadAndFetch();
+        }, [posts.length, user])
     );
 
     const fetchUser = async () => {
@@ -183,19 +199,22 @@ export default function ExploreScreen({ navigation, route }) {
         }
     };
 
-    const fetchExploreData = async () => {
+    const fetchExploreData = async (currentUser) => {
         try {
             setLoading(true);
             const token = await AsyncStorage.getItem('token');
             const [exploreRes, operatorsRes] = await Promise.all([
                 axios.get(`${API_URL}/social/explore`, {
-                    params: { user_id: user?.id },
+                    params: { user_id: currentUser?.id },
                     headers: token ? { Authorization: `Bearer ${token}` } : {}
                 }),
                 axios.get(`${API_URL}/operators?limit=100`)
             ]);
+            
+            lastFetchedUserId.current = currentUser?.id;
+            
             // Apply gender filtering to posts and stories
-            const userGender = getProfileGender(user) === 'kadin' ? 'kadin' : 'erkek';
+            const userGender = getProfileGender(currentUser) === 'kadin' ? 'kadin' : 'erkek';
             const targetGender = userGender === 'kadin' ? 'erkek' : 'kadin';
             
             const filteredPosts = exploreRes.data.posts.filter(p => {

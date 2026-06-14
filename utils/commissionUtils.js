@@ -202,6 +202,13 @@ async function recordOperatorCommission(client, chatId, senderId, cost, type) {
         }
     }
 
+    // Detect stats ID type dynamically to support both UUID and INTEGER schemas
+    const statsTypeRes = await client.query(`
+        SELECT data_type FROM information_schema.columns 
+        WHERE table_name = 'operator_stats' AND column_name = 'operator_id'
+    `);
+    const statsIdType = statsTypeRes.rows.length > 0 ? statsTypeRes.rows[0].data_type.toUpperCase() : 'UUID';
+
     // 4. Update Daily Stats for PAYEE (Upsert)
     await client.query(`
         INSERT INTO operator_stats (
@@ -211,7 +218,7 @@ async function recordOperatorCommission(client, chatId, senderId, cost, type) {
             text_earned, image_earned, audio_earned, gift_earned,
             gift_coins_received
         )
-        VALUES ($1::text, CURRENT_DATE, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+        VALUES ($1::text::${statsIdType}, CURRENT_DATE, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
         ON CONFLICT (operator_id, date) DO UPDATE SET
             messages_sent = COALESCE(operator_stats.messages_sent, 0) + EXCLUDED.messages_sent,
             coins_earned = COALESCE(operator_stats.coins_earned, 0) + EXCLUDED.coins_earned,

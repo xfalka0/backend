@@ -27,6 +27,8 @@ const { recordOperatorCommission } = require('./utils/commissionUtils');
 const jwt = require('jsonwebtoken');
 const socialRoutes = require('./routes/socialRoutes');
 const authRoutes = require('./routes/authRoutes');
+const userRoutes = require('./routes/userRoutes');
+const roomsRoutes = require('./routes/rooms');
 const favoritesRoutes = require('./routes/favorites');
 const viewsRoutes = require('./routes/views');
 const boostsRoutes = require('./routes/boosts');
@@ -694,6 +696,44 @@ app.get('/api/health-check', async (req, res) => {
     }
 });
 
+// GET /health - Staging & Production Health Check
+app.get('/health', async (req, res) => {
+    let databaseStatus = 'ok';
+    let redisStatus = 'ok';
+    let statusCode = 200;
+
+    // 1. Check Database
+    try {
+        await db.query('SELECT 1');
+    } catch (err) {
+        databaseStatus = 'error: ' + err.message;
+        statusCode = 500;
+    }
+
+    // 2. Check Redis (only if REDIS_URL is configured)
+    if (process.env.REDIS_URL) {
+        const { createClient } = require('redis');
+        const tempClient = createClient({ url: process.env.REDIS_URL, socket: { connectTimeout: 2000 } });
+        try {
+            await tempClient.connect();
+            await tempClient.ping();
+            await tempClient.disconnect();
+        } catch (err) {
+            redisStatus = 'error: ' + err.message;
+            statusCode = 500;
+        }
+    } else {
+        redisStatus = 'disabled';
+    }
+
+    res.status(statusCode).json({
+        status: statusCode === 200 ? 'ok' : 'error',
+        database: databaseStatus,
+        redis: redisStatus,
+        timestamp: new Date().toISOString()
+    });
+});
+
 const server = http.createServer(app);
 
 const getLocalIpAddress = () => {
@@ -753,6 +793,10 @@ const io = new Server(server, {
     transports: ['websocket', 'polling']
 });
 app.set('io', io);
+
+// RoomGateway initialization for real-time room & seat management (Phase 4)
+const { initializeRoomGateway } = require('./socket/roomGateway');
+initializeRoomGateway(io);
 
 // Redis Adapter Configuration for Socket.io (Horizontal Scaling support)
 if (process.env.REDIS_URL) {
@@ -1111,6 +1155,8 @@ app.get('/api/health', async (req, res) => {
 app.use('/api', socialRoutes);
 
 app.use('/api/auth', authRoutes);
+app.use('/api/users', userRoutes);
+app.use('/api/rooms', roomsRoutes);
 
 app.use('/api', authRoutes); // Proxy for /api/me /api/login etc
 app.use('/api', webhooksRoutes); // Public Webhooks
@@ -5009,23 +5055,27 @@ app.get('/api/offerings', async (req, res) => {
     }
 });
 
-// --- REPORTING SYSTEM (Required for Google Play Compliance) ---
+// --- REPORTING SYSTEM (Required for Google Play Compliance / Phase 8 Specs) ---
 app.post('/api/reports', authenticateToken, async (req, res) => {
-    const { reportedUserId, reason, details } = req.body;
-    const reporterId = req.user.id;
+    const { reportedUserId, targetUserId, reason, details, description, roomId, room_id } = req.body;
+    const reporterUserId = req.user.id;
+    const targetId = targetUserId || reportedUserId;
+    const rId = roomId || room_id || null;
+    const desc = description || details || null;
 
-    if (!reportedUserId || !reason) {
-        return res.status(400).json({ error: 'Eksik bilgi (reportedUserId veya reason).' });
+    if (!targetId || !reason) {
+        return res.status(400).json({ error: 'Eksik bilgi (targetUserId veya reason).' });
     }
 
     try {
         await db.query(
-            'INSERT INTO reports (reporter_id, reported_id, reason, status) VALUES ($1, $2, $3, $4)',
-            [reporterId, reportedUserId, `${reason}: ${details || ''}`, 'pending']
+            `INSERT INTO reports (reporter_user_id, target_user_id, room_id, reason, description, status) 
+             VALUES ($1, $2, $3, $4, $5, 'pending')`,
+            [reporterUserId, targetId, rId, reason, desc]
         );
         
         // Log activity
-        await logActivity(app.get('io'), reporterId, 'report', `User reported ${reportedUserId} for ${reason}`);
+        await logActivity(app.get('io'), reporterUserId, 'report', `User reported ${targetId} for ${reason}`);
         
         res.json({ success: true, message: 'Şikayetiniz alındı ve moderasyon ekibine iletildi.' });
     } catch (err) {

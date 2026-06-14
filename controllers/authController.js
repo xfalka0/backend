@@ -157,12 +157,17 @@ exports.googleAuth = async (req, res) => {
     }
 };
 
-// Register Email
+// Register User (Phase 1)
 exports.registerEmail = async (req, res) => {
-    let { email, password, username, display_name, deviceId } = req.body;
+    let { email, phone, password, username, displayName, display_name, gender, country, avatarUrl, avatar_url, bio, deviceId } = req.body;
     const io = req.app.get('io');
-    if (!email || !password) return res.status(400).json({ error: 'Email ve şifre zorunludur.' });
-    const normalizedEmail = email.trim().toLowerCase();
+    
+    if (!email && !phone) return res.status(400).json({ error: 'E-posta veya telefon numarası zorunludur.' });
+    if (!username) return res.status(400).json({ error: 'Kullanıcı adı zorunludur.' });
+
+    const normalizedEmail = email ? email.trim().toLowerCase() : null;
+    const finalDisplayName = displayName || display_name || username;
+    const finalAvatarUrl = avatarUrl || avatar_url || 'https://via.placeholder.com/150';
 
     try {
         if (deviceId) {
@@ -172,82 +177,20 @@ exports.registerEmail = async (req, res) => {
             }
         }
 
-        const { referralCode } = req.body;
-        let referredBy = null;
-        let finalReferralCode = referralCode;
-
-        // If no code provided, try IP matching
-        if (!finalReferralCode) {
-            const ip = req.headers['x-forwarded-for']?.split(',')[0].trim() || req.socket.remoteAddress;
-            console.log(`[REFERRAL_DEBUG] Checking IP match (Email Reg) for: ${ip}`);
-            const matchRes = await db.query(
-                "SELECT code FROM referral_clicks WHERE ip = $1 AND created_at > NOW() - INTERVAL '24 hours' ORDER BY created_at DESC LIMIT 1",
-                [ip]
-            );
-            if (matchRes.rows.length > 0) {
-                finalReferralCode = matchRes.rows[0].code;
-                console.log(`[REFERRAL] Auto-matched via IP: ${ip} -> ${finalReferralCode}`);
-            } else {
-                console.log(`[REFERRAL_DEBUG] No click match found for IP: ${ip}`);
-            }
+        let hashedPassword = null;
+        if (password) {
+            hashedPassword = await bcrypt.hash(password, 10);
         }
-
-        if (finalReferralCode) {
-            const referrerRes = await db.query('SELECT id FROM users WHERE referral_code = $1', [finalReferralCode.toUpperCase()]);
-            if (referrerRes.rows.length > 0) {
-                referredBy = referrerRes.rows[0].id;
-                console.log(`[REFERRAL] User referred by: ${finalReferralCode} (${referredBy})`);
-            }
-        }
-
-        const hashedPassword = await bcrypt.hash(password, 10);
-        const finalUsername = username || email.split('@')[0] + '_' + Math.floor(Math.random() * 1000);
 
         const result = await db.query(
-            "INSERT INTO users (username, email, password_hash, role, balance, display_name, avatar_url, device_id, referred_by) VALUES ($1, $2, $3, 'user', 100, $4, 'https://via.placeholder.com/150', $5, $6) RETURNING *",
-            [finalUsername, normalizedEmail, hashedPassword, display_name || finalUsername, deviceId || null, referredBy]
+            `INSERT INTO users 
+             (username, email, phone, password_hash, display_name, avatar_url, bio, gender, country, level, vip_level, coin_balance, diamond_balance, status, device_id, balance) 
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 1, 0, 100, 0, 'active', $10, 100) 
+             RETURNING *`,
+            [username.trim(), normalizedEmail, phone || null, hashedPassword, finalDisplayName, finalAvatarUrl, bio || null, gender || null, country || null, deviceId || null]
         );
 
         const user = result.rows[0];
-
-        // REFERRAL REWARD LOGIC
-        if (referredBy) {
-            try {
-                let fraudDetected = false;
-                if (deviceId) {
-                    const refUserRes = await db.query('SELECT device_id FROM users WHERE id = $1', [referredBy]);
-                    if (refUserRes.rows.length > 0 && refUserRes.rows[0].device_id === deviceId) {
-                        fraudDetected = true;
-                        console.log(`[REFERRAL_FRAUD] User ${user.id} and Referrer ${referredBy} share same device_id: ${deviceId}`);
-                    }
-                }
-
-                if (!fraudDetected) {
-                    await db.query('UPDATE users SET balance = balance + 500 WHERE id = $1', [referredBy]);
-                    await db.query("INSERT INTO transactions (user_id, amount, type, description) VALUES ($1, $2, $3, $4)", 
-                        [referredBy, 500, 'referral_bonus', 'Davet ettiğiniz kullanıcı kayıt oldu']);
-                    
-                    await db.query('UPDATE users SET balance = balance + 500 WHERE id = $1', [user.id]);
-                    await db.query("INSERT INTO transactions (user_id, amount, type, description) VALUES ($1, $2, $3, $4)", 
-                        [user.id, 500, 'referral_bonus', 'Davet kodu ile kayıt olma bonusu']);
-                    user.balance += 500;
-
-                    await db.query('INSERT INTO referral_rewards (referrer_id, referred_id, reward_type, amount) VALUES ($1, $2, $3, $4)',
-                        [referredBy, user.id, 'registration', 500]);
-
-                    if (io) {
-                        db.query("INSERT INTO notifications (user_id, type, body) VALUES ($1, $2, $3) RETURNING *",
-                            [referredBy, 'system', 'Tebrikler! Davet ettiğin bir arkadaşın kayıt oldu ve 500 Coin kazandın!']
-                        ).then(notif => {
-                            io.emit('new_notification', notif.rows[0]);
-                            io.emit('balance_update', { userId: referredBy, newBalance: null });
-                        }).catch(console.error);
-                    }
-                }
-            } catch (refErr) {
-                console.error('[REFERRAL_REWARD_ERROR]', refErr);
-            }
-        }
 
         await assignFakeInteractions(user.id);
         await triggerAutoEngagement(io, user.id);
@@ -258,35 +201,54 @@ exports.registerEmail = async (req, res) => {
             { expiresIn: '30d' }
         );
 
-        await logActivity(io, user.id, 'register', 'Yeni kullanıcı e-posta ile kayıt oldu.');
+        await logActivity(io, user.id, 'register', 'Yeni kullanıcı kayıt oldu.');
         if (io) io.emit('new_user', sanitizeUser(user, req));
+        
         res.status(201).json({ user: sanitizeUser(user, req), token });
     } catch (err) {
-        if (err.code === '23505') return res.status(400).json({ error: 'Bu e-posta adresi zaten kullanımda.' });
+        if (err.code === '23505') {
+            return res.status(400).json({ error: 'Kullanıcı adı veya iletişim bilgisi zaten kullanımda.' });
+        }
         res.status(500).json({ error: err.message });
     }
 };
 
-// Login Email
+// Login User (Phase 1)
 exports.loginEmail = async (req, res) => {
-    let { email, password, deviceId } = req.body;
+    let { email, phone, password, deviceId } = req.body;
     const io = req.app.get('io');
 
     try {
-        const normalizedEmail = email ? email.trim().toLowerCase() : '';
-        const result = await db.query('SELECT * FROM users WHERE LOWER(email) = $1', [normalizedEmail]);
+        let result;
+        if (email) {
+            const normalizedEmail = email.trim().toLowerCase();
+            result = await db.query('SELECT * FROM users WHERE LOWER(email) = $1', [normalizedEmail]);
+        } else if (phone) {
+            result = await db.query('SELECT * FROM users WHERE phone = $1', [phone]);
+        } else {
+            return res.status(400).json({ error: 'E-posta veya telefon girilmelidir.' });
+        }
+
         if (result.rows.length === 0) {
-            return res.status(401).json({ error: 'E-posta veya şifre hatalı.' });
+            return res.status(401).json({ error: 'Giriş bilgileri hatalı.' });
         }
 
         const user = result.rows[0];
-        const valid = await bcrypt.compare(password, user.password_hash || user.password);
-        if (!valid) {
-            return res.status(401).json({ error: 'E-posta veya şifre hatalı.' });
+
+        // Check password if exists
+        if (password && (user.password_hash || user.password)) {
+            const valid = await bcrypt.compare(password, user.password_hash || user.password);
+            if (!valid) {
+                return res.status(401).json({ error: 'Giriş bilgileri hatalı.' });
+            }
         }
 
-        if (user.account_status !== 'active') {
+        // Validate user status
+        const currentStatus = user.status || user.account_status || 'active';
+        if (currentStatus === 'banned') {
             return res.status(403).json({ error: 'Hesabınız askıya alınmış.' });
+        } else if (currentStatus === 'deleted') {
+            return res.status(403).json({ error: 'Bu hesap silinmiş.' });
         }
 
         if (deviceId && user.device_id !== deviceId) {
@@ -304,7 +266,7 @@ exports.loginEmail = async (req, res) => {
             { expiresIn: '30d' }
         );
 
-        await logActivity(io, user.id, 'login', 'Kullanıcı e-posta ile giriş yaptı.');
+        await logActivity(io, user.id, 'login', 'Kullanıcı giriş yaptı.');
         res.json({ user: sanitizeUser(user, req), token });
     } catch (err) {
         res.status(500).json({ error: err.message });

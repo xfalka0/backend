@@ -1,75 +1,91 @@
 const db = require('./db');
 const fs = require('fs');
 const path = require('path');
+const bcrypt = require('bcrypt');
 
 async function seed() {
     try {
         console.log('--- Reading Schema ---');
         const schemaSql = fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf8');
 
-        console.log('--- Creating Tables ---');
-        await db.query(schemaSql);
-
-        console.log('--- Seeding Data ---');
-
-        // 1. Create Admin
-        await db.query(`
-      INSERT INTO users (username, email, password_hash, role)
-      VALUES 
-      ('admin', 'admin@example.com', 'hashed_pass_123', 'admin')
-      ON CONFLICT (email) DO NOTHING;
-    `);
-
-        // 2. Create Operators
-        const ops = [
-            { name: 'Sarah', email: 'sarah@op.com', cat: 'Friendly', bio: 'I love to listen!', img: 'https://randomuser.me/api/portraits/women/44.jpg' },
-            { name: 'Jessica', email: 'jessica@op.com', cat: 'Flirty', bio: 'Lets have fun!', img: 'https://randomuser.me/api/portraits/women/68.jpg' },
-            { name: 'Emily', email: 'emily@op.com', cat: 'Advisor', bio: 'Here for you.', img: 'https://randomuser.me/api/portraits/women/65.jpg' }
-        ];
-
-        for (const op of ops) {
-            const res = await db.query(`
-        INSERT INTO users (username, email, password_hash, role, avatar_url, gender)
-        VALUES ($1, $2, 'pass123', 'operator', $3, 'kadin')
-        ON CONFLICT (email) DO UPDATE SET avatar_url = $3, gender = 'kadin'
-        RETURNING id;
-      `, [op.name, op.email, op.img]);
-
-            const userId = res.rows[0]?.id;
-            if (userId) {
-                await db.query(`
-          INSERT INTO operators (user_id, category, is_online, bio)
-          VALUES ($1, $2, true, $3)
-          ON CONFLICT (user_id) DO NOTHING;
-        `, [userId, op.cat, op.bio]);
-            }
+        console.log('--- Creating Tables (If not exist) ---');
+        try {
+            await db.query(schemaSql);
+        } catch (e) {
+            console.log('[Seed] Schema initialization warning (types might already exist):', e.message);
         }
 
-        // 3. Create Dummy User
-        await db.query(`
-      INSERT INTO users (username, email, password_hash, role, balance, is_vip)
-      VALUES ('testuser', 'user@test.com', 'pass123', 'user', 100, true)
-      ON CONFLICT (email) DO NOTHING;
-    `);
+        // Run Phase 1 Migration to ensure the columns exist in current database connection
+        console.log('--- Applying Phase 1 Database Migrations ---');
+        const migrationSql = fs.readFileSync(path.join(__dirname, 'db/phase1_migration.sql'), 'utf8');
+        await db.query(migrationSql);
 
-        // 4. Create Gifts
-        await db.query(`
-      INSERT INTO gifts (name, cost, icon_url)
-      VALUES 
-        ('Rose', 10, '🌹'),
-        ('Heart', 50, '❤️'),
-        ('Diamond', 500, '💎')
-      ON CONFLICT DO NOTHING;
-    `);
+        console.log('--- Seeding Phase 1 Users & Data ---');
+        
+        const hashedPass = await bcrypt.hash('pass123', 10);
 
-        // 5. Create Fake Videos (Stubs)
-        // In a real app, these would be local file paths or S3 URLs
-        const opUsers = await db.query("SELECT id FROM users WHERE role = 'operator'");
-        for (const row of opUsers.rows) {
+        // 1. Create Admin User
+        const adminRes = await db.query(`
+            INSERT INTO users (username, email, password_hash, role, display_name, status, level)
+            VALUES ('admin', 'admin@example.com', $1, 'admin', 'Sistem Yöneticisi', 'active', 99)
+            ON CONFLICT (username) DO UPDATE SET password_hash = $1, role = 'admin'
+            RETURNING id;
+        `, [hashedPass]);
+        console.log('[Seed] Created Admin User');
+
+        // 2. Create Host (Operator) User
+        const hostRes = await db.query(`
+            INSERT INTO users (username, email, password_hash, role, display_name, gender, avatar_url, bio, status, level)
+            VALUES ('host_sarah', 'host@example.com', $1, 'operator', 'Sarah (Yayıncı)', 'kadin', 'https://randomuser.me/api/portraits/women/44.jpg', 'Merhaba! Keyifli sohbetler için buradayım.', 'active', 5)
+            ON CONFLICT (username) DO UPDATE SET password_hash = $1, role = 'operator', gender = 'kadin'
+            RETURNING id;
+        `, [hashedPass]);
+        
+        const hostId = hostRes.rows[0]?.id;
+        if (hostId) {
             await db.query(`
-         INSERT INTO fake_videos (operator_id, video_url, title, duration_sec)
-         VALUES ($1, 'https://www.w3schools.com/html/mov_bbb.mp4', 'Welcome Video', 10)
-       `, [row.id]);
+                INSERT INTO operators (user_id, category, is_online, bio, rating)
+                VALUES ($1, 'Friendly', true, 'Merhaba! Keyifli sohbetler için buradayım.', 5.0)
+                ON CONFLICT (user_id) DO UPDATE SET is_online = true;
+            `, [hostId]);
+        }
+        console.log('[Seed] Created Host (Operator) User');
+
+        // 3. Create Normal User
+        await db.query(`
+            INSERT INTO users (username, email, password_hash, role, display_name, status, level, coin_balance, balance)
+            VALUES ('testuser', 'user@test.com', $1, 'user', 'Normal Üye', 'active', 1, 100, 100)
+            ON CONFLICT (username) DO UPDATE SET password_hash = $1, role = 'user';
+        `, [hashedPass]);
+        console.log('[Seed] Created Normal User');
+
+        // 4. Create Coin Rich User
+        await db.query(`
+            INSERT INTO users (username, email, password_hash, role, display_name, status, level, coin_balance, balance)
+            VALUES ('rich_guy', 'rich@example.com', $1, 'user', 'Vip Üye (Zengin)', 'active', 10, 50000, 50000)
+            ON CONFLICT (username) DO UPDATE SET password_hash = $1, coin_balance = 50000, balance = 50000;
+        `, [hashedPass]);
+        console.log('[Seed] Created Coin Rich User');
+
+        // 5. Create Gifts
+        await db.query(`
+            INSERT INTO gifts (id, name, cost, icon_url)
+            VALUES 
+                (1, 'Rose', 10, '🌹'),
+                (2, 'Heart', 50, '❤️'),
+                (3, 'Diamond', 500, '💎')
+            ON CONFLICT (id) DO NOTHING;
+        `);
+        console.log('[Seed] Seeded Gifts');
+
+        // 6. Create Fake Videos (Stubs) for Sarah
+        if (hostId) {
+            await db.query(`
+                INSERT INTO fake_videos (operator_id, video_url, title, duration_sec)
+                VALUES ($1, 'https://www.w3schools.com/html/mov_bbb.mp4', 'Welcome Video', 10)
+                ON CONFLICT DO NOTHING;
+            `, [hostId]);
+            console.log('[Seed] Created Fake Videos stubs');
         }
 
         console.log('--- Seeding Complete ---');

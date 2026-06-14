@@ -1,6 +1,23 @@
 // Mock db.query to avoid connecting to the database
 jest.mock('../db', () => {
-    const mockQuery = jest.fn().mockImplementation(() => Promise.resolve({ rows: [] }));
+    const mockQuery = jest.fn().mockImplementation((sql, params) => {
+        if (sql && sql.includes('FROM users WHERE id')) {
+            return Promise.resolve({
+                rows: [{
+                    id: 'user-uuid',
+                    username: 'testuser',
+                    email: 'test@example.com',
+                    role: 'user',
+                    account_status: 'active',
+                    display_name: 'Test User',
+                    avatar_url: 'https://via.placeholder.com/150',
+                    gender: 'erkek',
+                    onboarding_completed: true
+                }]
+            });
+        }
+        return Promise.resolve({ rows: [] });
+    });
     return {
         query: mockQuery,
         pool: {
@@ -17,12 +34,35 @@ jest.mock('../utils/notificationUtils', () => ({
 const request = require('supertest');
 const db = require('../db');
 const { app } = require('../server');
+const jwt = require('jsonwebtoken');
 
 describe('Chats API Tests', () => {
+    let mockToken;
+
+    beforeAll(() => {
+        mockToken = jwt.sign({ id: 'user-uuid', email: 'test@example.com', role: 'user' }, process.env.JWT_SECRET || 'testsecret');
+    });
+
     beforeEach(() => {
         jest.clearAllMocks();
-        // Explicitly set the default mock implementation to prevent resetMocks from clearing it
-        db.query.mockImplementation(() => Promise.resolve({ rows: [] }));
+        db.query.mockImplementation((sql, params) => {
+            if (sql && sql.includes('FROM users WHERE id')) {
+                return Promise.resolve({
+                    rows: [{
+                        id: 'user-uuid',
+                        username: 'testuser',
+                        email: 'test@example.com',
+                        role: 'user',
+                        account_status: 'active',
+                        display_name: 'Test User',
+                        avatar_url: 'https://via.placeholder.com/150',
+                        gender: 'erkek',
+                        onboarding_completed: true
+                    }]
+                });
+            }
+            return Promise.resolve({ rows: [] });
+        });
     });
 
     describe('GET /api/users/:userId/chats', () => {
@@ -44,11 +84,32 @@ describe('Chats API Tests', () => {
                 }
             ];
 
-            // Mock db.query result
-            db.query.mockResolvedValueOnce({ rows: mockChats });
+            // Setup mock implementation specifically for the chats query
+            db.query.mockImplementation((sql, params) => {
+                if (sql && sql.includes('FROM users WHERE id')) {
+                    return Promise.resolve({
+                        rows: [{
+                            id: 'user-uuid',
+                            username: 'testuser',
+                            email: 'test@example.com',
+                            role: 'user',
+                            account_status: 'active',
+                            display_name: 'Test User',
+                            avatar_url: 'https://via.placeholder.com/150',
+                            gender: 'erkek',
+                            onboarding_completed: true
+                        }]
+                    });
+                }
+                if (sql && sql.includes('chats')) {
+                    return Promise.resolve({ rows: mockChats });
+                }
+                return Promise.resolve({ rows: [] });
+            });
 
             const res = await request(app)
                 .get('/api/users/user-uuid/chats')
+                .set('Authorization', `Bearer ${mockToken}`)
                 .query({ limit: 10, offset: 0 });
 
             expect(res.status).toBe(200);
@@ -61,10 +122,23 @@ describe('Chats API Tests', () => {
         });
 
         it('should handle database errors gracefully', async () => {
-            db.query.mockRejectedValueOnce(new Error('Database error'));
+            db.query.mockImplementation((sql, params) => {
+                if (sql && sql.includes('FROM users WHERE id')) {
+                    return Promise.resolve({
+                        rows: [{
+                            id: 'user-uuid',
+                            username: 'testuser',
+                            role: 'user',
+                            account_status: 'active'
+                        }]
+                    });
+                }
+                return Promise.reject(new Error('Database error'));
+            });
 
             const res = await request(app)
-                .get('/api/users/user-uuid/chats');
+                .get('/api/users/user-uuid/chats')
+                .set('Authorization', `Bearer ${mockToken}`);
 
             expect(res.status).toBe(500);
             expect(res.body).toHaveProperty('error', 'Database error');
@@ -73,10 +147,26 @@ describe('Chats API Tests', () => {
 
     describe('GET /api/users/:userId/unread-count', () => {
         it('should return total unread count successfully', async () => {
-            db.query.mockResolvedValueOnce({ rows: [{ total_unread: 5 }] });
+            db.query.mockImplementation((sql, params) => {
+                if (sql && sql.includes('FROM users WHERE id')) {
+                    return Promise.resolve({
+                        rows: [{
+                            id: 'user-uuid',
+                            username: 'testuser',
+                            role: 'user',
+                            account_status: 'active'
+                        }]
+                    });
+                }
+                if (sql && sql.includes('unread')) {
+                    return Promise.resolve({ rows: [{ total_unread: 5 }] });
+                }
+                return Promise.resolve({ rows: [] });
+            });
 
             const res = await request(app)
-                .get('/api/users/user-uuid/unread-count');
+                .get('/api/users/user-uuid/unread-count')
+                .set('Authorization', `Bearer ${mockToken}`);
 
             expect(res.status).toBe(200);
             expect(res.body).toHaveProperty('count', 5);

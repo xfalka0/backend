@@ -45,6 +45,14 @@ const sanitizeUser = (user, req) => {
     if (newUser.image_url) newUser.image_url = rewrite(newUser.image_url);
     if (newUser.image) newUser.image = rewrite(newUser.image);
 
+    // Casing compatibility mapping for Phase 1
+    newUser.displayName = user.display_name !== undefined ? user.display_name : user.displayName;
+    newUser.avatarUrl = user.avatar_url !== undefined ? user.avatar_url : user.avatarUrl;
+    newUser.coinBalance = user.coin_balance !== undefined ? user.coin_balance : (user.balance !== undefined ? user.balance : user.coinBalance);
+    newUser.diamondBalance = user.diamond_balance !== undefined ? user.diamond_balance : user.diamondBalance;
+    newUser.vipLevel = user.vip_level !== undefined ? user.vip_level : (user.vipLevel !== undefined ? user.vipLevel : 0);
+    newUser.status = user.status !== undefined ? user.status : (user.account_status !== undefined ? user.account_status : user.status);
+
     // Pass through onboarding status
     if (user.onboarding_completed !== undefined) {
         newUser.onboarding_completed = !!user.onboarding_completed;

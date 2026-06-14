@@ -326,4 +326,47 @@ router.post('/report', authenticateToken, async (req, res) => {
     }
 });
 
+// PATCH /me - Update current user profile
+router.patch('/me', authenticateToken, async (req, res) => {
+    const userId = req.user.id;
+    const { displayName, bio, avatarUrl, gender, country } = req.body;
+    
+    try {
+        const result = await db.query(
+            `UPDATE users SET
+                display_name = COALESCE($1, display_name),
+                bio = COALESCE($2, bio),
+                avatar_url = COALESCE($3, avatar_url),
+                gender = COALESCE($4, gender),
+                country = COALESCE($5, country),
+                updated_at = NOW()
+             WHERE id::text = $6::text RETURNING *`,
+            [displayName || null, bio || null, avatarUrl || null, gender || null, country || null, userId]
+        );
+        
+        if (result.rows.length === 0) {
+            return res.status(404).json({ error: 'Kullanıcı bulunamadı.' });
+        }
+        
+        res.json(sanitizeUser(result.rows[0], req));
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// GET / - List all users with pagination
+router.get('/', async (req, res) => {
+    try {
+        const limit = parseInt(req.query.limit) || 50;
+        const offset = parseInt(req.query.offset) || 0;
+        const result = await db.query(
+            'SELECT * FROM users ORDER BY created_at DESC LIMIT $1 OFFSET $2',
+            [limit, offset]
+        );
+        res.json(result.rows.map(row => sanitizeUser(row, req)));
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 module.exports = router;

@@ -106,8 +106,8 @@ router.post('/', authenticateToken, async (req, res) => {
 
         const room = roomRes.rows[0];
 
-        // 2. Pre-populate 8 seats for the room
-        for (let seatNum = 1; seatNum <= 8; seatNum++) {
+        // 2. Pre-populate 16 seats for the room
+        for (let seatNum = 1; seatNum <= 16; seatNum++) {
             await client.query(`
                 INSERT INTO party_room_seats (room_id, seat_number, user_id)
                 VALUES ($1, $2, NULL)

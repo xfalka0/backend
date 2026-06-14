@@ -1,5 +1,8 @@
 const db = require('../db');
 
+const inMemoryPartyIdempotencyKeys = new Set();
+const pendingPartyIdempotencyKeys = new Set();
+
 function handlePartyRoomSockets(io, socket) {
     // 1. JOIN PARTY ROOM
     socket.on('join_party_room', async (data) => {
@@ -252,8 +255,16 @@ function handlePartyRoomSockets(io, socket) {
 
     // 8. SEND VIRTUAL GIFT TO SEAT OWNER
     socket.on('send_party_gift', async (data) => {
-        const { roomId, targetUserId, giftId } = data;
+        const { roomId, targetUserId, giftId, quantity = 1, idempotencyKey } = data;
         if (!roomId || !targetUserId || !giftId || !socket.user) return;
+
+        if (idempotencyKey) {
+            if (inMemoryPartyIdempotencyKeys.has(idempotencyKey) || pendingPartyIdempotencyKeys.has(idempotencyKey)) {
+                console.log(`[Idempotency In-Memory Party] Key ${idempotencyKey} already processed or pending.`);
+                return socket.emit('gift_success', { idempotencyKey, duplicate: true });
+            }
+            pendingPartyIdempotencyKeys.add(idempotencyKey);
+        }
 
         const roomName = `party_room_${roomId}`;
         const senderId = socket.user.id;
@@ -338,6 +349,13 @@ function handlePartyRoomSockets(io, socket) {
 
             await client.query('COMMIT');
 
+            if (idempotencyKey) {
+                inMemoryPartyIdempotencyKeys.add(idempotencyKey);
+                setTimeout(() => inMemoryPartyIdempotencyKeys.delete(idempotencyKey), 86400 * 1000);
+            }
+
+            socket.emit('gift_success', { idempotencyKey, duplicate: false });
+
             // Broadcast balance update to sender
             const newBalRes = await client.query('SELECT balance FROM users WHERE id = $1', [senderId]);
             const newBalance = newBalRes.rows[0].balance;
@@ -360,9 +378,15 @@ function handlePartyRoomSockets(io, socket) {
 
         } catch (err) {
             await client.query('ROLLBACK');
+            if (idempotencyKey) {
+                pendingPartyIdempotencyKeys.delete(idempotencyKey);
+            }
             console.error('[SOCKET] Send party gift error:', err.message);
             socket.emit('party_room_error', { message: 'Hediye gönderilirken bir hata oluştu.' });
         } finally {
+            if (idempotencyKey) {
+                pendingPartyIdempotencyKeys.delete(idempotencyKey);
+            }
             client.release();
         }
     });

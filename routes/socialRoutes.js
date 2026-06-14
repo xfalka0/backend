@@ -20,4 +20,7 @@ router.post('/admin/social/post', authenticateToken, authorizeRole('admin', 'sup
 router.post('/admin/social/story', authenticateToken, authorizeRole('admin', 'super_admin'), socialController.adminCreateStory);
 router.delete('/admin/social/:type/:id', authenticateToken, authorizeRole('admin', 'super_admin'), socialController.deleteSocialContent);
 
+// Voice Party Rooms router integration
+router.use('/party-rooms', require('./partyRooms'));
+
 module.exports = router;

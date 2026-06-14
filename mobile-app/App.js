@@ -62,7 +62,8 @@ import AgencyApplicationScreen from './src/screens/AgencyApplicationScreen';
 import AgencyJoinScreen from './src/screens/AgencyJoinScreen';
 import AgencyOperatorsScreen from './src/screens/AgencyOperatorsScreen';
 import AnimatedTabBar from './src/components/animated/AnimatedTabBar';
-import { useAppStore } from './src/store/useAppStore';
+import PartyRoomsListScreen from './src/screens/PartyRoomsListScreen';
+import PartyRoomScreen from './src/screens/PartyRoomScreen';
 import { trackPurchase } from './src/utils/analytics';
 import { Settings } from 'react-native-fbsdk-next';
 
@@ -74,16 +75,7 @@ function MainTabs({ route }) {
     const paramsUser = route.params?.user;
     const user = paramsUser ? paramsUser : { id: TEST_USER_ID, name: 'Test Kullanıcı', hearts: 100 };
 
-    // Read role dynamically from Zustand global store
-    const storeUser = useAppStore(state => state.user);
-    const storeRole = useAppStore(state => state.role);
-    const activeUser = storeUser || user;
-    const isMale = (activeUser?.gender || '').toLowerCase() === 'erkek';
-    const isOperator = !isMale && (
-                       storeRole === 'operator' || 
-                       (activeUser?.gender || '').toLowerCase() === 'kadin' || 
-                       ['operator', 'staff', 'moderator', 'admin', 'super_admin'].includes(activeUser?.role)
-    );
+
 
     return (
         <Tab.Navigator
@@ -108,14 +100,6 @@ function MainTabs({ route }) {
                 initialParams={{ user }}
                 options={{ tabBarIconName: 'chatbubbles' }}
             />
-            {isOperator && (
-                <Tab.Screen
-                    name="Görevler"
-                    component={MissionBoardScreen}
-                    initialParams={{ user }}
-                    options={{ tabBarIconName: 'trophy' }}
-                />
-            )}
             <Tab.Screen
                 name="Profil"
                 component={ProfileScreen}
@@ -175,6 +159,8 @@ function AppContent() {
                     <Stack.Screen name="AgencyApplication" component={AgencyApplicationScreen} />
                     <Stack.Screen name="AgencyJoin" component={AgencyJoinScreen} />
                     <Stack.Screen name="MissionBoard" component={MissionBoardScreen} />
+                    <Stack.Screen name="PartyRoomsList" component={PartyRoomsListScreen} />
+                    <Stack.Screen name="PartyRoom" component={PartyRoomScreen} />
                 </Stack.Navigator>
             </StarterPackProvider>
         </NavigationContainer>

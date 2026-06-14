@@ -312,6 +312,32 @@ export default function HomeScreen({ navigation, route }) {
             <View style={{ paddingHorizontal: 16 }}>
                 <DestinyHero onPress={() => navigation.navigate('Keşfet')} />
             </View>
+
+            <TouchableOpacity 
+                activeOpacity={0.85} 
+                style={styles.partyBannerWrapper}
+                onPress={() => navigation.navigate('PartyRoomsList')}
+            >
+                <LinearGradient
+                    colors={['#8b5cf6', '#ec4899']}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 0 }}
+                    style={styles.partyBanner}
+                >
+                    <View style={styles.partyBannerLeft}>
+                        <View style={styles.partyIconCircle}>
+                            <Ionicons name="mic" size={22} color="#fff" />
+                        </View>
+                        <View style={styles.partyTextContainer}>
+                            <Text style={styles.partyTitle}>Sesli Sohbet Odaları 🎙️</Text>
+                            <Text style={styles.partySubtitle}>Ses partilerine katıl veya kendi odanı kur!</Text>
+                        </View>
+                    </View>
+                    <View style={styles.partyBadge}>
+                        <Text style={styles.partyBadgeText}>Canlı</Text>
+                    </View>
+                </LinearGradient>
+            </TouchableOpacity>
             
             <View style={[styles.tabContainer, { justifyContent: 'space-between' }]}>
                 <View style={{ flexDirection: 'row', gap: 10, alignItems: 'center' }}>
@@ -559,6 +585,66 @@ const styles = StyleSheet.create({
     albumScroll: { marginTop: 10 },
     albumImage: { width: 70, height: 70, borderRadius: 12, marginRight: 10 },
     emptyContainer: { alignItems: 'center', justifyContent: 'center', marginTop: 100 },
-    emptyText: { marginTop: 15, fontSize: 16, fontWeight: '500' }
+    emptyText: { marginTop: 15, fontSize: 16, fontWeight: '500' },
+    partyBannerWrapper: {
+        paddingHorizontal: 16,
+        marginTop: 12,
+        marginBottom: 4,
+    },
+    partyBanner: {
+        borderRadius: 20,
+        padding: 14,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        borderWidth: 1,
+        borderColor: 'rgba(255, 255, 255, 0.12)',
+        shadowColor: '#ec4899',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.15,
+        shadowRadius: 12,
+        elevation: 8,
+    },
+    partyBannerLeft: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        flex: 1,
+    },
+    partyIconCircle: {
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        backgroundColor: 'rgba(255, 255, 255, 0.18)',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    partyTextContainer: {
+        marginLeft: 12,
+        flex: 1,
+    },
+    partyTitle: {
+        color: '#fff',
+        fontSize: 15,
+        fontWeight: 'bold',
+    },
+    partySubtitle: {
+        color: 'rgba(255, 255, 255, 0.75)',
+        fontSize: 11,
+        marginTop: 2,
+    },
+    partyBadge: {
+        backgroundColor: '#ef4444',
+        paddingHorizontal: 8,
+        paddingVertical: 3,
+        borderRadius: 8,
+        borderWidth: 1,
+        borderColor: 'rgba(255, 255, 255, 0.3)',
+    },
+    partyBadgeText: {
+        color: '#fff',
+        fontSize: 9,
+        fontWeight: '900',
+        textTransform: 'uppercase',
+    },
 });
 

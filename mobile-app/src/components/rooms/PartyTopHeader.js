@@ -1,20 +1,21 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 
-export default function RoomListHeader({ activeTab, onTabChange, onBack, insets }) {
+export default function PartyTopHeader({ activeTab, onTabChange, onBack, insets }) {
     return (
         <View style={[styles.header, { paddingTop: insets?.top || 50 }]}>
-            {/* Geri Butonu */}
+            {/* Back Button */}
             <TouchableOpacity 
                 onPress={onBack} 
                 style={styles.backButton}
                 activeOpacity={0.8}
             >
-                <Ionicons name="chevron-back" size={22} color="#FFFFFF" />
+                <Ionicons name="chevron-back" size={20} color="#FFFFFF" />
             </TouchableOpacity>
 
-            {/* Ortadaki Takip et / Parti Tabları */}
+            {/* Middle Main Tabs (Follow / Party) */}
             <View style={styles.mainTabsContainer}>
                 {['Takip et', 'Parti'].map(tab => {
                     const isActive = activeTab === tab;
@@ -32,16 +33,21 @@ export default function RoomListHeader({ activeTab, onTabChange, onBack, insets 
                                 {tab}
                             </Text>
                             {isActive && (
-                                <View style={styles.mainTabIndicator} />
+                                <LinearGradient
+                                    colors={['#21F58B', '#00D5FF']}
+                                    start={{ x: 0, y: 0 }}
+                                    end={{ x: 1, y: 0 }}
+                                    style={styles.mainTabIndicator}
+                                />
                             )}
                         </TouchableOpacity>
                     );
                 })}
             </View>
             
-            {/* Sağdaki Ödül / Sıralama İkonu */}
+            {/* Right Rewards/Ranking Icon */}
             <TouchableOpacity style={styles.rewardButton} activeOpacity={0.8}>
-                <Ionicons name="ribbon" size={20} color="#FFD700" style={styles.iconGlow} />
+                <Ionicons name="trophy-outline" size={18} color="#FF9B3D" />
             </TouchableOpacity>
         </View>
     );
@@ -53,22 +59,24 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'space-between',
         paddingHorizontal: 16,
-        paddingBottom: 12,
+        paddingBottom: 10,
         backgroundColor: 'transparent',
+        borderBottomWidth: 1,
+        borderColor: 'rgba(255, 255, 255, 0.05)',
     },
     backButton: {
         width: 36,
         height: 36,
         borderRadius: 18,
-        backgroundColor: 'rgba(255, 255, 255, 0.08)',
+        backgroundColor: 'rgba(255, 255, 255, 0.04)',
         alignItems: 'center',
         justifyContent: 'center',
         borderWidth: 0.5,
-        borderColor: 'rgba(255, 255, 255, 0.08)',
+        borderColor: 'rgba(255, 255, 255, 0.06)',
     },
     mainTabsContainer: {
         flexDirection: 'row',
-        gap: 24,
+        gap: 20,
     },
     mainTabItem: {
         alignItems: 'center',
@@ -76,36 +84,30 @@ const styles = StyleSheet.create({
     },
     mainTabText: {
         fontSize: 15.5,
-        color: '#9DA3B8',
-        fontWeight: 'bold',
+        color: 'rgba(255, 255, 255, 0.55)',
+        fontWeight: '600',
     },
     mainTabTextActive: {
-        color: '#21F58B', // Accent Green neon color matching request
+        color: '#21F58B', 
+        fontWeight: '700',
+        textShadowColor: 'rgba(33, 245, 139, 0.4)',
+        textShadowOffset: { width: 0, height: 0 },
+        textShadowRadius: 8,
     },
     mainTabIndicator: {
-        width: 14,
+        width: 16,
         height: 3,
         borderRadius: 1.5,
-        backgroundColor: '#21F58B', // Accent Green indicator
         marginTop: 4,
-        shadowColor: '#21F58B',
-        shadowOpacity: 0.9,
-        shadowRadius: 3,
-        elevation: 2,
     },
     rewardButton: {
         width: 36,
         height: 36,
         borderRadius: 18,
-        backgroundColor: 'rgba(255, 255, 255, 0.08)',
+        backgroundColor: 'rgba(255, 255, 255, 0.04)',
         alignItems: 'center',
         justifyContent: 'center',
         borderWidth: 0.5,
-        borderColor: 'rgba(255, 255, 255, 0.08)',
-    },
-    iconGlow: {
-        textShadowColor: '#FFC83D',
-        textShadowOffset: { width: 0, height: 0 },
-        textShadowRadius: 4,
+        borderColor: 'rgba(255, 255, 255, 0.06)',
     },
 });

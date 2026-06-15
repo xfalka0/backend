@@ -11,6 +11,7 @@ export const useRoomStore = create((set, get) => ({
     // ─── State ────────────────────────────────────────────────────────────────
     room: null,
     members: [],
+    bannedMembers: [],
     seats: [],
     onlineCount: 0,
     messages: [],
@@ -28,6 +29,101 @@ export const useRoomStore = create((set, get) => ({
 
     // Moderasyon events
     lastModerationEvent: null,
+
+    // ─── API Moderation Actions ────────────────────────────────────────────────
+
+    fetchMembers: async (roomId, query = '') => {
+        try {
+            const token = await AsyncStorage.getItem('token');
+            const res = await axios.get(`${API_URL}/party-rooms/${roomId}/members?query=${encodeURIComponent(query)}`, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            set({ members: res.data || [] });
+            return res.data;
+        } catch (err) {
+            console.error('[RoomStore] fetchMembers error:', err.message);
+            return [];
+        }
+    },
+
+    fetchBannedMembers: async (roomId) => {
+        try {
+            const token = await AsyncStorage.getItem('token');
+            const res = await axios.get(`${API_URL}/party-rooms/${roomId}/banned`, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            set({ bannedMembers: res.data || [] });
+            return res.data;
+        } catch (err) {
+            console.error('[RoomStore] fetchBannedMembers error:', err.message);
+            return [];
+        }
+    },
+
+    promoteToRoomAdmin: async (roomId, targetUserId) => {
+        const token = await AsyncStorage.getItem('token');
+        await axios.post(`${API_URL}/party-rooms/${roomId}/assign-role`, { targetUserId, role: 'room_admin' }, {
+            headers: { Authorization: `Bearer ${token}` }
+        });
+        await get().fetchMembers(roomId);
+    },
+
+    demoteRoomAdmin: async (roomId, targetUserId) => {
+        const token = await AsyncStorage.getItem('token');
+        await axios.post(`${API_URL}/party-rooms/${roomId}/assign-role`, { targetUserId, role: 'listener' }, {
+            headers: { Authorization: `Bearer ${token}` }
+        });
+        await get().fetchMembers(roomId);
+    },
+
+    promoteToModerator: async (roomId, targetUserId) => {
+        const token = await AsyncStorage.getItem('token');
+        await axios.post(`${API_URL}/party-rooms/${roomId}/assign-role`, { targetUserId, role: 'room_moderator' }, {
+            headers: { Authorization: `Bearer ${token}` }
+        });
+        await get().fetchMembers(roomId);
+    },
+
+    demoteModerator: async (roomId, targetUserId) => {
+        const token = await AsyncStorage.getItem('token');
+        await axios.post(`${API_URL}/party-rooms/${roomId}/assign-role`, { targetUserId, role: 'listener' }, {
+            headers: { Authorization: `Bearer ${token}` }
+        });
+        await get().fetchMembers(roomId);
+    },
+
+    muteMember: async (roomId, targetUserId, isMuted) => {
+        const token = await AsyncStorage.getItem('token');
+        await axios.post(`${API_URL}/party-rooms/${roomId}/mute`, { targetUserId, isMuted }, {
+            headers: { Authorization: `Bearer ${token}` }
+        });
+        await get().fetchMembers(roomId);
+    },
+
+    kickMember: async (roomId, targetUserId) => {
+        const token = await AsyncStorage.getItem('token');
+        await axios.post(`${API_URL}/party-rooms/${roomId}/kick`, { targetUserId }, {
+            headers: { Authorization: `Bearer ${token}` }
+        });
+        await get().fetchMembers(roomId);
+    },
+
+    banMember: async (roomId, targetUserId, reason = '') => {
+        const token = await AsyncStorage.getItem('token');
+        await axios.post(`${API_URL}/party-rooms/${roomId}/ban`, { targetUserId, reason }, {
+            headers: { Authorization: `Bearer ${token}` }
+        });
+        await get().fetchMembers(roomId);
+        await get().fetchBannedMembers(roomId);
+    },
+
+    unbanMember: async (roomId, targetUserId) => {
+        const token = await AsyncStorage.getItem('token');
+        await axios.post(`${API_URL}/party-rooms/${roomId}/unban`, { targetUserId }, {
+            headers: { Authorization: `Bearer ${token}` }
+        });
+        await get().fetchBannedMembers(roomId);
+    },
 
     // ─── Room Join / Leave ────────────────────────────────────────────────────
 
@@ -212,13 +308,28 @@ export const useRoomStore = create((set, get) => ({
             store.addMessage(msg);
         });
 
+        SocketService.on('user_left_party', (data) => {
+            set(s => ({ onlineCount: Math.max(0, s.onlineCount - 1) }));
+            const currentRoom = store.room;
+            if (currentRoom) {
+                store.fetchMembers(currentRoom.id);
+            }
+        });
+
         SocketService.on('user_joined_party', (data) => {
             set(s => ({ onlineCount: s.onlineCount + 1 }));
             store.addSystemMessage(`${data.display_name || data.username} odaya girdi.`);
+            const currentRoom = store.room;
+            if (currentRoom) {
+                store.fetchMembers(currentRoom.id);
+            }
         });
 
-        SocketService.on('user_left_party', (data) => {
-            set(s => ({ onlineCount: Math.max(0, s.onlineCount - 1) }));
+        SocketService.on('party_member_updated', (data) => {
+            const currentRoom = store.room;
+            if (currentRoom) {
+                store.fetchMembers(currentRoom.id);
+            }
         });
 
         SocketService.on('party_gift_sent', (giftData) => {

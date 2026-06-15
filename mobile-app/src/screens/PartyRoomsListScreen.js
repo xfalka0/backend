@@ -1,5 +1,5 @@
-import React, { useState, useCallback } from 'react';
-import { View, Text, StyleSheet, FlatList, RefreshControl, Modal, TextInput, ActivityIndicator, Dimensions, TouchableOpacity } from 'react-native';
+import React, { useState, useCallback, useEffect } from 'react';
+import { View, Text, StyleSheet, FlatList, RefreshControl, ActivityIndicator, Dimensions, TouchableOpacity, Platform } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
@@ -7,16 +7,91 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { API_URL } from '../config';
 import { useAlert } from '../contexts/AlertContext';
-import GlassCard from '../components/ui/GlassCard';
 
-// Import New Modular Components
-import RoomListHeader from '../components/rooms/RoomListHeader';
-import RoomCategoryTabs from '../components/rooms/RoomCategoryTabs';
+// Import Modular Components
+import PartyTopHeader from '../components/rooms/PartyTopHeader';
+import PartyCategoryTabs from '../components/rooms/PartyCategoryTabs';
+import PartyFilterChips from '../components/rooms/PartyFilterChips';
 import RoomCard from '../components/rooms/RoomCard';
 import CreateRoomFloatingButton from '../components/rooms/CreateRoomFloatingButton';
 import EmptyRoomState from '../components/rooms/EmptyRoomState';
 
-const { width } = Dimensions.get('window');
+import { canCreateRoom } from '../utils/permissions';
+
+const { width, height } = Dimensions.get('window');
+
+const DEMO_ROOMS = [
+    {
+        id: 'demo-1',
+        title: 'Gece Muhabbeti 🎙️',
+        host_name: 'melis',
+        agency_name: 'Diamond Agency',
+        category: 'Önerilen',
+        country: 'TR',
+        onlineCount: 124,
+        active_speakers: 5,
+        max_speakers: 8,
+        diamond_count: '2.4K',
+        room_level: 3,
+        host_avatar: 'https://randomuser.me/api/portraits/women/44.jpg',
+    },
+    {
+        id: 'demo-2',
+        title: 'Yeni İnsanlar & Sohbet 💫',
+        host_name: 'aylin',
+        agency_name: 'Star Agency',
+        category: 'Önerilen',
+        country: 'TR',
+        onlineCount: 89,
+        active_speakers: 4,
+        max_speakers: 8,
+        diamond_count: '1.2K',
+        room_level: 2,
+        host_avatar: 'https://randomuser.me/api/portraits/women/68.jpg',
+    },
+    {
+        id: 'demo-3',
+        title: 'Canlı Müzik & İstek 🎵',
+        host_name: 'deniz',
+        agency_name: 'Moon Agency',
+        category: 'Video',
+        country: 'TR',
+        onlineCount: 210,
+        active_speakers: 6,
+        max_speakers: 8,
+        diamond_count: '5.6K',
+        room_level: 5,
+        host_avatar: 'https://randomuser.me/api/portraits/men/32.jpg',
+    },
+    {
+        id: 'demo-4',
+        title: 'Eğlence Masası DC 🎮',
+        host_name: 'ece',
+        agency_name: 'Diamond Agency',
+        category: 'Eğlence',
+        country: 'TR',
+        onlineCount: 45,
+        active_speakers: 8,
+        max_speakers: 8,
+        diamond_count: '850',
+        room_level: 1,
+        host_avatar: 'https://randomuser.me/api/portraits/women/33.jpg',
+    },
+    {
+        id: 'demo-5',
+        title: 'İki Kalp Tek Oda ❤️',
+        host_name: 'gamze',
+        agency_name: 'Star Agency',
+        category: 'Etkileşimli',
+        country: 'TR',
+        onlineCount: 312,
+        active_speakers: 2,
+        max_speakers: 4,
+        diamond_count: '12.5K',
+        room_level: 6,
+        host_avatar: 'https://randomuser.me/api/portraits/women/12.jpg',
+    }
+];
 
 export default function PartyRoomsListScreen({ navigation }) {
     const { showAlert } = useAlert();
@@ -28,10 +103,9 @@ export default function PartyRoomsListScreen({ navigation }) {
     
     const [mainTab, setMainTab] = useState('Parti'); // 'Takip et' | 'Parti'
     const [subTab, setSubTab] = useState('Önerilen'); // Sub categories
+    const [activeFeaturedChip, setActiveFeaturedChip] = useState('popular');
     
-    const [createModalVisible, setCreateModalVisible] = useState(false);
-    const [roomTitle, setRoomTitle] = useState('');
-    const [creatingRoom, setCreatingRoom] = useState(false);
+    const [userPermission, setUserPermission] = useState(false);
 
     const fetchRooms = async () => {
         try {
@@ -40,6 +114,13 @@ export default function PartyRoomsListScreen({ navigation }) {
                 headers: { Authorization: `Bearer ${token}` }
             });
             setRooms(res.data);
+
+            // Fetch user permissions too
+            const userData = await AsyncStorage.getItem('user');
+            if (userData) {
+                const userObj = JSON.parse(userData);
+                setUserPermission(canCreateRoom(userObj));
+            }
         } catch (err) {
             console.error('[RoomsList] Fetch error:', err.message);
         } finally {
@@ -54,68 +135,82 @@ export default function PartyRoomsListScreen({ navigation }) {
         }, [])
     );
 
-    const handleCreateRoom = async () => {
-        if (!roomTitle.trim()) {
-            showAlert({ title: 'Hata', message: 'Lütfen bir oda başlığı yazın.', type: 'error' });
-            return;
-        }
-
-        setCreatingRoom(true);
-        try {
-            const token = await AsyncStorage.getItem('token');
-            const res = await axios.post(`${API_URL}/party-rooms`, {
-                title: roomTitle.trim()
-            }, {
-                headers: { Authorization: `Bearer ${token}` }
-            });
-
-            setRoomTitle('');
-            setCreateModalVisible(false);
-            fetchRooms();
-            navigation.navigate('PartyRoom', { room: res.data });
-        } catch (err) {
-            console.error('[RoomsList] Create error:', err.message);
-            showAlert({ title: 'Hata', message: 'Oda oluşturulamadı.', type: 'error' });
-        } finally {
-            setCreatingRoom(false);
-        }
-    };
-
     const onRefresh = () => {
         setRefreshing(true);
         fetchRooms();
     };
 
+    // Filter rooms based on selected category & active featured chip
+    const getFilteredRooms = () => {
+        const baseRooms = rooms.length > 0 ? rooms.map((r, index) => ({
+            ...r,
+            onlineCount: r.onlineCount || (10 + (index * 12)),
+            active_speakers: r.active_speakers || 3,
+            max_speakers: r.max_speakers || 8,
+            diamond_count: r.diamond_count || `${((index + 1) * 0.7).toFixed(1)}K`,
+            room_level: r.room_level || (index % 4) + 1,
+            category: r.category || 'Önerilen',
+            host_name: r.host_name || r.username || 'Yayıncı',
+            agency_name: r.agency_name || 'Star Agency',
+            host_avatar: r.host_avatar || null,
+        })) : DEMO_ROOMS;
+
+        // 1. Filter by categories: Önerilen, Video, Eğlence, Etkileşimli, Oyun
+        let categoryFiltered = baseRooms;
+        if (subTab !== 'Önerilen') {
+            categoryFiltered = baseRooms.filter(r => r.category === subTab);
+        }
+
+        // 2. Filter or sort by featured chips: popular, vip, new, tr
+        if (activeFeaturedChip === 'popular') {
+            return categoryFiltered.sort((a, b) => parseInt(b.onlineCount) - parseInt(a.onlineCount));
+        } else if (activeFeaturedChip === 'vip') {
+            return categoryFiltered.filter(r => r.room_level >= 3);
+        } else if (activeFeaturedChip === 'new') {
+            return categoryFiltered.filter(r => r.room_level <= 2);
+        }
+
+        return categoryFiltered;
+    };
+
+    const displayRooms = getFilteredRooms();
+
     return (
         <View style={styles.container}>
-            {/* Background Premium Dark Gradient */}
+            {/* Background Premium Dark Cosmic Gradient */}
             <LinearGradient
-                colors={['#0B1028', '#101632', '#0B1028']}
+                colors={['#070B24', '#12002E', '#210035']}
                 style={StyleSheet.absoluteFill}
             />
 
+            {/* Radial Glows */}
+            <View style={[styles.radialGlow, styles.glowTopRight]} />
+            <View style={[styles.radialGlow, styles.glowBottomLeft]} />
+
             {/* Top Navigation & Tabs (Follow / Party) */}
-            <RoomListHeader
+            <PartyTopHeader
                 activeTab={mainTab}
                 onTabChange={setMainTab}
                 onBack={() => navigation.goBack()}
                 insets={insets}
             />
 
-            {/* Sub Categories Horizontal Bar */}
-            <RoomCategoryTabs
-                activeCategory={subTab}
-                onCategoryChange={setSubTab}
+
+
+            {/* Yatay Featured Highlight Chips */}
+            <PartyFilterChips
+                activeChip={activeFeaturedChip}
+                onChipChange={setActiveFeaturedChip}
             />
 
             {/* Party Rooms List */}
             {loading ? (
                 <View style={styles.loadingContainer}>
-                    <ActivityIndicator size="large" color="#FF3F86" />
+                    <ActivityIndicator size="large" color="#FF2F8B" />
                 </View>
             ) : (
                 <FlatList
-                    data={rooms}
+                    data={displayRooms}
                     keyExtractor={item => item.id?.toString()}
                     renderItem={({ item }) => (
                         <RoomCard
@@ -123,76 +218,23 @@ export default function PartyRoomsListScreen({ navigation }) {
                             onPress={() => navigation.navigate('PartyRoom', { room: item })}
                         />
                     )}
-                    contentContainerStyle={[styles.listContent, { paddingBottom: insets.bottom + 85 }]}
+                    contentContainerStyle={[styles.listContent, { paddingBottom: insets.bottom + 90 }]}
                     refreshControl={
-                        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#FF3F86" />
-                    }
-                    ListFooterComponent={
-                        rooms.length === 1 ? (
-                            <EmptyRoomState 
-                                roomCount={rooms.length} 
-                                onCreatePress={() => setCreateModalVisible(true)} 
-                            />
-                        ) : null
+                        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#FF2F8B" />
                     }
                     ListEmptyComponent={
                         <EmptyRoomState 
                             roomCount={0} 
-                            onCreatePress={() => setCreateModalVisible(true)} 
+                            onCreatePress={() => navigation.navigate('CreateRoom')} 
                         />
                     }
                 />
             )}
 
-            {/* Pill-shaped FAB: Oda Oluştur */}
-            <CreateRoomFloatingButton onPress={() => setCreateModalVisible(true)} />
-
-            {/* Create Room Modal */}
-            <Modal
-                visible={createModalVisible}
-                transparent
-                animationType="fade"
-                onRequestClose={() => setCreateModalVisible(false)}
-            >
-                <View style={styles.modalOverlay}>
-                    <TouchableOpacity style={StyleSheet.absoluteFill} onPress={() => setCreateModalVisible(false)} />
-                    <GlassCard style={styles.createModal} intensity={40} tint="dark">
-                        <Text style={styles.modalTitle}>Oda Başlat 🎙️</Text>
-                        <TextInput
-                            placeholder="Odanız için eğlenceli bir başlık yazın..."
-                            placeholderTextColor="rgba(255,255,255,0.4)"
-                            style={styles.input}
-                            value={roomTitle}
-                            onChangeText={setRoomTitle}
-                            maxLength={40}
-                        />
-                        <View style={styles.modalActions}>
-                            <TouchableOpacity 
-                                style={[styles.modalBtn, styles.cancelBtn]} 
-                                onPress={() => setCreateModalVisible(false)}
-                            >
-                                <Text style={styles.cancelBtnText}>Vazgeç</Text>
-                            </TouchableOpacity>
-                            <TouchableOpacity 
-                                style={styles.modalBtn}
-                                onPress={handleCreateRoom}
-                                disabled={creatingRoom}
-                            >
-                                <LinearGradient
-                                    colors={['#8b5cf6', '#ec4899']}
-                                    style={styles.modalBtnGradient}
-                                >
-                                    {creatingRoom ? (
-                                        <ActivityIndicator size="small" color="#fff" />
-                                    ) : (
-                                        <Text style={styles.confirmBtnText}>Başlat</Text>
-                                    )}
-                                </LinearGradient>
-                            </TouchableOpacity>
-                        </View>
-                    </GlassCard>
-                </View>
-            </Modal>
+            {/* Floating Action Button (Only show if user has permission) */}
+            {userPermission && (
+                <CreateRoomFloatingButton onPress={() => navigation.navigate('CreateRoom')} />
+            )}
         </View>
     );
 }
@@ -200,7 +242,38 @@ export default function PartyRoomsListScreen({ navigation }) {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#0B1028',
+        backgroundColor: '#070B24',
+    },
+    radialGlow: {
+        position: 'absolute',
+        width: width * 0.8,
+        height: width * 0.8,
+        borderRadius: (width * 0.8) / 2,
+        opacity: 0.08, // Much softer glow to keep it extremely premium
+        ...Platform.select({
+            ios: {
+                shadowColor: '#7B2CFF',
+                shadowRadius: 120,
+                shadowOpacity: 0.8,
+            },
+            android: {
+                backgroundColor: 'rgba(123, 44, 255, 0.25)',
+                filter: 'blur(100px)',
+            }
+        })
+    },
+    glowTopRight: {
+        top: -100,
+        right: -100,
+        backgroundColor: 'rgba(255, 47, 139, 0.25)',
+        ...Platform.select({
+            ios: { shadowColor: '#FF2F8B' }
+        })
+    },
+    glowBottomLeft: {
+        bottom: -100,
+        left: -100,
+        backgroundColor: 'rgba(123, 44, 255, 0.25)',
     },
     loadingContainer: {
         flex: 1,
@@ -208,77 +281,6 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
     },
     listContent: {
-        paddingTop: 10,
-    },
-    modalOverlay: {
-        flex: 1,
-        backgroundColor: 'rgba(0, 0, 0, 0.72)',
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
-    createModal: {
-        width: width - 36,
-        borderRadius: 28,
-        padding: 24,
-        borderWidth: 1.2,
-        borderColor: 'rgba(255, 255, 255, 0.12)',
-        backgroundColor: '#171D3A',
-        shadowColor: '#FF3F86',
-        shadowOffset: { width: 0, height: 8 },
-        shadowOpacity: 0.15,
-        shadowRadius: 16,
-    },
-    modalTitle: {
-        fontSize: 18,
-        fontWeight: 'bold',
-        color: '#FFFFFF',
-        marginBottom: 20,
-        textAlign: 'center',
-        letterSpacing: 0.5,
-    },
-    input: {
-        backgroundColor: 'rgba(255, 255, 255, 0.05)',
-        borderWidth: 1,
-        borderColor: 'rgba(255, 255, 255, 0.1)',
-        borderRadius: 16,
-        paddingHorizontal: 16,
-        paddingVertical: 14,
-        color: '#FFFFFF',
-        fontSize: 14.5,
-        marginBottom: 22,
-        fontWeight: '500',
-    },
-    modalActions: {
-        flexDirection: 'row',
-        gap: 12,
-    },
-    modalBtn: {
-        flex: 1,
-        height: 46,
-        borderRadius: 16,
-        overflow: 'hidden',
-    },
-    modalBtnGradient: {
-        flex: 1,
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
-    cancelBtn: {
-        backgroundColor: 'rgba(255, 255, 255, 0.08)',
-        alignItems: 'center',
-        justifyContent: 'center',
-        borderWidth: 1.2,
-        borderColor: 'rgba(255, 255, 255, 0.08)',
-    },
-    cancelBtnText: {
-        color: '#9DA3B8',
-        fontWeight: 'bold',
-        fontSize: 13,
-    },
-    confirmBtnText: {
-        color: '#FFFFFF',
-        fontWeight: 'bold',
-        fontSize: 13,
+        paddingTop: 4,
     },
 });
-

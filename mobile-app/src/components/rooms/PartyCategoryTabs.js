@@ -1,9 +1,10 @@
 import React from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 
 const CATEGORIES = ['Önerilen', 'Video', 'Eğlence', 'Etkileşimli', 'Oyun'];
 
-export default function RoomCategoryTabs({ activeCategory, onCategoryChange }) {
+export default function PartyCategoryTabs({ activeCategory, onCategoryChange }) {
     return (
         <View style={styles.container}>
             <ScrollView 
@@ -27,7 +28,12 @@ export default function RoomCategoryTabs({ activeCategory, onCategoryChange }) {
                                 {cat}
                             </Text>
                             {isActive && (
-                                <View style={styles.tabIndicator} />
+                                <LinearGradient
+                                    colors={['#21F58B', '#00D5FF']}
+                                    start={{ x: 0, y: 0 }}
+                                    end={{ x: 1, y: 0 }}
+                                    style={styles.tabIndicator}
+                                />
                             )}
                         </TouchableOpacity>
                     );
@@ -39,36 +45,36 @@ export default function RoomCategoryTabs({ activeCategory, onCategoryChange }) {
 
 const styles = StyleSheet.create({
     container: {
-        borderBottomWidth: 1.2,
-        borderColor: 'rgba(255, 255, 255, 0.05)',
-        paddingBottom: 6,
+        borderBottomWidth: 1,
+        borderColor: 'rgba(255, 255, 255, 0.06)',
+        paddingBottom: 2,
         marginTop: 6,
     },
     scrollContent: {
         paddingHorizontal: 16,
-        gap: 20,
+        gap: 22,
     },
     tabItem: {
         alignItems: 'center',
-        paddingVertical: 6,
+        paddingVertical: 8,
         position: 'relative',
     },
     tabText: {
-        fontSize: 13.5,
-        color: '#9DA3B8',
-        fontWeight: 'bold',
+        fontSize: 14.5,
+        color: 'rgba(255, 255, 255, 0.55)',
+        fontWeight: '600',
     },
     tabTextActive: {
-        color: '#21F58B', // Neon Green active color
+        color: '#21F58B', 
+        fontWeight: '700',
+        textShadowColor: 'rgba(33, 245, 139, 0.35)',
+        textShadowOffset: { width: 0, height: 0 },
+        textShadowRadius: 6,
     },
     tabIndicator: {
         width: 16,
         height: 2.5,
-        borderRadius: 1,
-        backgroundColor: '#21F58B', // Neon Green line
+        borderRadius: 1.25,
         marginTop: 5,
-        shadowColor: '#21F58B',
-        shadowOpacity: 0.8,
-        shadowRadius: 3,
     },
 });

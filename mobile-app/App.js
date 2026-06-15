@@ -64,6 +64,7 @@ import AgencyOperatorsScreen from './src/screens/AgencyOperatorsScreen';
 import AnimatedTabBar from './src/components/animated/AnimatedTabBar';
 import PartyRoomsListScreen from './src/screens/PartyRoomsListScreen';
 import PartyRoomScreen from './src/screens/PartyRoomScreen';
+import CreateRoomScreen from './src/screens/CreateRoomScreen';
 import { trackPurchase } from './src/utils/analytics';
 import { Settings } from 'react-native-fbsdk-next';
 
@@ -161,6 +162,7 @@ function AppContent() {
                     <Stack.Screen name="MissionBoard" component={MissionBoardScreen} />
                     <Stack.Screen name="PartyRoomsList" component={PartyRoomsListScreen} />
                     <Stack.Screen name="PartyRoom" component={PartyRoomScreen} />
+                    <Stack.Screen name="CreateRoom" component={CreateRoomScreen} />
                 </Stack.Navigator>
             </StarterPackProvider>
         </NavigationContainer>

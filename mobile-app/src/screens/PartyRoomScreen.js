@@ -26,8 +26,10 @@ import RoomRightMenu from '../components/party-room/RoomRightMenu';
 import RoomBottomBar from '../components/party-room/RoomBottomBar';
 import GiftAnimationOverlay from '../components/party-room/GiftAnimationOverlay';
 
+import RoomMembersPanel from '../components/party-room/RoomMembersPanel';
+
 // Existing Sheets
-import GiftPickerBottomSheet from '../components/room/GiftPickerBottomSheet';
+import GiftPickerModal from '../components/GiftPickerModal';
 import UserProfileBottomSheet from '../components/room/UserProfileBottomSheet';
 import RoomSettingsBottomSheet from '../components/room/RoomSettingsBottomSheet';
 
@@ -66,7 +68,7 @@ export default function PartyRoomScreen({ route, navigation }) {
     const { room: routeRoom } = route.params;
     const insets = useSafeAreaInsets();
     const { showAlert } = useAlert();
-    const { user: currentUser } = useAppStore();
+    const { user: currentUser, balance, setBalance, syncBalanceWithServer } = useAppStore();
 
     // ── Store selectors (Zustand) ─────────────────────────────────────────────
     const room          = useRoomStore(s => s.room);
@@ -83,12 +85,13 @@ export default function PartyRoomScreen({ route, navigation }) {
     const { joinRoom, leaveRoom, takeSeat, leaveSeat,
             toggleSeatMute, lockSeat, sendMessage,
             toggleMic, toggleSpeaker } = useRoomStore();
-    const { openGiftPicker } = useGiftStore();
+    const { openGiftPicker, isVisible: isGiftVisible, closeGiftPicker } = useGiftStore();
 
     // ── Local UI state ────────────────────────────────────────────────────────
     const [inputText, setInputText] = useState('');
     const [chatExpanded, setChatExpanded] = useState(false);
     const [settingsVisible, setSettingsVisible] = useState(false);
+    const [membersVisible, setMembersVisible] = useState(false);
     const [profileSheet, setProfileSheet] = useState({ visible: false, user: null, seat: null });
 
     const chatRef = useRef(null);
@@ -121,6 +124,7 @@ export default function PartyRoomScreen({ route, navigation }) {
     useEffect(() => {
         joinRoom(routeRoom.id);
         _initAgora(routeRoom.id);
+        syncBalanceWithServer(); // Sync balance from server on entry
 
         return () => {
             leaveRoom();
@@ -239,20 +243,14 @@ export default function PartyRoomScreen({ route, navigation }) {
             return;
         }
 
+        // Switch seat directly if already sitting, otherwise take seat directly
         if (mySeat) {
-            showAlert({ title: 'Zaten Oturuyorsunuz', message: 'Önce mevcut koltuğunuzdan kalkın.', type: 'info' });
-            return;
+            leaveSeat(mySeat.seat_number);
         }
-
-        Alert.alert('Koltuğa Otur', `${seat.seat_number}. koltuğa oturmak istiyor musunuz?`, [
-            { text: 'Evet', onPress: () => {
-                takeSeat(seat.seat_number);
-                if (agoraRef.current) {
-                    agoraRef.current.setClientRole(AgoraRTC.ClientRoleType.ClientRoleBroadcaster).catch(() => {});
-                }
-            }},
-            { text: 'Hayır', style: 'cancel' },
-        ]);
+        takeSeat(seat.seat_number);
+        if (agoraRef.current) {
+            agoraRef.current.setClientRole(AgoraRTC.ClientRoleType.ClientRoleBroadcaster).catch(() => {});
+        }
     }, [currentUser, mySeat, isHost, seats]);
 
     const handleMicToggle = () => {
@@ -324,6 +322,7 @@ export default function PartyRoomScreen({ route, navigation }) {
                         onlineCount={onlineCount}
                         onBack={() => navigation.goBack()}
                         onOpenSettings={() => setSettingsVisible(true)}
+                        onOpenMembers={() => setMembersVisible(true)}
                         insets={insets}
                     />
 
@@ -404,7 +403,17 @@ export default function PartyRoomScreen({ route, navigation }) {
             <GiftAnimationOverlay giftEvent={currentGiftBanner} />
 
             {/* ══ Bottom Sheets ════════════════════════════════════════════════ */}
-            <GiftPickerBottomSheet room={currentRoom} />
+            <GiftPickerModal
+                visible={isGiftVisible}
+                onClose={closeGiftPicker}
+                onSelectGift={async (gift, quantity) => {
+                    const sendGift = useGiftStore.getState().sendGift;
+                    const SocketService = require('../services/SocketService').default;
+                    const adaptedGift = { ...gift, cost: gift.price };
+                    await sendGift(adaptedGift, balance, setBalance, SocketService, currentRoom);
+                }}
+                userBalance={balance}
+            />
 
             <UserProfileBottomSheet
                 visible={profileSheet.visible}
@@ -436,6 +445,14 @@ export default function PartyRoomScreen({ route, navigation }) {
                 navigation={navigation}
                 onClose={() => setSettingsVisible(false)}
                 onCloseRoom={handleCloseRoom}
+            />
+
+            <RoomMembersPanel
+                visible={membersVisible}
+                roomId={currentRoom.id}
+                currentUser={currentUser}
+                onClose={() => setMembersVisible(false)}
+                navigation={navigation}
             />
         </View>
     );

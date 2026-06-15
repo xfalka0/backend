@@ -10,6 +10,37 @@ function handlePartyRoomSockets(io, socket) {
         if (!roomId) return;
 
         const roomName = `party_room_${roomId}`;
+
+        // 1a. Check if user is banned
+        if (socket.user) {
+            try {
+                const banCheck = await db.query(
+                    'SELECT id FROM party_room_bans WHERE room_id = $1 AND user_id = $2::text AND is_active = TRUE',
+                    [roomId, socket.user.id]
+                );
+                if (banCheck.rows.length > 0) {
+                    socket.emit('party_room_error', { message: 'Bu odadan yasaklandınız.' });
+                    socket.emit('moderation:kicked', { roomId, targetUserId: socket.user.id, reason: 'Yasaklı kullanıcı girişi engellendi.' });
+                    return;
+                }
+
+                // 1b. Determine initial room role
+                const roomRes = await db.query('SELECT host_id FROM party_rooms WHERE id = $1', [roomId]);
+                const isHost = roomRes.rows.length > 0 && roomRes.rows[0].host_id.toString() === socket.user.id.toString();
+                const defaultRole = isHost ? 'room_owner' : 'listener';
+
+                // 1c. Upsert member record
+                await db.query(`
+                    INSERT INTO party_room_members (room_id, user_id, role, is_online)
+                    VALUES ($1, $2::text, $3, TRUE)
+                    ON CONFLICT (room_id, user_id)
+                    DO UPDATE SET is_online = TRUE, last_active_at = CURRENT_TIMESTAMP
+                `, [roomId, socket.user.id, defaultRole]);
+            } catch (err) {
+                console.error('[SOCKET JOIN] DB membership error:', err.message);
+            }
+        }
+
         socket.join(roomName);
         console.log(`[SOCKET] User ${socket.user?.username || socket.id} joined party room: ${roomName}`);
 
@@ -49,6 +80,9 @@ function handlePartyRoomSockets(io, socket) {
         // If user was on a seat, free it
         if (socket.user) {
             try {
+                // Set is_online to false in membership
+                await db.query('UPDATE party_room_members SET is_online = FALSE WHERE room_id = $1 AND user_id = $2::text', [roomId, socket.user.id]);
+
                 const freeRes = await db.query(`
                     UPDATE party_room_seats 
                     SET user_id = NULL 
@@ -395,6 +429,9 @@ function handlePartyRoomSockets(io, socket) {
     socket.on('disconnect', async () => {
         if (socket.user) {
             try {
+                // Set is_online to false across all party rooms for this user
+                await db.query('UPDATE party_room_members SET is_online = FALSE WHERE user_id = $1::text', [socket.user.id]);
+
                 // Free any seats occupied by this user across any rooms
                 const checkSeats = await db.query(
                     'UPDATE party_room_seats SET user_id = NULL WHERE user_id = $1::text RETURNING room_id, seat_number',

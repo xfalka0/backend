@@ -2,7 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
-export default function RoomTopHeader({ room, onlineCount, onBack, onOpenSettings, insets }) {
+export default function RoomTopHeader({ room, onlineCount, onBack, onOpenSettings, onOpenMembers, insets }) {
     const roomId = room?.id?.slice(0, 7)?.toUpperCase() || '4086795';
 
     return (
@@ -25,6 +25,14 @@ export default function RoomTopHeader({ room, onlineCount, onBack, onOpenSetting
 
             {/* Right compact actions */}
             <View style={styles.rightContainer}>
+                {/* Online participant count pill */}
+                <TouchableOpacity style={styles.onlineUserBubbles} onPress={onOpenMembers}>
+                    <Ionicons name="people-sharp" size={12} color="#34d399" />
+                    <View style={styles.onlineCountTextWrapper}>
+                        <Text style={styles.onlineCountText}>{onlineCount || 1}</Text>
+                    </View>
+                </TouchableOpacity>
+
                 {/* 3 VIP Avatars */}
                 <View style={styles.vipAvatarsRow}>
                     <View style={[styles.vipHeaderAvatar, styles.vipGold]}>

@@ -15,71 +15,119 @@ export default function RoomBottomBar({
     onOpenMenu,
     insets
 }) {
+    const [isFocused, setIsFocused] = React.useState(false);
+
+    const handleSend = () => {
+        onSendMessage();
+    };
+
     return (
         <KeyboardAvoidingView
             behavior={Platform.OS === 'ios' ? 'padding' : undefined}
             keyboardVerticalOffset={0}
         >
             <View style={[styles.bottomBar, { paddingBottom: Math.max(insets.bottom, 8), paddingTop: 8 }]}>
-                {/* 1. Chat input (Left) */}
-                <View style={styles.chatInputWrapper}>
-                    <TextInput
-                        style={styles.chatInput}
-                        placeholder="Bir şeyler söyle..."
-                        placeholderTextColor="rgba(255, 255, 255, 0.45)"
-                        value={message}
-                        onChangeText={setMessage}
-                        onSubmitEditing={onSendMessage}
-                        returnKeyType="send"
-                    />
-                </View>
-
-                {/* 2. Emoji Button */}
-                <TouchableOpacity style={styles.barIconBtn}>
-                    <Ionicons name="happy-sharp" size={16} color="rgba(255, 255, 255, 0.85)" />
-                </TouchableOpacity>
-
-                {/* 3. Mic Toggle */}
-                <TouchableOpacity
-                    style={[styles.barIconBtn, !micMuted && styles.barIconBtnActive]}
-                    onPress={onToggleMic}
-                >
-                    <Ionicons
-                        name={!micMuted ? 'mic-sharp' : 'mic-off-sharp'}
-                        size={16}
-                        color={!micMuted ? '#ff007f' : 'rgba(255, 255, 255, 0.85)'}
-                    />
-                </TouchableOpacity>
-
-                {/* 4. Speaker Toggle */}
-                <TouchableOpacity
-                    style={[styles.barIconBtn, !speakerMuted && styles.barIconBtnActive]}
-                    onPress={onToggleSpeaker}
-                >
-                    <Ionicons
-                        name={!speakerMuted ? 'volume-medium-sharp' : 'volume-mute-sharp'}
-                        size={16}
-                        color={!speakerMuted ? '#00f3ff' : 'rgba(255, 255, 255, 0.85)'}
-                    />
-                </TouchableOpacity>
-
-                {/* 5. Menu Grid */}
-                <TouchableOpacity style={styles.barIconBtn} onPress={onOpenMenu}>
-                    <Ionicons name="grid-sharp" size={15} color="rgba(255, 255, 255, 0.85)" />
-                </TouchableOpacity>
-
-                {/* 6. Gift Button (White Circle, Pink Icon) */}
-                <TouchableOpacity style={styles.giftBtn} onPress={() => onOpenGift(null)}>
-                    <Ionicons name="gift" size={16} color="#ff007f" />
-                </TouchableOpacity>
-
-                {/* 7. Chat Count Badge Button */}
-                <TouchableOpacity style={styles.chatBadgeBtn}>
-                    <Ionicons name="chatbubble-ellipses-sharp" size={16} color="rgba(255,255,255,0.85)" />
-                    <View style={styles.badgeCount}>
-                        <Text style={styles.badgeText}>16</Text>
+                {isFocused ? (
+                    <View style={styles.focusedRow}>
+                        <View style={styles.chatInputWrapperFocused}>
+                            <TextInput
+                                style={styles.chatInput}
+                                placeholder="Bir şeyler söyle..."
+                                placeholderTextColor="rgba(255, 255, 255, 0.45)"
+                                value={message}
+                                onChangeText={setMessage}
+                                onSubmitEditing={handleSend}
+                                returnKeyType="send"
+                                autoFocus={true}
+                                onFocus={() => setIsFocused(true)}
+                                onBlur={() => setIsFocused(false)}
+                            />
+                        </View>
+                        <TouchableOpacity 
+                            style={styles.sendBtn} 
+                            onPress={handleSend}
+                            disabled={!message.trim()}
+                        >
+                            <LinearGradient
+                                colors={message.trim() ? ['#FF4D8D', '#FF9B3D'] : ['rgba(255,255,255,0.06)', 'rgba(255,255,255,0.03)']}
+                                style={styles.sendBtnGradient}
+                                start={{ x: 0, y: 0 }}
+                                end={{ x: 1, y: 1 }}
+                            >
+                                <Text style={[styles.sendBtnText, !message.trim() && { color: 'rgba(255,255,255,0.3)' }]}>
+                                    Gönder
+                                </Text>
+                            </LinearGradient>
+                        </TouchableOpacity>
                     </View>
-                </TouchableOpacity>
+                ) : (
+                    <>
+                        {/* 1. Chat input (Left) */}
+                        <TouchableOpacity 
+                            style={styles.chatInputWrapper} 
+                            onPress={() => setIsFocused(true)}
+                            activeOpacity={0.9}
+                        >
+                            <TextInput
+                                style={styles.chatInput}
+                                placeholder="Bir şeyler söyle..."
+                                placeholderTextColor="rgba(255, 255, 255, 0.45)"
+                                value={message}
+                                onChangeText={setMessage}
+                                onFocus={() => setIsFocused(true)}
+                                pointerEvents="none"
+                                editable={false}
+                            />
+                        </TouchableOpacity>
+
+                        {/* 2. Emoji Button */}
+                        <TouchableOpacity style={styles.barIconBtn}>
+                            <Ionicons name="happy-sharp" size={16} color="rgba(255, 255, 255, 0.85)" />
+                        </TouchableOpacity>
+
+                        {/* 3. Mic Toggle */}
+                        <TouchableOpacity
+                            style={[styles.barIconBtn, !micMuted && styles.barIconBtnActive]}
+                            onPress={onToggleMic}
+                        >
+                            <Ionicons
+                                name={!micMuted ? 'mic-sharp' : 'mic-off-sharp'}
+                                size={16}
+                                color={!micMuted ? '#ff007f' : 'rgba(255, 255, 255, 0.85)'}
+                            />
+                        </TouchableOpacity>
+
+                        {/* 4. Speaker Toggle */}
+                        <TouchableOpacity
+                            style={[styles.barIconBtn, !speakerMuted && styles.barIconBtnActive]}
+                            onPress={onToggleSpeaker}
+                        >
+                            <Ionicons
+                                name={!speakerMuted ? 'volume-medium-sharp' : 'volume-mute-sharp'}
+                                size={16}
+                                color={!speakerMuted ? '#00f3ff' : 'rgba(255, 255, 255, 0.85)'}
+                            />
+                        </TouchableOpacity>
+
+                        {/* 5. Menu Grid */}
+                        <TouchableOpacity style={styles.barIconBtn} onPress={onOpenMenu}>
+                            <Ionicons name="grid-sharp" size={15} color="rgba(255, 255, 255, 0.85)" />
+                        </TouchableOpacity>
+
+                        {/* 6. Gift Button (White Circle, Pink Icon) */}
+                        <TouchableOpacity style={styles.giftBtn} onPress={() => onOpenGift(null)}>
+                            <Ionicons name="gift" size={16} color="#ff007f" />
+                        </TouchableOpacity>
+
+                        {/* 7. Chat Count Badge Button */}
+                        <TouchableOpacity style={styles.chatBadgeBtn}>
+                            <Ionicons name="chatbubble-ellipses-sharp" size={16} color="rgba(255,255,255,0.85)" />
+                            <View style={styles.badgeCount}>
+                                <Text style={styles.badgeText}>16</Text>
+                            </View>
+                        </TouchableOpacity>
+                    </>
+                )}
             </View>
         </KeyboardAvoidingView>
     );
@@ -94,6 +142,41 @@ const styles = StyleSheet.create({
         borderTopWidth: 0.5,
         borderColor: 'rgba(255, 255, 255, 0.08)',
         gap: 5,
+        minHeight: 46,
+    },
+    focusedRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        flex: 1,
+        gap: 8,
+        paddingHorizontal: 4,
+    },
+    chatInputWrapperFocused: {
+        flex: 1,
+        height: 36,
+        backgroundColor: 'rgba(12, 16, 36, 0.95)',
+        borderRadius: 18,
+        paddingHorizontal: 16,
+        justifyContent: 'center',
+        borderWidth: 1,
+        borderColor: 'rgba(255, 255, 255, 0.15)',
+    },
+    sendBtn: {
+        height: 36,
+        borderRadius: 18,
+        overflow: 'hidden',
+        justifyContent: 'center',
+    },
+    sendBtnGradient: {
+        paddingHorizontal: 18,
+        height: '100%',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    sendBtnText: {
+        color: '#fff',
+        fontSize: 12,
+        fontWeight: 'bold',
     },
     chatInputWrapper: {
         flex: 1.2,

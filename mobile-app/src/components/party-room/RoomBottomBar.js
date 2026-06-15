@@ -13,6 +13,7 @@ export default function RoomBottomBar({
     onToggleSpeaker,
     onOpenGift,
     onOpenMenu,
+    onOpenInbox,
     insets
 }) {
     const [isFocused, setIsFocused] = React.useState(false);
@@ -120,7 +121,7 @@ export default function RoomBottomBar({
                         </TouchableOpacity>
 
                         {/* 7. Chat Count Badge Button */}
-                        <TouchableOpacity style={styles.chatBadgeBtn}>
+                        <TouchableOpacity style={styles.chatBadgeBtn} onPress={onOpenInbox}>
                             <Ionicons name="chatbubble-ellipses-sharp" size={16} color="rgba(255,255,255,0.85)" />
                             <View style={styles.badgeCount}>
                                 <Text style={styles.badgeText}>16</Text>

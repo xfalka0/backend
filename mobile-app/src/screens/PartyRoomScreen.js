@@ -27,6 +27,7 @@ import RoomBottomBar from '../components/party-room/RoomBottomBar';
 import GiftAnimationOverlay from '../components/party-room/GiftAnimationOverlay';
 
 import RoomMembersPanel from '../components/party-room/RoomMembersPanel';
+import MessagesBottomSheet from '../components/party-room/MessagesBottomSheet';
 
 // Existing Sheets
 import GiftPickerModal from '../components/GiftPickerModal';
@@ -92,6 +93,7 @@ export default function PartyRoomScreen({ route, navigation }) {
     const [chatExpanded, setChatExpanded] = useState(false);
     const [settingsVisible, setSettingsVisible] = useState(false);
     const [membersVisible, setMembersVisible] = useState(false);
+    const [inboxVisible, setInboxVisible] = useState(false);
     const [profileSheet, setProfileSheet] = useState({ visible: false, user: null, seat: null });
 
     const chatRef = useRef(null);
@@ -395,6 +397,7 @@ export default function PartyRoomScreen({ route, navigation }) {
                     onToggleSpeaker={toggleSpeaker}
                     onOpenGift={() => openGiftPicker(null)}
                     onOpenMenu={() => setSettingsVisible(true)}
+                    onOpenInbox={() => setInboxVisible(true)}
                     insets={insets}
                 />
             </View>
@@ -452,6 +455,13 @@ export default function PartyRoomScreen({ route, navigation }) {
                 roomId={currentRoom.id}
                 currentUser={currentUser}
                 onClose={() => setMembersVisible(false)}
+                navigation={navigation}
+            />
+
+            <MessagesBottomSheet
+                visible={inboxVisible}
+                currentUser={currentUser}
+                onClose={() => setInboxVisible(false)}
                 navigation={navigation}
             />
         </View>

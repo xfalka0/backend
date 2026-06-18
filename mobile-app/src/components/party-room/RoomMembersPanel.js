@@ -6,6 +6,7 @@ import {
 import { Ionicons, FontAwesome5 } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRoomStore } from '../../store/useRoomStore';
+import { resolveImageUrl } from '../../utils/imageUtils';
 
 const { width, height } = Dimensions.get('window');
 
@@ -57,7 +58,7 @@ export function MemberListItem({ item, onSelect, isBannedTab, onUnban }) {
         <View style={styles.listItem}>
             <View style={styles.listItemLeft}>
                 {item.avatar_url ? (
-                    <Image source={{ uri: item.avatar_url }} style={styles.avatar} />
+                    <Image source={{ uri: resolveImageUrl(item.avatar_url) }} style={styles.avatar} />
                 ) : (
                     <LinearGradient
                         colors={['#7B2CFF', '#FF4D8D']}

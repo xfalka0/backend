@@ -162,7 +162,7 @@ function handlePartyRoomSockets(io, socket) {
                 });
             }
 
-            // Update the seat
+            // Insert the seat
             await db.query(`
                 INSERT INTO party_room_seats (room_id, seat_number, user_id)
                 VALUES ($1, $2, $3::text)
@@ -170,13 +170,20 @@ function handlePartyRoomSockets(io, socket) {
                 DO UPDATE SET user_id = EXCLUDED.user_id
             `, [roomId, seatNumber, socket.user.id]);
 
+            // Fetch latest user details (display_name, avatar_url, vip_level)
+            const userRes = await db.query(
+                'SELECT id, username, display_name, avatar_url, vip_level FROM users WHERE id::text = $1::text',
+                [socket.user.id]
+            );
+            const dbUser = userRes.rows[0] || socket.user;
+
             io.to(roomName).emit('party_seat_updated', {
                 seat_number: seatNumber,
                 user_id: socket.user.id,
-                username: socket.user.username,
-                display_name: socket.user.display_name,
-                avatar_url: socket.user.avatar_url,
-                vip_level: socket.user.vip_level,
+                username: dbUser.username,
+                display_name: dbUser.display_name,
+                avatar_url: dbUser.avatar_url,
+                vip_level: dbUser.vip_level,
                 is_muted: false
             });
         } catch (err) {
@@ -307,6 +314,21 @@ function handlePartyRoomSockets(io, socket) {
                 vip_level: socket.user.vip_level
             },
             created_at: new Date()
+        });
+    });
+
+    // 7a. ROOM EMOJI REACTION
+    socket.on('send_party_reaction', (data) => {
+        console.log('[SOCKET] send_party_reaction received:', data, 'from user:', socket.user?.username);
+        const { roomId, emoji } = data;
+        if (!roomId || !emoji || !socket.user) return;
+
+        const roomName = `party_room_${roomId}`;
+        console.log('[SOCKET] Broadcasting receive_party_reaction to room:', roomName);
+        io.to(roomName).emit('receive_party_reaction', {
+            userId: socket.user.id,
+            username: socket.user.username,
+            emoji
         });
     });
 

@@ -3,7 +3,7 @@ import React, {
 } from 'react';
 import {
     View, Text, StyleSheet, FlatList, TouchableOpacity, Image,
-    Dimensions, Animated, Alert, StatusBar, ActivityIndicator
+    Dimensions, Animated, Alert, StatusBar, ActivityIndicator, Modal
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -118,6 +118,13 @@ export default function PartyRoomScreen({ route, navigation }) {
     const [inboxVisible, setInboxVisible] = useState(false);
     const [inboxActiveChatUser, setInboxActiveChatUser] = useState(null);
     const [profileSheet, setProfileSheet] = useState({ visible: false, user: null, seat: null });
+    const [emojiPickerVisible, setEmojiPickerVisible] = useState(false);
+
+    const handleSendReaction = (emoji) => {
+        const SocketService = require('../services/SocketService').default;
+        SocketService.sendReaction(currentRoom.id, emoji);
+        setEmojiPickerVisible(false);
+    };
 
     const handleOpenInboxWithUser = (targetUser) => {
         setInboxActiveChatUser(targetUser);
@@ -139,8 +146,13 @@ export default function PartyRoomScreen({ route, navigation }) {
     );
 
     const listeners = useMemo(() => {
-        return members.filter(m => m.is_online && (m.seat_number === undefined || m.seat_number === null));
-    }, [members]);
+        const seatedUserIds = new Set(
+            seats
+                .filter(s => s.user_id)
+                .map(s => s.user_id.toString())
+        );
+        return members.filter(m => m.is_online && !seatedUserIds.has(m.user_id?.toString()));
+    }, [members, seats]);
 
     // Star animation dots layout
     const stars = useMemo(() => {
@@ -351,6 +363,7 @@ export default function PartyRoomScreen({ route, navigation }) {
                     <RoomTopHeader
                         room={currentRoom}
                         onlineCount={onlineCount}
+                        listeners={listeners}
                         onBack={() => navigation.goBack()}
                         onOpenSettings={() => setSettingsVisible(true)}
                         onOpenMembers={() => setMembersVisible(true)}
@@ -430,6 +443,7 @@ export default function PartyRoomScreen({ route, navigation }) {
                     onOpenInbox={() => setInboxVisible(true)}
                     unreadCount={unreadCount}
                     insets={insets}
+                    onOpenEmojiPicker={() => setEmojiPickerVisible(true)}
                 />
             </View>
 
@@ -472,6 +486,35 @@ export default function PartyRoomScreen({ route, navigation }) {
                 }}
                 onMessage={handleOpenInboxWithUser}
             />
+
+            {/* ══ Emoji Picker Modal ══════════════════════════════════════ */}
+            <Modal
+                transparent
+                visible={emojiPickerVisible}
+                animationType="fade"
+                onRequestClose={() => setEmojiPickerVisible(false)}
+            >
+                <TouchableOpacity 
+                    style={styles.emojiModalBackdrop} 
+                    activeOpacity={1} 
+                    onPress={() => setEmojiPickerVisible(false)}
+                >
+                    <View style={styles.emojiPickerContainer}>
+                        <Text style={styles.emojiPickerTitle}>Tepki Gönder</Text>
+                        <View style={styles.emojiGrid}>
+                            {['❤️', '😂', '😮', '😢', '😡', '👍'].map(emoji => (
+                                <TouchableOpacity 
+                                    key={emoji} 
+                                    style={styles.emojiBtn}
+                                    onPress={() => handleSendReaction(emoji)}
+                                >
+                                    <Text style={styles.emojiText}>{emoji}</Text>
+                                </TouchableOpacity>
+                            ))}
+                        </View>
+                    </View>
+                </TouchableOpacity>
+            </Modal>
 
             <RoomSettingsBottomSheet
                 visible={settingsVisible}
@@ -642,5 +685,44 @@ const styles = StyleSheet.create({
     },
     systemMsgAction: {
         color: '#00f3ff',
+    },
+    emojiModalBackdrop: {
+        flex: 1,
+        backgroundColor: 'rgba(0, 0, 0, 0.4)',
+        justifyContent: 'flex-end',
+        alignItems: 'center',
+    },
+    emojiPickerContainer: {
+        width: '90%',
+        backgroundColor: 'rgba(16, 7, 32, 0.95)',
+        borderWidth: 1,
+        borderColor: 'rgba(255, 255, 255, 0.1)',
+        borderRadius: 24,
+        padding: 20,
+        marginBottom: 80,
+        alignItems: 'center',
+    },
+    emojiPickerTitle: {
+        color: '#fff',
+        fontSize: 13,
+        fontWeight: 'bold',
+        marginBottom: 16,
+        opacity: 0.8,
+    },
+    emojiGrid: {
+        flexDirection: 'row',
+        justifyContent: 'space-around',
+        width: '100%',
+    },
+    emojiBtn: {
+        width: 46,
+        height: 46,
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: 'rgba(255, 255, 255, 0.08)',
+        borderRadius: 23,
+    },
+    emojiText: {
+        fontSize: 26,
     },
 });

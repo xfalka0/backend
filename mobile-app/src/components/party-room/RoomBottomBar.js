@@ -15,7 +15,8 @@ export default function RoomBottomBar({
     onOpenMenu,
     onOpenInbox,
     unreadCount = 0,
-    insets
+    insets,
+    onOpenEmojiPicker
 }) {
     const [isFocused, setIsFocused] = React.useState(false);
 
@@ -89,7 +90,7 @@ export default function RoomBottomBar({
                         </TouchableOpacity>
 
                         {/* 2. Emoji Button */}
-                        <TouchableOpacity style={styles.barIconBtn}>
+                        <TouchableOpacity style={styles.barIconBtn} onPress={onOpenEmojiPicker}>
                             <Ionicons name="happy-sharp" size={16} color="rgba(255, 255, 255, 0.85)" />
                         </TouchableOpacity>
 

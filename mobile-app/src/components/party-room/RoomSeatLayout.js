@@ -2,6 +2,7 @@ import React from 'react';
 import { View, StyleSheet, Dimensions, Image, Text } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import RoomSeat from './RoomSeat';
+import { resolveImageUrl } from '../../utils/imageUtils';
 
 const { width } = Dimensions.get('window');
 
@@ -94,7 +95,7 @@ export default function RoomSeatLayout({ seats, currentUserId, onSeatPress, isHo
                             ]}
                         >
                             {listener.avatar_url ? (
-                                <Image source={{ uri: listener.avatar_url }} style={styles.listenerAvatar} />
+                                <Image source={{ uri: resolveImageUrl(listener.avatar_url) }} style={styles.listenerAvatar} />
                             ) : (
                                 <View style={styles.listenerAvatarPlaceholder}>
                                     <Text style={styles.listenerPlaceholderText}>

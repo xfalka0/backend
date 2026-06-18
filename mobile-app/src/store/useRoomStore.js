@@ -311,6 +311,39 @@ export const useRoomStore = create((set, get) => ({
             store.addMessage(msg);
         });
 
+        SocketService.on('receive_party_reaction', (data) => {
+            console.log('[CLIENT STORE] receive_party_reaction received:', data);
+            const { userId, emoji } = data;
+            set(s => ({
+                seats: s.seats.map(seat => {
+                    console.log(`[CLIENT STORE] Checking seat ${seat.seat_number}: seat.user_id=${seat.user_id} (${typeof seat.user_id}), target userId=${userId} (${typeof userId})`);
+                    if (seat.user_id?.toString() === userId?.toString()) {
+                        console.log(`[CLIENT STORE] Seat matches! Setting reaction ${emoji} on seat ${seat.seat_number}`);
+                        return { 
+                            ...seat, 
+                            activeReaction: { 
+                                emoji, 
+                                id: Date.now() + Math.random()
+                            } 
+                        };
+                    }
+                    return seat;
+                })
+            }));
+            
+            // Clear the reaction after 2.5 seconds
+            setTimeout(() => {
+                set(s => ({
+                    seats: s.seats.map(seat => {
+                        if (seat.user_id?.toString() === userId?.toString()) {
+                            return { ...seat, activeReaction: null };
+                        }
+                        return seat;
+                    })
+                }));
+            }, 2500);
+        });
+
         SocketService.on('user_left_party', (data) => {
             set(s => ({ onlineCount: Math.max(0, s.onlineCount - 1) }));
             const currentRoom = store.room;

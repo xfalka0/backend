@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Animated } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import VipFrame from '../ui/VipFrame';
 
 function formatGiftPoints(value) {
@@ -28,6 +29,26 @@ export default function RoomSeat({ seat, currentUserId, onPress, isHost }) {
     const [pointsDiff, setPointsDiff] = useState(null);
     const floatAnim = useRef(new Animated.Value(0)).current;
     const glowAnim = useRef(new Animated.Value(0)).current;
+
+    // Reaction Animation State
+    const [visibleReaction, setVisibleReaction] = useState(null);
+    const reactionAnim = useRef(new Animated.Value(0)).current;
+
+    useEffect(() => {
+        if (seat.activeReaction) {
+            setVisibleReaction(seat.activeReaction.emoji);
+            reactionAnim.setValue(0);
+            Animated.timing(reactionAnim, {
+                toValue: 1,
+                duration: 2200,
+                useNativeDriver: true
+            }).start((res) => {
+                if (res.finished) {
+                    setVisibleReaction(null);
+                }
+            });
+        }
+    }, [seat.activeReaction]);
 
     useEffect(() => {
         if (isSpeaking) {
@@ -73,27 +94,41 @@ export default function RoomSeat({ seat, currentUserId, onPress, isHost }) {
         outputRange: [1, 1.15, 1]
     });
 
-    const badgeBorderColor = glowAnim.interpolate({
-        inputRange: [0, 1],
-        outputRange: ['rgba(255, 210, 90, 0.6)', '#FF4D8D']
-    });
-
     return (
         <TouchableOpacity 
             style={styles.seatCell} 
             onPress={() => onPress(seat)} 
             activeOpacity={0.85}
         >
-            <View style={{ position: 'relative' }}>
+            {/* Absolute container for the seat circle to prevent grid layout shifting */}
+            <View style={styles.avatarWrapper}>
                 <Animated.View style={{ transform: [{ scale: isSpeaking ? pulseAnim : 1 }] }}>
                     {isOccupied ? (
                         <View style={styles.seatOccupied}>
-                            <VipFrame
-                                level={seat.vip_level || 0}
-                                avatar={seat.avatar_url}
-                                size={48}
-                                isStatic
-                            />
+                            {(!seat.vip_level || seat.vip_level === 0) ? (
+                                <LinearGradient
+                                    colors={['#ffd700', '#db2777']} // Gold to vibrant pink gradient border
+                                    start={{ x: 0, y: 0 }}
+                                    end={{ x: 1, y: 1 }}
+                                    style={styles.gradientBorderContainer}
+                                >
+                                    <View style={styles.innerAvatarContainer}>
+                                        <VipFrame
+                                            level={seat.vip_level || 0}
+                                            avatar={seat.avatar_url}
+                                            size={44}
+                                            isStatic
+                                        />
+                                    </View>
+                                </LinearGradient>
+                            ) : (
+                                <VipFrame
+                                    level={seat.vip_level || 0}
+                                    avatar={seat.avatar_url}
+                                    size={48}
+                                    isStatic
+                                />
+                            )}
                             {/* Mic status badge */}
                             {seat.is_muted && (
                                 <View style={styles.muteBadge}>
@@ -102,13 +137,6 @@ export default function RoomSeat({ seat, currentUserId, onPress, isHost }) {
                             )}
                             {/* Active speaking neon ring */}
                             {isSpeaking && <View style={styles.speakingRing} />}
-                            
-                            {/* VIP or Seat rating label */}
-                            <View style={styles.vipBadge}>
-                                <Text style={styles.vipText}>
-                                    {seat.vip_level ? `${seat.vip_level}` : `Lv.${seat.level || 1}`}
-                                </Text>
-                            </View>
                         </View>
                     ) : (
                         <View style={[
@@ -147,43 +175,108 @@ export default function RoomSeat({ seat, currentUserId, onPress, isHost }) {
                         <Text style={styles.floatingDiffText}>+{pointsDiff}</Text>
                     </Animated.View>
                 )}
+
+                {/* Floating Reaction Emoji */}
+                {visibleReaction !== null && (
+                    <Animated.View style={[
+                        styles.floatingReactionContainer,
+                        {
+                            opacity: reactionAnim.interpolate({
+                                inputRange: [0, 0.15, 0.85, 1],
+                                outputRange: [0, 1, 1, 0]
+                            }),
+                            transform: [
+                                {
+                                    translateY: reactionAnim.interpolate({
+                                        inputRange: [0, 1],
+                                        outputRange: [15, -55]
+                                    })
+                                },
+                                {
+                                    scale: reactionAnim.interpolate({
+                                        inputRange: [0, 0.2, 0.85, 1],
+                                        outputRange: [0.3, 1.3, 1.1, 0.7]
+                                    })
+                                }
+                            ]
+                        }
+                    ]}>
+                        <Text style={styles.floatingReactionText}>{visibleReaction}</Text>
+                    </Animated.View>
+                )}
             </View>
 
-            {/* Gift points badge under avatar */}
+            {/* Gift points badge positioned exactly below the avatar without overlapping, absolute position */}
             {isOccupied && (
                 <Animated.View style={[
-                    styles.giftPointBadge,
+                    styles.giftPointBadgeContainer,
                     {
-                        borderColor: badgeBorderColor,
                         transform: [{ scale: badgeScale }]
                     }
                 ]}>
-                    <Text style={styles.giftPointText}>
-                        {formatGiftPoints(seat.room_gift_points || 0)}
-                    </Text>
+                    <LinearGradient
+                        colors={['#5b21b6', '#db2777']} // Deep violet to pink gradient
+                        start={{ x: 0, y: 0 }}
+                        end={{ x: 1, y: 0 }}
+                        style={styles.giftPointGradient}
+                    >
+                        <Text style={styles.giftPointText}>
+                            {formatGiftPoints(seat.room_gift_points || 0)}
+                        </Text>
+                    </LinearGradient>
                 </Animated.View>
             )}
 
-            <Text style={styles.seatName} numberOfLines={1}>
-                {isOccupied ? (seat.display_name || seat.username || 'Katılımcı') : seat.seat_number}
-            </Text>
+            {/* Username Row, absolute position */}
+            <View style={styles.nameRow}>
+                <Text style={styles.seatName} numberOfLines={1}>
+                    {isOccupied ? (seat.display_name || seat.username || 'Katılımcı') : seat.seat_number}
+                </Text>
+            </View>
         </TouchableOpacity>
     );
 }
 
 const styles = StyleSheet.create({
     seatCell: {
+        width: 72,
+        height: 80,
+        alignItems: 'center',
+        justifyContent: 'flex-start',
+        position: 'relative',
+        marginVertical: 4,
+    },
+    avatarWrapper: {
+        position: 'absolute',
+        top: 0,
+        width: 48,
+        height: 48,
         alignItems: 'center',
         justifyContent: 'center',
-        width: 72,
-        marginVertical: 6,
     },
     seatOccupied: {
-        width: 50,
-        height: 50,
+        width: 48,
+        height: 48,
         alignItems: 'center',
         justifyContent: 'center',
         position: 'relative',
+    },
+    gradientBorderContainer: {
+        width: 48,
+        height: 48,
+        borderRadius: 24,
+        padding: 1.2, // Frame border width peeking out
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    innerAvatarContainer: {
+        width: 45.6,
+        height: 45.6,
+        borderRadius: 22.8,
+        backgroundColor: '#070B24', // Koyu premium background
+        alignItems: 'center',
+        justifyContent: 'center',
+        overflow: 'hidden',
     },
     speakingRing: {
         position: 'absolute',
@@ -191,7 +284,7 @@ const styles = StyleSheet.create({
         left: -3,
         right: -3,
         bottom: -3,
-        borderRadius: 28,
+        borderRadius: 27,
         borderWidth: 1.5,
         borderColor: '#00f3ff',
         shadowColor: '#00f3ff',
@@ -200,7 +293,7 @@ const styles = StyleSheet.create({
     },
     muteBadge: {
         position: 'absolute',
-        bottom: 0,
+        top: 0,
         right: 0,
         width: 12,
         height: 12,
@@ -211,20 +304,6 @@ const styles = StyleSheet.create({
         borderWidth: 1,
         borderColor: '#070B24',
         zIndex: 10,
-    },
-    vipBadge: {
-        position: 'absolute',
-        bottom: -4,
-        backgroundColor: 'rgba(236,72,153,0.95)',
-        paddingHorizontal: 3,
-        borderRadius: 4,
-        borderWidth: 0.5,
-        borderColor: '#fff',
-    },
-    vipText: {
-        fontSize: 6.5,
-        color: '#fff',
-        fontWeight: 'bold',
     },
     emptySeat: {
         width: 48,
@@ -243,26 +322,32 @@ const styles = StyleSheet.create({
     hostEmptySeat: {
         borderColor: 'rgba(0, 243, 255, 0.45)',
     },
-    seatNumberText: {
-        fontSize: 7.5,
-        color: 'rgba(255,255,255,0.4)',
-        marginTop: 0.5,
+    giftPointBadgeContainer: {
+        position: 'absolute',
+        top: 42, // Positioned exactly to overlap the bottom edge of 48px avatar (centered on Y=42)
+        alignSelf: 'center',
+        zIndex: 10,
+        shadowColor: '#db2777',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.3,
+        shadowRadius: 1.5,
+        elevation: 2,
     },
-    giftPointBadge: {
-        minWidth: 42,
-        height: 15,
-        borderRadius: 7.5,
-        paddingHorizontal: 6,
+    giftPointGradient: {
+        width: 42,
+        height: 14,
+        borderRadius: 7,
         alignItems: 'center',
         justifyContent: 'center',
-        backgroundColor: 'rgba(15, 10, 35, 0.85)',
-        borderWidth: 1,
-        marginTop: 6,
+        borderWidth: 0.8,
+        borderColor: 'rgba(255, 215, 0, 0.4)', // Premium light gold border
     },
     giftPointText: {
-        fontSize: 9.5,
-        fontWeight: '700',
-        color: '#FFD75A',
+        fontSize: 9,
+        fontWeight: 'bold',
+        color: '#ffffff',
+        textAlign: 'center',
+        lineHeight: 12,
     },
     floatingDiffContainer: {
         position: 'absolute',
@@ -281,12 +366,31 @@ const styles = StyleSheet.create({
         fontSize: 8.5,
         fontWeight: '900',
     },
+    nameRow: {
+        position: 'absolute',
+        top: 60, // Fixed Y-coordinate for username/number across all seats
+        width: 72,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
     seatName: {
-        marginTop: 4,
         fontSize: 9.5,
         color: 'rgba(255,255,255,0.85)',
-        fontWeight: 'bold',
+        fontWeight: '600',
         textAlign: 'center',
-        width: 54,
+        maxWidth: 54,
+    },
+    floatingReactionContainer: {
+        position: 'absolute',
+        top: 0,
+        alignSelf: 'center',
+        zIndex: 100,
+    },
+    floatingReactionText: {
+        fontSize: 34,
+        textShadowColor: 'rgba(0, 0, 0, 0.3)',
+        textShadowOffset: { width: 0, height: 1.5 },
+        textShadowRadius: 3,
     },
 });

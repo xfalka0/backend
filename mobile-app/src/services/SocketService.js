@@ -35,6 +35,11 @@ class SocketService {
             timeout: 10000,
         });
 
+        // Re-bind any existing handlers tracked in our Map to the new socket instance
+        this._eventHandlers.forEach((handlers, event) => {
+            handlers.forEach(h => this._socket.on(event, h));
+        });
+
         this._socket.on('connect', () => {
             console.log('[SocketService] Connected:', this._socket.id);
             this._reconnectAttempts = 0;
@@ -119,11 +124,13 @@ class SocketService {
     }
 
     off(event, handler) {
-        if (!this._socket) return;
         if (handler) {
-            this._socket.off(event, handler);
+            if (this._socket) this._socket.off(event, handler);
+            const existing = this._eventHandlers.get(event) || [];
+            this._eventHandlers.set(event, existing.filter(h => h !== handler));
         } else {
-            this._socket.removeAllListeners(event);
+            if (this._socket) this._socket.removeAllListeners(event);
+            this._eventHandlers.delete(event);
         }
     }
 
@@ -138,8 +145,8 @@ class SocketService {
     // ─── Emit Helpers ─────────────────────────────────────────────────────────
 
     emit(event, data) {
-        if (!this._socket?.connected) {
-            console.warn(`[SocketService] emit '${event}' failed: not connected.`);
+        if (!this._socket) {
+            console.warn(`[SocketService] emit '${event}' failed: socket not initialized.`);
             return;
         }
         this._socket.emit(event, data);
@@ -149,6 +156,10 @@ class SocketService {
 
     sendMessage(roomId, content, clientMessageId) {
         this.emit('send_party_message', { roomId, content, clientMessageId });
+    }
+
+    sendReaction(roomId, emoji) {
+        this.emit('send_party_reaction', { roomId, emoji });
     }
 
     sendGift(roomId, receiverUserId, giftId, quantity, idempotencyKey) {

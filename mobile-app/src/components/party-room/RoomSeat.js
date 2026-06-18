@@ -195,7 +195,12 @@ export default function RoomSeat({ seat, currentUserId, onPress, isHost }) {
                             ]
                         }
                     ]}>
-                        <Text style={styles.floatingReactionText}>{visibleReaction}</Text>
+                        <Text style={[
+                            styles.floatingReactionText,
+                            visibleReaction.endsWith('_right') && { transform: [{ scaleX: -1 }] }
+                        ]}>
+                            {visibleReaction.endsWith('_right') ? visibleReaction.replace('_right', '') : visibleReaction}
+                        </Text>
                     </Animated.View>
                 )}
             </View>

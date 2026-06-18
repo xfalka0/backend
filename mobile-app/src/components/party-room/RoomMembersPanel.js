@@ -296,7 +296,7 @@ export function MemberManagementSheet({
 }
 
 // ─── Main Component: RoomMembersPanel (Default Export) ───────────────────────
-export default function RoomMembersPanel({ visible, roomId, currentUser, onClose, navigation }) {
+export default function RoomMembersPanel({ visible, roomId, currentUser, onClose, navigation, onSendMessage }) {
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedTab, setSelectedTab] = useState('all'); // all, speakers, listeners, banned
     const [selectedMember, setSelectedMember] = useState(null);
@@ -431,7 +431,9 @@ export default function RoomMembersPanel({ visible, roomId, currentUser, onClose
 
     const handleSendMessage = (member) => {
         onClose();
-        if (navigation) {
+        if (onSendMessage) {
+            onSendMessage(member);
+        } else if (navigation) {
             navigation.navigate('Chat', {
                 operatorId: member.user_id,
                 name: member.display_name || member.username,

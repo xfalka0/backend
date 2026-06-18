@@ -69,7 +69,7 @@ export default function PartyRoomScreen({ route, navigation }) {
     const { room: routeRoom } = route.params;
     const insets = useSafeAreaInsets();
     const { showAlert } = useAlert();
-    const { user: currentUser, balance, setBalance, syncBalanceWithServer } = useAppStore();
+    const { user: currentUser, balance, setBalance, syncBalanceWithServer, unreadCount } = useAppStore();
 
     // ── Store selectors (Zustand) ─────────────────────────────────────────────
     const room          = useRoomStore(s => s.room);
@@ -94,7 +94,13 @@ export default function PartyRoomScreen({ route, navigation }) {
     const [settingsVisible, setSettingsVisible] = useState(false);
     const [membersVisible, setMembersVisible] = useState(false);
     const [inboxVisible, setInboxVisible] = useState(false);
+    const [inboxActiveChatUser, setInboxActiveChatUser] = useState(null);
     const [profileSheet, setProfileSheet] = useState({ visible: false, user: null, seat: null });
+
+    const handleOpenInboxWithUser = (targetUser) => {
+        setInboxActiveChatUser(targetUser);
+        setInboxVisible(true);
+    };
 
     const chatRef = useRef(null);
     const agoraRef = useRef(null);
@@ -398,6 +404,7 @@ export default function PartyRoomScreen({ route, navigation }) {
                     onOpenGift={() => openGiftPicker(null)}
                     onOpenMenu={() => setSettingsVisible(true)}
                     onOpenInbox={() => setInboxVisible(true)}
+                    unreadCount={unreadCount}
                     insets={insets}
                 />
             </View>
@@ -439,6 +446,7 @@ export default function PartyRoomScreen({ route, navigation }) {
                 onGift={() => {
                     openGiftPicker(profileSheet.seat);
                 }}
+                onMessage={handleOpenInboxWithUser}
             />
 
             <RoomSettingsBottomSheet
@@ -456,6 +464,7 @@ export default function PartyRoomScreen({ route, navigation }) {
                 currentUser={currentUser}
                 onClose={() => setMembersVisible(false)}
                 navigation={navigation}
+                onSendMessage={handleOpenInboxWithUser}
             />
 
             <MessagesBottomSheet
@@ -463,6 +472,8 @@ export default function PartyRoomScreen({ route, navigation }) {
                 currentUser={currentUser}
                 onClose={() => setInboxVisible(false)}
                 navigation={navigation}
+                initialActiveChatUser={inboxActiveChatUser}
+                clearInitialActiveChatUser={() => setInboxActiveChatUser(null)}
             />
         </View>
     );

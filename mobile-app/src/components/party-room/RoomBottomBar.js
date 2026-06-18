@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, StyleSheet, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform, Text } from 'react-native';
+import { View, StyleSheet, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform, Text, Keyboard } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 
@@ -14,12 +14,15 @@ export default function RoomBottomBar({
     onOpenGift,
     onOpenMenu,
     onOpenInbox,
+    unreadCount = 0,
     insets
 }) {
     const [isFocused, setIsFocused] = React.useState(false);
 
     const handleSend = () => {
         onSendMessage();
+        setIsFocused(false);
+        Keyboard.dismiss();
     };
 
     return (
@@ -41,7 +44,11 @@ export default function RoomBottomBar({
                                 returnKeyType="send"
                                 autoFocus={true}
                                 onFocus={() => setIsFocused(true)}
-                                onBlur={() => setIsFocused(false)}
+                                onBlur={() => {
+                                    setTimeout(() => {
+                                        setIsFocused(false);
+                                    }, 200);
+                                }}
                             />
                         </View>
                         <TouchableOpacity 
@@ -123,9 +130,11 @@ export default function RoomBottomBar({
                         {/* 7. Chat Count Badge Button */}
                         <TouchableOpacity style={styles.chatBadgeBtn} onPress={onOpenInbox}>
                             <Ionicons name="chatbubble-ellipses-sharp" size={16} color="rgba(255,255,255,0.85)" />
-                            <View style={styles.badgeCount}>
-                                <Text style={styles.badgeText}>16</Text>
-                            </View>
+                            {unreadCount > 0 && (
+                                <View style={styles.badgeCount}>
+                                    <Text style={styles.badgeText}>{unreadCount > 99 ? '99+' : unreadCount}</Text>
+                                </View>
+                            )}
                         </TouchableOpacity>
                     </>
                 )}

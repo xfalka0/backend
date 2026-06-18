@@ -196,7 +196,9 @@ export default function RoomUserBottomSheet({ visible, user, seat, currentUser, 
 
     const handleMessage = () => {
         onClose();
-        if (navigation && user.id) {
+        if (onMessage) {
+            onMessage(user);
+        } else if (navigation && user.id) {
             navigation.navigate('Chat', {
                 operatorId: user.id,
                 name: user.display_name || user.username,

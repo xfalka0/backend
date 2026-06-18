@@ -4099,7 +4099,7 @@ io.use(async (socket, next) => {
         }
 
         const decoded = jwt.verify(token, SECRET_KEY);
-        const result = await db.query('SELECT id, username, role, account_status, balance, vip_level FROM users WHERE id = $1', [decoded.id]);
+        const result = await db.query('SELECT id, username, display_name, avatar_url, role, account_status, balance, vip_level FROM users WHERE id = $1', [decoded.id]);
 
         if (result.rows.length === 0) {
             global.payoutLogs.push({ timestamp: new Date().toISOString(), type: 'AUTH_FAILED', reason: 'User not found', userId: decoded.id });

@@ -144,6 +144,9 @@ export const useRoomStore = create((set, get) => ({
                 isLoading: false,
             });
 
+            // Fetch initial members list for listener bubbles
+            get().fetchMembers(roomId).catch(() => {});
+
             // 2. Connect socket and join room
             await SocketService.connect();
             get()._subscribeToRoom(roomId);

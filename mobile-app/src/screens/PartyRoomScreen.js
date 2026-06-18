@@ -502,7 +502,7 @@ export default function PartyRoomScreen({ route, navigation }) {
                     <View style={styles.emojiPickerContainer}>
                         <Text style={styles.emojiPickerTitle}>Tepki Gönder</Text>
                         <View style={styles.emojiGrid}>
-                            {['❤️', '😂', '😮', '😢', '😡', '👍'].map(emoji => (
+                            {['❤️', '😘', '💋', '😂', '😮', '👍'].map(emoji => (
                                 <TouchableOpacity 
                                     key={emoji} 
                                     style={styles.emojiBtn}

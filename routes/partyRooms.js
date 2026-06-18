@@ -346,7 +346,7 @@ router.get('/:roomId/members', authenticateToken, async (req, res) => {
 
     try {
         let sql = `
-            SELECT prm.*, u.username, u.display_name, u.avatar_url, u.vip_level, u.level,
+            SELECT prm.*, u.username, u.display_name, u.avatar_url, u.vip_level,
                    (SELECT seat_number FROM party_room_seats WHERE room_id = prm.room_id AND user_id = prm.user_id::text LIMIT 1) as seat_number
             FROM party_room_members prm
             JOIN users u ON prm.user_id = u.id::text

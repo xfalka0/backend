@@ -44,12 +44,33 @@ let AgoraRTC = null;
 const ChatMessageRow = React.memo(({ item, currentUserId }) => {
     if (item.isSystem) {
         const isGift = item.messageType === 'gift';
+        
+        let namePart = '';
+        let actionPart = item.content;
+        
+        if (item.content.includes(' odaya girdi.')) {
+            const parts = item.content.split(' odaya girdi.');
+            namePart = '@' + parts[0];
+            actionPart = ' odaya girdi.';
+        } else if (item.content.includes(' koltuğa oturdu.')) {
+            const parts = item.content.split(' koltuğa oturdu.');
+            namePart = '@' + parts[0];
+            actionPart = ' koltuğa oturdu.';
+        }
+
         return (
             <View style={[styles.systemMsg, isGift && styles.systemMsgGift]}>
                 {isGift && <Text style={styles.systemMsgIcon}>🎁 </Text>}
-                <Text style={[styles.systemMsgText, isGift && { color: '#fbbf24' }]} numberOfLines={3}>
-                    {item.content}
-                </Text>
+                {namePart ? (
+                    <Text numberOfLines={3} style={styles.systemMsgText}>
+                        <Text style={styles.systemMsgName}>{namePart}</Text>
+                        <Text style={styles.systemMsgAction}>{actionPart}</Text>
+                    </Text>
+                ) : (
+                    <Text style={[styles.systemMsgText, isGift && { color: '#fbbf24' }]} numberOfLines={3}>
+                        {item.content}
+                    </Text>
+                )}
             </View>
         );
     }
@@ -74,6 +95,7 @@ export default function PartyRoomScreen({ route, navigation }) {
     // ── Store selectors (Zustand) ─────────────────────────────────────────────
     const room          = useRoomStore(s => s.room);
     const seats         = useRoomStore(s => s.seats);
+    const members       = useRoomStore(s => s.members);
     const messages      = useRoomStore(s => s.messages);
     const onlineCount   = useRoomStore(s => s.onlineCount);
     const isLoading     = useRoomStore(s => s.isLoading);
@@ -115,6 +137,10 @@ export default function PartyRoomScreen({ route, navigation }) {
         () => seats.find(s => s.user_id?.toString() === currentUser?.id?.toString()),
         [seats, currentUser]
     );
+
+    const listeners = useMemo(() => {
+        return members.filter(m => m.is_online && (m.seat_number === undefined || m.seat_number === null));
+    }, [members]);
 
     // Star animation dots layout
     const stars = useMemo(() => {
@@ -347,6 +373,7 @@ export default function PartyRoomScreen({ route, navigation }) {
                             currentUserId={currentUser?.id}
                             onSeatPress={handleSeatPress}
                             isHost={isHost}
+                            listeners={listeners}
                         />
                     )}
                 </View>
@@ -590,14 +617,14 @@ const styles = StyleSheet.create({
     systemMsg: {
         flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: 'rgba(16,185,129,0.15)',
+        backgroundColor: 'rgba(7, 11, 36, 0.55)',
         paddingHorizontal: 9,
         paddingVertical: 3,
         borderRadius: 10,
         marginBottom: 4,
         alignSelf: 'flex-start',
         borderWidth: 0.5,
-        borderColor: 'rgba(16,185,129,0.3)',
+        borderColor: 'rgba(255,255,255,0.06)',
     },
     systemMsgGift: {
         backgroundColor: 'rgba(251,191,36,0.12)',
@@ -607,9 +634,16 @@ const styles = StyleSheet.create({
         fontSize: 11,
     },
     systemMsgText: {
-        color: '#10b981',
+        color: '#00f3ff',
         fontSize: 10,
-        fontWeight: '600',
+        fontWeight: '700',
         flexShrink: 1,
+    },
+    systemMsgName: {
+        color: '#ffb900',
+        fontWeight: 'bold',
+    },
+    systemMsgAction: {
+        color: '#00f3ff',
     },
 });

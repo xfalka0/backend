@@ -55,9 +55,11 @@ function handlePartyRoomSockets(io, socket) {
         // Fetch and send current seat status
         try {
             const seatsRes = await db.query(`
-                SELECT prs.*, u.username, u.display_name, u.avatar_url, u.vip_level
+                SELECT prs.*, u.username, u.display_name, u.avatar_url, u.vip_level,
+                       COALESCE(prm.room_gift_points, 0) as room_gift_points
                 FROM party_room_seats prs
                 LEFT JOIN users u ON prs.user_id = u.id::text
+                LEFT JOIN party_room_members prm ON prs.room_id = prm.room_id AND prs.user_id = prm.user_id
                 WHERE prs.room_id = $1
                 ORDER BY prs.seat_number ASC
             `, [roomId]);
@@ -98,6 +100,7 @@ function handlePartyRoomSockets(io, socket) {
                         display_name: null,
                         avatar_url: null,
                         vip_level: 0,
+                        room_gift_points: 0,
                         is_muted: false
                     });
                 }
@@ -137,8 +140,27 @@ function handlePartyRoomSockets(io, socket) {
                 }
             }
 
-            // Free any other seat the user might occupy in this room first
-            await db.query('UPDATE party_room_seats SET user_id = NULL WHERE room_id = $1 AND user_id = $2::text', [roomId, socket.user.id]);
+            // Free any other seat the user might occupy in this room first and get their numbers
+            const oldSeatRes = await db.query(
+                'UPDATE party_room_seats SET user_id = NULL WHERE room_id = $1 AND user_id = $2::text RETURNING seat_number',
+                [roomId, socket.user.id]
+            );
+
+            // Emit update for the old seat(s) if any were cleared
+            if (oldSeatRes.rows.length > 0) {
+                oldSeatRes.rows.forEach(row => {
+                    io.to(roomName).emit('party_seat_updated', {
+                        seat_number: row.seat_number,
+                        user_id: null,
+                        username: null,
+                        display_name: null,
+                        avatar_url: null,
+                        vip_level: 0,
+                        room_gift_points: 0,
+                        is_muted: false
+                    });
+                });
+            }
 
             // Update the seat
             await db.query(`
@@ -184,6 +206,7 @@ function handlePartyRoomSockets(io, socket) {
                     display_name: null,
                     avatar_url: null,
                     vip_level: 0,
+                    room_gift_points: 0,
                     is_muted: false
                 });
             }
@@ -381,6 +404,13 @@ function handlePartyRoomSockets(io, socket) {
                 }
             }
 
+            // Increment room_gift_points for recipient in the room session
+            await client.query(`
+                UPDATE party_room_members
+                SET room_gift_points = COALESCE(room_gift_points, 0) + $1
+                WHERE room_id = $2 AND user_id = $3
+            `, [gift.cost, roomId, targetUserId]);
+
             await client.query('COMMIT');
 
             if (idempotencyKey) {
@@ -394,6 +424,25 @@ function handlePartyRoomSockets(io, socket) {
             const newBalRes = await client.query('SELECT balance FROM users WHERE id = $1', [senderId]);
             const newBalance = newBalRes.rows[0].balance;
             socket.emit('balance_update', { userId: senderId, newBalance });
+
+            // Fetch updated room gift points
+            const pointsRes = await client.query(`
+                SELECT room_gift_points 
+                FROM party_room_members 
+                WHERE room_id = $1 AND user_id = $2
+            `, [roomId, targetUserId]);
+            const receiverRoomGiftPoints = pointsRes.rows.length > 0 ? parseInt(pointsRes.rows[0].room_gift_points || 0) : gift.cost;
+
+            // Broadcast room:gift_received to everyone in the room
+            io.to(roomName).emit('room:gift_received', {
+                roomId,
+                senderId,
+                receiverId: targetUserId,
+                giftId: gift.id,
+                giftName: gift.name,
+                giftValue: gift.cost,
+                receiverRoomGiftPoints
+            });
 
             // Broadcast gift event to room
             io.to(roomName).emit('party_gift_sent', {
@@ -447,6 +496,7 @@ function handlePartyRoomSockets(io, socket) {
                         display_name: null,
                         avatar_url: null,
                         vip_level: 0,
+                        room_gift_points: 0,
                         is_muted: false
                     });
                 });

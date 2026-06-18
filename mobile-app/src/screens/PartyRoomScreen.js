@@ -278,9 +278,6 @@ export default function PartyRoomScreen({ route, navigation }) {
         }
 
         // Switch seat directly if already sitting, otherwise take seat directly
-        if (mySeat) {
-            leaveSeat(mySeat.seat_number);
-        }
         takeSeat(seat.seat_number);
         if (agoraRef.current) {
             agoraRef.current.setClientRole(AgoraRTC.ClientRoleType.ClientRoleBroadcaster).catch(() => {});

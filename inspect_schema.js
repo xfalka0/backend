@@ -17,11 +17,11 @@ async function inspectSchema() {
     `);
     console.log(usersRes.rows);
 
-    console.log('--- Inspecting "party_room_members" Columns ---');
+    console.log('--- Inspecting "party_room_seats" Columns ---');
     const opsRes = await client.query(`
       SELECT column_name, data_type 
       FROM information_schema.columns 
-      WHERE table_name = 'party_room_members';
+      WHERE table_name = 'party_room_seats';
     `);
     console.log(opsRes.rows);
   } catch (err) {

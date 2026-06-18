@@ -206,9 +206,11 @@ router.get('/:roomId/seats', authenticateToken, async (req, res) => {
     const { roomId } = req.params;
     try {
         const seatsRes = await db.query(`
-            SELECT prs.*, u.username, u.display_name, u.avatar_url, u.vip_level
+            SELECT prs.*, u.username, u.display_name, u.avatar_url, u.vip_level,
+                   COALESCE(prm.room_gift_points, 0) as room_gift_points
             FROM party_room_seats prs
             LEFT JOIN users u ON prs.user_id = u.id::text
+            LEFT JOIN party_room_members prm ON prs.room_id = prm.room_id AND prs.user_id = prm.user_id
             WHERE prs.room_id = $1
             ORDER BY prs.seat_number ASC
         `, [roomId]);

@@ -344,6 +344,21 @@ export const useRoomStore = create((set, get) => ({
             );
         });
 
+        SocketService.on('room:gift_received', (data) => {
+            set(s => ({
+                seats: s.seats.map(seat => 
+                    seat.user_id?.toString() === data.receiverId?.toString()
+                        ? { ...seat, room_gift_points: data.receiverRoomGiftPoints }
+                        : seat
+                ),
+                members: s.members.map(member => 
+                    member.user_id?.toString() === data.receiverId?.toString()
+                        ? { ...member, room_gift_points: data.receiverRoomGiftPoints }
+                        : member
+                )
+            }));
+        });
+
         SocketService.on('party_chat_cleared', () => {
             store.clearMessages();
             store.addSystemMessage('Oda sohbeti temizlendi.');

@@ -187,15 +187,9 @@ export default function RoomSeat({ seat, currentUserId, onPress, isHost }) {
                             }),
                             transform: [
                                 {
-                                    translateY: reactionAnim.interpolate({
-                                        inputRange: [0, 1],
-                                        outputRange: [15, -55]
-                                    })
-                                },
-                                {
                                     scale: reactionAnim.interpolate({
-                                        inputRange: [0, 0.2, 0.85, 1],
-                                        outputRange: [0.3, 1.3, 1.1, 0.7]
+                                        inputRange: [0, 0.15, 0.85, 1],
+                                        outputRange: [0.3, 1.1, 1.1, 0.3]
                                     })
                                 }
                             ]
@@ -383,7 +377,7 @@ const styles = StyleSheet.create({
     },
     floatingReactionContainer: {
         position: 'absolute',
-        top: 0,
+        top: 3,
         alignSelf: 'center',
         zIndex: 100,
     },

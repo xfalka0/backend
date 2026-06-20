@@ -749,7 +749,7 @@ app.get('/api/health-check', async (req, res) => {
             db_time: dbCheck.rows[0].now,
             db_status: app.get('db_status'),
             tables: tables.rows.map(t => t.table_name),
-            schema_info: schemaDetails,
+            schema_info: schemaInfo,
             env: {
                 has_cloudinary: !!process.env.CLOUDINARY_CLOUD_NAME,
                 has_jwt_secret: !!process.env.JWT_SECRET,

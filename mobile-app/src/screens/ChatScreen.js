@@ -64,7 +64,20 @@ export default function ChatScreen({ route, navigation }) {
         };
     }, [isOperator]);
     const { theme, themeMode } = useTheme();
-    const { operatorId, chatId: existingChatId, name, job, user: routeUser = {}, avatar_url, is_online, vip_level = 0, gender } = route.params;
+    const { 
+        operatorId, 
+        chatId: existingChatId, 
+        name, 
+        job, 
+        user: routeUser = {}, 
+        avatar_url, 
+        is_online, 
+        vip_level = 0, 
+        gender,
+        nobility_key,
+        nobility_name,
+        nobility_name_color
+    } = route.params;
 
     // User Handling
     const TEST_USER_ID = 'c917f7d6-cc44-4b04-8917-1dbbed0b1e9b';
@@ -259,10 +272,29 @@ export default function ChatScreen({ route, navigation }) {
             headerShown: true,
             headerTitle: () => (
                 <View style={{ alignItems: 'center' }}>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 1 }}>
-                        <Text style={{ color: theme.colors.text, fontSize: 15, fontWeight: '900', marginRight: 4 }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 1, gap: 4 }}>
+                        <Text style={{ color: nobility_name_color || theme.colors.text, fontSize: 15, fontWeight: '900', marginRight: 4 }}>
                             {name ? name.toUpperCase() : 'SOHBET'}
                         </Text>
+
+                        {nobility_key && (
+                            <View style={{
+                                backgroundColor: `${nobility_name_color || '#FFD166'}20`,
+                                borderColor: nobility_name_color || '#FFD166',
+                                borderWidth: 1,
+                                paddingHorizontal: 5,
+                                paddingVertical: 1.5,
+                                borderRadius: 6,
+                                marginRight: 4,
+                                flexDirection: 'row',
+                                alignItems: 'center'
+                            }}>
+                                <Ionicons name="shield-checkmark" size={9} color={nobility_name_color || '#FFD166'} />
+                                <Text style={{ color: nobility_name_color || '#FFD166', fontSize: 9, fontWeight: '900', marginLeft: 2 }}>
+                                    {nobility_name}
+                                </Text>
+                            </View>
+                        )}
 
                         {vip_level > 0 && (
                             <LinearGradient
@@ -332,7 +364,7 @@ export default function ChatScreen({ route, navigation }) {
             headerTintColor: theme.colors.text,
             headerBackVisible: false,
         });
-    }, [navigation, showOptions, name, is_online, avatar_url, operatorId, user, vip_level]);
+    }, [navigation, showOptions, name, is_online, avatar_url, operatorId, user, vip_level, nobility_key, nobility_name, nobility_name_color]);
 
     // Initialize Chat
     useEffect(() => {

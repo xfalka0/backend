@@ -80,11 +80,38 @@ const ChatMessageRow = React.memo(({ item, currentUserId }) => {
     }
 
     const isMe = currentUserId && item.sender?.id?.toString() === currentUserId?.toString();
+    const senderNobilityKey = item.sender?.nobility_key || item.sender?.nobilityKey;
+    const senderNobilityName = item.sender?.nobility_name || item.sender?.nobilityName;
+    const senderNobilityNameColor = item.sender?.nobility_name_color || item.sender?.nobilityNameColor;
+
     return (
         <View style={styles.chatMsgRow}>
-            <Text style={[styles.chatSender, isMe && styles.chatSenderMe]}>
-                {item.sender?.display_name || item.sender?.username || 'Katılımcı'}
-            </Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 4, marginBottom: 2 }}>
+                {senderNobilityKey && (
+                    <View style={{
+                        backgroundColor: `${senderNobilityNameColor || '#FFD166'}20`,
+                        borderColor: senderNobilityNameColor || '#FFD166',
+                        borderWidth: 1,
+                        paddingHorizontal: 4,
+                        paddingVertical: 1,
+                        borderRadius: 6,
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                    }}>
+                        <Ionicons name="shield-checkmark" size={8} color={senderNobilityNameColor || '#FFD166'} />
+                        <Text style={{ color: senderNobilityNameColor || '#FFD166', fontSize: 7, fontWeight: '900', marginLeft: 1 }}>
+                            {senderNobilityName}
+                        </Text>
+                    </View>
+                )}
+                <Text style={[
+                    styles.chatSender, 
+                    isMe && styles.chatSenderMe,
+                    senderNobilityNameColor && { color: senderNobilityNameColor }
+                ]}>
+                    {item.sender?.display_name || item.sender?.username || 'Katılımcı'}
+                </Text>
+            </View>
             <Text style={styles.chatMsgText}>{item.content}</Text>
         </View>
     );

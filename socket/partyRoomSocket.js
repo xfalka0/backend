@@ -328,23 +328,61 @@ function handlePartyRoomSockets(io, socket) {
     });
 
     // 7. ROOM CHAT MESSAGE
-    socket.on('send_party_message', (data) => {
+    socket.on('send_party_message', async (data) => {
         const { roomId, content } = data;
         if (!roomId || !content || !socket.user) return;
 
         const roomName = `party_room_${roomId}`;
-        io.to(roomName).emit('receive_party_message', {
-            id: `msg_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
-            content,
-            sender: {
-                id: socket.user.id,
-                username: socket.user.username,
-                display_name: socket.user.display_name,
-                avatar_url: socket.user.avatar_url,
-                vip_level: socket.user.vip_level
-            },
-            created_at: new Date()
-        });
+        
+        try {
+            const nobRes = await db.query(`
+                SELECT un.expires_at as nobility_expires_at, 
+                       nt.key as nobility_key, 
+                       nt.name as nobility_name, 
+                       nt.level as nobility_level, 
+                       nt.badge_url as nobility_badge_url, 
+                       nt.name_color as nobility_name_color
+                FROM user_nobility un
+                JOIN nobility_titles nt ON un.title_id = nt.id
+                WHERE un.user_id = $1 AND un.is_active = TRUE AND un.expires_at > NOW()
+                ORDER BY nt.priority_weight DESC LIMIT 1
+            `, [socket.user.id.toString()]);
+            
+            const nobility = nobRes.rows[0] || {};
+
+            io.to(roomName).emit('receive_party_message', {
+                id: `msg_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
+                content,
+                sender: {
+                    id: socket.user.id,
+                    username: socket.user.username,
+                    display_name: socket.user.display_name,
+                    avatar_url: socket.user.avatar_url,
+                    vip_level: socket.user.vip_level,
+                    nobility_key: nobility.nobility_key || null,
+                    nobility_name: nobility.nobility_name || null,
+                    nobility_level: nobility.nobility_level || null,
+                    nobility_badge_url: nobility.nobility_badge_url || null,
+                    nobility_name_color: nobility.nobility_name_color || null
+                },
+                created_at: new Date()
+            });
+        } catch (err) {
+            console.error('[SOCKET] Error in send_party_message:', err.message);
+            // Fallback broadcast without nobility details
+            io.to(roomName).emit('receive_party_message', {
+                id: `msg_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
+                content,
+                sender: {
+                    id: socket.user.id,
+                    username: socket.user.username,
+                    display_name: socket.user.display_name,
+                    avatar_url: socket.user.avatar_url,
+                    vip_level: socket.user.vip_level
+                },
+                created_at: new Date()
+            });
+        }
     });
 
     // 7a. ROOM EMOJI REACTION

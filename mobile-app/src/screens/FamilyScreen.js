@@ -14,6 +14,51 @@ import { useAppStore } from '../store/useAppStore';
 const { width } = Dimensions.get('window');
 
 // Cumulative XP Level Configurations
+const DEMO_FAMILIES = [
+    {
+        id: 'demo_1',
+        name: "Diamond Angels",
+        leader_name: "Sudenur",
+        level: 4,
+        member_count: 87,
+        max_members: 100,
+        points: 82000,
+        nextXp: 100000,
+        rank: 1,
+        badge_url: "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=100&q=80",
+        join_type: "approval_required",
+        description: "Sadece aktif ve hediye gönderen üyeler kabul edilir."
+    },
+    {
+        id: 'demo_2',
+        name: "Star Family",
+        leader_name: "Melis",
+        level: 3,
+        member_count: 42,
+        max_members: 50,
+        points: 18400,
+        nextXp: 25000,
+        rank: 2,
+        badge_url: "https://images.unsplash.com/photo-1579783902614-a3fb3927b6a5?w=100&q=80",
+        join_type: "open",
+        description: "Herkes davetlidir, seviye atlamak için sesli odada kalın!"
+    },
+    {
+        id: 'demo_3',
+        name: "Moonlight Clan",
+        leader_name: "Aylin",
+        level: 2,
+        member_count: 18,
+        max_members: 20,
+        points: 4200,
+        nextXp: 5000,
+        rank: 3,
+        badge_url: "https://images.unsplash.com/photo-1550684848-fac1c5b4e853?w=100&q=80",
+        join_type: "approval_required",
+        description: "Sakin ve samimi bir topluluk."
+    }
+];
+
 const LEVEL_THRESHOLDS = [
     { level: 8, xp: 3000000, maxMembers: 999999 },
     { level: 7, xp: 1500000, maxMembers: 500 },
@@ -72,6 +117,10 @@ export default function FamilyScreen({ navigation }) {
     const [applications, setApplications] = useState([]);
     const [checkedInToday, setCheckedInToday] = useState(false);
     const [dailyContribution, setDailyContribution] = useState(0);
+
+    const [selectedFilter, setSelectedFilter] = useState('popular');
+    const searchInputRef = useRef(null);
+    const scrollViewRef = useRef(null);
 
     const isMale = (currentUser?.gender || '').toLowerCase() === 'erkek';
 
@@ -367,7 +416,6 @@ export default function FamilyScreen({ navigation }) {
         return (
             <View style={styles.center}>
                 <ActivityIndicator size="large" color="#ec4899" />
-                <Text style={styles.loadingText}>Yükleniyor...</Text>
             </View>
         );
     }
@@ -375,97 +423,302 @@ export default function FamilyScreen({ navigation }) {
     return (
         <View style={styles.container}>
             <StatusBar barStyle="light-content" />
-            <LinearGradient colors={['#0f0720', '#110928']} style={StyleSheet.absoluteFill} />
+            <LinearGradient colors={['#08051A', '#160627', '#090014']} style={StyleSheet.absoluteFill} />
 
             {/* HEADER */}
             <View style={styles.header}>
-                <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
-                    <Ionicons name="chevron-back" size={24} color="#fff" />
+                <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn} activeOpacity={0.7}>
+                    <LinearGradient colors={['rgba(255,255,255,0.12)', 'rgba(255,255,255,0.03)']} style={styles.backBtnGradient}>
+                        <Ionicons name="chevron-back" size={20} color="#fff" />
+                    </LinearGradient>
                 </TouchableOpacity>
-                <Text style={styles.headerTitle}>Ailem (Birlik)</Text>
-                <View style={{ width: 24 }} />
+                <Text style={styles.headerTitle}>Klan ve Aileler</Text>
+                <TouchableOpacity 
+                    onPress={() => showAlert({ 
+                        title: 'Klan ve Aileler', 
+                        message: 'Bir aileye katılarak günlük XP limitlerini zorlayın, görevleri tamamlayın ve haftalık sıralamada ödüller kazanın!', 
+                        type: 'info' 
+                    })}
+                    style={styles.backBtn} 
+                    activeOpacity={0.7}
+                >
+                    <LinearGradient colors={['rgba(255,255,255,0.12)', 'rgba(255,255,255,0.03)']} style={styles.backBtnGradient}>
+                        <Ionicons name="information-circle-outline" size={20} color="#fff" />
+                    </LinearGradient>
+                </TouchableOpacity>
             </View>
 
             {myFamilyData === null ? (
                 /* ─── NOT IN A FAMILY VIEW ─── */
                 <View style={{ flex: 1 }}>
-                    <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 100 }}>
-                        {/* Intro Hero Section */}
-                        <View style={styles.notInFamilyHero}>
-                            <View style={styles.heroBadgeBox}>
-                                <Ionicons name="people" size={40} color="#fff" />
-                            </View>
-                            <Text style={styles.heroTitle}>Bir Aileye Katıl!</Text>
-                            <Text style={styles.heroSubtitle}>
-                                Topluluk kur veya mevcut bir birliğe katılarak günlük XP'ler kazan, seviye atla ve özel haftalık bonuslar elde et.
-                            </Text>
-                        </View>
+                    <ScrollView 
+                        ref={scrollViewRef}
+                        showsVerticalScrollIndicator={false} 
+                        contentContainerStyle={{ paddingBottom: 60 }}
+                    >
 
-                        {/* Search Bar */}
-                        <View style={styles.searchBarContainer}>
-                            <Ionicons name="search" size={20} color="#8e85a6" style={{ marginLeft: 12 }} />
-                            <TextInput
-                                style={styles.searchInput}
-                                placeholder="Aile adı ara..."
-                                placeholderTextColor="#8e85a6"
-                                value={searchQuery}
-                                onChangeText={(text) => {
-                                    setSearchQuery(text);
-                                    fetchFamilies(text);
+
+                        {/* Quick Action Cards */}
+                        <View style={styles.quickActionsContainer}>
+                            <TouchableOpacity 
+                                style={styles.quickActionCard} 
+                                onPress={() => setCreateModalVisible(true)}
+                                activeOpacity={0.8}
+                            >
+                                <LinearGradient colors={['rgba(255,255,255,0.06)', 'rgba(255,255,255,0.02)']} style={styles.quickActionGradient}>
+                                    <Ionicons name="add-circle" size={22} color="#FFB84D" />
+                                    <Text style={styles.quickActionTitle}>Aile Kur</Text>
+                                    <Text style={styles.quickActionDesc}>Kendi klanını yarat</Text>
+                                </LinearGradient>
+                            </TouchableOpacity>
+
+                            <TouchableOpacity 
+                                style={styles.quickActionCard} 
+                                onPress={() => searchInputRef.current?.focus()}
+                                activeOpacity={0.8}
+                            >
+                                <LinearGradient colors={['rgba(255,255,255,0.06)', 'rgba(255,255,255,0.02)']} style={styles.quickActionGradient}>
+                                    <Ionicons name="search" size={22} color="#00D6FF" />
+                                    <Text style={styles.quickActionTitle}>Aile Ara</Text>
+                                    <Text style={styles.quickActionDesc}>Filtrele ve bul</Text>
+                                </LinearGradient>
+                            </TouchableOpacity>
+
+                            <TouchableOpacity 
+                                style={styles.quickActionCard} 
+                                onPress={() => {
+                                    // Scroll down to ranking section
+                                    scrollViewRef.current?.scrollTo({ y: 340, animated: true });
                                 }}
-                            />
+                                activeOpacity={0.8}
+                            >
+                                <LinearGradient colors={['rgba(255,255,255,0.06)', 'rgba(255,255,255,0.02)']} style={styles.quickActionGradient}>
+                                    <Ionicons name="bar-chart" size={22} color="#FF3D8B" />
+                                    <Text style={styles.quickActionTitle}>Sıralama</Text>
+                                    <Text style={styles.quickActionDesc}>Haftanın liderleri</Text>
+                                </LinearGradient>
+                            </TouchableOpacity>
                         </View>
 
-                        {/* Families list */}
-                        <View style={styles.listSection}>
-                            <Text style={styles.sectionHeaderTitle}>Önerilen Aileler</Text>
-                            {familiesList.length === 0 ? (
-                                <Text style={styles.noFamilyText}>Aradığınız kriterde aktif aile bulunamadı.</Text>
-                            ) : (
-                                <FlatList
-                                    data={familiesList}
-                                    renderItem={renderFamilyItem}
-                                    keyExtractor={(item) => item.id.toString()}
-                                    scrollEnabled={false}
+                        {/* Search and Filters Area */}
+                        <View style={styles.searchSectionWrapper}>
+                            <View style={styles.searchBarContainer}>
+                                <Ionicons name="search" size={18} color="rgba(255,255,255,0.5)" style={{ marginLeft: 14 }} />
+                                <TextInput
+                                    ref={searchInputRef}
+                                    style={styles.searchInput}
+                                    placeholder="Aile adı veya lider ara..."
+                                    placeholderTextColor="rgba(255,255,255,0.35)"
+                                    value={searchQuery}
+                                    onChangeText={(text) => {
+                                        setSearchQuery(text);
+                                        fetchFamilies(text);
+                                    }}
                                 />
-                            )}
+                                <TouchableOpacity style={styles.searchFilterBtn} activeOpacity={0.7}>
+                                    <Ionicons name="options-outline" size={18} color="#FF3D8B" />
+                                </TouchableOpacity>
+                            </View>
+
+                            {/* Horizontal Filters */}
+                            <ScrollView 
+                                horizontal 
+                                showsHorizontalScrollIndicator={false}
+                                contentContainerStyle={styles.filtersScrollContent}
+                                style={{ marginTop: 4, marginBottom: 8 }}
+                            >
+                                {[
+                                    { id: 'popular', label: 'Popüler', icon: 'flame-outline' },
+                                    { id: 'new', label: 'Yeni', icon: 'sparkles-outline' },
+                                    { id: 'high_level', label: 'Yüksek Seviye', icon: 'trending-up-outline' },
+                                    { id: 'open', label: 'Açık Katılım', icon: 'lock-open-outline' },
+                                    { id: 'weekly_best', label: 'Haftanın Enleri', icon: 'ribbon-outline' }
+                                ].map((filter) => {
+                                    const isSelected = selectedFilter === filter.id;
+                                    return (
+                                        <TouchableOpacity
+                                            key={filter.id}
+                                            style={[styles.filterChip, isSelected && styles.filterChipActive]}
+                                            onPress={() => setSelectedFilter(filter.id)}
+                                            activeOpacity={0.8}
+                                        >
+                                            <Ionicons name={filter.icon} size={12} color={isSelected ? '#fff' : 'rgba(255,255,255,0.6)'} style={{ marginRight: 5 }} />
+                                            <Text style={[styles.filterChipText, isSelected && styles.filterChipTextActive]}>{filter.label}</Text>
+                                        </TouchableOpacity>
+                                    );
+                                })}
+                            </ScrollView>
+                        </View>
+
+                        {/* Weekly Ranking Preview */}
+                        <View style={styles.rankingPreviewSection}>
+                            <View style={styles.sectionHeaderRow}>
+                                <Text style={styles.sectionHeaderTitle}>Haftanın Enleri</Text>
+                                <Ionicons name="trophy-outline" size={16} color="#FFB84D" />
+                            </View>
+                            
+                            <View style={styles.rankingRowsWrapper}>
+                                {DEMO_FAMILIES.map((fam, idx) => (
+                                    <View key={fam.id} style={styles.rankMiniRow}>
+                                        <View style={[styles.rankNumberCircle, idx === 0 ? styles.rank1Bg : idx === 1 ? styles.rank2Bg : styles.rank3Bg]}>
+                                            <Text style={styles.rankNumberText}>{idx + 1}</Text>
+                                        </View>
+                                        <Image source={{ uri: fam.badge_url }} style={styles.rankAvatar} />
+                                        <View style={styles.rankInfoBox}>
+                                            <Text style={styles.rankFamilyName}>{fam.name}</Text>
+                                            <Text style={styles.rankLeaderName}>Lider: {fam.leader_name}</Text>
+                                        </View>
+                                        <Text style={styles.rankLevelText}>Lv.{fam.level}</Text>
+                                    </View>
+                                ))}
+                            </View>
+                        </View>
+
+                        {/* Recommended Families */}
+                        <View style={styles.listSection}>
+                            <View style={styles.sectionHeaderRow}>
+                                <Text style={styles.sectionHeaderTitle}>Önerilen Aileler</Text>
+                                <TouchableOpacity onPress={() => searchInputRef.current?.focus()}>
+                                    <Text style={styles.seeAllText}>Tümünü Gör</Text>
+                                </TouchableOpacity>
+                            </View>
+                            
+                            {(() => {
+                                const items = searchQuery.trim() !== '' 
+                                    ? familiesList 
+                                    : DEMO_FAMILIES;
+
+                                if (items.length === 0) {
+                                    return (
+                                        <View style={styles.emptyContainer}>
+                                            <Ionicons name="sad-outline" size={44} color="rgba(255,255,255,0.15)" />
+                                            <Text style={styles.emptyTitle}>Henüz uygun aile yok</Text>
+                                            <Text style={styles.emptySubtitle}>İlk ailelerden birini kurarak sıralamada öne çıkabilirsin.</Text>
+                                            <TouchableOpacity 
+                                                style={styles.emptyCreateBtn}
+                                                onPress={() => setCreateModalVisible(true)}
+                                                activeOpacity={0.8}
+                                            >
+                                                <Text style={styles.emptyCreateBtnText}>Aile Kur</Text>
+                                            </TouchableOpacity>
+                                        </View>
+                                    );
+                                }
+
+                                return items.map((item) => {
+                                    const nextLvlXp = item.nextXp || 25000;
+                                    const currentPoints = item.points || 18400;
+                                    const progressPercent = Math.min(100, Math.max(5, (currentPoints / nextLvlXp) * 100));
+                                    
+                                    return (
+                                        <View key={item.id || item.name} style={styles.familyPremiumCard}>
+                                            <View style={styles.cardHeaderRow}>
+                                                <Image source={{ uri: item.badge_url || 'https://via.placeholder.com/100' }} style={styles.cardBadge} />
+                                                <View style={styles.cardMiddleInfo}>
+                                                    <Text style={styles.cardFamilyName}>{item.name}</Text>
+                                                    <Text style={styles.cardLeaderText}>Lider: {item.leader_name || item.leader?.username || 'Belirtilmemiş'}</Text>
+                                                    
+                                                    <View style={styles.cardSubStatsRow}>
+                                                        <View style={styles.levelMiniBadge}>
+                                                            <Text style={styles.levelMiniBadgeText}>Lv.{item.level}</Text>
+                                                        </View>
+                                                        <Text style={styles.cardMembersText}>👥 {item.member_count} / {item.max_members}</Text>
+                                                    </View>
+                                                </View>
+
+                                                <View style={styles.cardRightColumn}>
+                                                    {item.rank && (
+                                                        <View style={styles.cardRankCircle}>
+                                                            <Text style={styles.cardRankText}>#{item.rank}</Text>
+                                                        </View>
+                                                    )}
+                                                    
+                                                    <TouchableOpacity 
+                                                        style={styles.cardJoinBtn}
+                                                        onPress={() => handleApply(item.id)}
+                                                        activeOpacity={0.8}
+                                                    >
+                                                        <LinearGradient colors={['#FF3D8B', '#7B2CFF']} style={styles.cardJoinBtnGradient}>
+                                                            <Text style={styles.cardJoinText}>Katıl</Text>
+                                                        </LinearGradient>
+                                                    </TouchableOpacity>
+                                                </View>
+                                            </View>
+
+                                            {/* XP Progress Section */}
+                                            <View style={styles.cardXpSection}>
+                                                <View style={styles.cardXpTextRow}>
+                                                    <Text style={styles.cardXpLabel}>XP İlerlemesi</Text>
+                                                    <Text style={styles.cardXpVal}>{currentPoints.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ".")} / {nextLvlXp.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ".")}</Text>
+                                                </View>
+                                                <View style={styles.cardXpTrack}>
+                                                    <LinearGradient 
+                                                        colors={['#FF3D8B', '#FFB84D']}
+                                                        start={{ x: 0, y: 0 }}
+                                                        end={{ x: 1, y: 0 }}
+                                                        style={[styles.cardXpFill, { width: `${progressPercent}%` }]} 
+                                                    />
+                                                </View>
+                                            </View>
+                                        </View>
+                                    );
+                                });
+                            })()}
+                        </View>
+
+                        {/* Integrated CTA: Create Family Inline Section */}
+                        <View style={styles.ctaWrapper}>
+                            <LinearGradient 
+                                colors={['rgba(255, 184, 77, 0.12)', 'rgba(255, 61, 139, 0.05)']} 
+                                style={styles.ctaContainer}
+                            >
+                                <View style={styles.ctaTextSection}>
+                                    <View style={styles.ctaTitleRow}>
+                                        <Ionicons name="flash" size={16} color="#FFB84D" />
+                                        <Text style={styles.ctaTitle}>Kendi Aileni Kur</Text>
+                                    </View>
+                                    <Text style={styles.ctaSubtitle}>
+                                        {currentUser?.is_agency_owner 
+                                            ? 'İlk aileni ücretsiz kurabilirsin.' 
+                                            : '5.000 Altın ile aileni oluştur. Ajans sahiplerine ilk aile ücretsiz.'}
+                                    </Text>
+                                </View>
+                                <TouchableOpacity 
+                                    style={styles.ctaButton}
+                                    onPress={() => setCreateModalVisible(true)}
+                                    activeOpacity={0.8}
+                                >
+                                    <LinearGradient colors={['#FFB84D', '#FF3D8B']} style={styles.ctaButtonGradient}>
+                                        <Ionicons name="star" size={14} color="#fff" style={{ marginRight: 6 }} />
+                                        <Text style={styles.ctaButtonText}>Kur</Text>
+                                    </LinearGradient>
+                                </TouchableOpacity>
+                            </LinearGradient>
                         </View>
                     </ScrollView>
-
-                    {/* Create Family Bottom Sticky Banner */}
-                    <View style={styles.createStickyContainer}>
-                        <View style={styles.createStickyTextContainer}>
-                            <Text style={styles.createStickyTitle}>Kendi Aileni Kur ⚡</Text>
-                            <Text style={styles.createStickyDesc}>Normal Üyelere 5.000 Altın, Ajans Sahiplerine Ücretsiz!</Text>
-                        </View>
-                        <TouchableOpacity 
-                            style={styles.createStickyBtn} 
-                            onPress={() => setCreateModalVisible(true)}
-                            activeOpacity={0.8}
-                        >
-                            <LinearGradient colors={['#fbbf24', '#f59e0b']} style={styles.createStickyBtnGradient}>
-                                <Text style={styles.createStickyBtnText}>Kur</Text>
-                            </LinearGradient>
-                        </TouchableOpacity>
-                    </View>
                 </View>
             ) : (
                 /* ─── FAMILY DASHBOARD VIEW (ALREADY IN FAMILY) ─── */
                 <View style={{ flex: 1 }}>
                     {/* Family Header Summary Panel */}
-                    <View style={styles.familyHeaderCard}>
+                    <LinearGradient 
+                        colors={['rgba(139, 92, 246, 0.12)', 'rgba(0, 0, 0, 0.25)']} 
+                        style={styles.familyHeaderCard}
+                    >
                         <Image source={{ uri: myFamilyData.family.badge_url }} style={styles.familyBadgeImage} />
                         <View style={styles.familyHeaderTextInfo}>
                             <View style={styles.familyTitleRow}>
-                                <Text style={styles.familyName}>{myFamilyData.family.name}</Text>
-                                <View style={styles.levelBadge}>
+                                <Text style={styles.familyName} numberOfLines={1}>{myFamilyData.family.name}</Text>
+                                <LinearGradient colors={['#fbbf24', '#d97706']} style={styles.levelBadge}>
                                     <Text style={styles.levelBadgeText}>Lv.{myFamilyData.family.level}</Text>
-                                </View>
+                                </LinearGradient>
                             </View>
-                            <Text style={styles.familyDescription}>{myFamilyData.family.description || 'Açıklama girilmemiş.'}</Text>
-                            <Text style={styles.familyCountsText}>👥 Üyeler: {myFamilyData.family.member_count} / {myFamilyData.family.max_members}</Text>
+                            <Text style={styles.familyDescription} numberOfLines={2}>
+                                {myFamilyData.family.description || 'Bu aile için herhangi bir açıklama girilmemiş.'}
+                            </Text>
+                            <Text style={styles.familyCountsText}>👥 Üye Limiti: {myFamilyData.family.member_count} / {myFamilyData.family.max_members}</Text>
                         </View>
-                    </View>
+                    </LinearGradient>
 
                     {/* Progress Bar (Level Progression) */}
                     <View style={styles.progressContainer}>
@@ -479,11 +732,11 @@ export default function FamilyScreen({ navigation }) {
                                 return (
                                     <View>
                                         <View style={styles.xpRow}>
-                                            <Text style={styles.xpLabel}>Level {myFamilyData.family.level}</Text>
-                                            <Text style={styles.xpValue}>{formatNum(currentPoints)} XP (Max Seviye)</Text>
+                                            <Text style={styles.xpLabel}>Maksimum Seviye (Level 8)</Text>
+                                            <Text style={styles.xpValue}>{formatNum(currentPoints)} XP</Text>
                                         </View>
                                         <View style={styles.progressTrack}>
-                                            <View style={[styles.progressFill, { width: '100%' }]} />
+                                            <LinearGradient colors={['#fbbf24', '#f59e0b']} style={[styles.progressFill, { width: '100%' }]} />
                                         </View>
                                         <View style={styles.extraInfoRow}>
                                             <Text style={styles.extraInfoText}>Üye limiti: {myFamilyData.family.max_members}</Text>
@@ -501,11 +754,15 @@ export default function FamilyScreen({ navigation }) {
                             return (
                                 <View>
                                     <View style={styles.xpRow}>
-                                        <Text style={styles.xpLabel}>Level {myFamilyData.family.level}</Text>
+                                        <Text style={styles.xpLabel}>Level İlerlemesi</Text>
                                         <Text style={styles.xpValue}>{formatNum(currentPoints)} / {formatNum(nextLvl.xp)} XP</Text>
                                     </View>
                                     <View style={styles.progressTrack}>
-                                        <View style={[styles.progressFill, { width: `${percent}%` }]} />
+                                        <LinearGradient 
+                                            colors={['#8b5cf6', '#ec4899']} 
+                                            start={{x:0, y:0}} end={{x:1, y:0}}
+                                            style={[styles.progressFill, { width: `${percent}%` }]} 
+                                        />
                                     </View>
                                     <View style={styles.extraInfoRow}>
                                         <Text style={styles.extraInfoText}>Üye limiti: {myFamilyData.family.max_members}</Text>
@@ -521,18 +778,21 @@ export default function FamilyScreen({ navigation }) {
                         <TouchableOpacity 
                             style={[styles.tabItem, activeTab === 'members' && styles.activeTabItem]}
                             onPress={() => setActiveTab('members')}
+                            activeOpacity={0.8}
                         >
                             <Text style={[styles.tabText, activeTab === 'members' && styles.activeTabText]}>Üyeler</Text>
                         </TouchableOpacity>
                         <TouchableOpacity 
                             style={[styles.tabItem, activeTab === 'chat' && styles.activeTabItem]}
                             onPress={() => setActiveTab('chat')}
+                            activeOpacity={0.8}
                         >
                             <Text style={[styles.tabText, activeTab === 'chat' && styles.activeTabText]}>Sohbet</Text>
                         </TouchableOpacity>
                         <TouchableOpacity 
                             style={[styles.tabItem, activeTab === 'tasks' && styles.activeTabItem]}
                             onPress={() => setActiveTab('tasks')}
+                            activeOpacity={0.8}
                         >
                             <Text style={[styles.tabText, activeTab === 'tasks' && styles.activeTabText]}>XP & Check-in</Text>
                         </TouchableOpacity>
@@ -540,6 +800,7 @@ export default function FamilyScreen({ navigation }) {
                             <TouchableOpacity 
                                 style={[styles.tabItem, activeTab === 'manage' && styles.activeTabItem]}
                                 onPress={() => setActiveTab('manage')}
+                                activeOpacity={0.8}
                             >
                                 <Text style={[styles.tabText, activeTab === 'manage' && styles.activeTabText]}>Yönetim</Text>
                             </TouchableOpacity>
@@ -563,12 +824,15 @@ export default function FamilyScreen({ navigation }) {
                                             <Image source={{ uri: item.avatar_url || 'https://via.placeholder.com/80' }} style={styles.memberAvatar} />
                                             <View style={styles.memberInfo}>
                                                 <Text style={styles.memberName}>{item.display_name || item.username}</Text>
-                                                <View style={styles.roleContainer}>
+                                                <LinearGradient 
+                                                    colors={item.role === 'leader' ? ['#fbbf24', '#d97706'] : ['#8b5cf6', '#6d28d9']} 
+                                                    style={styles.roleContainer}
+                                                >
                                                     <Text style={styles.roleText}>{item.role.toUpperCase()}</Text>
-                                                </View>
+                                                </LinearGradient>
                                             </View>
                                             <View style={styles.memberXpStats}>
-                                                <Text style={styles.memberXpText}>Günlük: +{item.daily_xp_contributed} XP</Text>
+                                                <Text style={styles.memberXpText}>+{item.daily_xp_contributed} XP</Text>
                                                 <Text style={styles.memberTotalXpText}>Toplam: {item.total_xp_contributed} XP</Text>
                                             </View>
                                             
@@ -578,13 +842,13 @@ export default function FamilyScreen({ navigation }) {
                                                         style={styles.actionCircleBtn} 
                                                         onPress={() => handleTransferLeadership(item.user_id, item.display_name || item.username)}
                                                     >
-                                                        <Ionicons name="key" size={14} color="#fbbf24" />
+                                                        <Ionicons name="key" size={12} color="#fbbf24" />
                                                     </TouchableOpacity>
                                                     <TouchableOpacity 
-                                                        style={[styles.actionCircleBtn, { backgroundColor: 'rgba(239, 68, 68, 0.2)' }]} 
+                                                        style={[styles.actionCircleBtn, { backgroundColor: 'rgba(239, 68, 68, 0.12)', borderColor: 'rgba(239,68,68,0.25)', borderWidth: 1 }]} 
                                                         onPress={() => handleKickMember(item.user_id, item.display_name || item.username)}
                                                     >
-                                                        <Ionicons name="trash" size={14} color="#ef4444" />
+                                                        <Ionicons name="trash" size={12} color="#ef4444" />
                                                     </TouchableOpacity>
                                                 </View>
                                             )}
@@ -596,7 +860,7 @@ export default function FamilyScreen({ navigation }) {
 
                         {activeTab === 'chat' && (
                             /* ── Tab: Yazılı Grup Sohbeti ── */
-                            <View style={{ flex: 1, backgroundColor: 'rgba(255,255,255,0.01)' }}>
+                            <View style={{ flex: 1, backgroundColor: 'transparent' }}>
                                 <FlatList
                                     ref={chatFlatListRef}
                                     data={chatMessages}
@@ -622,13 +886,13 @@ export default function FamilyScreen({ navigation }) {
                                 <View style={styles.chatInputContainer}>
                                     <TextInput
                                         style={styles.chatInput}
-                                        placeholder="Bir şeyler yaz..."
-                                        placeholderTextColor="#8e85a6"
+                                        placeholder="Aileye mesaj yaz..."
+                                        placeholderTextColor="#6c6484"
                                         value={newMessageText}
                                         onChangeText={setNewMessageText}
                                     />
                                     <TouchableOpacity style={styles.sendChatBtn} onPress={handleSendMessage}>
-                                        <Ionicons name="send" size={18} color="#fff" />
+                                        <Ionicons name="send" size={16} color="#fff" />
                                     </TouchableOpacity>
                                 </View>
                             </View>
@@ -647,7 +911,7 @@ export default function FamilyScreen({ navigation }) {
                                         activeOpacity={0.8}
                                     >
                                         <LinearGradient 
-                                            colors={checkedInToday ? ['#4b5563', '#374151'] : ['#10b981', '#059669']} 
+                                            colors={checkedInToday ? ['#374151', '#1f2937'] : ['#10b981', '#047857']} 
                                             style={styles.checkInBtnGradient}
                                         >
                                             <Text style={styles.checkInBtnText}>
@@ -662,6 +926,7 @@ export default function FamilyScreen({ navigation }) {
                                     <Text style={styles.limitTitle}>Günlük XP Katkı Limiti</Text>
                                     <Text style={styles.limitSubtitle}>Bir kullanıcının aileye günlük maksimum katkı sınırı: 500 XP.</Text>
                                     <View style={styles.limitProgressRow}>
+                                        <Text style={styles.limitProgressLabel}>Senin Katkın</Text>
                                         <Text style={styles.limitProgressText}>{dailyContribution} / 500 XP</Text>
                                     </View>
                                     <View style={styles.limitProgressTrack}>
@@ -669,7 +934,7 @@ export default function FamilyScreen({ navigation }) {
                                     </View>
                                 </View>
 
-                                <TouchableOpacity style={styles.leaveFamilyDangerBtn} onPress={handleLeaveFamily}>
+                                <TouchableOpacity style={styles.leaveFamilyDangerBtn} onPress={handleLeaveFamily} activeOpacity={0.8}>
                                     <Text style={styles.leaveFamilyText}>Aileden Ayrıl</Text>
                                 </TouchableOpacity>
                             </ScrollView>
@@ -680,7 +945,10 @@ export default function FamilyScreen({ navigation }) {
                             <ScrollView contentContainerStyle={{ padding: 20 }}>
                                 <Text style={styles.sectionHeaderTitle}>Bekleyen Başvurular</Text>
                                 {applications.length === 0 ? (
-                                    <Text style={styles.noApplicationsText}>Bekleyen bir katılım isteği bulunmamaktadır.</Text>
+                                    <View style={styles.emptyContainer}>
+                                        <Ionicons name="mail-open-outline" size={40} color="rgba(255,255,255,0.06)" />
+                                        <Text style={styles.noApplicationsText}>Bekleyen bir katılım isteği bulunmamaktadır.</Text>
+                                    </View>
                                 ) : (
                                     applications.map(app => (
                                         <View key={app.id} style={styles.appRow}>
@@ -691,13 +959,13 @@ export default function FamilyScreen({ navigation }) {
                                                     style={styles.appActionReject} 
                                                     onPress={() => handleResolveApplication(app.id, 'reject')}
                                                 >
-                                                    <Ionicons name="close" size={18} color="#fff" />
+                                                    <Ionicons name="close" size={16} color="#fff" />
                                                 </TouchableOpacity>
                                                 <TouchableOpacity 
                                                     style={styles.appActionAccept} 
                                                     onPress={() => handleResolveApplication(app.id, 'accept')}
                                                 >
-                                                    <Ionicons name="checkmark" size={18} color="#fff" />
+                                                    <Ionicons name="checkmark" size={16} color="#fff" />
                                                 </TouchableOpacity>
                                             </View>
                                         </View>
@@ -726,7 +994,7 @@ export default function FamilyScreen({ navigation }) {
                         <TextInput
                             style={styles.modalInput}
                             placeholder="Aile adını yazın..."
-                            placeholderTextColor="#8e85a6"
+                            placeholderTextColor="#6c6484"
                             value={familyName}
                             onChangeText={setFamilyName}
                             maxLength={30}
@@ -734,9 +1002,9 @@ export default function FamilyScreen({ navigation }) {
 
                         <Text style={styles.inputLabel}>Açıklama</Text>
                         <TextInput
-                            style={[styles.modalInput, { height: 80, textAlignVertical: 'top' }]}
+                            style={[styles.modalInput, { height: 70, textAlignVertical: 'top', paddingTop: 8 }]}
                             placeholder="Ailenizi açıklayın..."
-                            placeholderTextColor="#8e85a6"
+                            placeholderTextColor="#6c6484"
                             value={familyDesc}
                             onChangeText={setFamilyDesc}
                             multiline
@@ -747,7 +1015,7 @@ export default function FamilyScreen({ navigation }) {
                         <TextInput
                             style={styles.modalInput}
                             placeholder="Resim linkini girin..."
-                            placeholderTextColor="#8e85a6"
+                            placeholderTextColor="#6c6484"
                             value={familyBadge}
                             onChangeText={setFamilyBadge}
                         />
@@ -778,7 +1046,7 @@ export default function FamilyScreen({ navigation }) {
                             <ActivityIndicator size="large" color="#ec4899" style={{ marginTop: 24 }} />
                         ) : (
                             <TouchableOpacity style={styles.modalSubmitBtn} onPress={handleCreateFamily}>
-                                <LinearGradient colors={['#fbbf24', '#f59e0b']} style={styles.submitBtnGradient}>
+                                <LinearGradient colors={['#fbbf24', '#d97706']} style={styles.submitBtnGradient}>
                                     <Text style={styles.submitBtnText}>Aileyi Kur (5000 Altın)</Text>
                                 </LinearGradient>
                             </TouchableOpacity>
@@ -798,12 +1066,13 @@ const styles = StyleSheet.create({
         flex: 1,
         justifyContent: 'center',
         alignItems: 'center',
-        backgroundColor: '#0f0720',
+        backgroundColor: '#0c061a',
     },
     loadingText: {
         color: '#fff',
         marginTop: 12,
         fontWeight: 'bold',
+        fontSize: 13,
     },
     header: {
         flexDirection: 'row',
@@ -812,95 +1081,135 @@ const styles = StyleSheet.create({
         paddingTop: 50,
         paddingBottom: 15,
         paddingHorizontal: 16,
-        backgroundColor: '#110928',
+        backgroundColor: 'rgba(12, 6, 26, 0.85)',
+        borderBottomWidth: 1,
+        borderBottomColor: 'rgba(255,255,255,0.06)',
     },
     backBtn: {
-        padding: 4,
+        borderRadius: 12,
+        overflow: 'hidden',
+    },
+    backBtnGradient: {
+        width: 36,
+        height: 36,
+        justifyContent: 'center',
+        alignItems: 'center',
     },
     headerTitle: {
         color: '#fff',
         fontSize: 16,
         fontWeight: '900',
+        letterSpacing: 0.5,
     },
     notInFamilyHero: {
         alignItems: 'center',
         paddingHorizontal: 24,
-        paddingVertical: 32,
+        paddingTop: 36,
+        paddingBottom: 28,
+        borderBottomLeftRadius: 32,
+        borderBottomRightRadius: 32,
+        marginBottom: 20,
     },
     heroBadgeBox: {
-        width: 80,
-        height: 80,
-        borderRadius: 24,
-        backgroundColor: 'rgba(139, 92, 246, 0.15)',
+        width: 68,
+        height: 68,
+        borderRadius: 22,
         justifyContent: 'center',
         alignItems: 'center',
         marginBottom: 16,
-        borderWidth: 1.5,
-        borderColor: '#8b5cf6',
+        shadowColor: '#8b5cf6',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.35,
+        shadowRadius: 10,
+        elevation: 6,
     },
     heroTitle: {
         color: '#fff',
-        fontSize: 20,
+        fontSize: 22,
         fontWeight: '900',
         marginBottom: 8,
+        letterSpacing: 0.3,
     },
     heroSubtitle: {
-        color: '#8e85a6',
+        color: '#a39cb5',
         fontSize: 12,
         textAlign: 'center',
         lineHeight: 18,
-        paddingHorizontal: 10,
+        paddingHorizontal: 12,
     },
     searchBarContainer: {
         flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: 'rgba(255,255,255,0.05)',
+        backgroundColor: 'rgba(255,255,255,0.04)',
         marginHorizontal: 16,
-        borderRadius: 16,
+        borderRadius: 18,
         height: 48,
         borderWidth: 1,
         borderColor: 'rgba(255,255,255,0.08)',
-        marginBottom: 20,
+        marginBottom: 24,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.2,
+        shadowRadius: 6,
+        elevation: 2,
     },
     searchInput: {
         flex: 1,
         color: '#fff',
-        fontSize: 14,
+        fontSize: 13,
         paddingHorizontal: 12,
     },
     listSection: {
         paddingHorizontal: 16,
     },
+    sectionHeaderRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: 14,
+        gap: 12,
+    },
     sectionHeaderTitle: {
         color: '#fff',
         fontSize: 14,
         fontWeight: '900',
-        marginBottom: 12,
+        letterSpacing: 0.5,
+    },
+    sectionHeaderLine: {
+        flex: 1,
+        height: 1,
+        backgroundColor: 'rgba(255,255,255,0.06)',
+    },
+    emptyContainer: {
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingVertical: 40,
+        gap: 10,
     },
     noFamilyText: {
-        color: '#8e85a6',
+        color: '#6c6484',
         fontSize: 12,
         textAlign: 'center',
-        marginTop: 20,
     },
     familyListCard: {
         flexDirection: 'row',
         alignItems: 'center',
         backgroundColor: 'rgba(255,255,255,0.02)',
-        borderRadius: 20,
+        borderRadius: 22,
         padding: 14,
-        marginBottom: 10,
+        marginBottom: 12,
         borderWidth: 1,
         borderColor: 'rgba(255,255,255,0.06)',
     },
     familyListBadge: {
-        width: 50,
-        height: 50,
-        borderRadius: 14,
+        width: 52,
+        height: 52,
+        borderRadius: 16,
+        borderWidth: 1.5,
+        borderColor: 'rgba(255,255,255,0.1)',
     },
     familyListInfo: {
         flex: 1,
-        marginLeft: 12,
+        marginLeft: 14,
     },
     familyListName: {
         color: '#fff',
@@ -910,34 +1219,39 @@ const styles = StyleSheet.create({
     familyListDesc: {
         color: '#8e85a6',
         fontSize: 11,
-        marginTop: 2,
+        marginTop: 3,
     },
     familyListStatsRow: {
         flexDirection: 'row',
         alignItems: 'center',
-        marginTop: 6,
+        marginTop: 8,
         gap: 8,
     },
     familyMiniPill: {
-        backgroundColor: 'rgba(236,72,153,0.15)',
-        paddingHorizontal: 6,
+        backgroundColor: 'rgba(236,72,153,0.12)',
+        paddingHorizontal: 7,
         paddingVertical: 2,
-        borderRadius: 6,
+        borderRadius: 8,
+        borderWidth: 0.5,
+        borderColor: 'rgba(236,72,153,0.2)',
     },
     familyMiniPillText: {
         color: '#ec4899',
-        fontSize: 8,
+        fontSize: 9,
         fontWeight: '900',
     },
     familyStatsText: {
         color: '#8e85a6',
         fontSize: 10,
+        fontWeight: '500',
     },
     familyJoinBtn: {
-        width: 64,
+        width: 70,
         height: 32,
         borderRadius: 10,
         overflow: 'hidden',
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.12)',
     },
     joinBtnGradient: {
         width: '100%',
@@ -952,16 +1266,24 @@ const styles = StyleSheet.create({
     },
     createStickyContainer: {
         position: 'absolute',
-        bottom: 0,
-        width: '100%',
-        backgroundColor: '#110928',
-        borderTopWidth: 1,
-        borderTopColor: 'rgba(255,255,255,0.08)',
+        bottom: 16,
+        left: 16,
+        right: 16,
+        borderRadius: 24,
+        backgroundColor: 'rgba(12, 6, 26, 0.88)',
+        borderWidth: 1.5,
+        borderColor: 'rgba(255,255,255,0.08)',
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'space-between',
         paddingHorizontal: 20,
-        paddingVertical: 16,
+        paddingVertical: 14,
+        overflow: 'hidden',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 10 },
+        shadowOpacity: 0.4,
+        shadowRadius: 15,
+        elevation: 8,
     },
     createStickyTextContainer: {
         flex: 1,
@@ -970,17 +1292,20 @@ const styles = StyleSheet.create({
         color: '#fff',
         fontSize: 14,
         fontWeight: '900',
+        letterSpacing: 0.3,
     },
     createStickyDesc: {
-        color: '#8e85a6',
+        color: '#8c849e',
         fontSize: 9,
         marginTop: 2,
     },
     createStickyBtn: {
-        width: 80,
+        width: 76,
         height: 36,
         borderRadius: 12,
         overflow: 'hidden',
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.15)',
     },
     createStickyBtnGradient: {
         width: '100%',
@@ -989,65 +1314,77 @@ const styles = StyleSheet.create({
         alignItems: 'center',
     },
     createStickyBtnText: {
-        color: '#78350f',
-        fontSize: 13,
+        color: '#5c2c06',
+        fontSize: 12,
         fontWeight: '900',
     },
     familyHeaderCard: {
         flexDirection: 'row',
-        padding: 16,
-        backgroundColor: '#110928',
+        padding: 18,
         borderBottomWidth: 1,
         borderBottomColor: 'rgba(255,255,255,0.05)',
         alignItems: 'center',
     },
     familyBadgeImage: {
-        width: 60,
-        height: 60,
-        borderRadius: 16,
+        width: 64,
+        height: 64,
+        borderRadius: 18,
+        borderWidth: 2,
+        borderColor: 'rgba(255,255,255,0.1)',
     },
     familyHeaderTextInfo: {
         flex: 1,
-        marginLeft: 14,
+        marginLeft: 16,
     },
     familyTitleRow: {
         flexDirection: 'row',
         alignItems: 'center',
         gap: 8,
     },
+    familyName: {
+        color: '#fff',
+        fontSize: 16,
+        fontWeight: '900',
+        flex: 1,
+    },
     levelBadge: {
-        backgroundColor: '#fbbf24',
-        paddingHorizontal: 6,
+        paddingHorizontal: 7,
         paddingVertical: 2,
-        borderRadius: 6,
+        borderRadius: 8,
+        shadowColor: '#fbbf24',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.3,
+        shadowRadius: 4,
+        elevation: 3,
     },
     levelBadgeText: {
-        color: '#78350f',
+        color: '#fff',
         fontSize: 9,
         fontWeight: '900',
     },
     familyDescription: {
         color: '#8e85a6',
         fontSize: 11,
-        marginTop: 3,
+        marginTop: 4,
+        lineHeight: 16,
     },
     familyCountsText: {
-        color: '#fff',
+        color: '#ec4899',
         fontSize: 10,
-        fontWeight: '600',
+        fontWeight: '700',
         marginTop: 6,
     },
     progressContainer: {
-        paddingHorizontal: 16,
+        paddingHorizontal: 18,
         paddingVertical: 14,
-        backgroundColor: 'rgba(255,255,255,0.02)',
+        backgroundColor: 'rgba(255,255,255,0.01)',
         borderBottomWidth: 1,
         borderBottomColor: 'rgba(255,255,255,0.05)',
     },
     xpRow: {
         flexDirection: 'row',
         justifyContent: 'space-between',
-        marginBottom: 6,
+        marginBottom: 8,
     },
     xpLabel: {
         color: '#8e85a6',
@@ -1060,30 +1397,29 @@ const styles = StyleSheet.create({
         fontWeight: 'bold',
     },
     progressTrack: {
-        height: 6,
-        backgroundColor: 'rgba(255,255,255,0.08)',
-        borderRadius: 3,
+        height: 8,
+        backgroundColor: 'rgba(255,255,255,0.06)',
+        borderRadius: 4,
         overflow: 'hidden',
     },
     progressFill: {
         height: '100%',
-        backgroundColor: '#fbbf24',
-        borderRadius: 3,
+        borderRadius: 4,
     },
     extraInfoRow: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         flexWrap: 'wrap',
-        marginTop: 6,
+        marginTop: 8,
     },
     extraInfoText: {
-        color: '#8e85a6',
+        color: '#6c6484',
         fontSize: 10,
-        fontWeight: '500',
+        fontWeight: '600',
     },
     tabBar: {
         flexDirection: 'row',
-        backgroundColor: '#110928',
+        backgroundColor: 'rgba(12, 6, 26, 0.4)',
         borderBottomWidth: 1,
         borderBottomColor: 'rgba(255,255,255,0.05)',
     },
@@ -1091,16 +1427,16 @@ const styles = StyleSheet.create({
         flex: 1,
         paddingVertical: 14,
         alignItems: 'center',
-        borderBottomWidth: 2,
+        borderBottomWidth: 2.5,
         borderBottomColor: 'transparent',
     },
     activeTabItem: {
         borderBottomColor: '#ec4899',
     },
     tabText: {
-        color: '#8e85a6',
+        color: '#6c6484',
         fontSize: 12,
-        fontWeight: '700',
+        fontWeight: '800',
     },
     activeTabText: {
         color: '#fff',
@@ -1108,21 +1444,23 @@ const styles = StyleSheet.create({
     memberRow: {
         flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: 'rgba(255,255,255,0.01)',
-        padding: 12,
-        borderRadius: 16,
+        backgroundColor: 'rgba(255,255,255,0.02)',
+        padding: 14,
+        borderRadius: 18,
         marginBottom: 8,
         borderWidth: 1,
         borderColor: 'rgba(255,255,255,0.04)',
     },
     memberAvatar: {
-        width: 40,
-        height: 40,
-        borderRadius: 12,
+        width: 42,
+        height: 42,
+        borderRadius: 14,
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.08)',
     },
     memberInfo: {
         flex: 1,
-        marginLeft: 12,
+        marginLeft: 14,
     },
     memberName: {
         color: '#fff',
@@ -1130,29 +1468,29 @@ const styles = StyleSheet.create({
         fontWeight: 'bold',
     },
     roleContainer: {
-        backgroundColor: 'rgba(139,92,246,0.15)',
-        paddingHorizontal: 6,
-        paddingVertical: 1,
-        borderRadius: 4,
+        paddingHorizontal: 7,
+        paddingVertical: 2,
+        borderRadius: 6,
         alignSelf: 'flex-start',
         marginTop: 4,
     },
     roleText: {
-        color: '#8b5cf6',
-        fontSize: 8,
+        color: '#fff',
+        fontSize: 7,
         fontWeight: '900',
+        letterSpacing: 0.5,
     },
     memberXpStats: {
         alignItems: 'flex-end',
-        marginRight: 6,
+        marginRight: 8,
     },
     memberXpText: {
         color: '#10b981',
-        fontSize: 10,
-        fontWeight: '700',
+        fontSize: 11,
+        fontWeight: '800',
     },
     memberTotalXpText: {
-        color: '#8e85a6',
+        color: '#6c6484',
         fontSize: 9,
         marginTop: 2,
     },
@@ -1161,17 +1499,19 @@ const styles = StyleSheet.create({
         gap: 6,
     },
     actionCircleBtn: {
-        width: 24,
-        height: 24,
-        borderRadius: 12,
-        backgroundColor: 'rgba(251,191,36,0.2)',
+        width: 26,
+        height: 26,
+        borderRadius: 8,
+        backgroundColor: 'rgba(251,191,36,0.12)',
+        borderColor: 'rgba(251,191,36,0.25)',
+        borderWidth: 1,
         justifyContent: 'center',
         alignItems: 'center',
     },
     msgWrapper: {
         flexDirection: 'row',
-        marginBottom: 12,
-        maxWidth: '80%',
+        marginBottom: 14,
+        maxWidth: '82%',
     },
     msgWrapperMe: {
         alignSelf: 'flex-end',
@@ -1186,82 +1526,95 @@ const styles = StyleSheet.create({
         height: 32,
         borderRadius: 10,
         marginRight: 8,
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.08)',
     },
     msgBubble: {
-        padding: 10,
-        borderRadius: 14,
+        padding: 12,
+        borderRadius: 16,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
     },
     msgBubbleMe: {
-        backgroundColor: '#8b5cf6',
+        backgroundColor: '#7c3aed',
         borderTopRightRadius: 2,
     },
     msgBubbleOther: {
-        backgroundColor: 'rgba(255,255,255,0.06)',
+        backgroundColor: 'rgba(255,255,255,0.05)',
         borderTopLeftRadius: 2,
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.04)',
     },
     chatSenderName: {
         color: '#ec4899',
         fontSize: 9,
         fontWeight: 'bold',
-        marginBottom: 2,
+        marginBottom: 3,
     },
     chatMessageText: {
         color: '#fff',
-        fontSize: 12,
+        fontSize: 12.5,
+        lineHeight: 18,
     },
     chatInputContainer: {
         flexDirection: 'row',
         alignItems: 'center',
-        padding: 12,
-        backgroundColor: '#110928',
+        paddingHorizontal: 16,
+        paddingVertical: 12,
+        backgroundColor: 'rgba(12, 6, 26, 0.95)',
         borderTopWidth: 1,
         borderTopColor: 'rgba(255,255,255,0.05)',
     },
     chatInput: {
         flex: 1,
-        height: 38,
-        backgroundColor: 'rgba(255,255,255,0.05)',
-        borderRadius: 12,
-        paddingHorizontal: 12,
+        height: 40,
+        backgroundColor: 'rgba(255,255,255,0.04)',
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.06)',
+        borderRadius: 14,
+        paddingHorizontal: 14,
         color: '#fff',
         fontSize: 13,
     },
     sendChatBtn: {
-        width: 38,
-        height: 38,
-        borderRadius: 12,
+        width: 40,
+        height: 40,
+        borderRadius: 14,
         backgroundColor: '#ec4899',
         justifyContent: 'center',
         alignItems: 'center',
         marginLeft: 10,
     },
     checkInContainer: {
-        backgroundColor: 'rgba(255,255,255,0.02)',
+        backgroundColor: 'rgba(255,255,255,0.01)',
         borderRadius: 24,
-        padding: 20,
+        padding: 24,
         borderWidth: 1,
-        borderColor: 'rgba(255,255,255,0.06)',
+        borderColor: 'rgba(255,255,255,0.05)',
         alignItems: 'center',
         marginBottom: 16,
     },
     checkInTitle: {
         color: '#fff',
-        fontSize: 15,
+        fontSize: 16,
         fontWeight: '900',
+        letterSpacing: 0.3,
     },
     checkInSubtitle: {
         color: '#8e85a6',
-        fontSize: 11,
+        fontSize: 12,
         textAlign: 'center',
         marginTop: 6,
-        lineHeight: 16,
+        lineHeight: 18,
     },
     checkInBtn: {
         width: '100%',
-        height: 44,
+        height: 46,
         borderRadius: 16,
         overflow: 'hidden',
-        marginTop: 16,
+        marginTop: 18,
     },
     checkInBtnGradient: {
         width: '100%',
@@ -1275,32 +1628,38 @@ const styles = StyleSheet.create({
         fontWeight: '900',
     },
     checkInBtnDisabled: {
-        opacity: 0.5,
+        opacity: 0.4,
     },
     dailyLimitCard: {
-        backgroundColor: 'rgba(255,255,255,0.02)',
+        backgroundColor: 'rgba(255,255,255,0.01)',
         borderRadius: 24,
-        padding: 20,
+        padding: 24,
         borderWidth: 1,
-        borderColor: 'rgba(255,255,255,0.06)',
+        borderColor: 'rgba(255,255,255,0.05)',
         marginBottom: 24,
     },
     limitTitle: {
         color: '#fff',
-        fontSize: 14,
+        fontSize: 15,
         fontWeight: '900',
+        letterSpacing: 0.3,
     },
     limitSubtitle: {
-        color: '#8e85a6',
+        color: '#8c849e',
         fontSize: 11,
         marginTop: 4,
-        lineHeight: 16,
+        lineHeight: 17,
     },
     limitProgressRow: {
         flexDirection: 'row',
         justifyContent: 'space-between',
-        marginTop: 14,
+        marginTop: 16,
         marginBottom: 6,
+    },
+    limitProgressLabel: {
+        color: '#8e85a6',
+        fontSize: 11,
+        fontWeight: 'bold',
     },
     limitProgressText: {
         color: '#10b981',
@@ -1309,7 +1668,7 @@ const styles = StyleSheet.create({
     },
     limitProgressTrack: {
         height: 6,
-        backgroundColor: 'rgba(255,255,255,0.08)',
+        backgroundColor: 'rgba(255,255,255,0.06)',
         borderRadius: 3,
         overflow: 'hidden',
     },
@@ -1319,8 +1678,8 @@ const styles = StyleSheet.create({
         borderRadius: 3,
     },
     leaveFamilyDangerBtn: {
-        backgroundColor: 'rgba(239, 68, 68, 0.08)',
-        borderColor: '#ef4444',
+        backgroundColor: 'rgba(239, 68, 68, 0.05)',
+        borderColor: 'rgba(239, 68, 68, 0.2)',
         borderWidth: 1,
         borderRadius: 16,
         paddingVertical: 14,
@@ -1332,25 +1691,24 @@ const styles = StyleSheet.create({
         fontWeight: 'bold',
     },
     noApplicationsText: {
-        color: '#8e85a6',
+        color: '#6c6484',
         fontSize: 12,
         textAlign: 'center',
-        marginTop: 20,
     },
     appRow: {
         flexDirection: 'row',
         alignItems: 'center',
         backgroundColor: 'rgba(255,255,255,0.02)',
-        padding: 12,
-        borderRadius: 16,
+        padding: 14,
+        borderRadius: 18,
         marginBottom: 8,
         borderWidth: 1,
         borderColor: 'rgba(255,255,255,0.04)',
     },
     appAvatar: {
-        width: 36,
-        height: 36,
-        borderRadius: 10,
+        width: 38,
+        height: 38,
+        borderRadius: 12,
     },
     appName: {
         color: '#fff',
@@ -1364,16 +1722,16 @@ const styles = StyleSheet.create({
         gap: 8,
     },
     appActionReject: {
-        width: 28,
-        height: 28,
+        width: 30,
+        height: 30,
         borderRadius: 8,
         backgroundColor: '#ef4444',
         justifyContent: 'center',
         alignItems: 'center',
     },
     appActionAccept: {
-        width: 28,
-        height: 28,
+        width: 30,
+        height: 30,
         borderRadius: 8,
         backgroundColor: '#10b981',
         justifyContent: 'center',
@@ -1381,22 +1739,28 @@ const styles = StyleSheet.create({
     },
     modalOverlay: {
         flex: 1,
-        backgroundColor: 'rgba(0,0,0,0.6)',
+        backgroundColor: 'rgba(0,0,0,0.65)',
         justifyContent: 'center',
         alignItems: 'center',
     },
     modalContent: {
         width: '90%',
-        backgroundColor: '#110928',
+        backgroundColor: '#0f0724',
         borderRadius: 24,
         padding: 24,
         borderWidth: 1,
-        borderColor: 'rgba(255,255,255,0.1)',
+        borderColor: 'rgba(255,255,255,0.08)',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 10 },
+        shadowOpacity: 0.5,
+        shadowRadius: 15,
+        elevation: 10,
     },
     modalTitle: {
         color: '#fff',
         fontSize: 18,
         fontWeight: '900',
+        letterSpacing: 0.3,
     },
     modalSubtitle: {
         color: '#8e85a6',
@@ -1412,7 +1776,7 @@ const styles = StyleSheet.create({
         marginBottom: 6,
     },
     modalInput: {
-        backgroundColor: 'rgba(255,255,255,0.05)',
+        backgroundColor: 'rgba(255,255,255,0.03)',
         borderRadius: 12,
         height: 42,
         color: '#fff',
@@ -1430,7 +1794,7 @@ const styles = StyleSheet.create({
         flex: 1,
         height: 32,
         borderRadius: 8,
-        backgroundColor: 'rgba(255,255,255,0.04)',
+        backgroundColor: 'rgba(255,255,255,0.02)',
         justifyContent: 'center',
         alignItems: 'center',
         borderWidth: 1,
@@ -1449,7 +1813,7 @@ const styles = StyleSheet.create({
         color: '#fff',
     },
     modalSubmitBtn: {
-        height: 44,
+        height: 46,
         borderRadius: 16,
         overflow: 'hidden',
         marginTop: 24,
@@ -1461,8 +1825,387 @@ const styles = StyleSheet.create({
         alignItems: 'center',
     },
     submitBtnText: {
-        color: '#78350f',
-        fontSize: 13,
+        color: '#fff',
+        fontSize: 14,
         fontWeight: '900',
     },
+    heroTextContent: {
+        flex: 1,
+        marginRight: 10,
+    },
+    heroMiniChipsRow: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        gap: 6,
+        marginTop: 14,
+    },
+    heroMiniChip: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: 'rgba(255,255,255,0.06)',
+        paddingHorizontal: 8,
+        paddingVertical: 4,
+        borderRadius: 10,
+        gap: 4,
+    },
+    heroMiniChipText: {
+        color: '#fff',
+        fontSize: 9,
+        fontWeight: 'bold',
+    },
+    heroRightBadge: {
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    heroShieldCircle: {
+        width: 58,
+        height: 58,
+        borderRadius: 29,
+        justifyContent: 'center',
+        alignItems: 'center',
+        shadowColor: '#FF3D8B',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.4,
+        shadowRadius: 10,
+        elevation: 6,
+    },
+    quickActionsContainer: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        justifyContent: 'space-between',
+        paddingHorizontal: 16,
+        marginTop: 16,
+        marginBottom: 20,
+        gap: 8,
+    },
+    quickActionCard: {
+        width: '31.5%',
+        borderRadius: 16,
+        overflow: 'hidden',
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.06)',
+    },
+    quickActionGradient: {
+        padding: 14,
+        alignItems: 'flex-start',
+    },
+    quickActionTitle: {
+        color: '#fff',
+        fontSize: 13,
+        fontWeight: '900',
+        marginTop: 8,
+        letterSpacing: 0.2,
+    },
+    quickActionDesc: {
+        color: 'rgba(255,255,255,0.5)',
+        fontSize: 9,
+        marginTop: 2,
+    },
+    searchSectionWrapper: {
+        marginBottom: 20,
+    },
+    searchFilterBtn: {
+        paddingHorizontal: 12,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    filtersScrollContent: {
+        paddingHorizontal: 16,
+        gap: 8,
+    },
+    filterChip: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: 'rgba(255,255,255,0.04)',
+        paddingHorizontal: 14,
+        paddingVertical: 8,
+        borderRadius: 14,
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.06)',
+    },
+    filterChipActive: {
+        backgroundColor: '#FF3D8B',
+        borderColor: 'transparent',
+    },
+    filterChipText: {
+        color: 'rgba(255,255,255,0.6)',
+        fontSize: 11,
+        fontWeight: 'bold',
+    },
+    filterChipTextActive: {
+        color: '#fff',
+    },
+    rankingPreviewSection: {
+        paddingHorizontal: 16,
+        marginBottom: 24,
+    },
+    rankingRowsWrapper: {
+        backgroundColor: 'rgba(255,255,255,0.02)',
+        borderRadius: 24,
+        padding: 16,
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.05)',
+        marginTop: 10,
+    },
+    rankMiniRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingVertical: 10,
+        borderBottomWidth: 1,
+        borderBottomColor: 'rgba(255,255,255,0.03)',
+    },
+    rankNumberCircle: {
+        width: 20,
+        height: 20,
+        borderRadius: 10,
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginRight: 12,
+    },
+    rank1Bg: {
+        backgroundColor: '#FFD700',
+    },
+    rank2Bg: {
+        backgroundColor: '#C0C0C0',
+    },
+    rank3Bg: {
+        backgroundColor: '#CD7F32',
+    },
+    rankNumberText: {
+        color: '#000',
+        fontSize: 10,
+        fontWeight: '900',
+    },
+    rankAvatar: {
+        width: 32,
+        height: 32,
+        borderRadius: 10,
+        marginRight: 12,
+    },
+    rankInfoBox: {
+        flex: 1,
+    },
+    rankFamilyName: {
+        color: '#fff',
+        fontSize: 12,
+        fontWeight: 'bold',
+    },
+    rankLeaderName: {
+        color: 'rgba(255,255,255,0.5)',
+        fontSize: 9,
+        marginTop: 2,
+    },
+    rankLevelText: {
+        color: '#FFB84D',
+        fontSize: 11,
+        fontWeight: '900',
+    },
+    seeAllText: {
+        color: '#FF3D8B',
+        fontSize: 12,
+        fontWeight: 'bold',
+    },
+    familyPremiumCard: {
+        backgroundColor: 'rgba(255,255,255,0.03)',
+        borderRadius: 24,
+        padding: 16,
+        marginBottom: 12,
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.06)',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.1,
+        shadowRadius: 8,
+    },
+    cardHeaderRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+    cardBadge: {
+        width: 52,
+        height: 52,
+        borderRadius: 16,
+        borderWidth: 1.5,
+        borderColor: 'rgba(255,255,255,0.08)',
+    },
+    cardMiddleInfo: {
+        flex: 1,
+        marginLeft: 14,
+    },
+    cardFamilyName: {
+        color: '#fff',
+        fontSize: 14,
+        fontWeight: '900',
+    },
+    cardLeaderText: {
+        color: 'rgba(255,255,255,0.5)',
+        fontSize: 10,
+        marginTop: 2,
+    },
+    cardSubStatsRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginTop: 6,
+        gap: 8,
+    },
+    levelMiniBadge: {
+        backgroundColor: 'rgba(255, 184, 77, 0.12)',
+        paddingHorizontal: 6,
+        paddingVertical: 2,
+        borderRadius: 6,
+    },
+    levelMiniBadgeText: {
+        color: '#FFB84D',
+        fontSize: 8,
+        fontWeight: '900',
+    },
+    cardMembersText: {
+        color: 'rgba(255,255,255,0.6)',
+        fontSize: 10,
+        fontWeight: 'bold',
+    },
+    cardRightColumn: {
+        alignItems: 'flex-end',
+        justifyContent: 'center',
+        gap: 6,
+    },
+    cardRankCircle: {
+        backgroundColor: 'rgba(255, 61, 139, 0.12)',
+        paddingHorizontal: 8,
+        paddingVertical: 3,
+        borderRadius: 10,
+        alignSelf: 'flex-end',
+    },
+    cardRankText: {
+        color: '#FF3D8B',
+        fontSize: 9,
+        fontWeight: '900',
+    },
+    cardJoinBtn: {
+        width: 68,
+        height: 30,
+        borderRadius: 10,
+        overflow: 'hidden',
+    },
+    cardJoinBtnGradient: {
+        width: '100%',
+        height: '100%',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    cardJoinText: {
+        color: '#fff',
+        fontSize: 11,
+        fontWeight: '900',
+    },
+    cardXpSection: {
+        marginTop: 14,
+        paddingTop: 12,
+        borderTopWidth: 1,
+        borderTopColor: 'rgba(255,255,255,0.04)',
+    },
+    cardXpTextRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        marginBottom: 6,
+    },
+    cardXpLabel: {
+        color: 'rgba(255,255,255,0.4)',
+        fontSize: 9,
+        fontWeight: 'bold',
+    },
+    cardXpVal: {
+        color: '#FFB84D',
+        fontSize: 9,
+        fontWeight: '900',
+    },
+    cardXpTrack: {
+        height: 4,
+        backgroundColor: 'rgba(255,255,255,0.06)',
+        borderRadius: 2,
+        overflow: 'hidden',
+    },
+    cardXpFill: {
+        height: '100%',
+        borderRadius: 2,
+    },
+    ctaWrapper: {
+        paddingHorizontal: 16,
+        marginTop: 8,
+        marginBottom: 20,
+    },
+    ctaContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        borderRadius: 24,
+        padding: 18,
+        borderWidth: 1.5,
+        borderColor: 'rgba(255, 184, 77, 0.15)',
+    },
+    ctaTextSection: {
+        flex: 1,
+        marginRight: 12,
+    },
+    ctaTitleRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
+    },
+    ctaTitle: {
+        color: '#fff',
+        fontSize: 15,
+        fontWeight: '900',
+        letterSpacing: 0.2,
+    },
+    ctaSubtitle: {
+        color: 'rgba(255,255,255,0.6)',
+        fontSize: 10,
+        marginTop: 4,
+        lineHeight: 14,
+    },
+    ctaButton: {
+        width: 72,
+        height: 36,
+        borderRadius: 12,
+        overflow: 'hidden',
+    },
+    ctaButtonGradient: {
+        width: '100%',
+        height: '100%',
+        flexDirection: 'row',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    ctaButtonText: {
+        color: '#fff',
+        fontSize: 12,
+        fontWeight: '900',
+    },
+    emptyTitle: {
+        color: '#fff',
+        fontSize: 14,
+        fontWeight: '900',
+        marginTop: 8,
+    },
+    emptySubtitle: {
+        color: 'rgba(255,255,255,0.5)',
+        fontSize: 11,
+        textAlign: 'center',
+        marginTop: 4,
+        lineHeight: 16,
+    },
+    emptyCreateBtn: {
+        marginTop: 14,
+        backgroundColor: '#FF3D8B',
+        paddingHorizontal: 20,
+        paddingVertical: 8,
+        borderRadius: 12,
+    },
+    emptyCreateBtnText: {
+        color: '#fff',
+        fontSize: 12,
+        fontWeight: '900',
+    }
 });
+

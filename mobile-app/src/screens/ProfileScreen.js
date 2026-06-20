@@ -603,9 +603,29 @@ const ProfileScreen = ({ route }) => {
                     </TouchableOpacity>
 
                     <View style={styles.profileInfo}>
-                        <Text style={styles.userName}>{user?.name || 'Kullanıcı'}, {user?.age || '24'}</Text>
-                        <View style={styles.idBadge}>
-                            <Text style={styles.idText}>ID: {String(user?.id || '').slice(-6).toUpperCase()}</Text>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                            <Text style={styles.userName}>{user?.name || 'Kullanıcı'}, {user?.age || '24'}</Text>
+                            {user?.nobilityKey && (
+                                <View style={[styles.nobilityBadge, { backgroundColor: `${user.nobilityNameColor || '#FFD166'}20`, borderColor: user.nobilityNameColor || '#FFD166', borderWidth: 1 }]}>
+                                    <Ionicons name="shield-checkmark" size={10} color={user.nobilityNameColor || '#FFD166'} style={{ marginRight: 2 }} />
+                                    <Text style={[styles.nobilityBadgeText, { color: user.nobilityNameColor || '#FFD166' }]}>
+                                        {user.nobilityName}
+                                    </Text>
+                                </View>
+                            )}
+                        </View>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 4 }}>
+                            <View style={styles.idBadge}>
+                                <Text style={styles.idText}>ID: {String(user?.id || '').slice(-6).toUpperCase()}</Text>
+                            </View>
+                            {user?.nobilityKey && (
+                                <View style={styles.nobilityExpiryRow}>
+                                    <Ionicons name="time-outline" size={11} color="#8e85a6" style={{ marginRight: 2 }} />
+                                    <Text style={styles.nobilityExpiryText}>
+                                        {Math.max(0, Math.ceil((new Date(user.nobility_expires_at).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)))} Gün kaldı
+                                    </Text>
+                                </View>
+                            )}
                         </View>
                         {isEditingBio ? (
                             <View style={styles.inlineBioEdit}>
@@ -673,7 +693,7 @@ const ProfileScreen = ({ route }) => {
                                 <View style={styles.qaIconOnly}>
                                     <Ionicons name="business" size={26} color="#3b82f6" />
                                 </View>
-                                <Text style={styles.qaLabel}>
+                                <Text style={styles.qaLabel} numberOfLines={1}>
                                      {(user?.agency_id || user?.is_agency_owner) ? 'Ajansım' : 'Ajans'}
                                  </Text>
                             </TouchableOpacity>
@@ -688,7 +708,7 @@ const ProfileScreen = ({ route }) => {
                                         <View style={styles.notifDot} />
                                     </View>
                                 </View>
-                                <Text style={styles.qaLabel}>Ziyaretçi</Text>
+                                <Text style={styles.qaLabel} numberOfLines={1}>Ziyaretçi</Text>
                             </TouchableOpacity>
 
                             {isShowWallet && (
@@ -696,7 +716,7 @@ const ProfileScreen = ({ route }) => {
                                     <View style={styles.qaIconOnly}>
                                         <Ionicons name="wallet" size={26} color="#22d3ee" />
                                     </View>
-                                    <Text style={styles.qaLabel}>Cüzdanım</Text>
+                                    <Text style={styles.qaLabel} numberOfLines={1}>Cüzdanım</Text>
                                 </TouchableOpacity>
                             )}
 
@@ -704,36 +724,43 @@ const ProfileScreen = ({ route }) => {
                                 <View style={styles.qaIconOnly}>
                                     <FontAwesome5 name="medal" size={24} color="#fbbf24" />
                                 </View>
-                                <Text style={styles.qaLabel}>VIP</Text>
+                                <Text style={styles.qaLabel} numberOfLines={1}>VIP</Text>
                                 <View style={styles.vipProgressBar} />
-                            </TouchableOpacity>
-
-                            <TouchableOpacity style={styles.qaItem} onPress={() => navigation.navigate('Shop')}>
-                                <View style={styles.qaIconOnly}>
-                                    <Ionicons name="cart" size={28} color="#f59e0b" />
-                                </View>
-                                <Text style={styles.qaLabel}>Mağaza</Text>
                             </TouchableOpacity>
 
                             <TouchableOpacity style={styles.qaItem} onPress={() => navigation.navigate('WhoFavoritedMe')}>
                                 <View style={styles.qaIconOnly}>
                                     <Ionicons name="heart" size={26} color="#ec4899" />
                                 </View>
-                                <Text style={styles.qaLabel}>Hayran</Text>
+                                <Text style={styles.qaLabel} numberOfLines={1}>Hayran</Text>
+                            </TouchableOpacity>
+
+                            <TouchableOpacity style={styles.qaItem} onPress={() => navigation.navigate('Shop')}>
+                                <View style={styles.qaIconOnly}>
+                                    <Ionicons name="cart" size={28} color="#f59e0b" />
+                                </View>
+                                <Text style={styles.qaLabel} numberOfLines={1}>Mağaza</Text>
                             </TouchableOpacity>
 
                             <TouchableOpacity style={styles.qaItem} onPress={() => navigation.navigate('Favorites')}>
                                 <View style={styles.qaIconOnly}>
                                     <Ionicons name="star" size={26} color="#a855f7" />
                                 </View>
-                                <Text style={styles.qaLabel}>Favori</Text>
+                                <Text style={styles.qaLabel} numberOfLines={1}>Favori</Text>
                             </TouchableOpacity>
 
                             <TouchableOpacity style={styles.qaItem} onPress={() => navigation.navigate('Family')}>
                                 <View style={styles.qaIconOnly}>
                                     <Ionicons name="people" size={26} color="#f43f5e" />
                                 </View>
-                                <Text style={styles.qaLabel}>Ailem</Text>
+                                <Text style={styles.qaLabel} numberOfLines={1}>Ailem</Text>
+                            </TouchableOpacity>
+
+                            <TouchableOpacity style={styles.qaItem} onPress={() => navigation.navigate('Nobility')}>
+                                <View style={styles.qaIconOnly}>
+                                    <Ionicons name="shield-checkmark" size={26} color="#FFD166" />
+                                </View>
+                                <Text style={styles.qaLabel} numberOfLines={1}>Asalet</Text>
                             </TouchableOpacity>
                         </View>
                     </LinearGradient>
@@ -1517,18 +1544,20 @@ const styles = StyleSheet.create({
         borderColor: 'rgba(255,255,255,0.08)',
     },
     glassCard: {
-        padding: 20,
+        padding: 8,
         backgroundColor: 'rgba(255,255,255,0.02)',
     },
     quickActionsGrid: {
         flexDirection: 'row',
         flexWrap: 'wrap',
-        justifyContent: 'space-between',
-        rowGap: 16,
+        justifyContent: 'flex-start',
+        columnGap: 4,
+        rowGap: 10,
     },
     qaItem: {
         alignItems: 'center',
-        width: '23%',
+        width: (width - 70) / 6,
+        overflow: 'hidden',
     },
     qaIconOnly: {
         width: 36,
@@ -1538,14 +1567,16 @@ const styles = StyleSheet.create({
         marginBottom: 4,
     },
     qaLabel: {
-        fontSize: 8,
+        fontSize: 7,
         color: '#8e85a6',
         fontWeight: '600',
+        width: '100%',
+        textAlign: 'center',
     },
     avatarIconWrapper: {
-        width: 40,
-        height: 40,
-        borderRadius: 20,
+        width: 32,
+        height: 32,
+        borderRadius: 16,
         overflow: 'hidden',
         justifyContent: 'center',
         alignItems: 'center',
@@ -2067,6 +2098,32 @@ const styles = StyleSheet.create({
         fontSize: 10,
         fontWeight: '700',
         marginTop: 5,
+    },
+    nobilityBadge: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 8,
+        paddingVertical: 3,
+        borderRadius: 8,
+    },
+    nobilityBadgeText: {
+        fontSize: 10,
+        fontWeight: 'bold',
+    },
+    nobilityExpiryRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: 'rgba(255,255,255,0.03)',
+        paddingHorizontal: 8,
+        paddingVertical: 4,
+        borderRadius: 10,
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.05)',
+    },
+    nobilityExpiryText: {
+        color: '#8e85a6',
+        fontSize: 9,
+        fontWeight: '700',
     },
 });
 

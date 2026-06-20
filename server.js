@@ -37,6 +37,7 @@ const adminOperatorsRoutes = require('./routes/adminOperators');
 const agencyRoutes = require('./routes/agency');
 const starterPackRoutes = require('./routes/starterPackRoutes');
 const familyRoutes = require('./routes/family');
+const nobilityRoutes = require('./routes/nobilityRoutes');
 const { sanitizeUser, logActivity } = require('./utils/helpers');
 const { sendPushNotification } = require('./utils/notificationUtils');
 
@@ -986,9 +987,17 @@ app.get('/api/operators', async (req, res) => {
                 u.avatar_url, u.gender, u.age, u.vip_level, u.job, u.relationship, u.zodiac, u.interests, u.role,
                 o.category, o.rating, o.is_online, 
                 COALESCE(o.bio, u.bio) as bio, o.photos,
-                EXISTS(SELECT 1 FROM stories s WHERE s.operator_id = u.id AND s.expires_at > NOW()) as has_active_story
+                EXISTS(SELECT 1 FROM stories s WHERE s.operator_id = u.id AND s.expires_at > NOW()) as has_active_story,
+                un.expires_at as nobility_expires_at, 
+                nt.key as nobility_key, 
+                nt.name as nobility_name, 
+                nt.level as nobility_level, 
+                nt.badge_url as nobility_badge_url, 
+                nt.name_color as nobility_name_color
             FROM users u
             JOIN operators o ON u.id = o.user_id
+            LEFT JOIN user_nobility un ON u.id = un.user_id AND un.is_active = TRUE AND un.expires_at > NOW()
+            LEFT JOIN nobility_titles nt ON un.title_id = nt.id
             WHERE u.account_status = 'active'
               AND u.role NOT IN ('admin', 'super_admin', 'moderator', 'staff')
         `;
@@ -1103,9 +1112,17 @@ app.get('/api/discovery', authenticateToken, async (req, res) => {
                 o.photos,
                 CASE WHEN o.user_id IS NOT NULL THEN TRUE ELSE FALSE END as is_operator,
                 EXISTS(SELECT 1 FROM stories s WHERE s.operator_id = u.id AND s.expires_at > NOW()) as has_active_story,
-                EXISTS(SELECT 1 FROM boosts b WHERE b.user_id = u.id AND b.end_time > NOW()) as is_boosted
+                EXISTS(SELECT 1 FROM boosts b WHERE b.user_id = u.id AND b.end_time > NOW()) as is_boosted,
+                un.expires_at as nobility_expires_at, 
+                nt.key as nobility_key, 
+                nt.name as nobility_name, 
+                nt.level as nobility_level, 
+                nt.badge_url as nobility_badge_url, 
+                nt.name_color as nobility_name_color
             FROM users u
             LEFT JOIN operators o ON u.id = o.user_id
+            LEFT JOIN user_nobility un ON u.id = un.user_id AND un.is_active = TRUE AND un.expires_at > NOW()
+            LEFT JOIN nobility_titles nt ON un.title_id = nt.id
             ${whereClause}
               AND u.id != ${targetGender === 'all' ? '$1' : '$2'}
               AND u.account_status = 'active'
@@ -1169,6 +1186,7 @@ app.use('/api/operators', adminOperatorsRoutes);
 app.use('/api', agencyRoutes);
 app.use('/api/starter-pack', starterPackRoutes);
 app.use('/api/families', familyRoutes);
+app.use('/api/nobility', nobilityRoutes);
 
 // TEMPORARY: Fix Genders Route
 app.get('/api/admin/fix-genders', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
@@ -3129,10 +3147,18 @@ app.get('/api/messages/:chatId', async (req, res) => {
                        COALESCE(u.display_name, u.username, 'Bilinmeyen Kullanıcı') as sender_name,
                        g.name as gift_name, 
                        g.cost as gift_cost, 
-                       g.icon_url as gift_icon
+                       g.icon_url as gift_icon,
+                       un.expires_at as nobility_expires_at, 
+                       nt.key as nobility_key, 
+                       nt.name as nobility_name, 
+                       nt.level as nobility_level, 
+                       nt.badge_url as nobility_badge_url, 
+                       nt.name_color as nobility_name_color
                 FROM messages m
                 LEFT JOIN users u ON m.sender_id = u.id
                 LEFT JOIN gifts g ON m.gift_id = g.id
+                LEFT JOIN user_nobility un ON u.id = un.user_id AND un.is_active = TRUE AND un.expires_at > NOW()
+                LEFT JOIN nobility_titles nt ON un.title_id = nt.id
                 WHERE m.chat_id = $1
                 ORDER BY m.created_at DESC
                 LIMIT $2 OFFSET $3

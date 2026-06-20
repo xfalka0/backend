@@ -21,7 +21,19 @@ const normalizeGenderValue = (gender) => {
 // GET USER PROFILE
 router.get('/:id', async (req, res) => {
     try {
-        const result = await db.query('SELECT * FROM users WHERE id::text = $1::text', [req.params.id]);
+        const result = await db.query(`
+            SELECT u.*, 
+                   un.expires_at as nobility_expires_at, 
+                   nt.key as nobility_key, 
+                   nt.name as nobility_name, 
+                   nt.level as nobility_level, 
+                   nt.badge_url as nobility_badge_url, 
+                   nt.name_color as nobility_name_color
+            FROM users u
+            LEFT JOIN user_nobility un ON u.id = un.user_id AND un.is_active = TRUE AND un.expires_at > NOW()
+            LEFT JOIN nobility_titles nt ON un.title_id = nt.id
+            WHERE u.id::text = $1::text
+        `, [req.params.id]);
         if (result.rows.length === 0) return res.status(404).json({ error: 'User not found' });
         res.json(sanitizeUser(result.rows[0], req));
     } catch (err) {
@@ -151,9 +163,17 @@ router.get('/:userId/chats', async (req, res) => {
                 (SELECT COUNT(*)::int FROM messages WHERE chat_id = c.id AND sender_id::text != $1::text AND is_read = false) as unread_count,
                 COALESCE(u.display_name, u.username, 'Bilinmeyen Kullanıcı') as name,
                 COALESCE(u.avatar_url, 'https://via.placeholder.com/150') as avatar_url,
-                u.vip_level, u.is_verified, u.gender, true as is_online
+                u.vip_level, u.is_verified, u.gender, true as is_online,
+                un.expires_at as nobility_expires_at, 
+                nt.key as nobility_key, 
+                nt.name as nobility_name, 
+                nt.level as nobility_level, 
+                nt.badge_url as nobility_badge_url, 
+                nt.name_color as nobility_name_color
             FROM chats c
             LEFT JOIN users u ON u.id = CASE WHEN c.user_id::text = $1::text THEN c.operator_id ELSE c.user_id END
+            LEFT JOIN user_nobility un ON u.id = un.user_id AND un.is_active = TRUE AND un.expires_at > NOW()
+            LEFT JOIN nobility_titles nt ON un.title_id = nt.id
             WHERE c.user_id::text = $1::text OR c.operator_id::text = $1::text
             ORDER BY c.last_message_at DESC
             LIMIT $2 OFFSET $3

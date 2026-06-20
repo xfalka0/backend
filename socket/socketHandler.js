@@ -294,11 +294,31 @@ function initializeSockets(io) {
                     savedMsg.gift_icon = giftDetails.icon_url;
                 }
 
+                // Fetch active nobility details of finalSenderId
+                const senderNobilityRes = await client.query(`
+                    SELECT un.expires_at as nobility_expires_at, 
+                           nt.key as nobility_key, 
+                           nt.name as nobility_name, 
+                           nt.level as nobility_level, 
+                           nt.badge_url as nobility_badge_url, 
+                           nt.name_color as nobility_name_color
+                    FROM user_nobility un
+                    JOIN nobility_titles nt ON un.title_id = nt.id
+                    WHERE un.user_id = $1 AND un.is_active = TRUE AND un.expires_at > NOW()
+                    ORDER BY nt.priority_weight DESC LIMIT 1
+                `, [finalSenderId.toString()]);
+                const senderNobility = senderNobilityRes.rows[0] || {};
+
                 const msgToEmit = { 
                     ...savedMsg, 
                     chat_id: savedMsg.chat_id.toString(), 
                     type: savedMsg.content_type, // Alias for mobile app compatibility
-                    tempId 
+                    tempId,
+                    nobility_key: senderNobility.nobility_key || null,
+                    nobility_name: senderNobility.nobility_name || null,
+                    nobility_level: senderNobility.nobility_level || null,
+                    nobility_badge_url: senderNobility.nobility_badge_url || null,
+                    nobility_name_color: senderNobility.nobility_name_color || null
                 };
                 io.to(chatId.toString()).emit('receive_message', msgToEmit);
                 

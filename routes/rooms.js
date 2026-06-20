@@ -83,7 +83,12 @@ function mapRoomMember(row) {
         displayName: row.display_name,
         display_name: row.display_name,
         avatarUrl: row.avatar_url,
-        avatar_url: row.avatar_url
+        avatar_url: row.avatar_url,
+        nobilityKey: row.nobility_key,
+        nobilityName: row.nobility_name,
+        nobilityLevel: row.nobility_level,
+        nobilityBadgeUrl: row.nobility_badge_url,
+        nobilityNameColor: row.nobility_name_color
     };
 }
 
@@ -110,7 +115,12 @@ function mapSeat(row) {
         displayName: row.display_name,
         display_name: row.display_name,
         avatarUrl: row.avatar_url,
-        avatar_url: row.avatar_url
+        avatar_url: row.avatar_url,
+        nobilityKey: row.nobility_key,
+        nobilityName: row.nobility_name,
+        nobilityLevel: row.nobility_level,
+        nobilityBadgeUrl: row.nobility_badge_url,
+        nobilityNameColor: row.nobility_name_color
     };
 }
 
@@ -118,9 +128,17 @@ function mapSeat(row) {
 async function broadcastSeatsState(io, roomId) {
     try {
         const seatsRes = await db.query(`
-            SELECT rs.*, u.username, u.display_name, u.avatar_url
+            SELECT rs.*, u.username, u.display_name, u.avatar_url,
+                   un.expires_at as nobility_expires_at, 
+                   nt.key as nobility_key, 
+                   nt.name as nobility_name, 
+                   nt.level as nobility_level, 
+                   nt.badge_url as nobility_badge_url, 
+                   nt.name_color as nobility_name_color
             FROM room_seats rs
             LEFT JOIN users u ON rs.user_id = u.id
+            LEFT JOIN user_nobility un ON u.id = un.user_id AND un.is_active = TRUE AND un.expires_at > NOW()
+            LEFT JOIN nobility_titles nt ON un.title_id = nt.id
             WHERE rs.room_id = $1
             ORDER BY rs.seat_index ASC
         `, [roomId]);
@@ -538,9 +556,17 @@ router.get('/:id/seats', authenticateToken, async (req, res) => {
         }
 
         const seatsRes = await db.query(`
-            SELECT rs.*, u.username, u.display_name, u.avatar_url
+            SELECT rs.*, u.username, u.display_name, u.avatar_url,
+                   un.expires_at as nobility_expires_at, 
+                   nt.key as nobility_key, 
+                   nt.name as nobility_name, 
+                   nt.level as nobility_level, 
+                   nt.badge_url as nobility_badge_url, 
+                   nt.name_color as nobility_name_color
             FROM room_seats rs
             LEFT JOIN users u ON rs.user_id = u.id
+            LEFT JOIN user_nobility un ON u.id = un.user_id AND un.is_active = TRUE AND un.expires_at > NOW()
+            LEFT JOIN nobility_titles nt ON un.title_id = nt.id
             WHERE rs.room_id = $1
             ORDER BY rs.seat_index ASC
         `, [id]);

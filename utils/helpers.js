@@ -53,6 +53,13 @@ const sanitizeUser = (user, req) => {
     newUser.vipLevel = user.vip_level !== undefined ? user.vip_level : (user.vipLevel !== undefined ? user.vipLevel : 0);
     newUser.status = user.status !== undefined ? user.status : (user.account_status !== undefined ? user.account_status : user.status);
 
+    // Nobility status mapping
+    newUser.nobilityKey = user.nobility_key !== undefined ? user.nobility_key : user.nobilityKey;
+    newUser.nobilityName = user.nobility_name !== undefined ? user.nobility_name : user.nobilityName;
+    newUser.nobilityLevel = user.nobility_level !== undefined ? user.nobility_level : user.nobilityLevel;
+    newUser.nobilityBadgeUrl = user.nobility_badge_url !== undefined ? user.nobility_badge_url : user.nobilityBadgeUrl;
+    newUser.nobilityNameColor = user.nobility_name_color !== undefined ? user.nobility_name_color : user.nobilityNameColor;
+
     // Pass through onboarding status
     if (user.onboarding_completed !== undefined) {
         newUser.onboarding_completed = !!user.onboarding_completed;

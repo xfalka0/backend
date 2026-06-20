@@ -44,6 +44,7 @@ import LegalScreen from './src/screens/LegalScreen';
 import VipProgressionScreen from './src/screens/VipProgressionScreen';
 import VipFrameDemoScreen from './src/screens/VipFrameDemoScreen';
 import ThemeSelectionScreen from './src/screens/ThemeSelectionScreen';
+import NobilityScreen from './src/screens/NobilityScreen';
 import StoryScreen from './src/screens/StoryScreen';
 import VoiceCallScreen from './src/screens/VoiceCallScreen';
 import VideoCallScreen from './src/screens/VideoCallScreen';
@@ -165,6 +166,7 @@ function AppContent() {
                     <Stack.Screen name="PartyRoom" component={PartyRoomScreen} />
                     <Stack.Screen name="CreateRoom" component={CreateRoomScreen} />
                     <Stack.Screen name="Family" component={FamilyScreen} />
+                    <Stack.Screen name="Nobility" component={NobilityScreen} />
                 </Stack.Navigator>
             </StarterPackProvider>
         </NavigationContainer>

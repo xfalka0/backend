@@ -18,6 +18,30 @@ const normalizeGenderValue = (gender) => {
     return null;
 };
 
+// GET USER BALANCE
+router.get('/balance', authenticateToken, async (req, res) => {
+    try {
+        const userId = req.user.id;
+        const result = await db.query('SELECT balance FROM users WHERE id = $1', [userId]);
+        if (result.rows.length === 0) return res.status(404).json({ error: 'User not found' });
+        res.json({ balance: result.rows[0].balance || 0 });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// GET USER BALANCE BY ID
+router.get('/:userId/balance', async (req, res) => {
+    const { userId } = req.params;
+    try {
+        const result = await db.query('SELECT balance FROM users WHERE id = $1', [userId]);
+        if (result.rows.length === 0) return res.status(404).json({ error: 'User not found' });
+        res.json({ balance: result.rows[0].balance || 0 });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // GET USER PROFILE
 router.get('/:id', async (req, res) => {
     try {

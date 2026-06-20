@@ -637,6 +637,69 @@ const initializeDatabase = async () => {
             created_at TIMESTAMP DEFAULT NOW()
         )`);
 
+        // --- Nobility Titles System Migrations ---
+        await runMigration('NobilityTitlesTable', `CREATE TABLE IF NOT EXISTS nobility_titles (
+            id SERIAL PRIMARY KEY,
+            key VARCHAR(50) UNIQUE NOT NULL,
+            name VARCHAR(100) NOT NULL,
+            level INT UNIQUE NOT NULL,
+            price INT NOT NULL,
+            duration_days INT NOT NULL DEFAULT 30,
+            badge_url TEXT,
+            name_color VARCHAR(30),
+            priority_weight INT DEFAULT 0,
+            is_active BOOLEAN DEFAULT TRUE,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )`);
+
+        await runMigration('UserNobilityTable', `CREATE TABLE IF NOT EXISTS user_nobility (
+            id SERIAL PRIMARY KEY,
+            user_id ${userIdType} REFERENCES users(id) ON DELETE CASCADE,
+            title_id INT REFERENCES nobility_titles(id) ON DELETE CASCADE,
+            started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            expires_at TIMESTAMP NOT NULL,
+            is_active BOOLEAN DEFAULT TRUE,
+            purchased_price INT NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )`);
+
+        await runMigration('NobilityPurchaseLogsTable', `CREATE TABLE IF NOT EXISTS nobility_purchase_logs (
+            id SERIAL PRIMARY KEY,
+            user_id ${userIdType} REFERENCES users(id) ON DELETE CASCADE,
+            title_id INT REFERENCES nobility_titles(id) ON DELETE CASCADE,
+            price INT NOT NULL,
+            purchase_type VARCHAR(50) NOT NULL,
+            old_title_id INT REFERENCES nobility_titles(id) ON DELETE SET NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )`);
+
+        // Seed Default Nobility Titles on startup if empty
+        try {
+            const nobilityCountRes = await db.query('SELECT COUNT(*) FROM nobility_titles');
+            if (parseInt(nobilityCountRes.rows[0].count) === 0) {
+                console.log('[DB] Seeding default nobility titles...');
+                const seedTitles = [
+                    { key: "knight", name: "Şövalye", level: 1, price: 2999, duration_days: 30, badge_url: "https://i.postimg.cc/k5zTq46q/knight.png", name_color: "#A7C7FF", priority_weight: 10 },
+                    { key: "baron", name: "Baron", level: 2, price: 4999, duration_days: 30, badge_url: "https://i.postimg.cc/zXhQWJ3Y/baron.png", name_color: "#B46CFF", priority_weight: 20 },
+                    { key: "king", name: "Kral", level: 3, price: 12999, duration_days: 30, badge_url: "https://i.postimg.cc/NfvN49Z1/king.png", name_color: "#FFD166", priority_weight: 40 },
+                    { key: "duke", name: "Dük", level: 4, price: 29999, duration_days: 30, badge_url: "https://i.postimg.cc/6qW8dK1k/duke.png", name_color: "#FF4D8D", priority_weight: 70 },
+                    { key: "emperor", name: "İmparator", level: 5, price: 49999, duration_days: 30, badge_url: "https://i.postimg.cc/0j1tqjD3/emperor.png", name_color: "#FFB84D", priority_weight: 100 }
+                ];
+                for (const t of seedTitles) {
+                    await db.query(`
+                        INSERT INTO nobility_titles (key, name, level, price, duration_days, badge_url, name_color, priority_weight, is_active)
+                        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, TRUE)
+                        ON CONFLICT (key) DO NOTHING
+                    `, [t.key, t.name, t.level, t.price, t.duration_days, t.badge_url, t.name_color, t.priority_weight]);
+                }
+                console.log('[DB] Seeding default nobility titles completed.');
+            }
+        } catch (seedErr) {
+            console.error('[DB] Nobility seeding error:', seedErr.message);
+        }
+
         // Auto-fix genders on startup
         const MALE_NAMES = ['Mustafa', 'Furkan', 'Ahmet', 'Mehmet', 'Ali', 'Veli', 'Can', 'Murat', 'Hakan', 'Emre', 'Burak', 'Volkan', 'Gökhan', 'Serkan', 'Ömer', 'Osman', 'İbrahim', 'Halil', 'Ramadan', 'Ramazan', 'Fırat', 'Mert', 'Yiğit', 'Arda'];
         for (const name of MALE_NAMES) {

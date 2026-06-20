@@ -148,11 +148,12 @@ describe('Mobile Zustand Stores Flow Tests', () => {
 
             axios.get
                 .mockResolvedValueOnce({ data: mockRoom }) // get room details
-                .mockResolvedValueOnce({ data: mockSeats }); // get seats details
+                .mockResolvedValueOnce({ data: mockSeats }) // get seats details
+                .mockResolvedValueOnce({ data: [] }); // get members details
 
             await useRoomStore.joinRoom('room-123');
 
-            expect(axios.get).toHaveBeenCalledTimes(2);
+            expect(axios.get).toHaveBeenCalledTimes(3);
             expect(useRoomStore.room).toEqual(mockRoom);
             expect(useRoomStore.seats).toEqual(mockSeats);
         });

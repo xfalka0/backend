@@ -252,6 +252,16 @@ function initializeSockets(io) {
 
                 await client.query('UPDATE chats SET last_message_at = NOW(), last_message = $2 WHERE id = $1', [chatId, lastMsgPreview]);
 
+                // Award Family XP if this is a gift
+                if (type === 'gift' && giftDetails) {
+                    try {
+                        const { handleGiftFamilyXp } = require('../utils/familyXpUtils');
+                        await handleGiftFamilyXp(client, senderId, chatReceiverId, giftDetails.cost);
+                    } catch (xpErr) {
+                        console.error('[FamilyXP-DM] Failed to award family XP:', xpErr.message);
+                    }
+                }
+
                 await client.query('COMMIT');
 
                 // --- 3.5. EXECUTE COMMISSION LATER (SAFE ZONE) ---

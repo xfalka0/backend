@@ -55,15 +55,29 @@ describe('Wallet and Gift Race Condition Tests', () => {
     describe('Concurrent Gift Sending (Race Condition)', () => {
         it('should process only one transaction when 10 identical gifts with the SAME idempotencyKey are sent concurrently', async () => {
             const mockClient = {
-                query: jest.fn()
-                    .mockResolvedValueOnce({ rows: [] }) // BEGIN
-                    .mockResolvedValueOnce({ rows: [{ id: 'gift-1', name: 'Rosy', cost: 50 }] }) // Gift fetch
-                    .mockResolvedValueOnce({ rows: [{ balance: 200 }] }) // Balance (200)
-                    .mockResolvedValueOnce({ rows: [] }) // Update user balance
-                    .mockResolvedValueOnce({ rows: [] }) // Insert transactions
-                    .mockResolvedValueOnce({ rows: [] }) // Recipient check
-                    .mockResolvedValueOnce({ rows: [] }) // COMMIT
-                    .mockResolvedValueOnce({ rows: [{ balance: 150 }] }), // Fetch new balance
+                query: jest.fn().mockImplementation((sql, params) => {
+                    if (sql.includes('BEGIN')) return Promise.resolve({ rows: [] });
+                    if (sql.includes('SELECT * FROM gifts')) {
+                        return Promise.resolve({ rows: [{ id: 'gift-1', name: 'Rosy', cost: 50 }] });
+                    }
+                    if (sql.includes('SELECT balance FROM users WHERE id')) {
+                        return Promise.resolve({ rows: [{ balance: 200 }] });
+                    }
+                    if (sql.includes('UPDATE users SET balance')) {
+                        return Promise.resolve({ rows: [] });
+                    }
+                    if (sql.includes('INSERT INTO transactions')) {
+                        return Promise.resolve({ rows: [] });
+                    }
+                    if (sql.includes('SELECT id, gender, role, agency_id FROM users WHERE id::text')) {
+                        return Promise.resolve({ rows: [{ gender: 'kadin', role: 'user' }] });
+                    }
+                    if (sql.includes('family_id FROM family_members')) {
+                        return Promise.resolve({ rows: [] });
+                    }
+                    if (sql.includes('COMMIT')) return Promise.resolve({ rows: [] });
+                    return Promise.resolve({ rows: [] });
+                }),
                 release: jest.fn()
             };
             db.pool.connect.mockResolvedValue(mockClient);
@@ -83,9 +97,13 @@ describe('Wallet and Gift Race Condition Tests', () => {
 
             await Promise.all(requests);
 
-            // Verify that only the first request actually ran queries through the database client
-            // The duplicate checks in memory prevent subsequent queries from executing
-            expect(mockClient.query).toHaveBeenCalledTimes(8); // BEGIN, select gift, select user balance, update balance, insert txn, select recipient, COMMIT, select balance
+            // Verify that only the first request actually ran transaction queries
+            // The duplicate checks in memory prevent subsequent queries from executing a new transaction
+            const beginCalls = mockClient.query.mock.calls.filter(call => call[0].includes('BEGIN')).length;
+            const commitCalls = mockClient.query.mock.calls.filter(call => call[0].includes('COMMIT')).length;
+            expect(beginCalls).toBe(1);
+            expect(commitCalls).toBe(1);
+
             expect(mockSocket.emit).toHaveBeenCalledWith('gift_success', { idempotencyKey: 'same-idempotency-key-999', duplicate: false });
             expect(mockSocket.emit).toHaveBeenCalledWith('gift_success', { idempotencyKey: 'same-idempotency-key-999', duplicate: true });
         });

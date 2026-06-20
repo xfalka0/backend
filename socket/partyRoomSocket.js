@@ -9,6 +9,23 @@ function handlePartyRoomSockets(io, socket) {
         const { roomId } = data;
         if (!roomId) return;
 
+        // Track voice stay time for previous room if switching
+        if (socket.user && socket.voiceRoomJoinedAt) {
+            const durationSeconds = Math.round((Date.now() - socket.voiceRoomJoinedAt) / 1000);
+            if (durationSeconds > 0) {
+                try {
+                    const { trackUserVoiceTime } = require('../utils/familyXpUtils');
+                    await trackUserVoiceTime(db, socket.user.id, durationSeconds);
+                } catch (xpErr) {
+                    console.error('[FamilyXP-PartyVoiceChange] Failed to track voice time:', xpErr.message);
+                }
+            }
+        }
+        if (socket.user) {
+            socket.voiceRoomJoinedAt = Date.now();
+            socket.voiceRoomId = roomId;
+        }
+
         const roomName = `party_room_${roomId}`;
 
         // 1a. Check if user is banned
@@ -81,6 +98,19 @@ function handlePartyRoomSockets(io, socket) {
 
         // If user was on a seat, free it
         if (socket.user) {
+            if (socket.voiceRoomJoinedAt) {
+                const durationSeconds = Math.round((Date.now() - socket.voiceRoomJoinedAt) / 1000);
+                if (durationSeconds > 0) {
+                    try {
+                        const { trackUserVoiceTime } = require('../utils/familyXpUtils');
+                        await trackUserVoiceTime(db, socket.user.id, durationSeconds);
+                    } catch (xpErr) {
+                        console.error('[FamilyXP-PartyLeave] Failed to track voice time:', xpErr.message);
+                    }
+                }
+                socket.voiceRoomJoinedAt = null;
+                socket.voiceRoomId = null;
+            }
             try {
                 // Set is_online to false in membership
                 await db.query('UPDATE party_room_members SET is_online = FALSE WHERE room_id = $1 AND user_id = $2::text', [roomId, socket.user.id]);
@@ -433,6 +463,14 @@ function handlePartyRoomSockets(io, socket) {
                 WHERE room_id = $2 AND user_id = $3
             `, [gift.cost, roomId, targetUserId]);
 
+            // Award Family XP for party room gift
+            try {
+                const { handleGiftFamilyXp } = require('../utils/familyXpUtils');
+                await handleGiftFamilyXp(client, senderId, targetUserId, gift.cost);
+            } catch (xpErr) {
+                console.error('[FamilyXP-Party] Failed to award family XP:', xpErr.message);
+            }
+
             await client.query('COMMIT');
 
             if (idempotencyKey) {
@@ -499,6 +537,18 @@ function handlePartyRoomSockets(io, socket) {
     // 9. CLEAN UP ON DISCONNECT
     socket.on('disconnect', async () => {
         if (socket.user) {
+            // Track voice stay time
+            if (socket.voiceRoomJoinedAt) {
+                const durationSeconds = Math.round((Date.now() - socket.voiceRoomJoinedAt) / 1000);
+                if (durationSeconds > 0) {
+                    try {
+                        const { trackUserVoiceTime } = require('../utils/familyXpUtils');
+                        await trackUserVoiceTime(db, socket.user.id, durationSeconds);
+                    } catch (xpErr) {
+                        console.error('[FamilyXP-PartyDisconnect] Failed to track voice time:', xpErr.message);
+                    }
+                }
+            }
             try {
                 // Set is_online to false across all party rooms for this user
                 await db.query('UPDATE party_room_members SET is_online = FALSE WHERE user_id = $1::text', [socket.user.id]);

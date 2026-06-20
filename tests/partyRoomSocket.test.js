@@ -63,7 +63,11 @@ describe('Party Rooms Socket.io Event Tests', () => {
     describe('join_party_room event', () => {
         it('should join the room, broadcast join to others and send current seats status', async () => {
             const seats = [{ seat_number: 1, user_id: null }];
-            db.query.mockResolvedValueOnce({ rows: seats });
+            db.query
+                .mockResolvedValueOnce({ rows: [] }) // banCheck
+                .mockResolvedValueOnce({ rows: [{ host_id: 'owner-id' }] }) // roomRes
+                .mockResolvedValueOnce({ rows: [] }) // membership upsert
+                .mockResolvedValueOnce({ rows: seats }); // seatsRes
 
             await registeredEvents['join_party_room']({ roomId: 'room-1' });
 
@@ -78,7 +82,8 @@ describe('Party Rooms Socket.io Event Tests', () => {
             db.query
                 .mockResolvedValueOnce({ rows: [{ user_id: null, is_locked: false }] }) // checkRes
                 .mockResolvedValueOnce({ rows: [] }) // Free old seats
-                .mockResolvedValueOnce({ rows: [] }); // Update new seat
+                .mockResolvedValueOnce({ rows: [] }) // Update new seat
+                .mockResolvedValueOnce({ rows: [{ username: 'tester1', display_name: 'Tester One', avatar_url: '', vip_level: 2 }] }); // Fetch user details
 
             await registeredEvents['request_seat']({ roomId: 'room-1', seatNumber: 1 });
 

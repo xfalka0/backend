@@ -36,9 +36,13 @@ import RoomSettingsBottomSheet from '../components/room/RoomSettingsBottomSheet'
 
 const { width, height } = Dimensions.get('window');
 
-// ─── Agora (crash-safe optional import) ────────────────────────────────────
+// ─── Agora RTC Integration (Crash-safe Dynamic Require) ───────────────────
 let AgoraRTC = null;
-// try { AgoraRTC = require('react-native-agora'); } catch {}
+try {
+    AgoraRTC = require('react-native-agora');
+} catch (e) {
+    console.warn('[Agora] Native module not linked. Rebuild with npx expo run:android to enable voice.');
+}
 
 // ─── Chat Message Row Component ───────────────────────────────────────────
 const ChatMessageRow = React.memo(({ item, currentUserId }) => {

@@ -663,7 +663,7 @@ const ProfileScreen = ({ route }) => {
                 <View style={styles.glassCardWrapper}>
                     <LinearGradient colors={themeMode === 'dark' ? theme.gradients.card : ['#fff', '#f0f0f0']} style={styles.glassCard}>
                         <View style={styles.quickActionsGrid}>
-                            <TouchableOpacity style={[styles.qaItem, isShowWallet && { width: '13%' }]} onPress={() => {
+                            <TouchableOpacity style={styles.qaItem} onPress={() => {
                                 if (user?.is_agency_owner) {
                                     navigation.navigate('AgencyDashboard');
                                 } else {
@@ -678,7 +678,7 @@ const ProfileScreen = ({ route }) => {
                                  </Text>
                             </TouchableOpacity>
 
-                            <TouchableOpacity style={[styles.qaItem, isShowWallet && { width: '13%' }]} onPress={() => navigation.navigate('ProfileVisitors')}>
+                            <TouchableOpacity style={styles.qaItem} onPress={() => navigation.navigate('ProfileVisitors')}>
                                 <View style={styles.qaIconOnly}>
                                     <View style={styles.avatarIconWrapper}>
                                         <Image 
@@ -692,7 +692,7 @@ const ProfileScreen = ({ route }) => {
                             </TouchableOpacity>
 
                             {isShowWallet && (
-                                <TouchableOpacity style={[styles.qaItem, { width: '13%' }]} onPress={() => navigation.navigate('Wallet')}>
+                                <TouchableOpacity style={styles.qaItem} onPress={() => navigation.navigate('Wallet')}>
                                     <View style={styles.qaIconOnly}>
                                         <Ionicons name="wallet" size={26} color="#22d3ee" />
                                     </View>
@@ -700,7 +700,7 @@ const ProfileScreen = ({ route }) => {
                                 </TouchableOpacity>
                             )}
 
-                            <TouchableOpacity style={[styles.qaItem, isShowWallet && { width: '13%' }]} onPress={() => navigation.navigate('Vip')}>
+                            <TouchableOpacity style={styles.qaItem} onPress={() => navigation.navigate('Vip')}>
                                 <View style={styles.qaIconOnly}>
                                     <FontAwesome5 name="medal" size={24} color="#fbbf24" />
                                 </View>
@@ -708,25 +708,32 @@ const ProfileScreen = ({ route }) => {
                                 <View style={styles.vipProgressBar} />
                             </TouchableOpacity>
 
-                            <TouchableOpacity style={[styles.qaItem, isShowWallet && { width: '13%' }]} onPress={() => navigation.navigate('Shop')}>
+                            <TouchableOpacity style={styles.qaItem} onPress={() => navigation.navigate('Shop')}>
                                 <View style={styles.qaIconOnly}>
                                     <Ionicons name="cart" size={28} color="#f59e0b" />
                                 </View>
                                 <Text style={styles.qaLabel}>Mağaza</Text>
                             </TouchableOpacity>
 
-                            <TouchableOpacity style={[styles.qaItem, isShowWallet && { width: '13%' }]} onPress={() => navigation.navigate('WhoFavoritedMe')}>
+                            <TouchableOpacity style={styles.qaItem} onPress={() => navigation.navigate('WhoFavoritedMe')}>
                                 <View style={styles.qaIconOnly}>
                                     <Ionicons name="heart" size={26} color="#ec4899" />
                                 </View>
                                 <Text style={styles.qaLabel}>Hayran</Text>
                             </TouchableOpacity>
 
-                            <TouchableOpacity style={[styles.qaItem, isShowWallet && { width: '13%' }]} onPress={() => navigation.navigate('Favorites')}>
+                            <TouchableOpacity style={styles.qaItem} onPress={() => navigation.navigate('Favorites')}>
                                 <View style={styles.qaIconOnly}>
                                     <Ionicons name="star" size={26} color="#a855f7" />
                                 </View>
                                 <Text style={styles.qaLabel}>Favori</Text>
+                            </TouchableOpacity>
+
+                            <TouchableOpacity style={styles.qaItem} onPress={() => navigation.navigate('Family')}>
+                                <View style={styles.qaIconOnly}>
+                                    <Ionicons name="people" size={26} color="#f43f5e" />
+                                </View>
+                                <Text style={styles.qaLabel}>Ailem</Text>
                             </TouchableOpacity>
                         </View>
                     </LinearGradient>
@@ -1515,11 +1522,13 @@ const styles = StyleSheet.create({
     },
     quickActionsGrid: {
         flexDirection: 'row',
+        flexWrap: 'wrap',
         justifyContent: 'space-between',
+        rowGap: 16,
     },
     qaItem: {
         alignItems: 'center',
-        width: '16%',
+        width: '23%',
     },
     qaIconOnly: {
         width: 36,

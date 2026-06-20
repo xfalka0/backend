@@ -62,12 +62,26 @@ function initializeRoomGateway(io) {
             socket.emit('error_response', { code, message });
         };
 
-        // 1. JOIN ROOM
         socket.on('join_room', async (data) => {
             const { roomId } = data;
             if (!roomId) {
                 return sendError('BAD_REQUEST', 'RoomId gereklidir.');
             }
+
+            // Track voice stay time for previous room if they switch rooms without disconnecting
+            if (socket.voiceRoomJoinedAt) {
+                const durationSeconds = Math.round((Date.now() - socket.voiceRoomJoinedAt) / 1000);
+                if (durationSeconds > 0) {
+                    try {
+                        const { trackUserVoiceTime } = require('../utils/familyXpUtils');
+                        await trackUserVoiceTime(db, socket.user.id, durationSeconds);
+                    } catch (xpErr) {
+                        console.error('[FamilyXP-VoiceChange] Failed to track voice time:', xpErr.message);
+                    }
+                }
+            }
+            socket.voiceRoomJoinedAt = Date.now();
+            socket.voiceRoomId = roomId;
 
             const roomName = `room_${roomId}`;
             socket.join(roomName);
@@ -422,6 +436,14 @@ function initializeRoomGateway(io) {
 
                 const savedSystemMsg = systemMsgRes.rows[0];
 
+                // Award Family XP for room gift
+                try {
+                    const { handleGiftFamilyXp } = require('../utils/familyXpUtils');
+                    await handleGiftFamilyXp(client, socket.user.id, receiverUserId, totalCost);
+                } catch (xpErr) {
+                    console.error('[FamilyXP-Room] Failed to award family XP:', xpErr.message);
+                }
+
                 await client.query('COMMIT');
 
                 if (redisClient && redisClient.isOpen) {
@@ -477,6 +499,20 @@ function initializeRoomGateway(io) {
         // 6. DISCONNECT
         socket.on('disconnect', async () => {
             console.log(`[RoomGateway] User disconnected: ${socket.user.username} (${socket.id})`);
+            
+            // Track voice stay time
+            if (socket.voiceRoomJoinedAt) {
+                const durationSeconds = Math.round((Date.now() - socket.voiceRoomJoinedAt) / 1000);
+                if (durationSeconds > 0) {
+                    try {
+                        const { trackUserVoiceTime } = require('../utils/familyXpUtils');
+                        await trackUserVoiceTime(db, socket.user.id, durationSeconds);
+                    } catch (xpErr) {
+                        console.error('[FamilyXP-VoiceDisconnect] Failed to track voice time:', xpErr.message);
+                    }
+                }
+            }
+
             try {
                 await db.query(
                     'UPDATE room_seats SET user_id = NULL, mic_on = false WHERE user_id = $1 RETURNING room_id',

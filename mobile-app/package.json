@@ -37,6 +37,7 @@
     "lottie-react-native": "6.7.0",
     "react": "18.2.0",
     "react-native": "0.74.5",
+    "react-native-agora": "^4.5.4",
     "react-native-fbsdk-next": "^13.4.3",
     "react-native-gesture-handler": "~2.16.1",
     "react-native-image-viewing": "^0.2.2",

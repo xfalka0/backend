@@ -132,7 +132,7 @@ export default function RoomSeat({ seat, currentUserId, onPress, isHost }) {
                             {/* Mic status badge */}
                             {seat.is_muted && (
                                 <View style={styles.muteBadge}>
-                                    <Ionicons name="mic-off" size={6} color="#fff" />
+                                    <Ionicons name="mic-off" size={9} color="#fff" />
                                 </View>
                             )}
                             {/* Active speaking neon ring */}
@@ -292,15 +292,15 @@ const styles = StyleSheet.create({
     },
     muteBadge: {
         position: 'absolute',
-        top: 0,
-        right: 0,
-        width: 12,
-        height: 12,
-        borderRadius: 6,
+        top: -2,
+        right: -2,
+        width: 16,
+        height: 16,
+        borderRadius: 8,
         backgroundColor: '#ef4444',
         alignItems: 'center',
         justifyContent: 'center',
-        borderWidth: 1,
+        borderWidth: 1.2,
         borderColor: '#070B24',
         zIndex: 10,
     },

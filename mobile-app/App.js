@@ -65,6 +65,7 @@ import AnimatedTabBar from './src/components/animated/AnimatedTabBar';
 import PartyRoomsListScreen from './src/screens/PartyRoomsListScreen';
 import PartyRoomScreen from './src/screens/PartyRoomScreen';
 import CreateRoomScreen from './src/screens/CreateRoomScreen';
+import FamilyScreen from './src/screens/FamilyScreen';
 import { trackPurchase } from './src/utils/analytics';
 import { Settings } from 'react-native-fbsdk-next';
 
@@ -163,6 +164,7 @@ function AppContent() {
                     <Stack.Screen name="PartyRoomsList" component={PartyRoomsListScreen} />
                     <Stack.Screen name="PartyRoom" component={PartyRoomScreen} />
                     <Stack.Screen name="CreateRoom" component={CreateRoomScreen} />
+                    <Stack.Screen name="Family" component={FamilyScreen} />
                 </Stack.Navigator>
             </StarterPackProvider>
         </NavigationContainer>

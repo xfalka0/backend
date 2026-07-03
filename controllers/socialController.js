@@ -7,7 +7,7 @@ const path = require('path');
 exports.getExplore = async (req, res) => {
     try {
         let currentUserId = req.query.user_id;
-        const userIdType = req.app?.get('user_id_type') || 'UUID';
+        const userIdType = req.app?.get('user_id_type') || 'INTEGER';
 
         if (userIdType === 'INTEGER') {
             if (currentUserId && isNaN(parseInt(currentUserId, 10))) {

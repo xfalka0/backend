@@ -1,195 +1,1066 @@
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-    View,
-    Text,
-    StyleSheet,
-    ScrollView,
-    TouchableOpacity,
-    Dimensions,
-    StatusBar,
-    SafeAreaView,
+    AccessibilityInfo,
     ActivityIndicator,
-    Image
+    Animated,
+    Dimensions,
+    Easing,
+    Image,
+    ImageBackground,
+    Modal,
+    Pressable,
+    ScrollView,
+    StatusBar,
+    StyleSheet,
+    Text as NativeText,
+    TouchableOpacity,
+    View,
 } from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
-import axios from 'axios';
-import { API_URL } from '../config';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useAlert } from '../contexts/AlertContext';
-import { Motion } from '../components/motion/MotionSystem';
+import axios from 'axios';
 
-const { width } = Dimensions.get('window');
+import { API_URL } from '../config';
+import { useAlert } from '../contexts/AlertContext';
+
+const { width, height: screenHeight } = Dimensions.get('window');
+const HERO_SIZE = Math.min(width * 0.58, 400);
+
+const Text = (props) => <NativeText allowFontScaling={false} {...props} />;
+
+const DEFAULT_TITLES = [
+    { id: 1, key: 'knight', name: 'Şövalye', level: 1, price: 2999, duration_days: 30 },
+    { id: 2, key: 'baron', name: 'Baron', level: 2, price: 4999, duration_days: 30 },
+    { id: 3, key: 'king', name: 'Kral', level: 3, price: 12999, duration_days: 30 },
+    { id: 4, key: 'duke', name: 'Dük', level: 4, price: 29999, duration_days: 30 },
+    { id: 5, key: 'emperor', name: 'İmparator', level: 5, price: 49999, duration_days: 30 },
+];
+
+const COMMON_BENEFITS = {
+    renewal: { name: 'Yenileme Teklifi', icon: 'sync-outline' },
+    identity: { name: 'Asalet Kimliği', icon: 'finger-print-outline' },
+    medal: { name: 'Özel Madalya', icon: 'ribbon-outline' },
+    frame: { name: 'Avatar Çerçevesi', icon: 'scan-outline' },
+    bubble: { name: 'Konuşma Balonu', icon: 'chatbubble-ellipses-outline' },
+    entrance: { name: 'Giriş Efekti', icon: 'flash-outline' },
+    priority: { name: 'Profil Önceliği', icon: 'trending-up-outline' },
+    badge: { name: 'VIP Rozet', icon: 'shield-checkmark-outline' },
+    crown: { name: 'Taç Rozeti', icon: 'diamond-outline' },
+    room: { name: 'Oda Ayrıcalığı', icon: 'people-outline' },
+};
 
 const TITLE_THEMES = {
     knight: {
-        gradient: ['#1e293b', '#0f172a'],
-        accent: '#A7C7FF',
-        badgeColor: '#A7C7FF',
-        glow: 'rgba(167, 199, 255, 0.25)',
-        benefits: [
-            'Özel Gümüş Mavi isim rengi',
-            'Şövalye profil ve chat rozeti',
-            'Sohbette öne çıkma'
-        ]
+        accent: '#D5C5A5',
+        accentSoft: '#82745C',
+        gradient: ['#111319', '#080A0E', '#050506'],
+        glow: 'rgba(185, 207, 236, 0.18)',
+        image: require('../../assets/sovalye_v2.png'),
+        backgroundImage: require('../../assets/sovalyebackground_v2.png'),
+        backgroundImageOpacity: 0.65,
+        isCutout: true,
+        motto: 'Cesaretin asaletle mühürlendiği ilk mertebe',
+        benefits: ['renewal', 'identity', 'medal', 'frame', 'bubble', 'entrance', 'priority', 'badge'],
     },
     baron: {
-        gradient: ['#2e1065', '#0f172a'],
-        accent: '#B46CFF',
-        badgeColor: '#B46CFF',
-        glow: 'rgba(180, 108, 255, 0.3)',
-        benefits: [
-            'Özel Asil Mor isim rengi',
-            'Baron profil ve chat rozeti',
-            'Chat listesinde öncelik',
-            'Prestijli profil görünümü'
-        ]
+        accent: '#C9A7DB',
+        accentSoft: '#785986',
+        gradient: ['#17101D', '#0B0910', '#050506'],
+        glow: 'rgba(158, 91, 196, 0.22)',
+        image: require('../../assets/baron_v3.png'),
+        backgroundImage: require('../../assets/baronbackground_v2.png'),
+        backgroundImageOpacity: 0.65,
+        isCutout: true,
+        motto: 'Seçkin çevrelerin zarif ve ayrıcalıklı nişanı',
+        benefits: ['renewal', 'identity', 'medal', 'frame', 'bubble', 'entrance', 'room', 'badge'],
     },
     king: {
-        gradient: ['#422006', '#0f172a'],
-        accent: '#FFD166',
-        badgeColor: '#FFD166',
-        glow: 'rgba(255, 209, 102, 0.35)',
-        benefits: [
-            'Özel Altın Sarı isim rengi',
-            'Kral profil ve chat rozeti',
-            'Chat listesinde yüksek öncelik',
-            'Üye listesinde üst sıralarda yer alma'
-        ]
+        accent: '#E3BE72',
+        accentSoft: '#8F682E',
+        gradient: ['#1B150A', '#0D0A06', '#050506'],
+        glow: 'rgba(224, 177, 77, 0.24)',
+        image: require('../../assets/kral_v2.png'),
+        backgroundImage: require('../../assets/kralbackground_v2.png'),
+        backgroundImageOpacity: 0.65,
+        isCutout: true,
+        motto: 'Gücün, ihtişamın ve görünür prestijin simgesi',
+        benefits: ['renewal', 'identity', 'crown', 'frame', 'bubble', 'entrance', 'priority', 'room'],
     },
     duke: {
-        gradient: ['#500730', '#0f172a'],
-        accent: '#FF4D8D',
-        badgeColor: '#FF4D8D',
-        glow: 'rgba(255, 77, 141, 0.4)',
-        benefits: [
-            'Özel Pembe Eflatun isim rengi',
-            'Dük profil ve chat rozeti',
-            'Sohbette üstün öncelik',
-            'Üye listesinde en üst sıralar'
-        ]
+        accent: '#D6A2BB',
+        accentSoft: '#875068',
+        gradient: ['#1C0C14', '#0D080B', '#050506'],
+        glow: 'rgba(193, 76, 127, 0.22)',
+        image: require('../../assets/duk_v2.png'),
+        backgroundImage: require('../../assets/dukbackground_v2.png'),
+        backgroundImageOpacity: 0.80,
+        isCutout: true,
+        imageStyle: { transform: [{ scale: 1.95 }, { translateY: 40 }] },
+        motto: 'Hanedan zarafetini modern prestijle buluşturan unvan',
+        benefits: ['renewal', 'identity', 'crown', 'frame', 'bubble', 'entrance', 'priority', 'badge'],
     },
     emperor: {
-        gradient: ['#450a0a', '#020617', '#000000'],
-        accent: '#FFB84D',
-        badgeColor: '#FFB84D',
-        glow: 'rgba(255, 184, 77, 0.45)',
-        benefits: [
-            'Özel İmparator Turuncusu isim rengi',
-            'İmparator profil ve chat rozeti',
-            'Tüm sohbetlerde mutlak öncelik',
-            'Üye listesinde en üstte listelenme',
-            'Zirvedeki prestij statüsü'
-        ]
-    }
+        accent: '#E6B46B',
+        accentSoft: '#98562E',
+        gradient: ['#200D08', '#0D0806', '#050506'],
+        glow: 'rgba(226, 118, 55, 0.27)',
+        image: require('../../assets/imparator_v2.png'),
+        backgroundImage: require('../../assets/imparatorbackground_v2.png'),
+        backgroundImageOpacity: 0.80,
+        isCutout: true,
+        motto: 'Asalet merkezinin erişilebilen en yüksek mertebesi',
+        benefits: ['renewal', 'identity', 'crown', 'frame', 'bubble', 'entrance', 'priority', 'room'],
+    },
 };
+
+const getTitleKey = (title) => {
+    if (title?.key && TITLE_THEMES[title.key]) return title.key;
+    return DEFAULT_TITLES.find((item) => Number(item.level) === Number(title?.level))?.key || 'knight';
+};
+
+const formatPrice = (value) => String(Number(value) || 0).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+
+// ── Floating premium particles ──────────────────────────────────────
+const PARTICLE_COUNT = 22;
+
+function generateParticleConfigs() {
+    const configs = [];
+    for (let i = 0; i < PARTICLE_COUNT; i++) {
+        const size = 2 + Math.random() * 4; // 2–6px
+        configs.push({
+            id: i,
+            size,
+            startX: Math.random() * width,
+            startY: screenHeight + 20 + Math.random() * 60,
+            endY: -(20 + Math.random() * 80),
+            driftX: (Math.random() - 0.5) * 90, // horizontal sway ±45
+            duration: 6000 + Math.random() * 8000, // 6–14s per cycle
+            delay: Math.random() * 6000,
+            peakOpacity: 0.18 + Math.random() * 0.45,
+            isGlowing: Math.random() > 0.65, // ~35% get a soft glow
+        });
+    }
+    return configs;
+}
+
+const PARTICLE_CONFIGS = generateParticleConfigs();
+
+function PremiumParticle({ config, accentColor, reduceMotion }) {
+    const progress = useRef(new Animated.Value(0)).current;
+
+    useEffect(() => {
+        if (reduceMotion) return undefined;
+
+        const animate = () => {
+            progress.setValue(0);
+            Animated.sequence([
+                Animated.delay(config.delay),
+                Animated.timing(progress, {
+                    toValue: 1,
+                    duration: config.duration,
+                    easing: Easing.linear,
+                    useNativeDriver: true,
+                }),
+            ]).start(({ finished }) => {
+                if (finished) animate();
+            });
+        };
+        animate();
+        return () => progress.stopAnimation();
+    }, [reduceMotion]);
+
+    if (reduceMotion) return null;
+
+    const translateY = progress.interpolate({
+        inputRange: [0, 1],
+        outputRange: [config.startY, config.endY],
+    });
+
+    const translateX = progress.interpolate({
+        inputRange: [0, 0.25, 0.5, 0.75, 1],
+        outputRange: [
+            0,
+            config.driftX * 0.6,
+            config.driftX,
+            config.driftX * 0.6,
+            0,
+        ],
+    });
+
+    const opacity = progress.interpolate({
+        inputRange: [0, 0.08, 0.35, 0.7, 0.92, 1],
+        outputRange: [0, config.peakOpacity * 0.5, config.peakOpacity, config.peakOpacity * 0.85, config.peakOpacity * 0.3, 0],
+    });
+
+    const scale = progress.interpolate({
+        inputRange: [0, 0.15, 0.5, 0.85, 1],
+        outputRange: [0.3, 1, 1.15, 0.9, 0.4],
+    });
+
+    return (
+        <Animated.View
+            pointerEvents="none"
+            style={{
+                position: 'absolute',
+                left: config.startX,
+                width: config.size,
+                height: config.size,
+                borderRadius: config.size / 2,
+                backgroundColor: accentColor,
+                opacity,
+                transform: [{ translateY }, { translateX }, { scale }],
+                ...(config.isGlowing ? {
+                    shadowColor: accentColor,
+                    shadowOffset: { width: 0, height: 0 },
+                    shadowOpacity: 0.8,
+                    shadowRadius: 6,
+                } : {}),
+            }}
+        />
+    );
+}
+
+const PremiumParticles = React.memo(function PremiumParticles({ accentColor, reduceMotion }) {
+    if (reduceMotion) return null;
+    return (
+        <View pointerEvents="none" style={StyleSheet.absoluteFill}>
+            {PARTICLE_CONFIGS.map((config) => (
+                <PremiumParticle
+                    key={config.id}
+                    config={config}
+                    accentColor={accentColor}
+                    reduceMotion={reduceMotion}
+                />
+            ))}
+        </View>
+    );
+});
+
+export function NobilityTabs({ titles, selectedTitle, onSelect, accent }) {
+    const [layoutWidth, setLayoutWidth] = useState(0);
+    const selectedIndex = Math.max(0, titles.findIndex((title) => title.id === selectedTitle?.id));
+    const [visualIndex, setVisualIndex] = useState(selectedIndex);
+    const indicatorIndex = useRef(new Animated.Value(selectedIndex)).current;
+    const gap = 4;
+    const horizontalPadding = 14;
+    const tabWidth = layoutWidth > 0
+        ? (layoutWidth - (horizontalPadding * 2) - (gap * (titles.length - 1))) / titles.length
+        : 0;
+
+    const moveIndicator = (index) => {
+        setVisualIndex(index);
+        Animated.spring(indicatorIndex, {
+            toValue: index,
+            speed: 20,
+            bounciness: 4,
+            useNativeDriver: true,
+        }).start();
+    };
+
+    useEffect(() => {
+        moveIndicator(selectedIndex);
+    }, [selectedIndex]);
+
+    return (
+        <View style={styles.tabsContent} onLayout={(event) => setLayoutWidth(event.nativeEvent.layout.width)}>
+            {tabWidth > 0 && (
+                <Animated.View
+                    pointerEvents="none"
+                    style={[
+                        styles.tabIndicator,
+                        {
+                            width: tabWidth,
+                            borderColor: accent,
+                            transform: [{
+                                translateX: Animated.multiply(indicatorIndex, tabWidth + gap),
+                            }],
+                        },
+                    ]}
+                />
+            )}
+            {titles.map((title, index) => {
+                const selected = visualIndex === index;
+                return (
+                    <TouchableOpacity
+                        key={title.id}
+                        activeOpacity={0.78}
+                        onPress={() => {
+                            moveIndicator(index);
+                            onSelect(title);
+                        }}
+                        style={styles.tab}
+                    >
+                        <Text style={[styles.tabText, selected && styles.tabTextActive]}>{title.name}</Text>
+                    </TouchableOpacity>
+                );
+            })}
+        </View>
+    );
+}
+
+export function NobilityHeroPreview({ title, theme, reduceMotion = false }) {
+    const floatY = useRef(new Animated.Value(0)).current;
+
+    useEffect(() => {
+        if (reduceMotion) {
+            floatY.setValue(0);
+            return undefined;
+        }
+
+        const floating = Animated.loop(
+            Animated.sequence([
+                Animated.timing(floatY, {
+                    toValue: -5,
+                    duration: 2600,
+                    easing: Easing.inOut(Easing.sin),
+                    useNativeDriver: true,
+                }),
+                Animated.timing(floatY, {
+                    toValue: 0,
+                    duration: 2600,
+                    easing: Easing.inOut(Easing.sin),
+                    useNativeDriver: true,
+                }),
+            ]),
+        );
+        floating.start();
+        return () => floating.stop();
+    }, [floatY, reduceMotion]);
+
+    return (
+        <Animated.View style={[styles.heroSection, { transform: [{ translateY: floatY }] }]}>
+            <View style={[
+                styles.heroFrame,
+                theme.isCutout && styles.heroFrameCutout,
+                { borderColor: `${theme.accent}70`, shadowColor: theme.accent },
+            ]}>
+                {!theme.isCutout && (
+                    <LinearGradient
+                        colors={['rgba(255,255,255,0.12)', 'rgba(255,255,255,0.015)', 'rgba(0,0,0,0.34)']}
+                        style={StyleSheet.absoluteFill}
+                    />
+                )}
+                {!theme.isCutout && (
+                    <>
+                        <View style={[styles.heroCorner, styles.heroCornerTopLeft, { borderColor: theme.accent }]} />
+                        <View style={[styles.heroCorner, styles.heroCornerTopRight, { borderColor: theme.accent }]} />
+                    </>
+                )}
+                <Image
+                    source={theme.image}
+                    resizeMode={theme.isCutout ? 'contain' : 'cover'}
+                    style={[
+                        styles.heroImage,
+                        theme.isCutout && styles.heroCutoutImage,
+                        theme.imageStyle,
+                    ]}
+                />
+                {!theme.isCutout && (
+                    <LinearGradient
+                        colors={['rgba(255,255,255,0.025)', 'transparent', 'rgba(4,4,6,0.16)']}
+                        locations={[0, 0.52, 1]}
+                        style={StyleSheet.absoluteFill}
+                    />
+                )}
+            </View>
+        </Animated.View>
+    );
+}
+
+export function NobilityBenefitItem({ benefit, accent, animation }) {
+    const animatedStyle = animation ? {
+        opacity: animation,
+        transform: [{
+            translateY: animation.interpolate({ inputRange: [0, 1], outputRange: [14, 0] }),
+        }],
+    } : null;
+
+    return (
+        <Animated.View style={[styles.benefitItem, animatedStyle]}>
+            <View style={[
+                styles.benefitCircleOuter,
+                { borderColor: `${accent}42` },
+            ]}>
+                <LinearGradient
+                    colors={['#45464B', '#292A2F', '#141519']}
+                    start={{ x: 0.18, y: 0 }}
+                    end={{ x: 0.82, y: 1 }}
+                    style={styles.benefitCircle}
+                >
+                    <Ionicons name={benefit.icon} size={25} color="#D9DADD" />
+                    <View style={[styles.benefitDot, { backgroundColor: accent }]} />
+                </LinearGradient>
+            </View>
+            <Text numberOfLines={2} style={styles.benefitText}>{benefit.name}</Text>
+        </Animated.View>
+    );
+}
+
+export function NobilityBenefitsGrid({ theme, reduceMotion = false }) {
+    const itemAnimations = useRef(theme.benefits.map(() => new Animated.Value(0))).current;
+
+    useEffect(() => {
+        itemAnimations.forEach((value) => value.setValue(reduceMotion ? 1 : 0));
+        if (reduceMotion) return undefined;
+
+        const entrance = Animated.stagger(
+            55,
+            itemAnimations.map((value) => Animated.timing(value, {
+                toValue: 1,
+                duration: 300,
+                easing: Easing.out(Easing.cubic),
+                useNativeDriver: true,
+            })),
+        );
+        entrance.start();
+        return () => entrance.stop();
+    }, [itemAnimations, reduceMotion, theme]);
+
+    return (
+        <View style={styles.benefitsGrid}>
+            {theme.benefits.map((key, index) => (
+                <NobilityBenefitItem
+                    key={key}
+                    benefit={COMMON_BENEFITS[key]}
+                    accent={theme.accent}
+                    animation={itemAnimations[index]}
+                />
+            ))}
+        </View>
+    );
+}
+
+function NobilityBenefitsHeader({ theme }) {
+    return (
+        <View style={styles.benefitsHeader}>
+            <View
+                pointerEvents="none"
+                style={[styles.benefitsHeaderArc, { borderColor: `${theme.accent}42` }]}
+            />
+            <View style={styles.benefitsHeaderContent}>
+                <View style={styles.benefitsTitlePill}>
+                    <View style={[styles.headerDiamond, { backgroundColor: theme.accent }]} />
+                    <Text style={styles.sectionTitle}>Özel Ayrıcalıklar</Text>
+                    <View style={[styles.headerDiamond, { backgroundColor: theme.accent }]} />
+                </View>
+            </View>
+        </View>
+    );
+}
+
+export function NobilityDualActionButtons({
+    disabled,
+    isOwned,
+    isLower,
+    onGift,
+    onActivate,
+    reduceMotion = false,
+    theme,
+}) {
+    const pressScalePrimary = useRef(new Animated.Value(1)).current;
+    const pressScaleSecondary = useRef(new Animated.Value(1)).current;
+    const borderRotate = useRef(new Animated.Value(0)).current;
+    const glowPulse = useRef(new Animated.Value(0)).current;
+
+    useEffect(() => {
+        if (reduceMotion) return undefined;
+
+        // Smooth clockwise rotation for border highlight sweep – 4s loop
+        const rotate = Animated.loop(
+            Animated.timing(borderRotate, {
+                toValue: 1,
+                duration: 4000,
+                easing: Easing.linear,
+                useNativeDriver: true,
+            }),
+        );
+
+        // Soft glow pulse behind the primary button
+        const glow = Animated.loop(
+            Animated.sequence([
+                Animated.timing(glowPulse, {
+                    toValue: 1,
+                    duration: 2200,
+                    easing: Easing.inOut(Easing.sin),
+                    useNativeDriver: true,
+                }),
+                Animated.timing(glowPulse, {
+                    toValue: 0,
+                    duration: 2200,
+                    easing: Easing.inOut(Easing.sin),
+                    useNativeDriver: true,
+                }),
+            ]),
+        );
+
+        rotate.start();
+        glow.start();
+        return () => {
+            rotate.stop();
+            glow.stop();
+        };
+    }, [reduceMotion, borderRotate, glowPulse]);
+
+    const animatePress = (animValue, pressed) => {
+        if (reduceMotion) return;
+        Animated.spring(animValue, {
+            toValue: pressed ? 0.97 : 1,
+            speed: 35,
+            bounciness: pressed ? 0 : 5,
+            useNativeDriver: true,
+        }).start();
+    };
+
+    const spin = borderRotate.interpolate({
+        inputRange: [0, 1],
+        outputRange: ['0deg', '360deg'],
+    });
+
+    const pulseOpacity = glowPulse.interpolate({
+        inputRange: [0, 1],
+        outputRange: [0.2, 0.6],
+    });
+
+    // Border gradient: mostly dark base with a small bright gold highlight segment (~25%)
+    // As the square rotates, only the bright part sweeps across the visible border
+    const borderBaseColor = '#3D3220'; // dark muted gold — subtle base border
+    const borderHighlightGradient = [
+        borderBaseColor,       // 0.0 – dark
+        borderBaseColor,       // 0.35 – still dark
+        '#B57C1E',             // 0.42 – transition into gold
+        '#D9B24C',             // 0.48 – warm gold
+        '#FFF4B5',             // 0.52 – bright highlight peak
+        '#F4DE7A',             // 0.56 – bright gold
+        '#D9B24C',             // 0.62 – fading
+        '#B57C1E',             // 0.68 – transition out
+        borderBaseColor,       // 0.75 – back to dark
+        borderBaseColor,       // 1.0 – dark
+    ];
+    const borderHighlightLocations = [0, 0.35, 0.42, 0.48, 0.52, 0.56, 0.62, 0.68, 0.75, 1];
+
+    return (
+        <View style={premiumStyles.buttonsRow}>
+            {/* ── SECONDARY BUTTON: Dağıt ── */}
+            <Animated.View style={[premiumStyles.btnOuter, premiumStyles.btnSecondaryOuter, { transform: [{ scale: pressScaleSecondary }] }]}>
+                {/* Static subtle silver border */}
+                <View style={premiumStyles.secondaryBorderFill}>
+                    <LinearGradient
+                        colors={['#C8C8CE', '#A8A8B0', '#C8C8CE']}
+                        start={{ x: 0, y: 0 }}
+                        end={{ x: 1, y: 1 }}
+                        style={StyleSheet.absoluteFill}
+                    />
+                </View>
+                <View style={premiumStyles.btnInner}>
+                    <LinearGradient
+                        colors={['#FAFAFA', '#ECEDF0', '#DCDCE0']}
+                        start={{ x: 0, y: 0 }}
+                        end={{ x: 0.6, y: 1 }}
+                        style={StyleSheet.absoluteFill}
+                    />
+                    <TouchableOpacity
+                        activeOpacity={0.88}
+                        style={premiumStyles.btnHitArea}
+                        onPressIn={() => animatePress(pressScaleSecondary, true)}
+                        onPressOut={() => animatePress(pressScaleSecondary, false)}
+                        onPress={onGift}
+                    >
+                        <Text style={premiumStyles.secondaryText}>Dağıt</Text>
+                    </TouchableOpacity>
+                </View>
+            </Animated.View>
+
+            {/* ── PRIMARY BUTTON: Etkinleştir ── */}
+            <Animated.View style={[
+                premiumStyles.btnOuter,
+                premiumStyles.btnPrimaryOuter,
+                isLower && premiumStyles.btnDisabledOuter,
+                { transform: [{ scale: pressScalePrimary }] },
+            ]}>
+                {/* Pulsing gold glow behind the button */}
+                {!reduceMotion && !isLower && (
+                    <Animated.View style={[premiumStyles.primaryGlow, { opacity: pulseOpacity }]} />
+                )}
+
+                {/* Rotating gold highlight on border — only a segment is bright */}
+                {!reduceMotion && !isLower && (
+                    <Animated.View style={[premiumStyles.borderSpinner, { transform: [{ rotate: spin }] }]}>
+                        <LinearGradient
+                            colors={borderHighlightGradient}
+                            locations={borderHighlightLocations}
+                            start={{ x: 0, y: 0 }}
+                            end={{ x: 1, y: 1 }}
+                            style={StyleSheet.absoluteFill}
+                        />
+                    </Animated.View>
+                )}
+
+                {/* Static dark base border for lower/disabled state */}
+                {isLower && (
+                    <View style={premiumStyles.staticBorderFill}>
+                        <LinearGradient
+                            colors={['#444448', '#333338', '#444448']}
+                            start={{ x: 0, y: 0 }}
+                            end={{ x: 1, y: 1 }}
+                            style={StyleSheet.absoluteFill}
+                        />
+                    </View>
+                )}
+
+                {/* Static dark base border for active state (visible when highlight segment is not covering) */}
+                {!isLower && !reduceMotion && (
+                    <View style={[premiumStyles.staticBorderFill, { zIndex: -1 }]}>
+                        <LinearGradient
+                            colors={['#3D3220', '#2E2518', '#3D3220']}
+                            start={{ x: 0, y: 0 }}
+                            end={{ x: 1, y: 1 }}
+                            style={StyleSheet.absoluteFill}
+                        />
+                    </View>
+                )}
+
+                {/* Clean button surface — no overlays, no shimmer, no highlight lines */}
+                <View style={[premiumStyles.btnInner, isLower && premiumStyles.btnInnerDisabled]}>
+                    <LinearGradient
+                        colors={isLower
+                            ? ['#55555A', '#3A3B40', '#292A2F']
+                            : ['#F2DEB8', '#D6A45E', '#A9742E']
+                        }
+                        locations={isLower ? [0, 0.5, 1] : [0, 0.45, 1]}
+                        start={{ x: 0, y: 0 }}
+                        end={{ x: 1, y: 0.7 }}
+                        style={StyleSheet.absoluteFill}
+                    />
+                    <TouchableOpacity
+                        activeOpacity={0.82}
+                        disabled={disabled || isLower}
+                        style={premiumStyles.btnHitArea}
+                        onPressIn={() => animatePress(pressScalePrimary, true)}
+                        onPressOut={() => animatePress(pressScalePrimary, false)}
+                        onPress={onActivate}
+                    >
+                        {disabled ? (
+                            <ActivityIndicator size="small" color="#FFFFFF" />
+                        ) : (
+                            <Text style={[
+                                premiumStyles.primaryText,
+                                isLower && premiumStyles.primaryTextDisabled,
+                            ]}>
+                                {isLower ? 'Aktif Değil' : isOwned ? 'Yenile' : 'Etkinleştir'}
+                            </Text>
+                        )}
+                    </TouchableOpacity>
+                </View>
+            </Animated.View>
+        </View>
+    );
+}
+
+const PREMIUM_BTN_HEIGHT = 58;
+const PREMIUM_BTN_RADIUS = 29;
+const PREMIUM_BORDER_WIDTH = 2;
+const SPINNER_SIZE = width * 1.4;
+
+const premiumStyles = StyleSheet.create({
+    buttonsRow: {
+        flexDirection: 'row',
+        gap: 14,
+        width: '100%',
+    },
+
+    // ── Outer container (clips the spinning border) ──
+    btnOuter: {
+        height: PREMIUM_BTN_HEIGHT,
+        borderRadius: PREMIUM_BTN_RADIUS,
+        overflow: 'hidden',
+    },
+    btnSecondaryOuter: {
+        flex: 0.42,
+    },
+    btnPrimaryOuter: {
+        flex: 0.58,
+    },
+    btnDisabledOuter: {
+        opacity: 0.5,
+    },
+
+    // ── Inner surface (inset to reveal border ring) ──
+    btnInner: {
+        position: 'absolute',
+        top: PREMIUM_BORDER_WIDTH,
+        left: PREMIUM_BORDER_WIDTH,
+        right: PREMIUM_BORDER_WIDTH,
+        bottom: PREMIUM_BORDER_WIDTH,
+        borderRadius: PREMIUM_BTN_RADIUS - PREMIUM_BORDER_WIDTH,
+        overflow: 'hidden',
+    },
+    btnInnerDisabled: {
+        top: 1,
+        left: 1,
+        right: 1,
+        bottom: 1,
+    },
+
+    // ── Spinning gradient square (only bright segment visible as border highlight) ──
+    borderSpinner: {
+        position: 'absolute',
+        width: SPINNER_SIZE,
+        height: SPINNER_SIZE,
+        left: -(SPINNER_SIZE - width) / 2,
+        top: -(SPINNER_SIZE - PREMIUM_BTN_HEIGHT) / 2,
+    },
+
+    // ── Static border fill (base border color) ──
+    staticBorderFill: {
+        ...StyleSheet.absoluteFillObject,
+    },
+
+    // ── Secondary button static silver border ──
+    secondaryBorderFill: {
+        ...StyleSheet.absoluteFillObject,
+    },
+
+    // ── Glow behind primary button ──
+    primaryGlow: {
+        position: 'absolute',
+        left: -5,
+        right: -5,
+        top: -5,
+        bottom: -5,
+        borderRadius: PREMIUM_BTN_RADIUS + 5,
+        backgroundColor: 'rgba(255, 240, 160, 0.12)',
+        shadowColor: '#D9B24C',
+        shadowOffset: { width: 0, height: 0 },
+        shadowOpacity: 0.45,
+        shadowRadius: 14,
+        elevation: 6,
+    },
+
+    // ── Hit area & text ──
+    btnHitArea: {
+        flex: 1,
+        alignItems: 'center',
+        justifyContent: 'center',
+        zIndex: 2,
+    },
+    secondaryText: {
+        color: '#3A3A3E',
+        fontSize: 16,
+        fontWeight: '800',
+    },
+    primaryText: {
+        color: '#FFFEF5',
+        fontSize: 17,
+        fontWeight: '900',
+        letterSpacing: 0.3,
+        textShadowColor: 'rgba(80, 45, 8, 0.5)',
+        textShadowOffset: { width: 0, height: 1 },
+        textShadowRadius: 2,
+    },
+    primaryTextDisabled: {
+        color: 'rgba(255,255,255,0.55)',
+        textShadowColor: 'transparent',
+    },
+});
+
+export function NobilityBottomPurchaseBar({
+    title,
+    theme,
+    actionLoading,
+    isOwned,
+    isLower,
+    onGift,
+    onActivate,
+    bottomInset,
+    reduceMotion,
+    animatedStyle,
+}) {
+    return (
+        <Animated.View style={[styles.purchaseBarPosition, { paddingBottom: Math.max(bottomInset, 10) }, animatedStyle]}>
+            <BlurView intensity={42} tint="dark" style={styles.purchaseBar}>
+                <LinearGradient
+                    colors={['rgba(39,40,48,0.96)', 'rgba(17,18,24,0.98)', 'rgba(10,11,16,0.99)']}
+                    style={StyleSheet.absoluteFill}
+                />
+                <View style={styles.priceRow}>
+                    <View style={[styles.coinMark, { borderColor: theme.accent }]}>
+                        <Ionicons name="diamond" size={12} color={theme.accent} />
+                    </View>
+                    <Text style={styles.priceText}>{formatPrice(title?.price)} Altın</Text>
+                    <Text style={styles.durationText}>/ {title?.duration_days || 30} Gün</Text>
+                    <Ionicons name="information-circle-outline" size={17} color="rgba(255,255,255,0.48)" />
+                </View>
+                <Text style={styles.purchaseDescription}>
+                    Asalet unvanı 30 gün aktif kalır ve otomatik yenilenmez.
+                </Text>
+                <NobilityDualActionButtons
+                    disabled={actionLoading}
+                    isOwned={isOwned}
+                    isLower={isLower}
+                    onGift={onGift}
+                    onActivate={onActivate}
+                    reduceMotion={reduceMotion}
+                    theme={theme}
+                />
+            </BlurView>
+        </Animated.View>
+    );
+}
+
+function PurchaseConfirmationModal({ visible, title, theme, isOwned, loading, onClose, onConfirm }) {
+    return (
+        <Modal visible={visible} transparent statusBarTranslucent animationType="fade" onRequestClose={onClose}>
+            <View style={styles.modalRoot}>
+                <Pressable style={StyleSheet.absoluteFill} onPress={loading ? undefined : onClose} />
+                <BlurView pointerEvents="none" intensity={24} tint="dark" style={StyleSheet.absoluteFill} />
+                <View style={[styles.modalCard, { borderColor: `${theme.accent}66` }]}>
+                    <LinearGradient
+                        colors={['#29272A', '#15151A', '#0B0C10']}
+                        style={StyleSheet.absoluteFill}
+                    />
+                    <TouchableOpacity disabled={loading} style={styles.modalClose} onPress={onClose}>
+                        <Ionicons name="close" size={21} color="rgba(255,255,255,0.62)" />
+                    </TouchableOpacity>
+                    <View style={[styles.modalCrest, { borderColor: theme.accent, backgroundColor: theme.glow }]}>
+                        <Ionicons name={isOwned ? 'refresh' : 'shield-checkmark'} size={28} color={theme.accent} />
+                    </View>
+                    <Text style={styles.modalEyebrow}>ASALET MERKEZİ</Text>
+                    <Text style={styles.modalTitle}>{isOwned ? 'Unvanı Yenile' : `${title?.name} Unvanını Etkinleştir`}</Text>
+                    <Text style={styles.modalDescription}>
+                        {isOwned
+                            ? 'Mevcut unvan sürene 30 gün daha eklenecek.'
+                            : 'Bu işlem seçili unvanı 30 gün boyunca hesabında aktif eder.'}
+                    </Text>
+                    <View style={styles.modalPriceLine}>
+                        <Text style={[styles.modalPrice, { color: theme.accent }]}>{formatPrice(title?.price)} Altın</Text>
+                        <Text style={styles.modalPriceCaption}>bakiyenden düşülecek</Text>
+                    </View>
+                    <View style={styles.modalActions}>
+                        <TouchableOpacity disabled={loading} style={styles.modalCancel} onPress={onClose}>
+                            <Text style={styles.modalCancelText}>Vazgeç</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity disabled={loading} style={styles.modalConfirmShell} onPress={onConfirm}>
+                            <LinearGradient colors={['#F0DFC9', '#C79465', '#8A5B38']} style={styles.modalConfirm}>
+                                {loading
+                                    ? <ActivityIndicator size="small" color="#21150C" />
+                                    : <Text style={styles.modalConfirmText}>{isOwned ? 'Yenile' : 'Onayla'}</Text>}
+                            </LinearGradient>
+                        </TouchableOpacity>
+                    </View>
+                </View>
+            </View>
+        </Modal>
+    );
+}
 
 export default function NobilityScreen({ navigation }) {
     const { showAlert } = useAlert();
+    const insets = useSafeAreaInsets();
     const [loading, setLoading] = useState(true);
     const [actionLoading, setActionLoading] = useState(false);
-    const [titles, setTitles] = useState([]);
+    const [titles, setTitles] = useState(DEFAULT_TITLES);
+    const [selectedTitle, setSelectedTitle] = useState(DEFAULT_TITLES[0]);
     const [activeNobility, setActiveNobility] = useState(null);
     const [userBalance, setUserBalance] = useState(0);
-    const [selectedTitle, setSelectedTitle] = useState(null);
     const [token, setToken] = useState('');
+    const [confirmationVisible, setConfirmationVisible] = useState(false);
+    const [reduceMotion, setReduceMotion] = useState(false);
+    const chromeEntrance = useRef(new Animated.Value(0)).current;
+    const contentEntrance = useRef(new Animated.Value(0)).current;
+    const purchaseEntrance = useRef(new Animated.Value(0)).current;
+    const contentTransitionOpacity = useRef(new Animated.Value(1)).current;
+    const contentTransitionScale = useRef(new Animated.Value(1)).current;
+    const titleTransition = useRef(null);
+
+    const contentOpacity = useMemo(
+        () => Animated.multiply(contentEntrance, contentTransitionOpacity),
+        [contentEntrance, contentTransitionOpacity],
+    );
 
     useEffect(() => {
         loadData();
     }, []);
 
+    useEffect(() => {
+        let mounted = true;
+        AccessibilityInfo.isReduceMotionEnabled().then((enabled) => {
+            if (mounted) setReduceMotion(enabled);
+        });
+        const subscription = AccessibilityInfo.addEventListener('reduceMotionChanged', setReduceMotion);
+        return () => {
+            mounted = false;
+            subscription?.remove?.();
+        };
+    }, []);
+
+    useEffect(() => {
+        if (loading) return undefined;
+        if (reduceMotion) {
+            titleTransition.current?.stop?.();
+            chromeEntrance.setValue(1);
+            contentEntrance.setValue(1);
+            purchaseEntrance.setValue(1);
+            contentTransitionOpacity.setValue(1);
+            contentTransitionScale.setValue(1);
+            return undefined;
+        }
+
+        chromeEntrance.setValue(0);
+        contentEntrance.setValue(0);
+        purchaseEntrance.setValue(0);
+        const entrance = Animated.stagger(90, [
+            Animated.timing(chromeEntrance, {
+                toValue: 1,
+                duration: 360,
+                easing: Easing.out(Easing.cubic),
+                useNativeDriver: true,
+            }),
+            Animated.spring(contentEntrance, {
+                toValue: 1,
+                speed: 16,
+                bounciness: 4,
+                useNativeDriver: true,
+            }),
+            Animated.spring(purchaseEntrance, {
+                toValue: 1,
+                speed: 18,
+                bounciness: 3,
+                useNativeDriver: true,
+            }),
+        ]);
+        entrance.start();
+        return () => entrance.stop();
+    }, [
+        chromeEntrance,
+        contentEntrance,
+        contentTransitionOpacity,
+        contentTransitionScale,
+        loading,
+        purchaseEntrance,
+        reduceMotion,
+    ]);
+
+    useEffect(() => () => titleTransition.current?.stop?.(), []);
+
     const loadData = async () => {
-        setLoading(true);
         try {
             const userToken = await AsyncStorage.getItem('token');
-            setToken(userToken);
+            setToken(userToken || '');
+            if (!userToken) return;
 
-            const headers = { Authorization: `Bearer ${userToken}` };
+            const config = { headers: { Authorization: `Bearer ${userToken}` } };
+            const [meResult, balanceResult, titlesResult] = await Promise.allSettled([
+                axios.get(`${API_URL}/nobility/me`, config),
+                axios.get(`${API_URL}/users/balance`, config),
+                axios.get(`${API_URL}/nobility/titles`, config),
+            ]);
 
-            // Fetch active nobility
-            const meRes = await axios.get(`${API_URL}/nobility/me`, { headers });
-            setActiveNobility(meRes.data);
+            const active = meResult.status === 'fulfilled' ? meResult.value.data : null;
+            const remoteTitles = titlesResult.status === 'fulfilled' ? titlesResult.value.data : null;
 
-            // Fetch balance
-            const balRes = await axios.get(`${API_URL}/users/balance`, { headers });
-            setUserBalance(balRes.data.balance || 0);
-
-            // Fetch titles
-            const titlesRes = await axios.get(`${API_URL}/nobility/titles`, { headers });
-            setTitles(titlesRes.data);
-
-            // Set default selected title (either active title or Knight)
-            if (meRes.data) {
-                const active = titlesRes.data.find(t => t.id === meRes.data.title_id);
-                setSelectedTitle(active || titlesRes.data[0]);
-            } else {
-                setSelectedTitle(titlesRes.data[0]);
+            setActiveNobility(active);
+            if (balanceResult.status === 'fulfilled') {
+                setUserBalance(Number(balanceResult.value.data?.balance) || 0);
             }
-        } catch (err) {
-            console.error('[Nobility Screen] Load Error:', err);
-            showAlert({ title: 'Hata', message: 'Asalet bilgileri yüklenemedi.', type: 'error' });
+            if (Array.isArray(remoteTitles) && remoteTitles.length) {
+                setTitles(remoteTitles);
+                const initial = active
+                    ? remoteTitles.find((item) => Number(item.id) === Number(active.title_id))
+                    : null;
+                setSelectedTitle(initial || remoteTitles[0]);
+            }
+        } catch (error) {
+            console.error('[Nobility Screen] Load Error:', error);
         } finally {
             setLoading(false);
         }
     };
 
-    const handlePurchase = async (title) => {
-        if (actionLoading) return;
+    const theme = useMemo(() => TITLE_THEMES[getTitleKey(selectedTitle)], [selectedTitle]);
+    const isOwned = Boolean(activeNobility && Number(activeNobility.title_id) === Number(selectedTitle?.id));
+    const isLower = Boolean(activeNobility && Number(selectedTitle?.level) < Number(activeNobility.level));
 
-        if (userBalance < title.price) {
-            showAlert({ title: 'Yetersiz Bakiye', message: 'Bu unvanı almak için yeterli altının yok.', type: 'error' });
+    const handleTitleSelect = (title) => {
+        if (Number(title?.id) === Number(selectedTitle?.id)) return;
+        if (reduceMotion) {
+            setSelectedTitle(title);
             return;
         }
 
-        setActionLoading(true);
-        try {
-            const headers = { Authorization: `Bearer ${token}` };
-            const isUpgrade = activeNobility && title.level > activeNobility.level;
-            
-            const res = await axios.post(`${API_URL}/nobility/purchase`, { titleId: title.id }, { headers });
-            
-            showAlert({
-                title: 'Başarılı!',
-                message: res.data.message || (isUpgrade ? 'Asalet unvanın yükseltildi.' : 'Asalet unvanın aktif edildi.'),
-                type: 'success'
-            });
-
-            // Update local state
-            setActiveNobility(res.data.nobility);
-            setUserBalance(res.data.new_balance);
-        } catch (err) {
-            const errorMsg = err.response?.data?.error || 'Satın alma işlemi başarısız oldu.';
-            showAlert({ title: 'İşlem Başarısız', message: errorMsg, type: 'error' });
-        } finally {
-            setActionLoading(false);
-        }
+        titleTransition.current?.stop?.();
+        titleTransition.current = Animated.parallel([
+            Animated.timing(contentTransitionOpacity, {
+                toValue: 0,
+                duration: 120,
+                easing: Easing.in(Easing.quad),
+                useNativeDriver: true,
+            }),
+            Animated.timing(contentTransitionScale, {
+                toValue: 0.985,
+                duration: 120,
+                easing: Easing.in(Easing.quad),
+                useNativeDriver: true,
+            }),
+        ]);
+        titleTransition.current.start(({ finished }) => {
+            if (!finished) return;
+            setSelectedTitle(title);
+            contentTransitionScale.setValue(1.015);
+            titleTransition.current = Animated.parallel([
+                Animated.timing(contentTransitionOpacity, {
+                    toValue: 1,
+                    duration: 240,
+                    easing: Easing.out(Easing.cubic),
+                    useNativeDriver: true,
+                }),
+                Animated.spring(contentTransitionScale, {
+                    toValue: 1,
+                    speed: 20,
+                    bounciness: 2,
+                    useNativeDriver: true,
+                }),
+            ]);
+            titleTransition.current.start();
+        });
     };
 
-    const handleRenew = async (title) => {
-        if (actionLoading) return;
-
-        if (userBalance < title.price) {
-            showAlert({ title: 'Yetersiz Bakiye', message: 'Bu unvanı almak için yeterli altının yok.', type: 'error' });
+    const runPurchase = async () => {
+        if (!selectedTitle || actionLoading) return;
+        if (userBalance < Number(selectedTitle.price)) {
+            setConfirmationVisible(false);
+            showAlert({
+                title: 'Yetersiz Bakiye',
+                message: `Bu unvan için ${formatPrice(selectedTitle.price)} altın gerekiyor.`,
+                type: 'error',
+            });
             return;
         }
 
         setActionLoading(true);
         try {
-            const headers = { Authorization: `Bearer ${token}` };
-            const res = await axios.post(`${API_URL}/nobility/renew`, { titleId: title.id }, { headers });
-            
+            const endpoint = isOwned ? 'renew' : 'purchase';
+            const response = await axios.post(
+                `${API_URL}/nobility/${endpoint}`,
+                { titleId: selectedTitle.id },
+                { headers: { Authorization: `Bearer ${token}` } },
+            );
+            setActiveNobility(response.data.nobility);
+            setUserBalance(Number(response.data.new_balance) || 0);
+            setConfirmationVisible(false);
             showAlert({
-                title: 'Başarılı!',
-                message: 'Asalet unvanın yenilendi.',
-                type: 'success'
+                title: isOwned ? 'Süre Uzatıldı' : 'Unvan Etkinleştirildi',
+                message: response.data.message || `${selectedTitle.name} unvanın artık aktif.`,
+                type: 'success',
             });
-
-            // Update local state
-            setActiveNobility(res.data.nobility);
-            setUserBalance(res.data.new_balance);
-        } catch (err) {
-            const errorMsg = err.response?.data?.error || 'Yenileme işlemi başarısız oldu.';
-            showAlert({ title: 'İşlem Başarısız', message: errorMsg, type: 'error' });
+        } catch (error) {
+            showAlert({
+                title: 'İşlem Başarısız',
+                message: error.response?.data?.error || 'Satın alma işlemi tamamlanamadı.',
+                type: 'error',
+            });
         } finally {
             setActionLoading(false);
         }
@@ -197,465 +1068,426 @@ export default function NobilityScreen({ navigation }) {
 
     if (loading) {
         return (
-            <View style={styles.loadingContainer}>
-                <LinearGradient colors={['#0f172a', '#020617']} style={StyleSheet.absoluteFill} />
-                <ActivityIndicator size="large" color="#FFD166" />
-                <Text style={styles.loadingText}>Asalet yükleniyor...</Text>
+            <View style={styles.loadingRoot}>
+                <LinearGradient colors={['#17130F', '#080A0E', '#050505']} style={StyleSheet.absoluteFill} />
+                <View style={styles.loadingCrest}><Ionicons name="shield" size={30} color="#C69A6B" /></View>
+                <ActivityIndicator size="small" color="#C69A6B" />
+                <Text style={styles.loadingText}>Asalet Merkezi hazırlanıyor</Text>
             </View>
         );
     }
 
-    const activeTheme = TITLE_THEMES[selectedTitle?.key] || TITLE_THEMES.knight;
-    const isOwned = activeNobility && activeNobility.title_id === selectedTitle?.id;
-    const isHigher = activeNobility && selectedTitle?.level > activeNobility.level;
-    const isLower = activeNobility && selectedTitle?.level < activeNobility.level;
-
-    // Remaining days calculation
-    let remainingDays = 0;
-    if (activeNobility) {
-        const expires = new Date(activeNobility.expires_at);
-        const diffTime = expires.getTime() - new Date().getTime();
-        remainingDays = Math.max(0, Math.ceil(diffTime / (1000 * 60 * 60 * 24)));
-    }
-
     return (
-        <View style={styles.container}>
-            <StatusBar style="light" />
-            <LinearGradient
-                colors={[`${activeTheme.accent}15`, '#020617']}
+        <View style={styles.root}>
+            <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
+            <LinearGradient colors={theme.gradient} style={StyleSheet.absoluteFill} />
+            <ImageBackground
+                source={theme.backgroundImage || require('../../assets/nobility/royal_background.png')}
+                resizeMode="cover"
+                imageStyle={[styles.backgroundImage, { opacity: theme.backgroundImageOpacity ?? 0.045 }]}
                 style={StyleSheet.absoluteFill}
             />
-
-            <SafeAreaView style={styles.safeArea}>
-                {/* Header */}
-                <View style={styles.header}>
-                    <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
-                        <Ionicons name="chevron-back" size={28} color="white" />
-                    </TouchableOpacity>
-                    <Text style={styles.headerTitle}>ASALET MERKEZİ</Text>
-                    <View style={styles.balanceContainer}>
-                        <Ionicons name="logo-bitcoin" size={16} color="#FFD166" />
-                        <Text style={styles.balanceText}>{userBalance}</Text>
+            <LinearGradient
+                pointerEvents="none"
+                colors={[`${theme.accent}16`, 'transparent', `${theme.accentSoft}12`, 'transparent']}
+                locations={[0, 0.3, 0.7, 1]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={StyleSheet.absoluteFill}
+            />
+            <PremiumParticles accentColor={theme.accent} reduceMotion={reduceMotion} />
+            <SafeAreaView edges={['top']} style={styles.safeArea}>
+                <Animated.View style={{
+                    opacity: chromeEntrance,
+                    transform: [{
+                        translateY: chromeEntrance.interpolate({ inputRange: [0, 1], outputRange: [-12, 0] }),
+                    }],
+                }}>
+                    <View style={styles.header}>
+                        <TouchableOpacity activeOpacity={0.72} onPress={() => navigation.goBack()} style={styles.headerButton}>
+                            <Ionicons name="chevron-back" size={24} color="#E8E8EA" />
+                        </TouchableOpacity>
+                        <View style={styles.headerTitleWrap}>
+                            <Text style={[styles.headerEyebrow, { color: theme.accent }]}>PREMIUM STATÜ</Text>
+                            <Text style={styles.headerTitle}>Asalet Merkezi</Text>
+                        </View>
+                        <TouchableOpacity
+                            activeOpacity={0.72}
+                            style={styles.headerButton}
+                            onPress={() => showAlert({
+                                title: 'Asalet Unvanları',
+                                message: 'Unvanlar 30 gün aktif kalır. Daha yüksek bir mertebeye dilediğin zaman geçebilirsin.',
+                                type: 'info',
+                            })}
+                        >
+                            <Ionicons name="help" size={21} color="#E8E8EA" />
+                        </TouchableOpacity>
                     </View>
-                </View>
+
+                    <NobilityTabs
+                        titles={titles}
+                        selectedTitle={selectedTitle}
+                        onSelect={handleTitleSelect}
+                        accent={theme.accent}
+                    />
+                </Animated.View>
 
                 <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-                    
-                    {/* Active Nobility Status */}
-                    <Motion.SlideUp delay={100}>
-                        <View style={styles.activeSection}>
-                            {activeNobility ? (
-                                <LinearGradient
-                                    colors={['rgba(255,255,255,0.03)', 'rgba(255,255,255,0.01)']}
-                                    style={styles.activeCard}
-                                >
-                                    <View style={styles.activeCardHeader}>
-                                        <View style={[styles.badgeIndicator, { backgroundColor: TITLE_THEMES[activeNobility.key]?.accent }]}>
-                                            <Ionicons name="shield-checkmark" size={18} color="white" />
-                                        </View>
-                                        <View style={styles.activeTitleInfo}>
-                                            <Text style={styles.activeLabel}>Aktif Unvanın</Text>
-                                            <Text style={[styles.activeTitleName, { color: activeNobility.name_color }]}>
-                                                {activeNobility.name}
-                                            </Text>
-                                        </View>
-                                        <View style={styles.remainingBadge}>
-                                            <Text style={styles.remainingText}>{remainingDays} Gün kaldı</Text>
-                                        </View>
-                                    </View>
-
-                                    <View style={styles.activeCardFooter}>
-                                        <Text style={styles.purchasedPrice}>
-                                            Ödenen Fiyat: {activeNobility.purchased_price} Altın
-                                        </Text>
-                                        <TouchableOpacity
-                                            style={styles.quickRenewButton}
-                                            onPress={() => {
-                                                const titleObj = titles.find(t => t.id === activeNobility.title_id);
-                                                if (titleObj) handleRenew(titleObj);
-                                            }}
-                                            disabled={actionLoading}
-                                        >
-                                            <Text style={styles.quickRenewText}>Yenile</Text>
-                                        </TouchableOpacity>
-                                    </View>
-                                </LinearGradient>
-                            ) : (
-                                <View style={styles.noActiveCard}>
-                                    <Text style={styles.noActiveTitle}>Henüz bir asalet unvanın yok.</Text>
-                                    <Text style={styles.noActiveSubtitle}>
-                                        Aşağıdan bir unvan seçerek profilinde prestijini göster.
-                                    </Text>
-                                </View>
-                            )}
-                        </View>
-                    </Motion.SlideUp>
-
-                    {/* Premium Title Carousel / Selector */}
-                    <View style={styles.selectorContainer}>
-                        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.selectorScroll}>
-                            {titles.map((title) => {
-                                const theme = TITLE_THEMES[title.key] || TITLE_THEMES.knight;
-                                const isSelected = selectedTitle?.id === title.id;
-                                return (
-                                    <TouchableOpacity
-                                        key={title.id}
-                                        onPress={() => setSelectedTitle(title)}
-                                        style={[
-                                            styles.titleSelectorCard,
-                                            isSelected && { borderColor: theme.accent, shadowColor: theme.glow, elevation: 10 }
-                                        ]}
-                                    >
-                                        <LinearGradient
-                                            colors={isSelected ? theme.gradient : ['rgba(255,255,255,0.02)', 'rgba(255,255,255,0.01)']}
-                                            style={styles.selectorCardGradient}
-                                        >
-                                            <Ionicons name="ribbon-outline" size={24} color={theme.accent} />
-                                            <Text style={[styles.selectorTitleName, { color: isSelected ? 'white' : '#64748b' }]}>
-                                                {title.name}
-                                            </Text>
-                                            <Text style={styles.selectorLevelText}>Lvl {title.level}</Text>
-                                        </LinearGradient>
-                                    </TouchableOpacity>
-                                );
-                            })}
-                        </ScrollView>
-                    </View>
-
-                    {/* Big Showcase Card for selected title */}
-                    {selectedTitle && (
-                        <Motion.Bounce visible={true}>
-                            <View style={[styles.showcaseWrapper, { shadowColor: activeTheme.glow }]}>
-                                <LinearGradient
-                                    colors={activeTheme.gradient}
-                                    style={styles.showcaseCard}
-                                >
-                                    {/* Accent border glow */}
-                                    <View style={[styles.showcaseHeader, { borderBottomColor: `${activeTheme.accent}30` }]}>
-                                        <View>
-                                            <Text style={[styles.showcaseName, { color: activeTheme.accent }]}>
-                                                {selectedTitle.name}
-                                            </Text>
-                                            <Text style={styles.showcaseDuration}>Geçerlilik: {selectedTitle.duration_days} Gün</Text>
-                                        </View>
-                                        <View style={styles.showcasePriceContainer}>
-                                            <Ionicons name="logo-bitcoin" size={18} color="#FFD166" />
-                                            <Text style={styles.showcasePrice}>{selectedTitle.price}</Text>
-                                        </View>
-                                    </View>
-
-                                    <View style={styles.benefitsSection}>
-                                        <Text style={styles.benefitsHeading}>UNVAN AYRICALIKLARI</Text>
-                                        {activeTheme.benefits.map((benefit, i) => (
-                                            <View key={i} style={styles.benefitRow}>
-                                                <Ionicons name="checkmark-circle-outline" size={16} color={activeTheme.accent} />
-                                                <Text style={styles.benefitText}>{benefit}</Text>
-                                            </View>
-                                        ))}
-                                    </View>
-
-                                    {/* Action button inside card */}
-                                    <TouchableOpacity
-                                        style={styles.actionButton}
-                                        onPress={() => {
-                                            if (isOwned) {
-                                                handleRenew(selectedTitle);
-                                            } else {
-                                                handlePurchase(selectedTitle);
-                                            }
-                                        }}
-                                        disabled={actionLoading || isLower}
-                                    >
-                                        <LinearGradient
-                                            colors={isLower ? ['#334155', '#1e293b'] : (isOwned ? ['#059669', '#065f46'] : [activeTheme.accent, `${activeTheme.accent}aa`])}
-                                            start={{ x: 0, y: 0 }}
-                                            end={{ x: 1, y: 0 }}
-                                            style={styles.actionGradient}
-                                        >
-                                            {actionLoading ? (
-                                                <ActivityIndicator size="small" color="white" />
-                                            ) : (
-                                                <Text style={[styles.actionButtonText, isLower && { color: '#64748b' }]}>
-                                                    {isOwned ? 'SÜREYİ UZAT (YENİLE)' : (isHigher ? 'UNVANI YÜKSELT' : (isLower ? 'Zaten Üst Unvana Sahipsin' : 'SATIN AL'))}
-                                                </Text>
-                                            )}
-                                        </LinearGradient>
-                                    </TouchableOpacity>
-                                </LinearGradient>
-                            </View>
-                        </Motion.Bounce>
-                    )}
-
+                    <Animated.View style={{
+                        opacity: contentOpacity,
+                        transform: [
+                            {
+                                scale: contentEntrance.interpolate({ inputRange: [0, 1], outputRange: [0.965, 1] }),
+                            },
+                            { scale: contentTransitionScale },
+                        ],
+                    }}>
+                        <NobilityHeroPreview title={selectedTitle} theme={theme} reduceMotion={reduceMotion} />
+                        <NobilityBenefitsHeader theme={theme} />
+                        <NobilityBenefitsGrid theme={theme} reduceMotion={reduceMotion} />
+                    </Animated.View>
                 </ScrollView>
+
+                <NobilityBottomPurchaseBar
+                    title={selectedTitle}
+                    theme={theme}
+                    actionLoading={actionLoading}
+                    isOwned={isOwned}
+                    isLower={isLower}
+                    bottomInset={insets.bottom}
+                    reduceMotion={reduceMotion}
+                    animatedStyle={{
+                        opacity: purchaseEntrance,
+                        transform: [{
+                            translateY: purchaseEntrance.interpolate({ inputRange: [0, 1], outputRange: [54, 0] }),
+                        }],
+                    }}
+                    onGift={() => showAlert({
+                        title: 'Hediye Et',
+                        message: 'Unvan hediye etme seçeneği yakında kullanıma açılacak.',
+                        type: 'info',
+                    })}
+                    onActivate={() => setConfirmationVisible(true)}
+                />
             </SafeAreaView>
+
+            <PurchaseConfirmationModal
+                visible={confirmationVisible}
+                title={selectedTitle}
+                theme={theme}
+                isOwned={isOwned}
+                loading={actionLoading}
+                onClose={() => setConfirmationVisible(false)}
+                onConfirm={runPurchase}
+            />
         </View>
     );
 }
 
 const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-        backgroundColor: '#020617',
-    },
-    safeArea: {
-        flex: 1,
-    },
-    loadingContainer: {
-        flex: 1,
-        justifyContent: 'center',
+    root: { flex: 1, backgroundColor: '#050506' },
+    safeArea: { flex: 1 },
+    backgroundImage: { opacity: 0.045 },
+    loadingRoot: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 10 },
+    loadingCrest: {
+        width: 64,
+        height: 64,
+        borderRadius: 32,
+        borderWidth: 1,
+        borderColor: 'rgba(198,154,107,0.45)',
+        backgroundColor: 'rgba(198,154,107,0.08)',
         alignItems: 'center',
+        justifyContent: 'center',
+        marginBottom: 6,
     },
-    loadingText: {
-        color: 'white',
-        marginTop: 10,
-        fontSize: 14,
-        fontWeight: 'bold',
-    },
+    loadingText: { color: 'rgba(255,255,255,0.58)', fontSize: 13, letterSpacing: 0.4 },
     header: {
+        height: 62,
+        paddingHorizontal: 16,
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'space-between',
-        paddingHorizontal: 20,
-        paddingVertical: 15,
     },
-    backButton: {
-        padding: 5,
-    },
-    headerTitle: {
-        color: 'white',
-        fontSize: 14,
-        fontWeight: '900',
-        letterSpacing: 2,
-    },
-    balanceContainer: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: 'rgba(255, 209, 102, 0.1)',
-        paddingHorizontal: 12,
-        paddingVertical: 6,
+    headerButton: {
+        width: 40,
+        height: 40,
         borderRadius: 20,
         borderWidth: 1,
-        borderColor: 'rgba(255, 209, 102, 0.2)',
-    },
-    balanceText: {
-        color: '#FFD166',
-        fontSize: 13,
-        fontWeight: 'bold',
-        marginLeft: 5,
-    },
-    scrollContent: {
-        paddingBottom: 40,
-    },
-    activeSection: {
-        paddingHorizontal: 20,
-        marginTop: 10,
-        marginBottom: 20,
-    },
-    activeCard: {
-        borderRadius: 24,
-        padding: 20,
-        borderWidth: 1,
-        borderColor: 'rgba(255,255,255,0.06)',
-    },
-    activeCardHeader: {
-        flexDirection: 'row',
-        alignItems: 'center',
-    },
-    badgeIndicator: {
-        width: 36,
-        height: 36,
-        borderRadius: 18,
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    activeTitleInfo: {
-        flex: 1,
-        marginLeft: 15,
-    },
-    activeLabel: {
-        color: '#64748b',
-        fontSize: 11,
-        fontWeight: '700',
-    },
-    activeTitleName: {
-        fontSize: 18,
-        fontWeight: 'bold',
-        marginTop: 2,
-    },
-    remainingBadge: {
-        backgroundColor: 'rgba(255,255,255,0.05)',
-        paddingHorizontal: 12,
-        paddingVertical: 6,
-        borderRadius: 12,
-    },
-    remainingText: {
-        color: 'white',
-        fontSize: 12,
-        fontWeight: 'bold',
-    },
-    activeCardFooter: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginTop: 20,
-        paddingTop: 15,
-        borderTopWidth: 1,
-        borderTopColor: 'rgba(255,255,255,0.05)',
-    },
-    purchasedPrice: {
-        color: '#64748b',
-        fontSize: 12,
-    },
-    quickRenewButton: {
-        paddingHorizontal: 16,
-        paddingVertical: 8,
-        borderRadius: 10,
-        backgroundColor: 'rgba(255,255,255,0.05)',
-    },
-    quickRenewText: {
-        color: 'white',
-        fontSize: 12,
-        fontWeight: 'bold',
-    },
-    noActiveCard: {
-        backgroundColor: 'rgba(255,255,255,0.01)',
-        borderRadius: 24,
-        padding: 24,
-        borderWidth: 1.5,
-        borderColor: 'rgba(255,255,255,0.03)',
-        alignItems: 'center',
-    },
-    noActiveTitle: {
-        color: 'white',
-        fontSize: 15,
-        fontWeight: 'bold',
-        textAlign: 'center',
-    },
-    noActiveSubtitle: {
-        color: '#475569',
-        fontSize: 12,
-        textAlign: 'center',
-        marginTop: 8,
-        lineHeight: 16,
-    },
-    selectorContainer: {
-        marginBottom: 25,
-    },
-    selectorScroll: {
-        paddingHorizontal: 20,
-        gap: 12,
-    },
-    titleSelectorCard: {
-        width: 105,
-        height: 105,
-        borderRadius: 22,
-        borderWidth: 1.5,
-        borderColor: 'rgba(255,255,255,0.05)',
-        overflow: 'hidden',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.3,
-        shadowRadius: 5,
-    },
-    selectorCardGradient: {
-        flex: 1,
+        borderColor: 'rgba(255,255,255,0.13)',
+        backgroundColor: 'rgba(255,255,255,0.045)',
         alignItems: 'center',
         justifyContent: 'center',
-        padding: 10,
     },
-    selectorTitleName: {
-        fontSize: 12,
-        fontWeight: 'bold',
-        marginTop: 8,
-    },
-    selectorLevelText: {
-        color: '#475569',
-        fontSize: 10,
-        fontWeight: 'bold',
-        marginTop: 4,
-    },
-    showcaseWrapper: {
-        marginHorizontal: 20,
-        borderRadius: 28,
-        elevation: 20,
-        shadowOffset: { width: 0, height: 12 },
-        shadowOpacity: 0.4,
-        shadowRadius: 16,
-        overflow: 'visible',
-    },
-    showcaseCard: {
-        borderRadius: 28,
-        padding: 24,
-        borderWidth: 1.5,
-        borderColor: 'rgba(255,255,255,0.1)',
-    },
-    showcaseHeader: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        paddingBottom: 20,
-        borderBottomWidth: 1,
-    },
-    showcaseName: {
-        fontSize: 24,
-        fontWeight: '900',
-    },
-    showcaseDuration: {
-        color: '#94a3b8',
-        fontSize: 12,
-        marginTop: 4,
-    },
-    showcasePriceContainer: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: 'rgba(255, 209, 102, 0.05)',
-        paddingHorizontal: 14,
-        paddingVertical: 8,
-        borderRadius: 16,
-        borderWidth: 1,
-        borderColor: 'rgba(255, 209, 102, 0.1)',
-    },
-    showcasePrice: {
-        color: '#FFD166',
-        fontSize: 18,
-        fontWeight: 'bold',
-        marginLeft: 6,
-    },
-    benefitsSection: {
-        marginVertical: 24,
-    },
-    benefitsHeading: {
-        color: '#475569',
-        fontSize: 11,
-        fontWeight: '900',
-        letterSpacing: 2,
-        marginBottom: 15,
-    },
-    benefitRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        marginBottom: 10,
-    },
-    benefitText: {
-        color: '#94a3b8',
-        fontSize: 13,
-        marginLeft: 10,
-        fontWeight: '500',
-    },
-    actionButton: {
+    headerTitleWrap: { alignItems: 'center' },
+    headerEyebrow: { color: '#A98B67', fontSize: 8, fontWeight: '800', letterSpacing: 2.1, marginBottom: 3 },
+    headerTitle: { color: '#F4F3F1', fontSize: 19, fontWeight: '700', letterSpacing: 0.4 },
+    tabsContent: {
         width: '100%',
-        height: 54,
-        borderRadius: 27,
+        paddingHorizontal: 14,
+        paddingVertical: 7,
+        flexDirection: 'row',
+        gap: 4,
+        alignItems: 'center',
+        justifyContent: 'space-between',
+    },
+    tabIndicator: {
+        position: 'absolute',
+        left: 14,
+        top: 7,
+        height: 39,
+        borderRadius: 20,
+        borderWidth: 1,
+        backgroundColor: 'rgba(255,255,255,0.055)',
+    },
+    tab: {
+        flex: 1,
+        height: 39,
+        paddingHorizontal: 3,
+        borderRadius: 20,
+        borderWidth: 1,
+        borderColor: 'transparent',
+        alignItems: 'center',
+        justifyContent: 'center',
         overflow: 'hidden',
     },
-    actionGradient: {
-        flex: 1,
+    tabText: { color: 'rgba(255,255,255,0.42)', fontSize: 14, fontWeight: '600' },
+    tabTextActive: { color: '#FFFFFF', fontWeight: '700' },
+    scrollContent: { paddingTop: 10, paddingBottom: 248 },
+    heroSection: { alignItems: 'center', justifyContent: 'center', marginTop: 12 },
+    heroFrame: {
+        width: HERO_SIZE,
+        height: HERO_SIZE,
+        borderRadius: 24,
+        borderWidth: 1,
+        overflow: 'hidden',
+        backgroundColor: '#0A0B0F',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 18 },
+        shadowOpacity: 0.16,
+        shadowRadius: 24,
+        elevation: 16,
+    },
+    heroFrameCutout: {
+        borderWidth: 0,
+        backgroundColor: 'transparent',
+        overflow: 'visible',
+        shadowOpacity: 0,
+        elevation: 0,
+    },
+    heroImage: { width: '100%', height: '100%' },
+    heroCutoutImage: { transform: [{ scale: 1.8 }, { translateY: 45 }] },
+    heroCorner: { position: 'absolute', zIndex: 2, top: 11, width: 28, height: 28, borderTopWidth: 1.5 },
+    heroCornerTopLeft: { left: 11, borderLeftWidth: 1.5, borderTopLeftRadius: 8 },
+    heroCornerTopRight: { right: 11, borderRightWidth: 1.5, borderTopRightRadius: 8 },
+    benefitsHeader: {
+        height: 64,
+        marginTop: 17,
+        marginBottom: 12,
+        justifyContent: 'center',
+        overflow: 'hidden',
+    },
+    benefitsHeaderArc: {
+        position: 'absolute',
+        width: width * 2.6,
+        height: width * 2.6,
+        borderRadius: width * 1.3,
+        left: -width * 0.8,
+        top: -(width * 2.6) + 36,
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.11)',
+    },
+    benefitsHeaderContent: {
+        position: 'absolute',
+        top: 24,
+        left: 0,
+        right: 0,
+        flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'center',
     },
-    actionButtonText: {
-        color: '#020617',
-        fontSize: 14,
-        fontWeight: '900',
-        letterSpacing: 1,
-    }
+    benefitsTitlePill: {
+        minHeight: 30,
+        paddingHorizontal: 14,
+        borderRadius: 15,
+        backgroundColor: '#080A0E',
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 10,
+    },
+    headerDiamond: {
+        width: 5,
+        height: 5,
+        backgroundColor: '#D8D8DA',
+        transform: [{ rotate: '45deg' }],
+        shadowColor: '#FFFFFF',
+        shadowOpacity: 0.35,
+        shadowRadius: 3,
+    },
+    sectionTitle: {
+        color: '#DEDEE0',
+        fontSize: 15,
+        fontWeight: '800',
+        letterSpacing: 0.1,
+        textShadowColor: 'rgba(255,255,255,0.18)',
+        textShadowOffset: { width: 0, height: 1 },
+        textShadowRadius: 3,
+    },
+    benefitsGrid: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: 20, rowGap: 26 },
+    benefitItem: { width: '33.33%', alignItems: 'center', paddingHorizontal: 6 },
+    benefitCircleOuter: {
+        width: 68,
+        height: 68,
+        borderRadius: 34,
+        borderWidth: 1,
+        backgroundColor: '#202126',
+        overflow: 'hidden',
+    },
+    benefitCircle: { flex: 1, borderRadius: 34, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
+    benefitDot: { position: 'absolute', width: 4, height: 4, borderRadius: 2, bottom: 8, opacity: 0.75 },
+    benefitText: { color: 'rgba(236,236,238,0.69)', fontSize: 11, lineHeight: 14, fontWeight: '600', textAlign: 'center', marginTop: 8 },
+    purchaseBarPosition: { position: 'absolute', left: 12, right: 12, bottom: 0 },
+    purchaseBarGlow: { position: 'absolute', top: -10, left: 28, right: 28, height: 30, borderRadius: 20 },
+    purchaseBar: {
+        minHeight: 190,
+        borderRadius: 30,
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.16)',
+        paddingHorizontal: 18,
+        paddingTop: 19,
+        paddingBottom: 15,
+        overflow: 'hidden',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: -6 },
+        shadowOpacity: 0.5,
+        shadowRadius: 18,
+        elevation: 20,
+    },
+    panelAccent: { position: 'absolute', top: 0, left: '28%', right: '28%', height: 1, opacity: 0.7 },
+    priceRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5 },
+    coinMark: { width: 24, height: 24, borderRadius: 12, borderWidth: 1, alignItems: 'center', justifyContent: 'center', marginRight: 2 },
+    priceText: { color: '#FAFAFA', fontSize: 22, fontWeight: '800', letterSpacing: 0.2 },
+    durationText: { color: 'rgba(255,255,255,0.61)', fontSize: 14, fontWeight: '600' },
+    purchaseDescription: { color: 'rgba(255,255,255,0.43)', textAlign: 'center', fontSize: 11.5, marginTop: 6, marginBottom: 16 },
+    dualButtonOuter: {
+        width: '100%',
+        height: 58,
+        borderRadius: 29,
+        overflow: 'hidden',
+        padding: 1.8,
+        backgroundColor: '#000',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 8 },
+        shadowOpacity: 0.46,
+        shadowRadius: 10,
+        elevation: 9,
+    },
+    neonWrapper: {
+        position: 'absolute',
+        width: width * 1.3,
+        height: width * 1.3,
+        left: -width * 0.15,
+        top: -(width * 1.3 - 58) / 2,
+    },
+    dualButtonInner: {
+        position: 'absolute',
+        top: 1.8,
+        left: 1.8,
+        right: 1.8,
+        bottom: 1.8,
+        borderRadius: 27.2,
+        flexDirection: 'row',
+        overflow: 'hidden',
+        backgroundColor: '#111115',
+    },
+    buttonGlowShadow: {
+        position: 'absolute',
+        left: 2,
+        right: 2,
+        top: 2,
+        bottom: 2,
+        borderRadius: 29,
+        backgroundColor: 'transparent',
+        shadowOffset: { width: 0, height: 0 },
+        shadowOpacity: 0.95,
+        shadowRadius: 15,
+        elevation: 12,
+        zIndex: -1,
+    },
+    dualButtonSilverSurface: {
+        position: 'absolute',
+        top: 0,
+        bottom: 0,
+        left: 0,
+        width: '55%',
+    },
+    dualButtonGoldSurface: {
+        position: 'absolute',
+        top: -3,
+        right: -5,
+        bottom: -3,
+        width: '54%',
+        borderTopLeftRadius: 32,
+        borderBottomLeftRadius: 8,
+        transform: [{ skewX: '-7deg' }],
+    },
+    dualButtonHighlight: {
+        position: 'absolute',
+        top: 1,
+        left: 26,
+        right: 26,
+        height: 1,
+        backgroundColor: 'rgba(255,255,255,0.66)',
+    },
+    buttonShimmer: {
+        position: 'absolute',
+        left: 0,
+        top: -22,
+        width: 46,
+        height: 104,
+        backgroundColor: 'rgba(255,255,255,0.14)',
+    },
+    dualButtonHitArea: { flex: 1, height: '100%', alignItems: 'center', justifyContent: 'center', zIndex: 2 },
+    dualButtonPrimary: { paddingLeft: 8 },
+    buttonDisabled: { opacity: 0.45 },
+    secondaryButtonText: { color: '#343434', fontSize: 16, fontWeight: '800' },
+    primaryButtonText: {
+        color: '#FFFFFF',
+        fontSize: 16,
+        fontWeight: '800',
+        textShadowColor: 'rgba(54,30,17,0.3)',
+        textShadowOffset: { width: 0, height: 1 },
+        textShadowRadius: 2,
+    },
+    modalRoot: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 22, backgroundColor: 'rgba(0,0,0,0.58)' },
+    modalCard: {
+        width: '100%',
+        maxWidth: 390,
+        borderRadius: 30,
+        borderWidth: 1,
+        paddingHorizontal: 22,
+        paddingTop: 31,
+        paddingBottom: 20,
+        alignItems: 'center',
+        overflow: 'hidden',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 18 },
+        shadowOpacity: 0.65,
+        shadowRadius: 28,
+        elevation: 24,
+    },
+    modalClose: { position: 'absolute', right: 14, top: 14, zIndex: 3, width: 32, height: 32, alignItems: 'center', justifyContent: 'center' },
+    modalCrest: { width: 62, height: 62, borderRadius: 31, borderWidth: 1, alignItems: 'center', justifyContent: 'center', marginBottom: 15 },
+    modalEyebrow: { color: '#A89884', fontSize: 9, fontWeight: '800', letterSpacing: 2.1, marginBottom: 7 },
+    modalTitle: { color: '#F6F5F3', fontSize: 20, fontWeight: '800', textAlign: 'center' },
+    modalDescription: { color: 'rgba(255,255,255,0.52)', fontSize: 13, lineHeight: 19, textAlign: 'center', marginTop: 9, paddingHorizontal: 10 },
+    modalPriceLine: { marginVertical: 20, alignItems: 'center' },
+    modalPrice: { fontSize: 24, fontWeight: '900' },
+    modalPriceCaption: { color: 'rgba(255,255,255,0.38)', fontSize: 11, marginTop: 3 },
+    modalActions: { flexDirection: 'row', gap: 11, width: '100%' },
+    modalCancel: { flex: 1, height: 50, borderRadius: 25, borderWidth: 1, borderColor: 'rgba(255,255,255,0.14)', backgroundColor: 'rgba(255,255,255,0.055)', alignItems: 'center', justifyContent: 'center' },
+    modalCancelText: { color: 'rgba(255,255,255,0.72)', fontSize: 14, fontWeight: '700' },
+    modalConfirmShell: { flex: 1, height: 50, borderRadius: 25, overflow: 'hidden' },
+    modalConfirm: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+    modalConfirmText: { color: '#21150C', fontSize: 14, fontWeight: '900' },
 });

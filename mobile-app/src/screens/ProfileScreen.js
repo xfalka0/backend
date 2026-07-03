@@ -953,31 +953,45 @@ const ProfileScreen = ({ route }) => {
                         </View>
                         <View style={styles.infoGrid}>
                             <View style={styles.infoPill}>
-                                <Ionicons name="calendar" size={16} color="#f97316" />
+                                <View style={[styles.infoPillIconContainer, { backgroundColor: 'rgba(249, 115, 22, 0.12)' }]}>
+                                    <Ionicons name="calendar" size={13} color="#f97316" />
+                                </View>
                                 <Text style={styles.infoPillText}>{user?.age || '18'}</Text>
                             </View>
                             <View style={styles.infoPill}>
-                                <Ionicons name="briefcase" size={16} color="#3b82f6" />
+                                <View style={[styles.infoPillIconContainer, { backgroundColor: 'rgba(59, 130, 246, 0.12)' }]}>
+                                    <Ionicons name="briefcase" size={13} color="#3b82f6" />
+                                </View>
                                 <Text style={styles.infoPillText}>{user?.job || 'Yazılımcı'}</Text>
                             </View>
                             <View style={styles.infoPill}>
-                                <Ionicons name="school" size={16} color="#10b981" />
+                                <View style={[styles.infoPillIconContainer, { backgroundColor: 'rgba(16, 185, 129, 0.12)' }]}>
+                                    <Ionicons name="school" size={13} color="#10b981" />
+                                </View>
                                 <Text style={styles.infoPillText}>{user?.edu || 'Üniversite'}</Text>
                             </View>
                             <View style={styles.infoPill}>
-                                <Ionicons name="man" size={16} color="#8b5cf6" />
+                                <View style={[styles.infoPillIconContainer, { backgroundColor: 'rgba(139, 92, 246, 0.12)' }]}>
+                                    <Ionicons name="man" size={13} color="#8b5cf6" />
+                                </View>
                                 <Text style={styles.infoPillText}>{user?.boy || '175'}</Text>
                             </View>
                             <View style={styles.infoPill}>
-                                <Ionicons name="barbell" size={16} color="#ef4444" />
+                                <View style={[styles.infoPillIconContainer, { backgroundColor: 'rgba(239, 68, 68, 0.12)' }]}>
+                                    <Ionicons name="barbell" size={13} color="#ef4444" />
+                                </View>
                                 <Text style={styles.infoPillText}>{user?.kilo || '70'}</Text>
                             </View>
                             <View style={styles.infoPill}>
-                                <Ionicons name="star" size={16} color="#a855f7" />
+                                <View style={[styles.infoPillIconContainer, { backgroundColor: 'rgba(168, 85, 247, 0.12)' }]}>
+                                    <Ionicons name="star" size={13} color="#a855f7" />
+                                </View>
                                 <Text style={styles.infoPillText}>{user?.zodiac || 'Aslan'}</Text>
                             </View>
                             <View style={styles.infoPill}>
-                                <Ionicons name="heart" size={16} color="#ec4899" />
+                                <View style={[styles.infoPillIconContainer, { backgroundColor: 'rgba(236, 72, 153, 0.12)' }]}>
+                                    <Ionicons name="heart" size={13} color="#ec4899" />
+                                </View>
                                 <Text style={styles.infoPillText}>{user?.relationship || 'Sohbet'}</Text>
                             </View>
                         </View>
@@ -1015,10 +1029,10 @@ const ProfileScreen = ({ route }) => {
                 <LinearGradient colors={themeMode === 'dark' ? theme.gradients.card : ['#fff', '#f0f0f0']} style={styles.footerContainer}>
                     <TouchableOpacity style={styles.footerItem} onPress={() => navigation.navigate('Settings')}>
                         <View style={[styles.footerIconBg, { backgroundColor: '#3b82f620' }]}>
-                            <Ionicons name="settings-outline" size={20} color="#3b82f6" />
+                            <Ionicons name="settings-outline" size={15} color="#3b82f6" />
                         </View>
                         <Text style={styles.footerText}>Ayarlar</Text>
-                        <Ionicons name="chevron-forward" size={16} color="#4b3f61" />
+                        <Ionicons name="chevron-forward" size={14} color="#4b3f61" />
                     </TouchableOpacity>
 
                     <TouchableOpacity 
@@ -1030,10 +1044,10 @@ const ProfileScreen = ({ route }) => {
                         }}
                     >
                         <View style={[styles.footerIconBg, { backgroundColor: '#f59e0b20' }]}>
-                            <Ionicons name="mail-outline" size={20} color="#f59e0b" />
+                            <Ionicons name="mail-outline" size={15} color="#f59e0b" />
                         </View>
                         <Text style={styles.footerText}>E-posta Destek</Text>
-                        <Ionicons name="chevron-forward" size={16} color="#4b3f61" />
+                        <Ionicons name="chevron-forward" size={14} color="#4b3f61" />
                     </TouchableOpacity>
 
                     <TouchableOpacity 
@@ -1045,10 +1059,10 @@ const ProfileScreen = ({ route }) => {
                         }}
                     >
                         <View style={[styles.footerIconBg, { backgroundColor: '#25d36620' }]}>
-                            <Ionicons name="logo-whatsapp" size={20} color="#25d366" />
+                            <Ionicons name="logo-whatsapp" size={15} color="#25d366" />
                         </View>
                         <Text style={styles.footerText}>WhatsApp Destek</Text>
-                        <Ionicons name="chevron-forward" size={16} color="#4b3f61" />
+                        <Ionicons name="chevron-forward" size={14} color="#4b3f61" />
                     </TouchableOpacity>
                 </LinearGradient>
 
@@ -1427,30 +1441,30 @@ const styles = StyleSheet.create({
         alignItems: 'center',
     },
     userName: {
-        fontSize: 20,
+        fontSize: 17,
         fontWeight: 'bold',
         color: '#fff',
     },
     idBadge: {
-        backgroundColor: 'rgba(255,255,255,0.1)',
-        paddingHorizontal: 12,
-        paddingVertical: 4,
-        borderRadius: 12,
-        marginTop: 8,
+        backgroundColor: 'rgba(255,255,255,0.08)',
+        paddingHorizontal: 10,
+        paddingVertical: 3,
+        borderRadius: 10,
+        marginTop: 4,
     },
     idText: {
         color: '#8e85a6',
-        fontSize: 12,
+        fontSize: 10,
         fontWeight: '600',
     },
     userBio: {
         color: '#fff',
         textAlign: 'center',
-        marginTop: 8,
+        marginTop: 6,
         paddingHorizontal: 10,
-        lineHeight: 18,
-        fontSize: 12,
-        fontWeight: 'bold',
+        lineHeight: 16,
+        fontSize: 11,
+        fontWeight: '500',
     },
     inlineBioEdit: {
         flexDirection: 'row',
@@ -1510,35 +1524,35 @@ const styles = StyleSheet.create({
     statsContainer: {
         flexDirection: 'row',
         justifyContent: 'center',
-        marginTop: 25,
-        gap: 12,
+        marginTop: 20,
+        gap: 10,
     },
     statPod: {
         width: (width - 64) / 3,
-        height: 60,
-        borderRadius: 16,
+        height: 50,
+        borderRadius: 12,
         overflow: 'hidden',
     },
     statBlur: {
         flex: 1,
         justifyContent: 'center',
         alignItems: 'center',
-        backgroundColor: 'rgba(255,255,255,0.05)',
+        backgroundColor: 'rgba(255,255,255,0.04)',
     },
     statValue: {
-        fontSize: 15,
+        fontSize: 13,
         fontWeight: 'bold',
         color: '#fff',
     },
     statLabel: {
-        fontSize: 9,
+        fontSize: 8,
         color: '#8e85a6',
         marginTop: 1,
     },
     glassCardWrapper: {
         marginHorizontal: 16,
-        marginBottom: 16,
-        borderRadius: 32,
+        marginBottom: 12,
+        borderRadius: 20,
         overflow: 'hidden',
         borderWidth: 1,
         borderColor: 'rgba(255,255,255,0.08)',
@@ -1684,45 +1698,45 @@ const styles = StyleSheet.create({
         marginTop: 1,
     },
     infoSection: {
-        padding: 24,
+        padding: 16,
         backgroundColor: 'rgba(255,255,255,0.02)',
     },
     sectionDivider: {
         height: 1,
         backgroundColor: 'rgba(255,255,255,0.05)',
-        marginVertical: 20,
+        marginVertical: 14,
     },
     sectionHeader: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        marginBottom: 20,
+        marginBottom: 12,
     },
     sectionTitle: {
-        fontSize: 15,
+        fontSize: 13,
         fontWeight: 'bold',
         color: '#fff',
     },
     editLink: {
         color: '#8b5cf6',
         fontWeight: 'bold',
-        fontSize: 11,
+        fontSize: 10,
     },
     miniEditBtn: {
         backgroundColor: 'rgba(139, 92, 246, 0.15)',
-        paddingHorizontal: 10,
-        paddingVertical: 4,
+        paddingHorizontal: 8,
+        paddingVertical: 3,
         borderRadius: 8,
     },
     emptyInfoText: {
         color: '#8e85a6',
-        fontSize: 14,
+        fontSize: 11,
         marginTop: 5,
     },
     infoGrid: {
         flexDirection: 'row',
         flexWrap: 'wrap',
-        gap: 12,
+        gap: 8,
     },
     modalOverlay: {
         flex: 1,
@@ -1833,26 +1847,36 @@ const styles = StyleSheet.create({
     infoPill: {
         flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: 'rgba(255,255,255,0.05)',
-        paddingHorizontal: 10,
-        paddingVertical: 6,
-        borderRadius: 14,
+        backgroundColor: 'rgba(255,255,255,0.03)',
+        paddingHorizontal: 8,
+        paddingVertical: 4,
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.05)',
+        gap: 4,
+    },
+    infoPillIconContainer: {
+        width: 22,
+        height: 22,
+        borderRadius: 11,
+        justifyContent: 'center',
+        alignItems: 'center',
     },
     infoPillText: {
         color: '#fff',
-        fontSize: 11,
-        marginLeft: 6,
+        fontSize: 10,
+        fontWeight: '500',
     },
     albumSection: {
-        padding: 20,
+        padding: 14,
     },
     albumScroll: {
         marginTop: 10,
     },
     addPhotoButton: {
-        width: 80,
-        height: 80,
-        borderRadius: 16,
+        width: 64,
+        height: 64,
+        borderRadius: 12,
         borderWidth: 2,
         borderColor: 'rgba(142, 133, 166, 0.3)',
         borderStyle: 'dashed',
@@ -1862,16 +1886,16 @@ const styles = StyleSheet.create({
         marginRight: 12,
     },
     albumPhotoWrapper: {
-        width: 80,
-        height: 80,
-        borderRadius: 16,
+        width: 64,
+        height: 64,
+        borderRadius: 12,
         marginRight: 12,
         position: 'relative',
     },
     albumPhoto: {
         width: '100%',
         height: '100%',
-        borderRadius: 16,
+        borderRadius: 12,
         resizeMode: 'cover',
     },
     removePhotoBadge: {
@@ -1914,27 +1938,27 @@ const styles = StyleSheet.create({
     footerContainer: {
         marginHorizontal: 16,
         backgroundColor: 'rgba(255,255,255,0.02)',
-        borderRadius: 32,
-        padding: 8,
+        borderRadius: 24,
+        padding: 6,
         borderWidth: 1,
         borderColor: 'rgba(255,255,255,0.08)',
     },
     footerItem: {
         flexDirection: 'row',
         alignItems: 'center',
-        padding: 10,
+        padding: 8,
     },
     footerIconBg: {
-        width: 34,
-        height: 34,
-        borderRadius: 10,
+        width: 28,
+        height: 28,
+        borderRadius: 8,
         justifyContent: 'center',
         alignItems: 'center',
         marginRight: 12,
     },
     footerText: {
         color: '#fff',
-        fontSize: 13,
+        fontSize: 11,
         flex: 1,
         fontWeight: '500',
     },

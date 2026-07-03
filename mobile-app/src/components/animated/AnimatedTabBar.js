@@ -16,7 +16,7 @@ import * as Haptics from 'expo-haptics';
 const { width } = Dimensions.get('window');
 
 const AnimatedTab = ({ state, descriptors, navigation }) => {
-    // 4 tabs + padding calculations
+    // Equal-width slots keep the rooms action exactly in the center.
     const tabWidth = (width - 60) / state.routes.length;
 
     const indicatorPos = useSharedValue(0);
@@ -41,7 +41,7 @@ const AnimatedTab = ({ state, descriptors, navigation }) => {
                 {/* Sliding Indicator */}
                 <Animated.View style={[styles.indicatorWrapper, { width: tabWidth }, indicatorStyle]}>
                     <LinearGradient
-                        colors={['#8B5CF6', '#EC4899']}
+                        colors={['#EC4899', '#FFFFFF']}
                         style={styles.slidingIndicator}
                         start={{ x: 0, y: 0 }}
                         end={{ x: 1, y: 1 }}
@@ -71,6 +71,7 @@ const AnimatedTab = ({ state, descriptors, navigation }) => {
                             isFocused={isFocused}
                             onPress={onPress}
                             icon={options.tabBarIconName || 'home'}
+                            isCenter={options.tabBarCenterButton === true}
                         />
                     );
                 })}
@@ -81,9 +82,10 @@ const AnimatedTab = ({ state, descriptors, navigation }) => {
 
 import { useChat } from '../../contexts/ChatContext';
 
-const TabItem = ({ isFocused, onPress, icon }) => {
+const TabItem = ({ isFocused, onPress, icon, isCenter = false }) => {
     const scale = useSharedValue(1);
     const translateY = useSharedValue(0);
+    const activeProgress = useSharedValue(isFocused ? 1 : 0);
     const { unreadCount } = useChat();
 
     useEffect(() => {
@@ -93,34 +95,64 @@ const TabItem = ({ isFocused, onPress, icon }) => {
                 withTiming(-8, { duration: 150, easing: Easing.out(Easing.ease) }),
                 withSpring(-4, { damping: 8, stiffness: 200 })
             );
+            activeProgress.value = withTiming(1, { duration: 250 });
         } else {
             scale.value = withSpring(1, { damping: 10 });
             translateY.value = withSpring(0, { damping: 10 });
+            activeProgress.value = withTiming(0, { duration: 250 });
         }
     }, [isFocused]);
 
     const animatedStyle = useAnimatedStyle(() => ({
         transform: [
             { scale: scale.value },
-            { translateY: translateY.value }
+            { translateY: translateY.value + (isCenter ? -9 : 0) }
         ],
     }));
 
+    const activeIconStyle = useAnimatedStyle(() => ({
+        opacity: activeProgress.value,
+    }));
+
+    const inactiveIconStyle = useAnimatedStyle(() => ({
+        opacity: 1 - activeProgress.value,
+        position: 'absolute',
+    }));
+
     return (
-        <Pressable onPress={onPress} style={styles.tabItem}>
+        <Pressable onPress={onPress} style={[styles.tabItem, isCenter && styles.centerTabItem]}>
             <Animated.View style={animatedStyle}>
-                <View style={{ position: 'relative' }}>
-                    <Ionicons
-                        name={icon}
-                        size={26}
-                        color={isFocused ? '#ffffff' : 'rgba(255,255,255,0.4)'}
-                    />
-                    {icon === 'chatbubbles' && unreadCount > 0 && (
-                        <View style={styles.badge}>
-                            <Text style={styles.badgeText}>{unreadCount > 9 ? '9+' : unreadCount}</Text>
-                        </View>
-                    )}
-                </View>
+                {isCenter ? (
+                    <LinearGradient
+                        colors={isFocused ? ['#A78BFA', '#EC4899'] : ['#6D5AA8', '#9D467B']}
+                        start={{ x: 0, y: 0 }}
+                        end={{ x: 1, y: 1 }}
+                        style={[styles.centerButton, isFocused && styles.centerButtonFocused]}
+                    >
+                        <Ionicons name="mic" size={25} color="#FFFFFF" />
+                        <Text style={styles.centerButtonLabel}>Odalar</Text>
+                    </LinearGradient>
+                ) : (
+                    <View style={{ position: 'relative', width: 28, height: 28, justifyContent: 'center', alignItems: 'center' }}>
+                        {/* Active state (Solid Pink-White Blend) */}
+                        <Animated.View style={activeIconStyle}>
+                            <Ionicons name={icon} size={26} color="#FFA3E3" />
+                        </Animated.View>
+                        {/* Inactive state (Outline, Gray) */}
+                        <Animated.View style={inactiveIconStyle}>
+                            <Ionicons
+                                name={`${icon}-outline`}
+                                size={26}
+                                color="rgba(255, 255, 255, 0.4)"
+                            />
+                        </Animated.View>
+                        {icon === 'chatbubbles' && unreadCount > 0 && (
+                            <View style={styles.badge}>
+                                <Text style={styles.badgeText}>{unreadCount > 9 ? '9+' : unreadCount}</Text>
+                            </View>
+                        )}
+                    </View>
+                )}
             </Animated.View>
         </Pressable>
     );
@@ -137,6 +169,7 @@ const styles = StyleSheet.create({
     },
     tabBar: {
         flexDirection: 'row',
+        overflow: 'visible',
         paddingVertical: 18,
         paddingHorizontal: 10,
         borderRadius: 40,
@@ -168,6 +201,33 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'center',
         height: 30,
+    },
+    centerTabItem: {
+        zIndex: 20,
+    },
+    centerButton: {
+        width: 58,
+        height: 58,
+        borderRadius: 29,
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderWidth: 3,
+        borderColor: '#17152B',
+        shadowColor: '#EC4899',
+        shadowOffset: { width: 0, height: 7 },
+        shadowOpacity: 0.35,
+        shadowRadius: 10,
+        elevation: 12,
+    },
+    centerButtonFocused: {
+        borderColor: 'rgba(255,255,255,0.32)',
+    },
+    centerButtonLabel: {
+        color: '#FFFFFF',
+        fontSize: 8,
+        lineHeight: 9,
+        fontWeight: '800',
+        marginTop: 1,
     },
     badge: {
         position: 'absolute',

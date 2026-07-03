@@ -171,8 +171,12 @@ export default function ExploreScreen({ navigation, route }) {
                     let currentUser = user;
                     const userStr = await AsyncStorage.getItem('user');
                     if (userStr) {
-                        currentUser = JSON.parse(userStr);
-                        setUser(currentUser);
+                        const parsedUser = JSON.parse(userStr);
+                        // Prevent infinite loop by only updating state if user data actually changed
+                        if (!user || user.id !== parsedUser.id || user.vip_level !== parsedUser.vip_level) {
+                            currentUser = parsedUser;
+                            setUser(parsedUser);
+                        }
                     }
                     
                     if (posts.length === 0 || (currentUser && currentUser.id !== lastFetchedUserId.current)) {

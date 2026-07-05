@@ -5,11 +5,18 @@
     <item name="android:editTextBackground">@drawable/rn_edit_text_material</item>
     <item name="colorPrimary">@color/colorPrimary</item>
     <item name="android:statusBarColor">#1a0533</item>
+    <!-- Cursor and control tint color — pink brand color -->
+    <item name="colorControlActivated">#EC4DA7</item>
+    <item name="colorAccent">#EC4DA7</item>
+    <item name="colorControlNormal">#EC4DA7</item>
+    <item name="colorControlHighlight">#33EC4DA7</item>
   </style>
   <style name="ResetEditText" parent="@android:style/Widget.EditText">
     <item name="android:padding">0dp</item>
     <item name="android:textColorHint">#c8c8c8</item>
     <item name="android:textColor">@android:color/black</item>
+    <!-- Force transparent background directly on the EditText view -->
+    <item name="android:background">@android:color/transparent</item>
   </style>
   <style name="Theme.App.SplashScreen" parent="AppTheme">
     <item name="android:windowBackground">@drawable/splashscreen</item>

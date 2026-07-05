@@ -112,7 +112,7 @@ router.get('/:userId/fans', async (req, res) => {
     try {
         // First, check if the requested user is VIP
         const userCheck = await pool.query(
-            'SELECT is_vip, vip_expire_date FROM users WHERE id = $1',
+            'SELECT is_vip, vip_expire_date, gender FROM users WHERE id = $1',
             [userId]
         );
 
@@ -123,7 +123,7 @@ router.get('/:userId/fans', async (req, res) => {
         const user = userCheck.rows[0];
         const now = new Date();
         const expireDate = new Date(user.vip_expire_date);
-        const isVIP = user.is_vip && (expireDate > now || !user.vip_expire_date); // Logic: if is_vip is true and not expired
+        const isVIP = user.is_vip && (expireDate > now || !user.vip_expire_date);
 
         const fans = await pool.query(`
             SELECT u.id, COALESCE(u.display_name, u.username) as name, u.username, u.avatar_url, u.gender, u.is_vip, f.created_at,
@@ -135,8 +135,61 @@ router.get('/:userId/fans', async (req, res) => {
             ORDER BY f.created_at DESC
         `, [userId]);
 
+        let fakeFans = [];
+        
+        // If the user is male, inject fake female operator favorites to boost engagement
+        if (user.gender && user.gender.toLowerCase() === 'erkek') {
+            const femaleOpsRes = await pool.query(`
+                SELECT u.id, COALESCE(u.display_name, u.username) as name, u.username, u.avatar_url, u.gender, u.is_vip, o.is_online
+                FROM users u
+                JOIN operators o ON u.id = o.user_id
+                WHERE u.gender ILIKE 'kadin'
+                LIMIT 15
+            `);
+            
+            const femaleOps = femaleOpsRes.rows;
+            if (femaleOps.length > 0) {
+                // Deterministic seed based on user ID
+                let hash = 0;
+                const userIdStr = String(userId);
+                for (let i = 0; i < userIdStr.length; i++) {
+                    hash = userIdStr.charCodeAt(i) + ((hash << 5) - hash);
+                }
+
+                const numFake = 4 + (Math.abs(hash) % 3); // 4 to 6 fake favorites
+                const today = new Date().toDateString(); // Changes daily
+
+                for (let j = 0; j < numFake; j++) {
+                    let seed = hash + j + today.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+                    const opIndex = Math.abs(seed) % femaleOps.length;
+                    const op = femaleOps[opIndex];
+
+                    const alreadyExists = fans.rows.some(f => f.id === op.id);
+                    if (!alreadyExists && !fakeFans.some(f => f.id === op.id)) {
+                        const minutesAgo = 30 + (Math.abs(seed * 9) % 2800); // 30 mins to ~46 hours ago
+                        const fakeTime = new Date(Date.now() - minutesAgo * 60 * 1000);
+
+                        fakeFans.push({
+                            id: op.id,
+                            name: op.name,
+                            username: op.username,
+                            avatar_url: op.avatar_url,
+                            gender: op.gender,
+                            is_vip: op.is_vip,
+                            created_at: fakeTime.toISOString(),
+                            is_online: op.is_online
+                        });
+                    }
+                }
+            }
+        }
+
+        // Merge and sort all fans by created_at DESC
+        const allFans = [...fans.rows, ...fakeFans];
+        const sortedFans = allFans.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+
         // If not VIP, obscure the data
-        const processedFans = fans.rows.map(fan => {
+        const processedFans = sortedFans.map(fan => {
             if (isVIP) {
                 return fan;
             } else {

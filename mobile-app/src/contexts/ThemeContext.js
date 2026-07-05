@@ -22,56 +22,28 @@ export const ThemeProvider = ({ children }) => {
     }, []);
 
     const loadTheme = async () => {
+        setThemeMode('dark');
         try {
-            const savedTheme = await AsyncStorage.getItem('theme_mode');
-            if (savedTheme) {
-                setThemeMode(savedTheme);
-            }
+            await AsyncStorage.setItem('theme_mode', 'dark');
         } catch (error) {
             console.error('Failed to load theme:', error);
         }
     };
 
     const toggleTheme = async () => {
-        // Centered ripple since Switch doesn't easily provide coordinates
-        const x = width / 2;
-        const y = height / 2;
-
-        const nextMode = themeMode === 'dark' ? 'light' : 'dark';
-        const nextTheme = nextMode === 'dark' ? DARK_THEME : LIGHT_THEME;
-
-        // Save immediately but update state after ripple covers the screen
-        try {
-            await AsyncStorage.setItem('theme_mode', nextMode);
-        } catch (error) {
-            console.error('Failed to save theme:', error);
-        }
-
-        // Start Ripple
-        setRippleConfig({ x, y, color: nextTheme.colors.background });
-        rippleOpacity.value = 1;
-
-        rippleScale.value = withTiming(1, { duration: 600, easing: Easing.inOut(Easing.ease) }, () => {
-            runOnJS(setThemeMode)(nextMode);
-
-            // Fade out the overlay smoothly
-            rippleOpacity.value = withTiming(0, { duration: 400 }, () => {
-                rippleScale.value = 0;
-                runOnJS(setRippleConfig)(null);
-            });
-        });
+        // Toggle theme is disabled since the app is dark-only
     };
 
     const setTheme = async (mode) => {
-        setThemeMode(mode);
+        setThemeMode('dark');
         try {
-            await AsyncStorage.setItem('theme_mode', mode);
+            await AsyncStorage.setItem('theme_mode', 'dark');
         } catch (error) {
             console.error('Failed to set theme:', error);
         }
     };
 
-    const theme = themeMode === 'dark' ? DARK_THEME : LIGHT_THEME;
+    const theme = DARK_THEME;
 
     const animatedRippleStyle = useAnimatedStyle(() => {
         if (!rippleConfig) return {};

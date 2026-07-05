@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, Image, Dimensions, Platform } from 'react-native';
 import Animated, { FadeInDown, Layout } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
 import { useFocusEffect } from '@react-navigation/native';
@@ -7,6 +7,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
 import axios from 'axios';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '../contexts/ThemeContext';
 import { API_URL } from '../config';
 import VipFrame from '../components/ui/VipFrame';
@@ -14,30 +15,46 @@ import GlassCard from '../components/ui/GlassCard';
 import SkeletonCard from '../components/ui/SkeletonCard';
 import AnimatedEmptyState from '../components/ui/AnimatedEmptyState';
 
+const { width } = Dimensions.get('window');
+
 export default function ProfileVisitorsScreen({ navigation, route }) {
-    const { theme, themeMode } = useTheme();
+    const { theme } = useTheme();
     const { user } = route.params || {};
+    
+    const [activeTab, setActiveTab] = useState('whoViewedMe'); // 'whoViewedMe' or 'whoIVisited'
     const [visitors, setVisitors] = useState([]);
+    const [history, setHistory] = useState([]);
     const [isVIP, setIsVIP] = useState(false);
     const [loading, setLoading] = useState(true);
 
     useFocusEffect(
         React.useCallback(() => {
             if (user?.id) {
-                fetchVisitors();
+                fetchData();
             } else {
                 setLoading(false);
             }
-        }, [user])
+        }, [user, activeTab])
     );
 
-    const fetchVisitors = async () => {
+    const fetchData = async () => {
+        setLoading(true);
         try {
-            const res = await axios.get(`${API_URL}/views/${user.id}`);
-            setIsVIP(res.data.isVIP);
-            setVisitors(res.data.visitors);
+            const token = await AsyncStorage.getItem('token');
+            if (activeTab === 'whoViewedMe') {
+                const res = await axios.get(`${API_URL}/views/${user.id}`, {
+                    headers: { Authorization: `Bearer ${token}` }
+                });
+                setIsVIP(res.data.isVIP);
+                setVisitors(res.data.visitors || []);
+            } else {
+                const res = await axios.get(`${API_URL}/views/history/${user.id}`, {
+                    headers: { Authorization: `Bearer ${token}` }
+                });
+                setHistory(res.data.history || []);
+            }
         } catch (error) {
-            console.error('Fetch Visitors Error:', error);
+            console.error('Fetch Visitors/History Error:', error);
         } finally {
             setLoading(false);
         }
@@ -55,14 +72,20 @@ export default function ProfileVisitorsScreen({ navigation, route }) {
     };
 
     const renderVisitorItem = ({ item, index }) => {
+        const isWhoViewed = activeTab === 'whoViewedMe';
+        const displayBlurred = isWhoViewed && !isVIP;
+        
+        const displayName = displayBlurred ? 'Gizli Kullanıcı' : item.username;
+        const subText = displayBlurred ? 'Bugün Profilinizi Görüntüleyenler' : (isWhoViewed ? 'Profilinizi ziyaret etti' : 'Profilini ziyaret ettiniz');
+
         return (
             <Animated.View
-                entering={FadeInDown.delay(index * 50).springify().damping(12)}
+                entering={FadeInDown.delay(index * 40).springify().damping(13)}
                 layout={Layout.springify()}
             >
                 <TouchableOpacity
                     onPress={() => {
-                        if (!isVIP) {
+                        if (isWhoViewed && !isVIP) {
                             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
                             navigation.navigate('VipDetails', { user });
                             return;
@@ -74,125 +97,193 @@ export default function ProfileVisitorsScreen({ navigation, route }) {
                             name: item.username,
                             avatar_url: item.avatar_url,
                             gender: item.gender,
-                            job: item.job,
-                            vip_level: item.is_vip ? 1 : 0,
+                            vip_level: item.vip_level || 0,
                             is_online: item.is_online
                         };
                         navigation.navigate('OperatorProfile', { operator: operatorData, user });
                     }}
-                    style={{ marginBottom: 12, marginHorizontal: 16 }}
+                    style={styles.cardContainer}
                     activeOpacity={0.8}
                 >
-                    <GlassCard intensity={20} tint="dark" style={styles.chatItem}>
+                    <GlassCard intensity={25} tint="dark" style={styles.visitorCard}>
                         <View style={styles.avatarContainer}>
                             <View style={styles.avatarWrapper}>
                                 <VipFrame
-                                    level={0}
-                                    avatar={item.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(item.username)}&background=random&color=fff`}
-                                    size={56}
+                                    level={item.vip_level || 0}
+                                    avatar={item.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(item.username || 'User')}&background=random&color=fff`}
+                                    size={50}
                                     isStatic={true}
                                 />
-                                {item.is_blurred && (
-                                    <BlurView intensity={80} tint="dark" style={StyleSheet.absoluteFillObject} />
+                                {displayBlurred && (
+                                    <BlurView intensity={70} tint="dark" style={StyleSheet.absoluteFillObject} />
                                 )}
                             </View>
-                            {item.is_online && !item.is_blurred && (
-                                <View style={[styles.onlineBadge, { borderColor: theme.colors.background }]} />
+                            {item.is_online && !displayBlurred && (
+                                <View style={styles.onlineBadge} />
                             )}
                         </View>
 
                         <View style={styles.content}>
-                            <View style={styles.mainContent}>
-                                <View style={styles.textContainer}>
-                                    <View style={styles.nameRow}>
-                                        <Text style={[styles.name, { color: theme.colors.text }]} numberOfLines={1}>
-                                            {item.username}
-                                        </Text>
-
-                                        {!isVIP && item.is_blurred && (
-                                            <Ionicons name="lock-closed" size={14} color={theme.colors.textSecondary} style={{ marginLeft: 4 }} />
-                                        )}
-                                    </View>
-                                    <Text style={[styles.lastMsg, { color: theme.colors.textSecondary }]} numberOfLines={1}>
-                                        {formatTimestamp(item.created_at)}
-                                    </Text>
-                                </View>
-                                <View style={styles.metaContainer}>
-                                    <View style={styles.eyeIconWrapper}>
-                                        <Ionicons name="eye" size={20} color={theme.colors.primary} />
-                                    </View>
-                                </View>
-                            </View>
+                            <Text style={styles.name} numberOfLines={1}>
+                                {displayName}
+                            </Text>
+                            <Text style={styles.subText} numberOfLines={1}>
+                                {subText}
+                            </Text>
+                            <Text style={styles.timeText}>
+                                {formatTimestamp(item.created_at)}
+                            </Text>
                         </View>
+
+                        {isWhoViewed && !isVIP ? (
+                            <View style={styles.lockBadge}>
+                                <Ionicons name="lock-closed" size={15} color="#FFB300" />
+                            </View>
+                        ) : (
+                            <View style={styles.eyeIconBox}>
+                                <Ionicons name="chevron-forward" size={16} color="rgba(255, 255, 255, 0.4)" />
+                            </View>
+                        )}
                     </GlassCard>
                 </TouchableOpacity>
             </Animated.View>
         );
     };
 
+    const currentList = activeTab === 'whoViewedMe' ? visitors : history;
+
     return (
-        <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
+        <View style={styles.container}>
+            {/* Background Image Layer identical to Profile Screen */}
+            <View style={styles.bgWrapper}>
+                <Image 
+                    source={require('../../assets/fiva_profile_banner.png')} 
+                    style={styles.backgroundImage}
+                />
+                <LinearGradient
+                    colors={['rgba(9, 2, 26, 0.15)', 'rgba(9, 2, 26, 0.8)', '#09021a']}
+                    style={StyleSheet.absoluteFill}
+                />
+            </View>
+
+            {/* Header */}
             <View style={styles.header}>
                 <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
-                    <Ionicons name="arrow-back" size={24} color={theme.colors.text} />
+                    <Ionicons name="chevron-back" size={24} color="#FFFFFF" />
                 </TouchableOpacity>
-                <Text style={[styles.headerTitle, { color: theme.colors.text }]}>Profilime Bakanlar</Text>
+                <Text style={styles.headerTitle}>Ziyaretçi Kullanıcı</Text>
                 <View style={{ width: 40 }} />
             </View>
 
+            {/* Premium Sliding Segmented Tabs */}
+            <View style={styles.tabContainer}>
+                <TouchableOpacity
+                    style={[styles.tabButton, activeTab === 'whoViewedMe' && styles.activeTabButton]}
+                    onPress={() => {
+                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                        setActiveTab('whoViewedMe');
+                    }}
+                    activeOpacity={0.7}
+                >
+                    <Text style={[
+                        styles.tabText,
+                        activeTab === 'whoViewedMe' ? styles.activeTabText : styles.inactiveTabText
+                    ]}>
+                        Beni kim gördü
+                    </Text>
+                    {activeTab === 'whoViewedMe' && (
+                        <LinearGradient
+                            colors={['#EC4899', '#7C3AED']}
+                            style={styles.activeTabIndicator}
+                            start={{ x: 0, y: 0 }}
+                            end={{ x: 1, y: 0 }}
+                        />
+                    )}
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                    style={[styles.tabButton, activeTab === 'whoIVisited' && styles.activeTabButton]}
+                    onPress={() => {
+                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                        setActiveTab('whoIVisited');
+                    }}
+                    activeOpacity={0.7}
+                >
+                    <Text style={[
+                        styles.tabText,
+                        activeTab === 'whoIVisited' ? styles.activeTabText : styles.inactiveTabText
+                    ]}>
+                        Kimi Ziyaret Ettim
+                    </Text>
+                    {activeTab === 'whoIVisited' && (
+                        <LinearGradient
+                            colors={['#EC4899', '#7C3AED']}
+                            style={styles.activeTabIndicator}
+                            start={{ x: 0, y: 0 }}
+                            end={{ x: 1, y: 0 }}
+                        />
+                    )}
+                </TouchableOpacity>
+            </View>
+            <View style={styles.tabDivider} />
+
             {loading ? (
-                <View style={{ paddingTop: 10 }}>
+                <View style={{ padding: 16 }}>
                     {[...Array(5)].map((_, i) => <SkeletonCard key={i} />)}
                 </View>
-            ) : visitors.length === 0 ? (
+            ) : currentList.length === 0 ? (
                 <View style={{ flex: 1, justifyContent: 'center' }}>
                     <AnimatedEmptyState
                         icon="eye-off-outline"
-                        title="Hâlâ Sakin"
-                        description="Görünüşe göre henüz profilini kimse ziyaret etmemiş. Daha fazla etkileşim için aktif ol!"
-                        colors={['#3b82f6', '#8b5cf6']}
+                        title={activeTab === 'whoViewedMe' ? "Hâlâ Sakin" : "Ziyaret Yok"}
+                        description={activeTab === 'whoViewedMe' 
+                            ? "Görünüşe göre henüz profilini kimse ziyaret etmemiş. Daha aktif ol!"
+                            : "Henüz kimsenin profilini ziyaret etmediniz. Keşfet sayfasından yeni insanlarla tanışın!"}
+                        colors={['#3B82F6', '#8B5CF6']}
                     />
                 </View>
             ) : (
-                <>
+                <View style={{ flex: 1 }}>
                     <FlatList
-                        data={visitors}
+                        data={currentList}
                         renderItem={renderVisitorItem}
-                        keyExtractor={item => item.view_id + '-' + item.created_at}
-                        contentContainerStyle={{ paddingVertical: 10, paddingBottom: isVIP ? 100 : 180 }}
+                        keyExtractor={(item, idx) => (item.id || idx).toString() + '-' + item.created_at}
+                        contentContainerStyle={{ 
+                            paddingVertical: 12, 
+                            paddingBottom: (!isVIP && activeTab === 'whoViewedMe') ? 140 : 50 
+                        }}
                         showsVerticalScrollIndicator={false}
                     />
 
-                    {!isVIP && visitors.length > 0 && (
+                    {/* Gold Premium Paywall Action Button at the Bottom */}
+                    {!isVIP && activeTab === 'whoViewedMe' && (
                         <View style={styles.paywallOverlay}>
-                            <BlurView intensity={70} tint="dark" style={styles.paywallBlur}>
+                            <BlurView intensity={35} tint="dark" style={StyleSheet.absoluteFillObject} />
+                            <LinearGradient
+                                colors={['rgba(9, 2, 26, 0.0)', 'rgba(9, 2, 26, 0.85)', '#09021a']}
+                                style={StyleSheet.absoluteFillObject}
+                            />
+                            
+                            <TouchableOpacity
+                                style={styles.paywallBtn}
+                                onPress={() => {
+                                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                                    navigation.navigate('VipDetails', { user });
+                                }}
+                                activeOpacity={0.85}
+                            >
                                 <LinearGradient
-                                    colors={['rgba(59,130,246,0.1)', 'transparent']}
-                                    style={StyleSheet.absoluteFillObject}
-                                />
-                                <Ionicons name="eye" size={32} color={theme.colors.primary} style={{ marginBottom: 8 }} />
-                                <Text style={styles.paywallTitle}>Gizli Takipçilerini Gör</Text>
-                                <Text style={styles.paywallDesc}>Profilini kimlerin gezdiğini görmek için hemen VIP ol.</Text>
-                                <TouchableOpacity
-                                    style={styles.vipButton}
-                                    onPress={() => {
-                                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                                        navigation.navigate('VipDetails', { user });
-                                    }}
-                                    activeOpacity={0.8}
+                                    colors={['#FFE082', '#FFB300']}
+                                    start={{ x: 0, y: 0 }}
+                                    end={{ x: 1, y: 0 }}
+                                    style={styles.paywallGradient}
                                 >
-                                    <LinearGradient
-                                        colors={['#8b5cf6', '#d946ef']}
-                                        start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
-                                        style={styles.vipButtonGradient}
-                                    >
-                                        <Text style={styles.vipButtonText}>VIP Ayrıcalıklarını Keşfet</Text>
-                                    </LinearGradient>
-                                </TouchableOpacity>
-                            </BlurView>
+                                    <Text style={styles.paywallBtnText}>VIP 4 seviyesinde kullanılabilir.</Text>
+                                </LinearGradient>
+                            </TouchableOpacity>
                         </View>
                     )}
-                </>
+                </View>
             )}
         </View>
     );
@@ -201,155 +292,177 @@ export default function ProfileVisitorsScreen({ navigation, route }) {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
+        backgroundColor: '#09021a',
+    },
+    bgWrapper: {
+        position: 'absolute',
+        width: '100%',
+        height: 400,
+    },
+    backgroundImage: {
+        width: '100%',
+        height: '100%',
+        resizeMode: 'cover',
     },
     header: {
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'space-between',
         paddingHorizontal: 16,
-        paddingTop: 60,
-        paddingBottom: 20,
+        paddingTop: Platform.OS === 'ios' ? 60 : 40,
+        paddingBottom: 15,
     },
     backButton: {
         width: 40,
         height: 40,
         borderRadius: 20,
-        backgroundColor: 'rgba(255,255,255,0.05)',
+        backgroundColor: 'rgba(255,255,255,0.06)',
         alignItems: 'center',
         justifyContent: 'center',
+        borderWidth: 1,
+        borderColor: 'rgba(255, 255, 255, 0.08)',
     },
     headerTitle: {
-        fontSize: 20,
-        fontWeight: '800',
-        letterSpacing: -0.5,
+        color: '#FFFFFF',
+        fontSize: 18,
+        fontWeight: '900',
+        letterSpacing: 0.2,
     },
-    centerContainer: {
+    tabContainer: {
+        flexDirection: 'row',
+        paddingHorizontal: 20,
+        marginTop: 10,
+    },
+    tabButton: {
         flex: 1,
         alignItems: 'center',
-        justifyContent: 'center',
-        paddingHorizontal: 32,
+        paddingVertical: 12,
+        position: 'relative',
     },
-    emptyText: {
-        fontSize: 18,
-        fontWeight: '700',
-        textAlign: 'center',
-        marginBottom: 8,
-    },
-    emptySubText: {
+    activeTabButton: {},
+    tabText: {
         fontSize: 14,
-        textAlign: 'center',
-        lineHeight: 20,
+        letterSpacing: -0.2,
     },
-    chatItem: {
+    activeTabText: {
+        color: '#FFFFFF',
+        fontWeight: '800',
+    },
+    inactiveTabText: {
+        color: 'rgba(255, 255, 255, 0.4)',
+        fontWeight: '600',
+    },
+    activeTabIndicator: {
+        position: 'absolute',
+        bottom: 0,
+        width: 48,
+        height: 3,
+        borderRadius: 1.5,
+    },
+    tabDivider: {
+        height: 1,
+        backgroundColor: 'rgba(255, 255, 255, 0.05)',
+        marginHorizontal: 20,
+        marginBottom: 10,
+    },
+    cardContainer: {
+        marginBottom: 10,
+        marginHorizontal: 16,
+    },
+    visitorCard: {
         flexDirection: 'row',
-        padding: 12,
-        borderRadius: 24,
+        padding: 10,
+        borderRadius: 16,
         alignItems: 'center',
     },
     avatarContainer: {
         position: 'relative',
-        marginRight: 16,
     },
     avatarWrapper: {
-        width: 56,
-        height: 56,
-        borderRadius: 28,
+        width: 50,
+        height: 50,
+        borderRadius: 25,
         overflow: 'hidden',
     },
     onlineBadge: {
         position: 'absolute',
-        bottom: 2,
-        right: 2,
-        width: 14,
-        height: 14,
-        borderRadius: 7,
+        bottom: 1,
+        right: 1,
+        width: 12,
+        height: 12,
+        borderRadius: 6,
         backgroundColor: '#10b981',
         borderWidth: 2,
+        borderColor: '#110C24',
         zIndex: 2,
     },
     content: {
         flex: 1,
+        marginLeft: 12,
         justifyContent: 'center',
-    },
-    mainContent: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-    },
-    textContainer: {
-        flex: 1,
-        justifyContent: 'center',
-    },
-    nameRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 6,
-        marginBottom: 4,
     },
     name: {
-        fontSize: 16,
-        fontWeight: '700',
-        letterSpacing: -0.3,
-    },
-    lastMsg: {
+        color: '#FFFFFF',
         fontSize: 14,
-        paddingRight: 16,
+        fontWeight: '700',
+        letterSpacing: -0.2,
     },
-    metaContainer: {
-        alignItems: 'flex-end',
+    subText: {
+        color: 'rgba(255, 255, 255, 0.5)',
+        fontSize: 11,
+        marginTop: 2,
+    },
+    timeText: {
+        color: 'rgba(255, 255, 255, 0.3)',
+        fontSize: 9.5,
+        marginTop: 2,
+    },
+    lockBadge: {
+        width: 32,
+        height: 32,
+        borderRadius: 10,
+        backgroundColor: 'rgba(255, 179, 0, 0.1)',
+        alignItems: 'center',
         justifyContent: 'center',
-        marginLeft: 8,
+        borderWidth: 1,
+        borderColor: 'rgba(255, 179, 0, 0.15)',
     },
-    eyeIconWrapper: {
-        padding: 8,
-        backgroundColor: 'rgba(59, 130, 246, 0.1)',
-        borderRadius: 16,
+    eyeIconBox: {
+        width: 28,
+        height: 28,
+        alignItems: 'center',
+        justifyContent: 'center',
     },
     paywallOverlay: {
         position: 'absolute',
         bottom: 0,
         left: 0,
         right: 0,
-        height: 220,
-        justifyContent: 'flex-end',
-    },
-    paywallBlur: {
-        padding: 24,
-        paddingBottom: 40,
+        height: 140,
+        justifyContent: 'center',
         alignItems: 'center',
-        borderTopLeftRadius: 32,
-        borderTopRightRadius: 32,
-        overflow: 'hidden',
-        borderTopWidth: 1,
-        borderTopColor: 'rgba(255,255,255,0.1)',
-    },
-    paywallTitle: {
-        color: 'white',
-        fontSize: 22,
-        fontWeight: '900',
-        marginBottom: 8,
-    },
-    paywallDesc: {
-        color: 'rgba(255,255,255,0.7)',
-        fontSize: 14,
-        textAlign: 'center',
-        marginBottom: 20,
         paddingHorizontal: 20,
     },
-    vipButton: {
+    paywallBtn: {
         width: '100%',
-        height: 56,
-        borderRadius: 28,
+        height: 48,
+        borderRadius: 24,
         overflow: 'hidden',
+        shadowColor: '#FFB300',
+        shadowOffset: { width: 0, height: 6 },
+        shadowOpacity: 0.3,
+        shadowRadius: 12,
+        elevation: 8,
     },
-    vipButtonGradient: {
+    paywallGradient: {
         flex: 1,
         alignItems: 'center',
         justifyContent: 'center',
     },
-    vipButtonText: {
-        color: 'white',
-        fontSize: 16,
+    paywallBtnText: {
+        color: '#09021a',
+        fontSize: 14,
         fontWeight: '800',
+        letterSpacing: 0.2,
     },
 });

@@ -1,11 +1,13 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, Image, Dimensions, Platform } from 'react-native';
 import Animated, { FadeInDown, Layout } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
 import { useFocusEffect } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
+import { BlurView } from 'expo-blur';
 import axios from 'axios';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '../contexts/ThemeContext';
 import { API_URL } from '../config';
 import VipFrame from '../components/ui/VipFrame';
@@ -13,137 +15,278 @@ import GlassCard from '../components/ui/GlassCard';
 import SkeletonCard from '../components/ui/SkeletonCard';
 import AnimatedEmptyState from '../components/ui/AnimatedEmptyState';
 
+const { width } = Dimensions.get('window');
+
 export default function FavoritesScreen({ navigation, route }) {
-    const { theme, themeMode } = useTheme();
+    const { theme } = useTheme();
     const { user } = route.params || {};
-    const [favorites, setFavorites] = useState([]);
+    
+    const [activeTab, setActiveTab] = useState('whoFavoritedMe'); // 'whoFavoritedMe' or 'whoIFavorited'
+    const [favorites, setFavorites] = useState([]); // People I favorited
+    const [fans, setFans] = useState([]); // People who favorited me
+    const [isVIP, setIsVIP] = useState(false);
     const [loading, setLoading] = useState(true);
 
     useFocusEffect(
         React.useCallback(() => {
             if (user?.id) {
-                fetchFavorites();
+                fetchData();
             } else {
                 setLoading(false);
             }
-        }, [user])
+        }, [user, activeTab])
     );
 
-    const fetchFavorites = async () => {
+    const fetchData = async () => {
+        setLoading(true);
         try {
-            const res = await axios.get(`${API_URL}/favorites/${user.id}`);
-            setFavorites(res.data);
+            const token = await AsyncStorage.getItem('token');
+            if (activeTab === 'whoFavoritedMe') {
+                const res = await axios.get(`${API_URL}/favorites/${user.id}/fans`, {
+                    headers: { Authorization: `Bearer ${token}` }
+                });
+                setIsVIP(res.data.isVIP);
+                setFans(res.data.fans || []);
+            } else {
+                const res = await axios.get(`${API_URL}/favorites/${user.id}`, {
+                    headers: { Authorization: `Bearer ${token}` }
+                });
+                setFavorites(res.data || []);
+            }
         } catch (error) {
-            console.error('Fetch Favorites Error:', error);
+            console.error('Fetch Favorites/Fans Error:', error);
         } finally {
             setLoading(false);
         }
     };
 
+    const formatTimestamp = (dateString) => {
+        if (!dateString) return '';
+        const date = new Date(dateString);
+        const now = new Date();
+        const diffInSeconds = Math.floor((now - date) / 1000);
+
+        if (diffInSeconds < 60) return 'Az önce';
+        if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)} dakika önce`;
+        if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)} saat önce`;
+        return `${Math.floor(diffInSeconds / 86400)} gün önce`;
+    };
+
     const renderFavoriteItem = ({ item, index }) => {
+        const isWhoFavorited = activeTab === 'whoFavoritedMe';
+        const displayBlurred = isWhoFavorited && !isVIP;
+        
+        const displayName = displayBlurred ? 'Gizli Kullanıcı' : (item.name || item.username);
+        const subText = displayBlurred ? 'Bugün Sizi Favorilerine Ekleyenler' : (isWhoFavorited ? 'Sizi favorilerine ekledi' : 'Favorilerinizde kayıtlı');
+
         return (
             <Animated.View
-                entering={FadeInDown.delay(index * 50).springify().damping(12)}
+                entering={FadeInDown.delay(index * 40).springify().damping(13)}
                 layout={Layout.springify()}
             >
                 <TouchableOpacity
                     onPress={() => {
+                        if (isWhoFavorited && !isVIP) {
+                            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+                            navigation.navigate('VipDetails', { user });
+                            return;
+                        }
                         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                        // Convert DB format to expected Operator format if needed
                         const operatorData = {
                             id: item.id,
                             user_id: item.id,
                             name: item.name || item.username,
                             avatar_url: item.avatar_url,
                             gender: item.gender,
-                            job: item.job,
-                            vip_level: item.is_vip ? 1 : 0, // Fallback
+                            vip_level: item.vip_level || (item.is_vip ? 1 : 0),
                             is_online: item.is_online
                         };
                         navigation.navigate('OperatorProfile', { operator: operatorData, user });
                     }}
-                    style={{ marginBottom: 12, marginHorizontal: 16 }}
+                    style={styles.cardContainer}
                     activeOpacity={0.8}
                 >
-                    <GlassCard intensity={20} tint="dark" style={styles.chatItem}>
+                    <GlassCard intensity={25} tint="dark" style={styles.favoriteCard}>
                         <View style={styles.avatarContainer}>
-                            <VipFrame
-                                level={item.is_vip ? 1 : 0}
-                                avatar={item.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(item.name || item.username)}&background=random&color=fff`}
-                                size={56}
-                                isStatic={true}
-                            />
-                            {item.is_online && (
-                                <View style={[styles.onlineBadge, { borderColor: theme.colors.background }]} />
+                            <View style={styles.avatarWrapper}>
+                                <VipFrame
+                                    level={item.vip_level || (item.is_vip ? 1 : 0)}
+                                    avatar={item.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(item.name || item.username || 'User')}&background=random&color=fff`}
+                                    size={50}
+                                    isStatic={true}
+                                />
+                                {displayBlurred && (
+                                    <BlurView intensity={70} tint="dark" style={StyleSheet.absoluteFillObject} />
+                                )}
+                            </View>
+                            {item.is_online && !displayBlurred && (
+                                <View style={styles.onlineBadge} />
                             )}
                         </View>
 
                         <View style={styles.content}>
-                            <View style={styles.mainContent}>
-                                <View style={styles.textContainer}>
-                                    <View style={styles.nameRow}>
-                                        <Text style={[styles.name, { color: theme.colors.text }]} numberOfLines={1}>
-                                            {item.name || item.username}
-                                        </Text>
-
-                                        {item.is_vip && (
-                                            <LinearGradient
-                                                colors={['#e879f9', '#d946ef']}
-                                                start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.vipBadge}
-                                            >
-                                                <Ionicons name="star" size={8} color="white" />
-                                                <Text style={styles.vipText}>VIP</Text>
-                                            </LinearGradient>
-                                        )}
-                                    </View>
-                                    <Text style={[styles.lastMsg, { color: theme.colors.textSecondary }]} numberOfLines={1}>
-                                        {item.job || (item.gender === 'erkek' ? 'Erkek' : 'Kadın')}
-                                    </Text>
-                                </View>
-                                <View style={styles.metaContainer}>
-                                    <View style={styles.heartIconWrapper}>
-                                        <Ionicons name="heart" size={20} color="#ef4444" />
-                                    </View>
-                                </View>
-                            </View>
+                            <Text style={styles.name} numberOfLines={1}>
+                                {displayName}
+                            </Text>
+                            <Text style={styles.subText} numberOfLines={1}>
+                                {subText}
+                            </Text>
+                            {item.created_at && (
+                                <Text style={styles.timeText}>
+                                    {formatTimestamp(item.created_at)}
+                                </Text>
+                            )}
                         </View>
+
+                        {isWhoFavorited && !isVIP ? (
+                            <View style={styles.lockBadge}>
+                                <Ionicons name="lock-closed" size={15} color="#FFB300" />
+                            </View>
+                        ) : (
+                            <View style={styles.heartIconBox}>
+                                <Ionicons name="heart" size={18} color="#ef4444" />
+                            </View>
+                        )}
                     </GlassCard>
                 </TouchableOpacity>
             </Animated.View>
         );
     };
 
+    const currentList = activeTab === 'whoFavoritedMe' ? fans : favorites;
+
     return (
-        <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
+        <View style={styles.container}>
+            {/* Background Image Layer identical to Profile Screen */}
+            <View style={styles.bgWrapper}>
+                <Image 
+                    source={require('../../assets/fiva_profile_banner.png')} 
+                    style={styles.backgroundImage}
+                />
+                <LinearGradient
+                    colors={['rgba(9, 2, 26, 0.15)', 'rgba(9, 2, 26, 0.8)', '#09021a']}
+                    style={StyleSheet.absoluteFill}
+                />
+            </View>
+
+            {/* Header */}
             <View style={styles.header}>
                 <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
-                    <Ionicons name="arrow-back" size={24} color={theme.colors.text} />
+                    <Ionicons name="chevron-back" size={24} color="#FFFFFF" />
                 </TouchableOpacity>
-                <Text style={[styles.headerTitle, { color: theme.colors.text }]}>Favorilerim</Text>
+                <Text style={styles.headerTitle}>Favori Kullanıcı</Text>
                 <View style={{ width: 40 }} />
             </View>
 
+            {/* Segmented Tabs */}
+            <View style={styles.tabContainer}>
+                <TouchableOpacity
+                    style={[styles.tabButton, activeTab === 'whoFavoritedMe' && styles.activeTabButton]}
+                    onPress={() => {
+                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                        setActiveTab('whoFavoritedMe');
+                    }}
+                    activeOpacity={0.7}
+                >
+                    <Text style={[
+                        styles.tabText,
+                        activeTab === 'whoFavoritedMe' ? styles.activeTabText : styles.inactiveTabText
+                    ]}>
+                        Beni kim ekledi
+                    </Text>
+                    {activeTab === 'whoFavoritedMe' && (
+                        <LinearGradient
+                            colors={['#EC4899', '#7C3AED']}
+                            style={styles.activeTabIndicator}
+                            start={{ x: 0, y: 0 }}
+                            end={{ x: 1, y: 0 }}
+                        />
+                    )}
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                    style={[styles.tabButton, activeTab === 'whoIFavorited' && styles.activeTabButton]}
+                    onPress={() => {
+                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                        setActiveTab('whoIFavorited');
+                    }}
+                    activeOpacity={0.7}
+                >
+                    <Text style={[
+                        styles.tabText,
+                        activeTab === 'whoIFavorited' ? styles.activeTabText : styles.inactiveTabText
+                    ]}>
+                        Favori Eklediklerim
+                    </Text>
+                    {activeTab === 'whoIFavorited' && (
+                        <LinearGradient
+                            colors={['#EC4899', '#7C3AED']}
+                            style={styles.activeTabIndicator}
+                            start={{ x: 0, y: 0 }}
+                            end={{ x: 1, y: 0 }}
+                        />
+                    )}
+                </TouchableOpacity>
+            </View>
+            <View style={styles.tabDivider} />
+
             {loading ? (
-                <View style={{ paddingTop: 10 }}>
+                <View style={{ padding: 16 }}>
                     {[...Array(5)].map((_, i) => <SkeletonCard key={i} />)}
                 </View>
-            ) : favorites.length === 0 ? (
+            ) : currentList.length === 0 ? (
                 <View style={{ flex: 1, justifyContent: 'center' }}>
                     <AnimatedEmptyState
                         icon="heart-outline"
-                        title="Henüz kimse yok"
-                        description="Görünüşe göre henüz kimseyi favorilerine eklememişsin. Yeni insanları keşfetmeye başla!"
-                        colors={['#ef4444', '#f43f5e']}
+                        title={activeTab === 'whoFavoritedMe' ? "Hâlâ Boş" : "Favori Yok"}
+                        description={activeTab === 'whoFavoritedMe' 
+                            ? "Henüz kimse seni favorilerine eklememiş. Profilini tamamla ve öne çık!"
+                            : "Henüz kimseyi favorilerine eklememişsin. Keşfet sayfasından yeni insanlarla tanışın!"}
+                        colors={['#EF4444', '#F43F5E']}
                     />
                 </View>
             ) : (
-                <FlatList
-                    data={favorites}
-                    renderItem={renderFavoriteItem}
-                    keyExtractor={item => item.id}
-                    contentContainerStyle={{ paddingVertical: 10, paddingBottom: 100 }}
-                    showsVerticalScrollIndicator={false}
-                />
+                <View style={{ flex: 1 }}>
+                    <FlatList
+                        data={currentList}
+                        renderItem={renderFavoriteItem}
+                        keyExtractor={(item, idx) => (item.id || idx).toString() + '-' + (item.created_at || idx)}
+                        contentContainerStyle={{ 
+                            paddingVertical: 12, 
+                            paddingBottom: (!isVIP && activeTab === 'whoFavoritedMe') ? 140 : 50 
+                        }}
+                        showsVerticalScrollIndicator={false}
+                    />
+
+                    {/* Gold Premium Paywall Action Button at the Bottom */}
+                    {!isVIP && activeTab === 'whoFavoritedMe' && (
+                        <View style={styles.paywallOverlay}>
+                            <BlurView intensity={35} tint="dark" style={StyleSheet.absoluteFillObject} />
+                            <LinearGradient
+                                colors={['rgba(9, 2, 26, 0.0)', 'rgba(9, 2, 26, 0.85)', '#09021a']}
+                                style={StyleSheet.absoluteFillObject}
+                            />
+                            
+                            <TouchableOpacity
+                                style={styles.paywallBtn}
+                                onPress={() => {
+                                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                                    navigation.navigate('VipDetails', { user });
+                                }}
+                                activeOpacity={0.85}
+                            >
+                                <LinearGradient
+                                    colors={['#FFE082', '#FFB300']}
+                                    start={{ x: 0, y: 0 }}
+                                    end={{ x: 1, y: 0 }}
+                                    style={styles.paywallGradient}
+                                >
+                                    <Text style={styles.paywallBtnText}>VIP 4 seviyesinde kullanılabilir.</Text>
+                                </LinearGradient>
+                            </TouchableOpacity>
+                        </View>
+                    )}
+                </View>
             )}
         </View>
     );
@@ -152,116 +295,177 @@ export default function FavoritesScreen({ navigation, route }) {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
+        backgroundColor: '#09021a',
+    },
+    bgWrapper: {
+        position: 'absolute',
+        width: '100%',
+        height: 400,
+    },
+    backgroundImage: {
+        width: '100%',
+        height: '100%',
+        resizeMode: 'cover',
     },
     header: {
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'space-between',
         paddingHorizontal: 16,
-        paddingTop: 60,
-        paddingBottom: 20,
+        paddingTop: Platform.OS === 'ios' ? 60 : 40,
+        paddingBottom: 15,
     },
     backButton: {
         width: 40,
         height: 40,
         borderRadius: 20,
-        backgroundColor: 'rgba(255,255,255,0.05)',
+        backgroundColor: 'rgba(255,255,255,0.06)',
         alignItems: 'center',
         justifyContent: 'center',
+        borderWidth: 1,
+        borderColor: 'rgba(255, 255, 255, 0.08)',
     },
     headerTitle: {
-        fontSize: 20,
-        fontWeight: '800',
-        letterSpacing: -0.5,
+        color: '#FFFFFF',
+        fontSize: 18,
+        fontWeight: '900',
+        letterSpacing: 0.2,
     },
-    centerContainer: {
+    tabContainer: {
+        flexDirection: 'row',
+        paddingHorizontal: 20,
+        marginTop: 10,
+    },
+    tabButton: {
         flex: 1,
         alignItems: 'center',
-        justifyContent: 'center',
-        paddingHorizontal: 32,
+        paddingVertical: 12,
+        position: 'relative',
     },
-    emptyText: {
-        fontSize: 18,
-        fontWeight: '700',
-        textAlign: 'center',
-        marginBottom: 8,
-    },
-    emptySubText: {
+    activeTabButton: {},
+    tabText: {
         fontSize: 14,
-        textAlign: 'center',
-        lineHeight: 20,
+        letterSpacing: -0.2,
     },
-    chatItem: {
+    activeTabText: {
+        color: '#FFFFFF',
+        fontWeight: '800',
+    },
+    inactiveTabText: {
+        color: 'rgba(255, 255, 255, 0.4)',
+        fontWeight: '600',
+    },
+    activeTabIndicator: {
+        position: 'absolute',
+        bottom: 0,
+        width: 48,
+        height: 3,
+        borderRadius: 1.5,
+    },
+    tabDivider: {
+        height: 1,
+        backgroundColor: 'rgba(255, 255, 255, 0.05)',
+        marginHorizontal: 20,
+        marginBottom: 10,
+    },
+    cardContainer: {
+        marginBottom: 10,
+        marginHorizontal: 16,
+    },
+    favoriteCard: {
         flexDirection: 'row',
-        padding: 12,
-        borderRadius: 24,
+        padding: 10,
+        borderRadius: 16,
         alignItems: 'center',
     },
     avatarContainer: {
         position: 'relative',
-        marginRight: 16,
+    },
+    avatarWrapper: {
+        width: 50,
+        height: 50,
+        borderRadius: 25,
+        overflow: 'hidden',
     },
     onlineBadge: {
         position: 'absolute',
-        bottom: 2,
-        right: 2,
-        width: 14,
-        height: 14,
-        borderRadius: 7,
+        bottom: 1,
+        right: 1,
+        width: 12,
+        height: 12,
+        borderRadius: 6,
         backgroundColor: '#10b981',
         borderWidth: 2,
+        borderColor: '#110C24',
         zIndex: 2,
     },
     content: {
         flex: 1,
+        marginLeft: 12,
         justifyContent: 'center',
-    },
-    mainContent: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-    },
-    textContainer: {
-        flex: 1,
-        justifyContent: 'center',
-    },
-    nameRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 6,
-        marginBottom: 4,
     },
     name: {
-        fontSize: 16,
-        fontWeight: '700',
-        letterSpacing: -0.3,
-    },
-    vipBadge: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        paddingHorizontal: 6,
-        paddingVertical: 2,
-        borderRadius: 8,
-        gap: 2,
-    },
-    vipText: {
-        color: 'white',
-        fontSize: 10,
-        fontWeight: '800',
-        letterSpacing: 0.5,
-    },
-    lastMsg: {
+        color: '#FFFFFF',
         fontSize: 14,
-        paddingRight: 16,
+        fontWeight: '700',
+        letterSpacing: -0.2,
     },
-    metaContainer: {
-        alignItems: 'flex-end',
+    subText: {
+        color: 'rgba(255, 255, 255, 0.5)',
+        fontSize: 11,
+        marginTop: 2,
+    },
+    timeText: {
+        color: 'rgba(255, 255, 255, 0.3)',
+        fontSize: 9.5,
+        marginTop: 2,
+    },
+    lockBadge: {
+        width: 32,
+        height: 32,
+        borderRadius: 10,
+        backgroundColor: 'rgba(255, 179, 0, 0.1)',
+        alignItems: 'center',
         justifyContent: 'center',
-        marginLeft: 8,
+        borderWidth: 1,
+        borderColor: 'rgba(255, 179, 0, 0.15)',
     },
-    heartIconWrapper: {
-        padding: 8,
-        backgroundColor: 'rgba(239, 68, 68, 0.1)',
-        borderRadius: 16,
-    }
+    heartIconBox: {
+        width: 28,
+        height: 28,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    paywallOverlay: {
+        position: 'absolute',
+        bottom: 0,
+        left: 0,
+        right: 0,
+        height: 140,
+        justifyContent: 'center',
+        alignItems: 'center',
+        paddingHorizontal: 20,
+    },
+    paywallBtn: {
+        width: '100%',
+        height: 48,
+        borderRadius: 24,
+        overflow: 'hidden',
+        shadowColor: '#FFB300',
+        shadowOffset: { width: 0, height: 6 },
+        shadowOpacity: 0.3,
+        shadowRadius: 12,
+        elevation: 8,
+    },
+    paywallGradient: {
+        flex: 1,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    paywallBtnText: {
+        color: '#09021a',
+        fontSize: 14,
+        fontWeight: '800',
+        letterSpacing: 0.2,
+    },
 });

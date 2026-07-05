@@ -1047,7 +1047,7 @@ app.get('/api/operators', async (req, res) => {
             SELECT 
                 u.id, 
                 COALESCE(u.display_name, u.username) as name, 
-                u.avatar_url, u.gender, u.age, u.vip_level, u.job, u.relationship, u.zodiac, u.interests, u.role,
+                u.avatar_url, u.gender, u.age, u.vip_level, u.job, u.relationship, u.zodiac, u.interests, u.role, u.boy,
                 o.category, o.rating, o.is_online, 
                 COALESCE(o.bio, u.bio) as bio, o.photos,
                 EXISTS(SELECT 1 FROM stories s WHERE s.operator_id = u.id AND s.expires_at > NOW()) as has_active_story,
@@ -1152,7 +1152,7 @@ app.get('/api/discovery', authenticateToken, async (req, res) => {
             orderByClause = 'ORDER BY u.vip_level DESC, o.rating DESC NULLS LAST, u.created_at DESC, u.id DESC';
         } else {
             // "Önerilen" or Default
-            orderByClause = 'ORDER BY o.is_online DESC NULLS LAST, (coalesce(cardinality(o.photos), 0) > 0) DESC, (EXISTS(SELECT 1 FROM boosts b WHERE b.user_id = u.id AND b.end_time > NOW())) DESC, u.created_at DESC, u.id DESC';
+            orderByClause = 'ORDER BY o.is_online DESC NULLS LAST, (coalesce(cardinality(o.photos), 0) > 0) DESC, COALESCE(active_boosts.val, FALSE) DESC, u.created_at DESC, u.id DESC';
         }
 
         const query = `
@@ -1168,14 +1168,15 @@ app.get('/api/discovery', authenticateToken, async (req, res) => {
                 u.zodiac,
                 u.interests,
                 u.role,
+                u.boy,
                 o.category, 
                 o.rating, 
                 o.is_online, 
                 COALESCE(o.bio, u.bio) as bio, 
                 o.photos,
                 CASE WHEN o.user_id IS NOT NULL THEN TRUE ELSE FALSE END as is_operator,
-                EXISTS(SELECT 1 FROM stories s WHERE s.operator_id = u.id AND s.expires_at > NOW()) as has_active_story,
-                EXISTS(SELECT 1 FROM boosts b WHERE b.user_id = u.id AND b.end_time > NOW()) as is_boosted,
+                COALESCE(active_stories.val, FALSE) as has_active_story,
+                COALESCE(active_boosts.val, FALSE) as is_boosted,
                 un.expires_at as nobility_expires_at, 
                 nt.key as nobility_key, 
                 nt.name as nobility_name, 
@@ -1186,6 +1187,12 @@ app.get('/api/discovery', authenticateToken, async (req, res) => {
             LEFT JOIN operators o ON u.id = o.user_id
             LEFT JOIN user_nobility un ON u.id = un.user_id AND un.is_active = TRUE AND un.expires_at > NOW()
             LEFT JOIN nobility_titles nt ON un.title_id = nt.id
+            LEFT JOIN LATERAL (
+                SELECT TRUE as val FROM boosts b WHERE b.user_id = u.id AND b.end_time > NOW() LIMIT 1
+            ) active_boosts ON TRUE
+            LEFT JOIN LATERAL (
+                SELECT TRUE as val FROM stories s WHERE s.operator_id = u.id AND s.expires_at > NOW() LIMIT 1
+            ) active_stories ON TRUE
             ${whereClause}
               AND u.id != ${targetGender === 'all' ? '$1' : '$2'}
               AND u.account_status = 'active'
@@ -2606,7 +2613,7 @@ app.delete('/api/users/:id', authenticateToken, async (req, res) => {
 // UPDATE USER PROFILE
 app.put('/api/users/:id/profile', authenticateToken, async (req, res) => {
     const { id } = req.params;
-    const { name, bio, job, relationship, zodiac, interests, age, edu, boy, kilo } = req.body;
+    const { name, bio, job, relationship, zodiac, interests, age, edu, boy, kilo, city } = req.body;
 
     // Authorization check: User can update own profile, Admins can update any
     if (req.user.id.toString() !== id.toString() && req.user.role !== 'admin' && req.user.role !== 'super_admin') {
@@ -2626,10 +2633,11 @@ app.put('/api/users/:id/profile', authenticateToken, async (req, res) => {
                  age = COALESCE($7, age),
                  edu = COALESCE($8, edu),
                  boy = COALESCE($9, boy),
-                 kilo = COALESCE($10, kilo)
-             WHERE id = $11 
+                 kilo = COALESCE($10, kilo),
+                 city = COALESCE($11, city)
+             WHERE id = $12 
              RETURNING *`,
-            [name, bio, job, relationship, zodiac, interests, age, edu, boy, kilo, id]
+            [name, bio, job, relationship, zodiac, interests, age, edu, boy, kilo, city, id]
         );
 
         if (result.rows.length === 0) {

@@ -1,7 +1,12 @@
 package com.fivachat.app
 
+import android.graphics.Color
 import android.os.Build
 import android.os.Bundle
+import android.view.View
+import android.view.ViewGroup
+import android.view.ViewTreeObserver
+import android.widget.EditText
 
 import com.facebook.react.ReactActivity
 import com.facebook.react.ReactActivityDelegate
@@ -11,12 +16,36 @@ import com.facebook.react.defaults.DefaultReactActivityDelegate
 import expo.modules.ReactActivityDelegateWrapper
 
 class MainActivity : ReactActivity() {
+
+  private val layoutListener = ViewTreeObserver.OnGlobalLayoutListener {
+    clearEditTextBackgrounds(window.decorView)
+  }
+
+  private fun clearEditTextBackgrounds(view: View) {
+    if (view is EditText) {
+      view.background = null
+      view.setBackgroundColor(Color.TRANSPARENT)
+    }
+    if (view is ViewGroup) {
+      for (i in 0 until view.childCount) {
+        clearEditTextBackgrounds(view.getChildAt(i))
+      }
+    }
+  }
+
   override fun onCreate(savedInstanceState: Bundle?) {
     // Set the theme to AppTheme BEFORE onCreate to support
     // coloring the background, status bar, and navigation bar.
     // This is required for expo-splash-screen.
-    setTheme(R.style.AppTheme);
+    setTheme(R.style.AppTheme)
     super.onCreate(null)
+    // Clear native EditText backgrounds that cause a dark strip on focus/typing
+    window.decorView.viewTreeObserver.addOnGlobalLayoutListener(layoutListener)
+  }
+
+  override fun onDestroy() {
+    super.onDestroy()
+    window.decorView.viewTreeObserver.removeOnGlobalLayoutListener(layoutListener)
   }
 
   /**
@@ -59,3 +88,4 @@ class MainActivity : ReactActivity() {
       super.invokeDefaultOnBackPressed()
   }
 }
+

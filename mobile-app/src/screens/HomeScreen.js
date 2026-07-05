@@ -71,16 +71,37 @@ const OperatorItem = React.memo(({ item, navigation, user, theme, onHiPress }) =
                             )}
                             <Ionicons name="checkmark-circle" size={16} color="#3b82f6" />
                         </View>
-                        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                            {item.job ? (
-                                <Text style={[styles.jobText, { color: theme.colors.textSecondary }]}>{item.job}</Text>
+                        <View style={styles.chipsRow}>
+                            <View style={styles.infoChip}>
+                                <Ionicons name="location-sharp" size={10} color="#a855f7" style={{ marginRight: 2 }} />
+                                <Text style={[styles.infoChipText, { color: theme.colors.textSecondary }]} numberOfLines={1}>
+                                    {item.distance_km ? `${item.distance_km.toFixed(1)} km` : (item.city || 'İstanbul')}
+                                </Text>
+                            </View>
+
+                            <Text style={styles.chipDivider}>·</Text>
+
+                            <View style={styles.infoChip}>
+                                <Ionicons name={profileGender === 'erkek' ? "male" : "female"} size={10} color={profileGender === 'erkek' ? '#3b82f6' : '#ec4899'} style={{ marginRight: 2 }} />
+                                <Text style={[styles.infoChipText, { color: theme.colors.textSecondary }]}>{item.age ? `${item.age}y` : '25y'}</Text>
+                            </View>
+
+                            <Text style={styles.chipDivider}>·</Text>
+
+                            <View style={styles.infoChip}>
+                                <Ionicons name="man" size={10} color="#06b6d4" style={{ marginRight: 2 }} />
+                                <Text style={[styles.infoChipText, { color: theme.colors.textSecondary }]}>{item.boy ? `${item.boy} cm` : '172 cm'}</Text>
+                            </View>
+
+                            {item.is_verified ? (
+                                <>
+                                    <Text style={styles.chipDivider}>·</Text>
+                                    <View style={styles.infoChip}>
+                                        <Ionicons name="checkmark-circle" size={10} color="#3b82f6" style={{ marginRight: 2 }} />
+                                        <Text style={[styles.infoChipText, { color: theme.colors.textSecondary }]}>Doğrulandı</Text>
+                                    </View>
+                                </>
                             ) : null}
-                            {item.age && (
-                                <View style={[styles.ageBadge, { backgroundColor: profileGender === 'erkek' ? '#3b82f6' : '#f472b6' }]}>
-                                    <Ionicons name={profileGender === 'erkek' ? "male" : "female"} size={8} color="white" />
-                                    <Text style={styles.ageBadgeText}>{item.age}</Text>
-                                </View>
-                            )}
                         </View>
                     </View>
                 </TouchableOpacity>
@@ -195,16 +216,25 @@ export default function HomeScreen({ navigation, route }) {
             setRefreshing(true);
         } else if (pageNum === 1) {
             setLoading(true);
+            setOperators([]); // Clear list immediately on tab change to show loading skeleton
         } else {
             setLoadingMore(true);
         }
 
+        const requestedTab = activeTab; // Keep track of tab for race conditions
+
         try {
             const token = await AsyncStorage.getItem('token');
             // Fetch 20 profiles per page to fill the screen and support smooth scrolling
-            const res = await axios.get(`${API_URL}/discovery?tab=${activeTab}&page=${pageNum}&limit=20`, {
+            const res = await axios.get(`${API_URL}/discovery?tab=${requestedTab}&page=${pageNum}&limit=20`, {
                 headers: { Authorization: `Bearer ${token}` }
             });
+            
+            // If the user has switched tabs while this request was loading, discard the stale result
+            if (activeTab !== requestedTab) {
+                return;
+            }
+
             const data = res.data?.data || res.data || [];
             
             if (pageNum === 1) {
@@ -230,9 +260,12 @@ export default function HomeScreen({ navigation, route }) {
         } catch (e) {
             console.error('Fetch operators error:', e);
         } finally {
-            setLoading(false);
-            setRefreshing(false);
-            setLoadingMore(false);
+            // Only toggle loading states if we are still on the active tab
+            if (activeTab === requestedTab) {
+                setLoading(false);
+                setRefreshing(false);
+                setLoadingMore(false);
+            }
         }
     };
 
@@ -398,27 +431,29 @@ export default function HomeScreen({ navigation, route }) {
     ), [theme, balance, showSearch, searchText, activeTab, user, featuredOperators, currentFilters]);
 
 
-    const filteredData = operators.filter(op => {
-        const matchesSearch = normalizeText(op.name).includes(normalizeText(searchText)) ||
-                              normalizeText(op.job || '').includes(normalizeText(searchText));
-        
-        let matchesGender = true;
-        if (currentFilters.gender !== 'all') {
-            const opGender = getProfileGender(op);
-            matchesGender = opGender === currentFilters.gender;
-        }
+    const filteredData = React.useMemo(() => {
+        return operators.filter(op => {
+            const matchesSearch = normalizeText(op.name).includes(normalizeText(searchText)) ||
+                                  normalizeText(op.job || '').includes(normalizeText(searchText));
+            
+            let matchesGender = true;
+            if (currentFilters.gender !== 'all') {
+                const opGender = getProfileGender(op);
+                matchesGender = opGender === currentFilters.gender;
+            }
 
-        let matchesAge = true;
-        if (currentFilters.ageGroup !== 'all' && op.age) {
-            const age = parseInt(op.age, 10);
-            if (currentFilters.ageGroup === '18-24') matchesAge = age >= 18 && age <= 24;
-            else if (currentFilters.ageGroup === '25-34') matchesAge = age >= 25 && age <= 34;
-            else if (currentFilters.ageGroup === '35-44') matchesAge = age >= 35 && age <= 44;
-            else if (currentFilters.ageGroup === '45+') matchesAge = age >= 45;
-        }
+            let matchesAge = true;
+            if (currentFilters.ageGroup !== 'all' && op.age) {
+                const age = parseInt(op.age, 10);
+                if (currentFilters.ageGroup === '18-24') matchesAge = age >= 18 && age <= 24;
+                else if (currentFilters.ageGroup === '25-34') matchesAge = age >= 25 && age <= 34;
+                else if (currentFilters.ageGroup === '35-44') matchesAge = age >= 35 && age <= 44;
+                else if (currentFilters.ageGroup === '45+') matchesAge = age >= 45;
+            }
 
-        return matchesSearch && matchesGender && matchesAge;
-    });
+            return matchesSearch && matchesGender && matchesAge;
+        });
+    }, [operators, searchText, currentFilters]);
 
     const renderItem = React.useCallback(({ item }) => (
         <OperatorItem 
@@ -560,9 +595,31 @@ const styles = StyleSheet.create({
     infoContainer: { marginLeft: 12, flex: 1 },
     nameRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 1 },
     name: { fontSize: 16, fontWeight: 'bold' },
-    jobText: { fontSize: 11, marginRight: 6 },
-    ageBadge: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 10 },
-    ageBadgeText: { color: 'white', fontSize: 10, fontWeight: 'bold', marginLeft: 2 },
+    chipsRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        flexWrap: 'wrap',
+        marginTop: 4,
+    },
+    infoChip: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: 'rgba(255, 255, 255, 0.04)',
+        paddingHorizontal: 6,
+        paddingVertical: 2,
+        borderRadius: 8,
+        maxWidth: 80,
+    },
+    infoChipText: {
+        fontSize: 10,
+        fontWeight: '700',
+    },
+    chipDivider: {
+        color: 'rgba(255, 255, 255, 0.2)',
+        marginHorizontal: 3,
+        fontSize: 10,
+        fontWeight: 'bold',
+    },
     premiumVipBadge: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6, marginRight: 4 },
     premiumVipText: { color: 'white', fontSize: 9, fontWeight: 'bold' },
     bioText: { fontSize: 11, marginTop: 8, lineHeight: 16 },

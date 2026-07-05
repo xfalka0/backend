@@ -2,6 +2,11 @@ package com.fivachat.app
 
 import android.app.Application
 import android.content.res.Configuration
+import android.graphics.drawable.ColorDrawable
+import android.graphics.Color
+import android.view.ViewTreeObserver
+import android.widget.EditText
+import android.view.ViewGroup
 
 import com.facebook.react.PackageList
 import com.facebook.react.ReactApplication
@@ -22,7 +27,7 @@ class MainApplication : Application(), ReactApplication {
         object : DefaultReactNativeHost(this) {
           override fun getPackages(): List<ReactPackage> {
             // Packages that cannot be autolinked yet can be added manually here, for example:
-            // packages.add(new MyReactNativePackage());
+            // packages.add(new MyReactNativePackage())
             return PackageList(this).packages
           }
 
@@ -53,3 +58,4 @@ class MainApplication : Application(), ReactApplication {
     ApplicationLifecycleDispatcher.onConfigurationChanged(this, newConfig)
   }
 }
+

@@ -10,22 +10,49 @@ import Animated, {
 } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
+import MaskedView from '@react-native-masked-view/masked-view';
 import GlassCard from '../ui/GlassCard';
 import * as Haptics from 'expo-haptics';
 
 const { width } = Dimensions.get('window');
+
+// MaskedView-based GradientIcon (uses compiled native module)
+const GradientIcon = ({ name, size = 26, colors = ['#FFFFFF', '#EC4899'] }) => (
+    <MaskedView
+        style={{ width: size, height: size }}
+        maskElement={
+            <View style={{ backgroundColor: 'transparent', flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+                <Ionicons name={name} size={size} color="#FFFFFF" />
+            </View>
+        }
+    >
+        <LinearGradient
+            colors={colors}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 0, y: 1 }}
+            style={{ width: size, height: size }}
+        />
+    </MaskedView>
+);
 
 const AnimatedTab = ({ state, descriptors, navigation }) => {
     // Equal-width slots keep the rooms action exactly in the center.
     const tabWidth = (width - 60) / state.routes.length;
 
     const indicatorPos = useSharedValue(0);
+    const indicatorOpacity = useSharedValue(1);
 
     useEffect(() => {
         indicatorPos.value = withSpring(state.index * tabWidth, {
             damping: 14,
             stiffness: 120,
         });
+
+        // Find if the currently focused route is the center button
+        const centerIndex = state.routes.findIndex(
+            route => descriptors[route.key].options.tabBarCenterButton === true
+        );
+        indicatorOpacity.value = withTiming(state.index === centerIndex ? 0 : 1, { duration: 180 });
     }, [state.index]);
 
     const indicatorStyle = useAnimatedStyle(() => ({
@@ -33,6 +60,7 @@ const AnimatedTab = ({ state, descriptors, navigation }) => {
             { translateX: indicatorPos.value },
             { translateY: 15 } // Move even further down
         ],
+        opacity: indicatorOpacity.value,
     }));
 
     return (
@@ -124,19 +152,24 @@ const TabItem = ({ isFocused, onPress, icon, isCenter = false }) => {
             <Animated.View style={animatedStyle}>
                 {isCenter ? (
                     <LinearGradient
-                        colors={isFocused ? ['#A78BFA', '#EC4899'] : ['#6D5AA8', '#9D467B']}
+                        colors={isFocused ? ['#EC4899', '#FFFFFF'] : ['rgba(255, 255, 255, 0.15)', 'rgba(255, 255, 255, 0.05)']}
                         start={{ x: 0, y: 0 }}
                         end={{ x: 1, y: 1 }}
                         style={[styles.centerButton, isFocused && styles.centerButtonFocused]}
                     >
-                        <Ionicons name="mic" size={25} color="#FFFFFF" />
-                        <Text style={styles.centerButtonLabel}>Odalar</Text>
+                        <View style={styles.centerButtonInner}>
+                            {isFocused ? (
+                                <GradientIcon name="mic" size={26} colors={['#FFFFFF', '#EC4899']} />
+                            ) : (
+                                <Ionicons name="mic-outline" size={26} color="rgba(255, 255, 255, 0.45)" />
+                            )}
+                        </View>
                     </LinearGradient>
                 ) : (
                     <View style={{ position: 'relative', width: 28, height: 28, justifyContent: 'center', alignItems: 'center' }}>
-                        {/* Active state (Solid Pink-White Blend) */}
+                        {/* Active state (Gradient Pink-White) */}
                         <Animated.View style={activeIconStyle}>
-                            <Ionicons name={icon} size={26} color="#FFA3E3" />
+                            <GradientIcon name={icon} size={26} />
                         </Animated.View>
                         {/* Inactive state (Outline, Gray) */}
                         <Animated.View style={inactiveIconStyle}>
@@ -206,28 +239,30 @@ const styles = StyleSheet.create({
         zIndex: 20,
     },
     centerButton: {
-        width: 58,
-        height: 58,
-        borderRadius: 29,
+        width: 54,
+        height: 54,
+        borderRadius: 27,
+        padding: 2.5, // Outer gradient border width
         alignItems: 'center',
         justifyContent: 'center',
-        borderWidth: 3,
-        borderColor: '#17152B',
         shadowColor: '#EC4899',
-        shadowOffset: { width: 0, height: 7 },
-        shadowOpacity: 0.35,
-        shadowRadius: 10,
-        elevation: 12,
+        shadowOffset: { width: 0, height: 6 },
+        shadowOpacity: 0.3,
+        shadowRadius: 12,
+        elevation: 10,
+    },
+    centerButtonInner: {
+        flex: 1,
+        width: '100%',
+        height: '100%',
+        borderRadius: 24,
+        backgroundColor: '#171430', // Sleek dark matching tab bar
+        alignItems: 'center',
+        justifyContent: 'center',
     },
     centerButtonFocused: {
-        borderColor: 'rgba(255,255,255,0.32)',
-    },
-    centerButtonLabel: {
-        color: '#FFFFFF',
-        fontSize: 8,
-        lineHeight: 9,
-        fontWeight: '800',
-        marginTop: 1,
+        shadowOpacity: 0.45,
+        shadowRadius: 15,
     },
     badge: {
         position: 'absolute',

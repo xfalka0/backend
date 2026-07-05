@@ -248,7 +248,9 @@ export const useRoomStore = create((set, get) => ({
         const { giftBannerQueue, currentGiftBanner, _advanceBannerQueue } = get();
         if (!currentGiftBanner) {
             set({ currentGiftBanner: giftEvent });
-            const timer = setTimeout(() => get()._advanceBannerQueue(), GIFT_BANNER_DURATION_MS);
+            const giftId = Number(giftEvent?.gift_id);
+            const duration = giftId === 6 ? 6000 : (giftId === 7 ? 5000 : GIFT_BANNER_DURATION_MS);
+            const timer = setTimeout(() => get()._advanceBannerQueue(), duration);
             set({ giftBannerTimer: timer });
         } else {
             set({ giftBannerQueue: [...giftBannerQueue, giftEvent] });
@@ -263,7 +265,9 @@ export const useRoomStore = create((set, get) => ({
         }
         const [next, ...rest] = giftBannerQueue;
         set({ currentGiftBanner: next, giftBannerQueue: rest });
-        const timer = setTimeout(() => get()._advanceBannerQueue(), GIFT_BANNER_DURATION_MS);
+        const giftId = Number(next?.gift_id);
+        const duration = giftId === 6 ? 6000 : (giftId === 7 ? 5000 : GIFT_BANNER_DURATION_MS);
+        const timer = setTimeout(() => get()._advanceBannerQueue(), duration);
         set({ giftBannerTimer: timer });
     },
 

@@ -19,6 +19,7 @@ import {
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons, FontAwesome5 } from '@expo/vector-icons';
+import MaskedView from '@react-native-masked-view/masked-view';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
@@ -33,6 +34,25 @@ import { preventScreenshots } from '../utils/security';
 import GlassCard from '../components/ui/GlassCard';
 
 const { width } = Dimensions.get('window');
+
+// Generic MaskedView Gradient Icon for Profile actions
+const GradientIcon = ({ IconComponent, name, size = 26, colors = ['#FFFFFF', '#EC4899'] }) => (
+    <MaskedView
+        style={{ width: size, height: size }}
+        maskElement={
+            <View style={{ backgroundColor: 'transparent', flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+                <IconComponent name={name} size={size} color="#FFFFFF" />
+            </View>
+        }
+    >
+        <LinearGradient
+            colors={colors}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={{ width: size, height: size }}
+        />
+    </MaskedView>
+);
 
 const ProfileScreen = ({ route }) => {
     const navigation = useNavigation();
@@ -52,6 +72,66 @@ const ProfileScreen = ({ route }) => {
     const scrollY = new Animated.Value(0);
     const [operatorStats, setOperatorStats] = useState(null);
     const [pendingInvitations, setPendingInvitations] = useState([]);
+
+    // Nobility checkmark scale & opacity animation hooks
+    const nobilityTickScale = React.useRef(new Animated.Value(0.4)).current;
+    const nobilityTickOpacity = React.useRef(new Animated.Value(0)).current;
+
+    // Visitor eye blink animation hook
+    const visitorEyeScaleY = React.useRef(new Animated.Value(1)).current;
+
+    useEffect(() => {
+        const runTickAnim = () => {
+            nobilityTickScale.setValue(0.4);
+            nobilityTickOpacity.setValue(0);
+            Animated.sequence([
+                // Scale up with spring, fade in
+                Animated.parallel([
+                    Animated.spring(nobilityTickScale, {
+                        toValue: 1.1,
+                        friction: 4,
+                        tension: 40,
+                        useNativeDriver: true
+                    }),
+                    Animated.timing(nobilityTickOpacity, {
+                        toValue: 1,
+                        duration: 450,
+                        useNativeDriver: true
+                    })
+                ]),
+                Animated.delay(1400),
+                // Fade out
+                Animated.timing(nobilityTickOpacity, {
+                    toValue: 0,
+                    duration: 350,
+                    useNativeDriver: true
+                }),
+                Animated.delay(350)
+            ]).start(() => runTickAnim());
+        };
+        runTickAnim();
+    }, []);
+
+    useEffect(() => {
+        const runBlinkAnim = () => {
+            Animated.sequence([
+                Animated.delay(2500 + Math.random() * 2500), // Blink every 2.5 to 5.0 seconds
+                // Close Eye slowly
+                Animated.timing(visitorEyeScaleY, {
+                    toValue: 0.05,
+                    duration: 350, // 350ms to close
+                    useNativeDriver: true
+                }),
+                // Open Eye slowly
+                Animated.timing(visitorEyeScaleY, {
+                    toValue: 1,
+                    duration: 400, // 400ms to open
+                    useNativeDriver: true
+                })
+            ]).start(() => runBlinkAnim());
+        };
+        runBlinkAnim();
+    }, []);
 
     // Zustand Role & Cihaz Güvenliği
     const role = useAppStore(state => state.role);
@@ -73,7 +153,7 @@ const ProfileScreen = ({ route }) => {
         edu: ["Lise", "Ön Lisans", "Üniversite", "Yüksek Lisans", "Doktora"],
         zodiac: ["Koç", "Boğa", "İkizler", "Yengeç", "Aslan", "Başak", "Terazi", "Akrep", "Yay", "Oğlak", "Kova", "Balık"],
         relationship: ["Sohbet", "Ciddi İlişki", "Arkadaşlık", "Evlilik", "Sadece Takılma"],
-        interests: ["Müzik", "Spor", "Seyahat", "Kitap", "Sinema", "Dans", "Oyun", "Sanat", "Doğa", "Fotoğraf", "Yazılım", "Yoga", "Kamp"],
+        interests: ["Müzik", "Spor", "Seyahat", "Sinema", "Yemek", "Dans", "Oyun", "Sanat", "Kitap", "Doğa", "Karaoke", "Anime", "Fitness", "Motor", "Gece Sohbeti", "Fotoğraf", "Yazılım", "Yoga", "Kamp"],
         boy: Array.from({ length: 71 }, (_, i) => `${140 + i}`),
         kilo: Array.from({ length: 101 }, (_, i) => `${40 + i}`)
     };
@@ -681,7 +761,7 @@ const ProfileScreen = ({ route }) => {
 
                 {/* Floating Action Grid */}
                 <View style={styles.glassCardWrapper}>
-                    <LinearGradient colors={themeMode === 'dark' ? theme.gradients.card : ['#fff', '#f0f0f0']} style={styles.glassCard}>
+                    <View style={styles.glassCard}>
                         <View style={styles.quickActionsGrid}>
                             <TouchableOpacity style={styles.qaItem} onPress={() => {
                                 if (user?.is_agency_owner) {
@@ -691,7 +771,7 @@ const ProfileScreen = ({ route }) => {
                                 }
                             }}>
                                 <View style={styles.qaIconOnly}>
-                                    <Ionicons name="business" size={26} color="#3b82f6" />
+                                    <GradientIcon IconComponent={Ionicons} name="business-outline" size={26} colors={['#60A5FA', '#3B82F6']} />
                                 </View>
                                 <Text style={styles.qaLabel} numberOfLines={1}>
                                      {(user?.agency_id || user?.is_agency_owner) ? 'Ajansım' : 'Ajans'}
@@ -701,10 +781,9 @@ const ProfileScreen = ({ route }) => {
                             <TouchableOpacity style={styles.qaItem} onPress={() => navigation.navigate('ProfileVisitors')}>
                                 <View style={styles.qaIconOnly}>
                                     <View style={styles.avatarIconWrapper}>
-                                        <Image 
-                                            source={{ uri: 'https://i.pravatar.cc/100?u=visitor' }} 
-                                            style={styles.qaAvatarIcon} 
-                                        />
+                                        <Animated.View style={{ transform: [{ scaleY: visitorEyeScaleY }] }}>
+                                            <GradientIcon IconComponent={Ionicons} name="eye-outline" size={26} colors={['#FF4FA3', '#FF85B3']} />
+                                        </Animated.View>
                                         <View style={styles.notifDot} />
                                     </View>
                                 </View>
@@ -714,7 +793,7 @@ const ProfileScreen = ({ route }) => {
                             {isShowWallet && (
                                 <TouchableOpacity style={styles.qaItem} onPress={() => navigation.navigate('Wallet')}>
                                     <View style={styles.qaIconOnly}>
-                                        <Ionicons name="wallet" size={26} color="#22d3ee" />
+                                        <GradientIcon IconComponent={Ionicons} name="wallet-outline" size={26} colors={['#FFE082', '#F59E0B']} />
                                     </View>
                                     <Text style={styles.qaLabel} numberOfLines={1}>Cüzdanım</Text>
                                 </TouchableOpacity>
@@ -722,61 +801,71 @@ const ProfileScreen = ({ route }) => {
 
                             <TouchableOpacity style={styles.qaItem} onPress={() => navigation.navigate('Vip')}>
                                 <View style={styles.qaIconOnly}>
-                                    <FontAwesome5 name="medal" size={24} color="#fbbf24" />
+                                    <GradientIcon IconComponent={Ionicons} name="ribbon-outline" size={26} colors={['#C084FC', '#EC4899']} />
                                 </View>
                                 <Text style={styles.qaLabel} numberOfLines={1}>VIP</Text>
-                                <View style={styles.vipProgressBar} />
                             </TouchableOpacity>
 
-                            <TouchableOpacity style={styles.qaItem} onPress={() => navigation.navigate('WhoFavoritedMe')}>
-                                <View style={styles.qaIconOnly}>
-                                    <Ionicons name="heart" size={26} color="#ec4899" />
-                                </View>
-                                <Text style={styles.qaLabel} numberOfLines={1}>Hayran</Text>
-                            </TouchableOpacity>
 
                             <TouchableOpacity style={styles.qaItem} onPress={() => navigation.navigate('Shop')}>
                                 <View style={styles.qaIconOnly}>
-                                    <Ionicons name="cart" size={28} color="#f59e0b" />
+                                    <GradientIcon IconComponent={Ionicons} name="cart-outline" size={26} colors={['#FFB74D', '#F97316']} />
                                 </View>
                                 <Text style={styles.qaLabel} numberOfLines={1}>Mağaza</Text>
                             </TouchableOpacity>
 
                             <TouchableOpacity style={styles.qaItem} onPress={() => navigation.navigate('Favorites')}>
                                 <View style={styles.qaIconOnly}>
-                                    <Ionicons name="star" size={26} color="#a855f7" />
+                                    <GradientIcon IconComponent={Ionicons} name="heart-outline" size={26} colors={['#FDA4AF', '#E11D48']} />
                                 </View>
                                 <Text style={styles.qaLabel} numberOfLines={1}>Favori</Text>
                             </TouchableOpacity>
 
                             <TouchableOpacity style={styles.qaItem} onPress={() => navigation.navigate('Family')}>
                                 <View style={styles.qaIconOnly}>
-                                    <Ionicons name="people" size={26} color="#f43f5e" />
+                                    <GradientIcon IconComponent={Ionicons} name="people-outline" size={26} colors={['#A78BFA', '#6366F1']} />
                                 </View>
                                 <Text style={styles.qaLabel} numberOfLines={1}>Ailem</Text>
                             </TouchableOpacity>
 
                             <TouchableOpacity style={styles.qaItem} onPress={() => navigation.navigate('Nobility')}>
                                 <View style={styles.qaIconOnly}>
-                                    <Ionicons name="shield-checkmark" size={26} color="#FFD166" />
+                                    <View style={{ width: 26, height: 26, justifyContent: 'center', alignItems: 'center', position: 'relative' }}>
+                                        {/* Outer Shield */}
+                                        <GradientIcon IconComponent={Ionicons} name="shield-outline" size={26} colors={['#FFE082', '#D97706']} />
+                                        
+                                        {/* Animated Inner Checkmark */}
+                                        <Animated.View style={{
+                                            position: 'absolute',
+                                            top: 5.5, // Visually centered inside the shield body
+                                            justifyContent: 'center',
+                                            alignItems: 'center',
+                                            transform: [{ scale: nobilityTickScale }],
+                                            opacity: nobilityTickOpacity
+                                        }}>
+                                            <GradientIcon IconComponent={Ionicons} name="checkmark" size={12} colors={['#FFE082', '#D97706']} />
+                                        </Animated.View>
+                                    </View>
                                 </View>
                                 <Text style={styles.qaLabel} numberOfLines={1}>Asalet</Text>
                             </TouchableOpacity>
                         </View>
-                    </LinearGradient>
+                    </View>
                 </View>
 
                 {/* Wallet Glass Card */}
                 {!isShowWallet && (
                     <TouchableOpacity style={styles.glassCardWrapper} onPress={() => navigation.navigate('Shop')} activeOpacity={0.8}>
-                        <LinearGradient colors={themeMode === 'dark' ? theme.gradients.card : ['#fff', '#f0f0f0']} style={styles.walletCard}>
+                        <View style={styles.walletCard}>
                             <View style={styles.walletLeft}>
                                 <View style={styles.coinIconBox}>
-                                    <FontAwesome5 name="coins" size={20} color="#f59e0b" />
+                                    <GradientIcon IconComponent={FontAwesome5} name="coins" size={18} colors={['#FFE082', '#F59E0B']} />
                                 </View>
                                 <View>
                                     <Text style={styles.walletTitle}>CÜZDAN BAKİYESİ</Text>
-                                    <Text style={styles.walletValue}>{balance} Kredi</Text>
+                                    <Text style={styles.walletValue}>
+                                        <Text style={styles.walletValueHighlight}>{balance}</Text> Kredi
+                                    </Text>
                                 </View>
                             </View>
                             <LinearGradient
@@ -787,20 +876,25 @@ const ProfileScreen = ({ route }) => {
                             >
                                 <Text style={styles.depositBtnText}>Yükle</Text>
                             </LinearGradient>
-                        </LinearGradient>
+                        </View>
                     </TouchableOpacity>
                 )}
 
                 {/* Boost Premium Card */}
                 <TouchableOpacity 
-                    style={styles.glassCardWrapper} 
+                    style={[styles.glassCardWrapper, !user?.is_boosted && styles.promoBorderGlow]} 
                     activeOpacity={0.8}
                     onPress={handleBoost}
                 >
-                    <LinearGradient colors={themeMode === 'dark' ? theme.gradients.card : ['#fff', '#f0f0f0']} style={styles.boostCard}>
+                    <View style={styles.boostCard}>
                         <View style={styles.boostLeft}>
-                            <View style={[styles.boostIconCircle, user?.is_boosted && { backgroundColor: 'rgba(16, 185, 129, 0.2)' }]}>
-                                <Ionicons name={user?.is_boosted ? "flash" : "rocket"} size={18} color={user?.is_boosted ? "#10b981" : "#ec4899"} />
+                            <View style={styles.boostIconCircle}>
+                                <GradientIcon 
+                                    IconComponent={Ionicons} 
+                                    name={user?.is_boosted ? "flash" : "rocket"} 
+                                    size={18} 
+                                    colors={user?.is_boosted ? ['#10B981', '#059669'] : ['#FF4FA3', '#8B5CFF']} 
+                                />
                             </View>
                             <View>
                                 <Text style={styles.boostMainText}>
@@ -811,8 +905,8 @@ const ProfileScreen = ({ route }) => {
                                 </Text>
                             </View>
                         </View>
-                        <Ionicons name="chevron-forward" size={16} color="#4b5563" />
-                    </LinearGradient>
+                        <Ionicons name="chevron-forward" size={16} color="#8e85a6" />
+                    </View>
                 </TouchableOpacity>
 
                 {/* Invite & Earn Card */}
@@ -821,22 +915,24 @@ const ProfileScreen = ({ route }) => {
                     activeOpacity={0.8}
                     onPress={() => navigation.navigate('Invite')}
                 >
-                    <LinearGradient colors={['#FF5F6D', '#FFC371']} style={styles.boostCard} start={{x:0, y:0}} end={{x:1, y:1}}>
+                    <View style={styles.boostCard}>
+                        <LinearGradient
+                            colors={['rgba(255, 95, 109, 0.15)', 'rgba(255, 195, 113, 0.15)']}
+                            style={StyleSheet.absoluteFill}
+                            start={{ x: 0, y: 0 }}
+                            end={{ x: 1, y: 1 }}
+                        />
                         <View style={styles.boostLeft}>
-                            <View style={[styles.boostIconCircle, { backgroundColor: 'rgba(255, 255, 255, 0.25)' }]}>
-                                <Ionicons name="gift" size={20} color="#fff" />
+                            <View style={styles.boostIconCircle}>
+                                <GradientIcon IconComponent={Ionicons} name="gift-outline" size={20} colors={['#FF5F6D', '#FFC371']} />
                             </View>
                             <View>
-                                <Text style={[styles.boostMainText, { color: '#fff', textShadowColor: 'rgba(0,0,0,0.1)', textShadowOffset: {width: 0, height: 1}, textShadowRadius: 2 }]}>
-                                    Davet Et, Kazan!
-                                </Text>
-                                <Text style={[styles.boostSubText, { color: 'rgba(255,255,255,0.9)' }]}>
-                                    Arkadaşlarını davet et, 500 Coin kazan.
-                                </Text>
+                                <Text style={styles.boostMainText}>Davet Et, Kazan!</Text>
+                                <Text style={styles.boostSubText}>Arkadaşlarını davet et, 500 Coin kazan.</Text>
                             </View>
                         </View>
-                        <Ionicons name="chevron-forward" size={16} color="#fff" />
-                    </LinearGradient>
+                        <Ionicons name="chevron-forward" size={16} color="#8e85a6" />
+                    </View>
                 </TouchableOpacity>
 
                 {/* Görevler (Missions) Card - Visible to female users and operators */}
@@ -846,12 +942,14 @@ const ProfileScreen = ({ route }) => {
                         activeOpacity={0.82}
                         onPress={() => navigation.navigate('MissionBoard')}
                     >
-                        <LinearGradient
-                            colors={['#ff2d55', '#ff6b9d', '#c026d3', '#7c3aed']}
-                            start={{ x: 0, y: 0 }}
-                            end={{ x: 1, y: 0 }}
-                            style={styles.missionCard}
-                        >
+                        <View style={styles.missionCard}>
+                            {/* Subtle gradient overlay to give it a glowing feel */}
+                            <LinearGradient
+                                colors={['rgba(255, 45, 85, 0.15)', 'rgba(124, 58, 237, 0.15)']}
+                                start={{ x: 0, y: 0 }}
+                                end={{ x: 1, y: 0 }}
+                                style={StyleSheet.absoluteFill}
+                            />
                             {/* Left: label + count */}
                             <View style={styles.missionLeftPanel}>
                                 <Text style={styles.missionLeftLabel}>GÜNLÜK</Text>
@@ -884,7 +982,7 @@ const ProfileScreen = ({ route }) => {
                             </View>
 
                             <Ionicons name="chevron-forward" size={16} color="rgba(255,255,255,0.6)" style={{ alignSelf: 'center', marginRight: 4 }} />
-                        </LinearGradient>
+                        </View>
                     </TouchableOpacity>
                 )}
 
@@ -893,7 +991,7 @@ const ProfileScreen = ({ route }) => {
 
                 {/* Album Section */}
                 <View style={styles.glassCardWrapper}>
-                    <LinearGradient colors={themeMode === 'dark' ? theme.gradients.card : ['#fff', '#f0f0f0']} style={styles.albumSection}>
+                    <View style={styles.albumSection}>
                         <View style={styles.sectionHeader}>
                             <Text style={styles.sectionTitle}>Albüm</Text>
                         </View>
@@ -938,12 +1036,12 @@ const ProfileScreen = ({ route }) => {
                                 </View>
                             ))}
                         </ScrollView>
-                    </LinearGradient>
+                    </View>
                 </View>
 
                 {/* Merged Info Sections */}
                 <View style={styles.glassCardWrapper}>
-                    <LinearGradient colors={themeMode === 'dark' ? theme.gradients.card : ['#fff', '#f0f0f0']} style={styles.infoSection}>
+                    <View style={styles.infoSection}>
                         {/* Temel Bilgiler Section */}
                         <View style={styles.sectionHeader}>
                             <Text style={styles.sectionTitle}>Temel Bilgiler</Text>
@@ -1022,17 +1120,17 @@ const ProfileScreen = ({ route }) => {
                                 ));
                             })()}
                         </View>
-                    </LinearGradient>
+                    </View>
                 </View>
 
                 {/* Footer Actions */}
-                <LinearGradient colors={themeMode === 'dark' ? theme.gradients.card : ['#fff', '#f0f0f0']} style={styles.footerContainer}>
+                <View style={styles.footerContainer}>
                     <TouchableOpacity style={styles.footerItem} onPress={() => navigation.navigate('Settings')}>
-                        <View style={[styles.footerIconBg, { backgroundColor: '#3b82f620' }]}>
+                        <View style={[styles.footerIconBg, { backgroundColor: 'rgba(59, 130, 246, 0.12)' }]}>
                             <Ionicons name="settings-outline" size={15} color="#3b82f6" />
                         </View>
                         <Text style={styles.footerText}>Ayarlar</Text>
-                        <Ionicons name="chevron-forward" size={14} color="#4b3f61" />
+                        <Ionicons name="chevron-forward" size={14} color="#8e85a6" />
                     </TouchableOpacity>
 
                     <TouchableOpacity 
@@ -1043,11 +1141,11 @@ const ProfileScreen = ({ route }) => {
                             });
                         }}
                     >
-                        <View style={[styles.footerIconBg, { backgroundColor: '#f59e0b20' }]}>
+                        <View style={[styles.footerIconBg, { backgroundColor: 'rgba(245, 158, 11, 0.12)' }]}>
                             <Ionicons name="mail-outline" size={15} color="#f59e0b" />
                         </View>
                         <Text style={styles.footerText}>E-posta Destek</Text>
-                        <Ionicons name="chevron-forward" size={14} color="#4b3f61" />
+                        <Ionicons name="chevron-forward" size={14} color="#8e85a6" />
                     </TouchableOpacity>
 
                     <TouchableOpacity 
@@ -1058,13 +1156,13 @@ const ProfileScreen = ({ route }) => {
                             });
                         }}
                     >
-                        <View style={[styles.footerIconBg, { backgroundColor: '#25d36620' }]}>
+                        <View style={[styles.footerIconBg, { backgroundColor: 'rgba(37, 211, 102, 0.12)' }]}>
                             <Ionicons name="logo-whatsapp" size={15} color="#25d366" />
                         </View>
                         <Text style={styles.footerText}>WhatsApp Destek</Text>
-                        <Ionicons name="chevron-forward" size={14} color="#4b3f61" />
+                        <Ionicons name="chevron-forward" size={14} color="#8e85a6" />
                     </TouchableOpacity>
-                </LinearGradient>
+                </View>
 
                 <View style={{ height: 120 }} />
             </Animated.ScrollView>
@@ -1390,11 +1488,11 @@ const styles = StyleSheet.create({
     modernHeader: {
         alignItems: 'center',
         paddingHorizontal: 20,
-        marginBottom: 30,
+        marginBottom: 24,
     },
     avatarContainer: {
         position: 'relative',
-        marginBottom: 20,
+        marginBottom: 16,
     },
     avatarGlow: {
         position: 'absolute',
@@ -1403,7 +1501,7 @@ const styles = StyleSheet.create({
         right: -4,
         bottom: -4,
         borderRadius: 60,
-        opacity: 0.6,
+        opacity: 0.7,
     },
     avatarImage: {
         width: 110,
@@ -1416,20 +1514,20 @@ const styles = StyleSheet.create({
         position: 'absolute',
         bottom: 5,
         right: 5,
-        backgroundColor: '#ec4899',
-        width: 32,
-        height: 32,
-        borderRadius: 16,
+        backgroundColor: '#FF4FA3', // Rosy/Pink accents
+        width: 30,
+        height: 30,
+        borderRadius: 15,
         justifyContent: 'center',
         alignItems: 'center',
-        borderWidth: 3,
+        borderWidth: 2.5,
         borderColor: '#09021a',
         elevation: 5,
     },
     onlineStatus: {
         position: 'absolute',
-        top: 8,
-        right: 8,
+        top: 6,
+        right: 6,
         backgroundColor: '#10b981',
         width: 16,
         height: 16,
@@ -1441,12 +1539,12 @@ const styles = StyleSheet.create({
         alignItems: 'center',
     },
     userName: {
-        fontSize: 17,
+        fontSize: 18,
         fontWeight: 'bold',
         color: '#fff',
     },
     idBadge: {
-        backgroundColor: 'rgba(255,255,255,0.08)',
+        backgroundColor: 'rgba(255, 255, 255, 0.05)',
         paddingHorizontal: 10,
         paddingVertical: 3,
         borderRadius: 10,
@@ -1458,12 +1556,12 @@ const styles = StyleSheet.create({
         fontWeight: '600',
     },
     userBio: {
-        color: '#fff',
+        color: '#d1cde0',
         textAlign: 'center',
-        marginTop: 6,
-        paddingHorizontal: 10,
+        marginTop: 8,
+        paddingHorizontal: 20,
         lineHeight: 16,
-        fontSize: 11,
+        fontSize: 12,
         fontWeight: '500',
     },
     inlineBioEdit: {
@@ -1530,140 +1628,144 @@ const styles = StyleSheet.create({
     statPod: {
         width: (width - 64) / 3,
         height: 50,
-        borderRadius: 12,
+        borderRadius: 14,
         overflow: 'hidden',
     },
     statBlur: {
         flex: 1,
         justifyContent: 'center',
         alignItems: 'center',
-        backgroundColor: 'rgba(255,255,255,0.04)',
+        backgroundColor: 'rgba(255,255,255,0.03)',
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.05)',
     },
     statValue: {
-        fontSize: 13,
+        fontSize: 14,
         fontWeight: 'bold',
         color: '#fff',
     },
     statLabel: {
-        fontSize: 8,
+        fontSize: 9,
         color: '#8e85a6',
-        marginTop: 1,
+        marginTop: 2,
     },
     glassCardWrapper: {
         marginHorizontal: 16,
         marginBottom: 12,
-        borderRadius: 20,
+        borderRadius: 22,
         overflow: 'hidden',
         borderWidth: 1,
         borderColor: 'rgba(255,255,255,0.08)',
+        backgroundColor: 'rgba(255,255,255,0.03)', // Uniform premium Glassmorphic Style
+    },
+    promoBorderGlow: {
+        borderColor: 'rgba(255, 79, 163, 0.22)', // Soft pink glow highlight
     },
     glassCard: {
-        padding: 8,
-        backgroundColor: 'rgba(255,255,255,0.02)',
+        padding: 12,
+        backgroundColor: 'transparent',
     },
     quickActionsGrid: {
         flexDirection: 'row',
         flexWrap: 'wrap',
         justifyContent: 'flex-start',
-        columnGap: 4,
-        rowGap: 10,
+        columnGap: 8,
+        rowGap: 14,
     },
     qaItem: {
         alignItems: 'center',
-        width: (width - 70) / 6,
+        width: (width - 32 - 24 - 32) / 4, // Clean 4-column spacing
         overflow: 'hidden',
     },
     qaIconOnly: {
+        width: 44,
+        height: 44,
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginBottom: 6,
+    },
+    qaIconWrapper: {
         width: 36,
         height: 36,
         justifyContent: 'center',
         alignItems: 'center',
-        marginBottom: 4,
+        position: 'relative',
     },
     qaLabel: {
-        fontSize: 7,
-        color: '#8e85a6',
-        fontWeight: '600',
+        fontSize: 10,
+        color: '#fff',
+        fontWeight: '500',
         width: '100%',
         textAlign: 'center',
+        opacity: 0.9,
     },
     avatarIconWrapper: {
-        width: 32,
-        height: 32,
-        borderRadius: 16,
-        overflow: 'hidden',
+        width: 36,
+        height: 36,
+        borderRadius: 18,
         justifyContent: 'center',
         alignItems: 'center',
         position: 'relative',
     },
-    qaAvatarIcon: {
-        width: '100%',
-        height: '100%',
-        resizeMode: 'cover',
-    },
     notifDot: {
         position: 'absolute',
-        bottom: -2,
-        left: 16,
-        width: 12,
-        height: 12,
-        borderRadius: 6,
-        backgroundColor: '#ef4444',
-        borderWidth: 2,
-        borderColor: '#fff',
-    },
-    vipProgressBar: {
-        width: 24,
-        height: 3,
-        backgroundColor: '#ec4899',
-        borderRadius: 2,
-        marginTop: 4,
-        opacity: 0.8,
+        top: 2,
+        right: 2,
+        width: 8,
+        height: 8,
+        borderRadius: 4,
+        backgroundColor: '#FF4FA3',
+        borderWidth: 1,
+        borderColor: '#080B1E',
     },
     walletCard: {
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'space-between',
-        padding: 24,
-        backgroundColor: 'rgba(255,255,255,0.02)',
+        paddingHorizontal: 20,
+        paddingVertical: 18,
     },
     walletLeft: {
         flexDirection: 'row',
         alignItems: 'center',
     },
     coinIconBox: {
-        width: 36,
-        height: 36,
-        borderRadius: 18,
-        backgroundColor: 'rgba(245, 158, 11, 0.15)',
         justifyContent: 'center',
         alignItems: 'center',
         marginRight: 12,
     },
     walletTitle: {
-        fontSize: 8,
+        fontSize: 9,
         color: '#8e85a6',
         letterSpacing: 1.5,
         fontWeight: 'bold',
     },
     walletValue: {
-        fontSize: 16,
-        fontWeight: 'bold',
+        fontSize: 15,
+        fontWeight: '500',
         color: '#fff',
-        marginTop: 1,
+        marginTop: 2,
+    },
+    walletValueHighlight: {
+        fontSize: 18,
+        fontWeight: 'bold',
+        color: '#FBBF24', // Gold Color Credit amount
+        textShadowColor: 'rgba(245, 158, 11, 0.3)',
+        textShadowOffset: { width: 0, height: 1 },
+        textShadowRadius: 6,
     },
     depositBtn: {
-        paddingHorizontal: 16,
-        paddingVertical: 8,
+        paddingHorizontal: 18,
+        paddingVertical: 9,
         borderRadius: 16,
         shadowColor: '#F59E0B',
         shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.4,
+        shadowOpacity: 0.35,
         shadowRadius: 8,
         elevation: 6,
     },
     depositBtnText: {
-        color: '#78350F',
+        color: '#451A03', // Deep amber text color
         fontWeight: '900',
         fontSize: 13,
     },
@@ -1671,18 +1773,16 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'space-between',
-        padding: 24,
-        backgroundColor: 'rgba(255,255,255,0.02)',
+        paddingHorizontal: 20,
+        paddingVertical: 18,
+        position: 'relative',
+        overflow: 'hidden',
     },
     boostLeft: {
         flexDirection: 'row',
         alignItems: 'center',
     },
     boostIconCircle: {
-        width: 34,
-        height: 34,
-        borderRadius: 17,
-        backgroundColor: 'rgba(236, 72, 153, 0.15)',
         justifyContent: 'center',
         alignItems: 'center',
         marginRight: 12,
@@ -1695,27 +1795,27 @@ const styles = StyleSheet.create({
     boostSubText: {
         color: '#8e85a6',
         fontSize: 10,
-        marginTop: 1,
+        marginTop: 2,
     },
     infoSection: {
-        padding: 16,
-        backgroundColor: 'rgba(255,255,255,0.02)',
+        padding: 20,
     },
     sectionDivider: {
         height: 1,
         backgroundColor: 'rgba(255,255,255,0.05)',
-        marginVertical: 14,
+        marginVertical: 16,
     },
     sectionHeader: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        marginBottom: 12,
+        marginBottom: 14,
     },
     sectionTitle: {
         fontSize: 13,
         fontWeight: 'bold',
         color: '#fff',
+        letterSpacing: 0.5,
     },
     editLink: {
         color: '#8b5cf6',
@@ -1723,7 +1823,7 @@ const styles = StyleSheet.create({
         fontSize: 10,
     },
     miniEditBtn: {
-        backgroundColor: 'rgba(139, 92, 246, 0.15)',
+        backgroundColor: 'rgba(139, 92, 246, 0.12)',
         paddingHorizontal: 8,
         paddingVertical: 3,
         borderRadius: 8,

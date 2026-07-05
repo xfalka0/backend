@@ -23,12 +23,12 @@ const CONFETTI_LOTTIE = require('../../assets/lottie/vip_confetti.json');
 // (To make your custom drifting car fully transparent, convert yarisarabasi.mp4 to transparent yarisarabasi.gif, save it, and set type to 'gif'!)
 const PREMIUM_VIDEOS = {
     6: {
-        type: 'video', // Change to 'gif' and change source file to yarisarabasi.gif for 100% transparency!
-        source: require('../../../assets/yarisarabasi.mp4')
+        type: 'gif', // Change to 'gif' and change source file to yarisarabasi.gif for 100% transparency!
+        source: require('../../../assets/yarisarabasi.webp')
     },
     7: {
-        type: 'video',
-        source: { uri: 'http://commondatastorage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4' }
+        type: 'gif',
+        source: require('../../../assets/sato.webp')
     },
     8: {
         type: 'video',
@@ -145,7 +145,13 @@ export default function GiftOverlay({ gift, receiver, onFinish }) {
             Vibration.vibrate(150);
 
             // Auto Close Timer (Fallback close if loading hangs)
-            const duration = isPremium ? 12000 : 4000;
+            let duration = 4000;
+            if (gift) {
+                const giftId = Number(gift.id);
+                if (giftId === 6) duration = 6000;
+                else if (giftId === 7) duration = 5000;
+                else if (isPremium) duration = 12000;
+            }
             const timer = setTimeout(() => {
                 opacity.value = withTiming(0, { duration: 500 }, () => {
                     runOnJS(onFinish)();
@@ -324,7 +330,7 @@ const styles = StyleSheet.create({
     },
     backdrop: {
         ...StyleSheet.absoluteFillObject,
-        backgroundColor: 'rgba(11, 15, 25, 0.15)', // Fully transparent, very subtle vignetting
+        backgroundColor: 'rgba(0, 0, 0, 0.55)', // Dim background to make the animation pop
         zIndex: 1,
     },
     backdropSolid: {
@@ -437,19 +443,21 @@ const styles = StyleSheet.create({
         fontWeight: '900',
         letterSpacing: 2,
     },
-    // Premium Video bottom placement styles
+    // Premium Video bottom fullscreen placement styles
     premiumVideoWrapper: {
         position: 'absolute',
-        bottom: 90, // Resting beautifully just above the bottom input bar
-        width: width,
-        height: 220, // Clean 220px bottom video frame
+        bottom: -140, // Offset the scaled transparent space at the bottom of the WebP file
+        left: -width * 0.1, // Center the wider component horizontally
+        width: width * 1.2, // Make it 20% wider
+        height: width * 1.7, // Make it taller proportionally
         zIndex: 2,
         backgroundColor: 'transparent',
-        overflow: 'hidden',
+        justifyContent: 'flex-end',
+        alignItems: 'center',
     },
     premiumVideoPlayer: {
-        width: '100%',
-        height: '100%',
+        width: width * 1.2,
+        height: width * 1.7,
         backgroundColor: 'transparent',
     },
     topMask: {
@@ -486,7 +494,7 @@ const styles = StyleSheet.create({
     },
     videoOverlay: {
         position: 'absolute',
-        bottom: 330, // Float beautifully right above the video container
+        top: 80, // Float beautifully at the top of the screen
         width: '100%',
         alignItems: 'center',
         zIndex: 10,
@@ -518,9 +526,12 @@ const styles = StyleSheet.create({
     },
     premiumLoadingContainer: {
         position: 'absolute',
-        bottom: 90,
+        top: 0,
+        bottom: 0,
+        left: 0,
+        right: 0,
         width: width,
-        height: 220,
+        height: height,
         alignItems: 'center',
         justifyContent: 'center',
         backgroundColor: 'rgba(11, 15, 25, 0.4)',

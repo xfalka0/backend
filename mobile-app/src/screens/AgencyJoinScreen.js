@@ -237,8 +237,8 @@ export default function AgencyJoinScreen() {
                                 <Text style={styles.inputLabel}>Ajans Davet Kodu / Referans Kodu</Text>
                                 <TextInput
                                     style={[styles.input, isFocused && styles.inputFocused]}
-                                    placeholder=""
-                                    placeholderTextColor="rgba(255, 255, 255, 0.3)"
+                                    placeholder="Ajans kodunu buraya yazın..."
+                                    placeholderTextColor="rgba(255, 255, 255, 0.4)"
                                     value={agencyCode}
                                     onChangeText={setAgencyCode}
                                     autoCapitalize="characters"
@@ -481,9 +481,9 @@ const styles = StyleSheet.create({
         width: '100%',
         height: 56,
         borderRadius: 18,
-        backgroundColor: 'rgba(255, 255, 255, 0.04)',
-        borderWidth: 1,
-        borderColor: 'rgba(255, 255, 255, 0.08)',
+        backgroundColor: 'rgba(255, 255, 255, 0.08)', // Temsili cam dolgusu artırıldı
+        borderWidth: 1.5,
+        borderColor: 'rgba(255, 255, 255, 0.22)', // Çok daha görünür kılmak için kenarlık rengi açıldı
         paddingHorizontal: 18,
         color: '#fff',
         fontSize: 15,
@@ -491,7 +491,7 @@ const styles = StyleSheet.create({
     },
     inputFocused: {
         borderColor: '#db2777',
-        backgroundColor: 'rgba(255, 255, 255, 0.06)'
+        backgroundColor: 'rgba(255, 255, 255, 0.12)'
     },
     inputHelper: {
         color: 'rgba(255, 255, 255, 0.35)',

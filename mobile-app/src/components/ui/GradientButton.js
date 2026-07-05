@@ -3,13 +3,23 @@ import { Text, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-nat
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '../../contexts/ThemeContext';
 
-export default function GradientButton({ onPress, title, loading, style, icon }) {
+export default function GradientButton({ onPress, title, loading, style, icon, disabled }) {
     const { theme } = useTheme();
+    const isDisabled = disabled || loading;
 
     return (
-        <TouchableOpacity onPress={onPress} activeOpacity={0.8} disabled={loading} style={[styles.container, style]}>
+        <TouchableOpacity 
+            onPress={onPress} 
+            activeOpacity={0.8} 
+            disabled={isDisabled} 
+            style={[
+                styles.container, 
+                isDisabled && styles.disabledContainer,
+                style
+            ]}
+        >
             <LinearGradient
-                colors={theme.gradients.primary}
+                colors={isDisabled ? ['rgba(255,255,255,0.06)', 'rgba(255,255,255,0.06)'] : theme.gradients.primary}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 1 }}
                 style={styles.gradient}
@@ -19,7 +29,7 @@ export default function GradientButton({ onPress, title, loading, style, icon })
                 ) : (
                     <>
                         {icon && icon}
-                        <Text style={styles.text}>{title}</Text>
+                        <Text style={[styles.text, isDisabled && styles.disabledText]}>{title}</Text>
                     </>
                 )}
             </LinearGradient>
@@ -38,6 +48,13 @@ const styles = StyleSheet.create({
         shadowRadius: 8,
         elevation: 8,
     },
+    disabledContainer: {
+        shadowColor: 'transparent',
+        shadowOpacity: 0,
+        elevation: 0,
+        borderColor: 'rgba(255, 255, 255, 0.05)',
+        borderWidth: 1,
+    },
     gradient: {
         flex: 1,
         justifyContent: 'center',
@@ -51,5 +68,8 @@ const styles = StyleSheet.create({
         fontSize: 18,
         fontWeight: 'bold',
         letterSpacing: 0.5,
+    },
+    disabledText: {
+        color: 'rgba(255,255,255,0.25)',
     }
 });

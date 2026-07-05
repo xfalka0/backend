@@ -426,8 +426,6 @@ export default function AuthScreen({ navigation, route }) {
                 }}
             />
 
-            {loading && <ActivityIndicator size="large" color="#8b5cf6" style={{ marginTop: 15 }} />}
-
             <WelcomeButton
                 title="DEVAM ET"
                 variant="gradient"

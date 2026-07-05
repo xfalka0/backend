@@ -16,7 +16,7 @@ router.get('/', async (req, res) => {
 
         let query = `
             SELECT u.id, COALESCE(u.display_name, u.username) as name,
-                u.avatar_url, u.gender, u.age, u.vip_level, u.job, u.relationship, u.zodiac, u.interests, u.role,
+                u.avatar_url, u.gender, u.age, u.vip_level, u.job, u.relationship, u.zodiac, u.interests, u.role, u.boy,
                 o.category, o.rating, o.is_online, COALESCE(o.bio, u.bio) as bio, o.photos,
                 EXISTS(SELECT 1 FROM stories s WHERE s.operator_id = u.id AND s.expires_at > NOW()) as has_active_story
             FROM users u
@@ -72,11 +72,15 @@ router.post('/', authenticateToken, authorizeRole('admin', 'super_admin'), async
         const email = `${username}@fiva.admin`;
         const dummyPassword = await bcrypt.hash('op_pass_123!', 10);
 
+        const randomBoy = (gender === 'kadin' || !gender) ? String(Math.floor(Math.random() * (170 - 155 + 1)) + 155) : '175';
+        const CITIES = ['İstanbul', 'Ankara', 'İzmir', 'Bursa', 'Antalya', 'Adana', 'Kocaeli', 'Gaziantep', 'Eskişehir', 'Muğla', 'Trabzon', 'Samsun', 'Aydın', 'Denizli', 'Balkesir', 'Mersin', 'Kayseri', 'Sakarya'];
+        const randomCity = CITIES[Math.floor(Math.random() * CITIES.length)];
+
         const userResult = await db.query(
-            `INSERT INTO users (username, email, password, password_hash, role, display_name, name, gender, age, avatar_url, job, relationship, zodiac, interests, vip_level, account_status)
-             VALUES ($1, $2, $3, $3, $4, $5, $5, $6, $7, $8, $9, $10, $11, $12, $13, 'active') RETURNING id`,
+            `INSERT INTO users (username, email, password, password_hash, role, display_name, name, gender, age, avatar_url, job, relationship, zodiac, interests, vip_level, boy, city, account_status)
+             VALUES ($1, $2, $3, $3, $4, $5, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, 'active') RETURNING id`,
             [username, email, dummyPassword, 'operator', name, gender || 'kadin', parseInt(age) || 18, avatar_url,
-             job || null, relationship || null, zodiac || null, interests || '[]', parseInt(vip_level) || 0]
+             job || null, relationship || null, zodiac || null, interests || '[]', parseInt(vip_level) || 0, randomBoy, randomCity]
         );
         const userId = userResult.rows[0].id;
         const opResult = await db.query(

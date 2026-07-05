@@ -75,12 +75,12 @@ router.post('/', async (req, res) => {
     }
 });
 
-// Get users who viewed me
+// Get users who viewed me (with fake visitor system for male users)
 router.get('/:userId', async (req, res) => {
     const { userId } = req.params;
     try {
         const userCheck = await pool.query(
-            'SELECT is_vip, vip_expire_date FROM users WHERE id = $1',
+            'SELECT is_vip, vip_expire_date, gender FROM users WHERE id = $1',
             [userId]
         );
 
@@ -93,11 +93,11 @@ router.get('/:userId', async (req, res) => {
         const expireDate = new Date(user.vip_expire_date);
         const isVIP = user.is_vip && (expireDate > now || !user.vip_expire_date);
 
-        // Get unique recent visitors
+        // Get unique recent real visitors
         const views = await pool.query(`
             SELECT DISTINCT ON (v.viewer_id) 
                    v.id as view_id, u.id, u.username, u.avatar_url, u.gender, v.created_at,
-                   o.is_online
+                   o.is_online, o.vip_level
             FROM profile_views v
             JOIN users u ON v.viewer_id = u.id
             LEFT JOIN operators o ON u.id = o.user_id
@@ -105,8 +105,58 @@ router.get('/:userId', async (req, res) => {
             ORDER BY v.viewer_id, v.created_at DESC
         `, [userId]);
 
-        // Then order by time DESC in JS or with subquery
-        const sortedViews = views.rows.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+        let fakeVisitors = [];
+        
+        // If the user is male, inject fake female operator visits to boost engagement
+        if (user.gender && user.gender.toLowerCase() === 'erkek') {
+            const femaleOpsRes = await pool.query(`
+                SELECT u.id, u.username, u.avatar_url, u.gender, o.is_online, o.vip_level
+                FROM users u
+                JOIN operators o ON u.id = o.user_id
+                WHERE u.gender ILIKE 'kadin'
+                LIMIT 15
+            `);
+            
+            const femaleOps = femaleOpsRes.rows;
+            if (femaleOps.length > 0) {
+                // Deterministic seed based on user ID
+                let hash = 0;
+                const userIdStr = String(userId);
+                for (let i = 0; i < userIdStr.length; i++) {
+                    hash = userIdStr.charCodeAt(i) + ((hash << 5) - hash);
+                }
+
+                const numFake = 5 + (Math.abs(hash) % 3); // 5 to 7 fake visitors
+                const today = new Date().toDateString(); // Changes daily
+
+                for (let j = 0; j < numFake; j++) {
+                    let seed = hash + j + today.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+                    const opIndex = Math.abs(seed) % femaleOps.length;
+                    const op = femaleOps[opIndex];
+
+                    const alreadyExists = views.rows.some(v => v.id === op.id);
+                    if (!alreadyExists && !fakeVisitors.some(f => f.id === op.id)) {
+                        const minutesAgo = 10 + (Math.abs(seed * 7) % 1400); // 10 mins to ~23 hours ago
+                        const fakeTime = new Date(Date.now() - minutesAgo * 60 * 1000);
+
+                        fakeVisitors.push({
+                            view_id: `fake-${userId}-${op.id}-${j}`,
+                            id: op.id,
+                            username: op.username,
+                            avatar_url: op.avatar_url,
+                            gender: op.gender,
+                            created_at: fakeTime.toISOString(),
+                            is_online: op.is_online,
+                            vip_level: op.vip_level || 0
+                        });
+                    }
+                }
+            }
+        }
+
+        // Merge and sort all views by created_at DESC
+        const allViews = [...views.rows, ...fakeVisitors];
+        const sortedViews = allViews.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
 
         const processedViews = sortedViews.map(view => {
             if (isVIP) {
@@ -115,11 +165,12 @@ router.get('/:userId', async (req, res) => {
                 return {
                     id: view.id,
                     username: 'Gizli Kullanıcı',
-                    avatar_url: view.avatar_url, // For blur
+                    avatar_url: view.avatar_url, // Used for the blur image fallback
                     gender: view.gender,
                     created_at: view.created_at,
                     is_online: false,
-                    is_blurred: true
+                    is_blurred: true,
+                    vip_level: view.vip_level || 0
                 };
             }
         });
@@ -130,6 +181,32 @@ router.get('/:userId', async (req, res) => {
         });
     } catch (err) {
         console.error('Get Visitors Error:', err);
+        res.status(500).json({ error: 'Server error' });
+    }
+});
+
+// Get users whom I viewed
+router.get('/history/:userId', async (req, res) => {
+    const { userId } = req.params;
+    try {
+        const views = await pool.query(`
+            SELECT DISTINCT ON (v.viewed_user_id) 
+                   v.id as view_id, u.id, u.username, u.avatar_url, u.gender, v.created_at,
+                   o.is_online
+            FROM profile_views v
+            JOIN users u ON v.viewed_user_id = u.id
+            LEFT JOIN operators o ON u.id = o.user_id
+            WHERE v.viewer_id = $1
+            ORDER BY v.viewed_user_id, v.created_at DESC
+        `, [userId]);
+
+        const sortedViews = views.rows.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+
+        res.json({
+            history: sortedViews
+        });
+    } catch (err) {
+        console.error('Get Viewed History Error:', err);
         res.status(500).json({ error: 'Server error' });
     }
 });

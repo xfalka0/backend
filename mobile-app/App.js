@@ -37,7 +37,6 @@ import VipScreen from './src/screens/VipScreen';
 import VipDetailsScreen from './src/screens/VipDetailsScreen';
 import ShopScreen from './src/screens/ShopScreen';
 import FavoritesScreen from './src/screens/FavoritesScreen';
-import WhoFavoritedMeScreen from './src/screens/WhoFavoritedMeScreen';
 import ProfileVisitorsScreen from './src/screens/ProfileVisitorsScreen';
 import NotificationsScreen from './src/screens/NotificationsScreen';
 import LegalScreen from './src/screens/LegalScreen';
@@ -67,8 +66,6 @@ import PartyRoomsListScreen from './src/screens/PartyRoomsListScreen';
 import PartyRoomScreen from './src/screens/PartyRoomScreen';
 import CreateRoomScreen from './src/screens/CreateRoomScreen';
 import FamilyScreen from './src/screens/FamilyScreen';
-import { trackPurchase } from './src/utils/analytics';
-import { Settings } from 'react-native-fbsdk-next';
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -77,8 +74,6 @@ function MainTabs({ route }) {
     const TEST_USER_ID = 'c917f7d6-cc44-4b04-8917-1dbbed0b1e9b';
     const paramsUser = route.params?.user;
     const user = paramsUser ? paramsUser : { id: TEST_USER_ID, name: 'Test Kullanıcı', hearts: 100 };
-
-
 
     return (
         <Tab.Navigator
@@ -122,12 +117,12 @@ function MainTabs({ route }) {
 import { navigationRef } from './src/services/navigationRef';
 
 function AppContent() {
-    const { theme, themeMode } = useTheme();
+    const { theme } = useTheme();
 
     return (
         <NavigationContainer ref={navigationRef}>
             <StarterPackProvider>
-                <StatusBar style={themeMode === 'dark' ? 'light' : 'dark'} translucent backgroundColor="transparent" />
+                <StatusBar style="light" translucent backgroundColor="transparent" />
                 <Stack.Navigator
                     initialRouteName="Splash"
                     screenOptions={{
@@ -144,7 +139,6 @@ function AppContent() {
                     <Stack.Screen name="VipDetails" component={VipDetailsScreen} />
                     <Stack.Screen name="Shop" component={ShopScreen} />
                     <Stack.Screen name="Favorites" component={FavoritesScreen} />
-                    <Stack.Screen name="WhoFavoritedMe" component={WhoFavoritedMeScreen} />
                     <Stack.Screen name="ProfileVisitors" component={ProfileVisitorsScreen} />
                     <Stack.Screen name="Notifications" component={NotificationsScreen} />
                     <Stack.Screen name="Legal" component={LegalScreen} />

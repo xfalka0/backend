@@ -1,16 +1,36 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Switch, Platform, Linking, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Switch, Platform, Linking, ActivityIndicator, Image } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
+import MaskedView from '@react-native-masked-view/masked-view';
 import axios from 'axios';
 import { API_URL } from '../config';
 import { useTheme } from '../contexts/ThemeContext';
-import { DARK_THEME, LIGHT_THEME } from '../theme';
+import { DARK_THEME } from '../theme';
 import ModernAlert from '../components/ui/ModernAlert';
 
+// Generic MaskedView Gradient Icon for premium dating aesthetic
+const GradientIcon = ({ name, size = 22, colors = ['#FFFFFF', '#EC4899'] }) => (
+    <MaskedView
+        style={{ width: size, height: size }}
+        maskElement={
+            <View style={{ backgroundColor: 'transparent', flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+                <Ionicons name={name} size={size} color="#FFFFFF" />
+            </View>
+        }
+    >
+        <LinearGradient
+            colors={colors}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={{ width: size, height: size }}
+        />
+    </MaskedView>
+);
+
 export default function SettingsScreen({ navigation, route }) {
-    const { theme, themeMode, toggleTheme } = useTheme();
+    const { theme, themeMode } = useTheme();
     const { user } = route.params || {};
     const [loading, setLoading] = useState(false);
     const [alert, setAlert] = useState({
@@ -25,12 +45,30 @@ export default function SettingsScreen({ navigation, route }) {
     // Settings States
     const [isProfileHidden, setIsProfileHidden] = useState(user?.is_hidden || false);
     const [onlineStatus, setOnlineStatus] = useState(user?.show_online !== false);
+    
+    // Detailed Notification Preferences
     const [notifications, setNotifications] = useState({
+        all: true,
         messages: true,
+        voiceCalls: true,
         matching: true,
     });
 
-    // Sync settings with backend on change
+    useEffect(() => {
+        loadNotificationSettings();
+    }, []);
+
+    const loadNotificationSettings = async () => {
+        try {
+            const saved = await AsyncStorage.getItem('notification_settings');
+            if (saved) {
+                setNotifications(JSON.parse(saved));
+            }
+        } catch (e) {
+            console.log('Load notifications settings error:', e);
+        }
+    };
+
     const updateSetting = async (key, value) => {
         try {
             const token = await AsyncStorage.getItem('token');
@@ -53,6 +91,33 @@ export default function SettingsScreen({ navigation, route }) {
         updateSetting('show_online', val);
     };
 
+    const handleToggleNotification = async (key, val) => {
+        const updated = { ...notifications, [key]: val };
+        
+        if (key === 'all') {
+            updated.messages = val;
+            updated.voiceCalls = val;
+            updated.matching = val;
+        } else {
+            // If any sub-setting is enabled, master setting should be on
+            if (val === true) {
+                updated.all = true;
+            } else {
+                // If all sub-settings are disabled, master setting is off
+                if (!updated.messages && !updated.voiceCalls && !updated.matching) {
+                    updated.all = false;
+                }
+            }
+        }
+        
+        setNotifications(updated);
+        try {
+            await AsyncStorage.setItem('notification_settings', JSON.stringify(updated));
+        } catch (e) {
+            console.log('Save notifications settings error:', e);
+        }
+    };
+
     const handleLogout = () => {
         setAlert({
             visible: true,
@@ -69,7 +134,6 @@ export default function SettingsScreen({ navigation, route }) {
 
     const handleClearCache = () => {
         setLoading(true);
-        // Simulate cache clearing
         setTimeout(() => {
             setLoading(false);
             setAlert({ visible: true, title: 'Başarılı', message: 'Uygulama önbelleği ve geçici dosyalar temizlendi.', type: 'success' });
@@ -101,15 +165,15 @@ export default function SettingsScreen({ navigation, route }) {
         });
     };
 
-    const SettingItem = ({ icon, label, sublabel, value, type = 'next', onPress, onValueChange, iconColor = '#8b5cf6' }) => (
+    const SettingItem = ({ icon, label, sublabel, value, type = 'next', onPress, onValueChange, colors, disabled = false }) => (
         <TouchableOpacity
-            style={styles.settingItem}
+            style={[styles.settingItem, disabled && { opacity: 0.5 }]}
             onPress={onPress}
-            disabled={type === 'switch'}
+            disabled={type === 'switch' || disabled}
             activeOpacity={0.7}
         >
-            <View style={[styles.iconContainer, { backgroundColor: `${iconColor}15` }]}>
-                <Ionicons name={icon} size={22} color={iconColor} />
+            <View style={styles.iconContainer}>
+                <GradientIcon name={icon} size={15} colors={colors} />
             </View>
             <View style={styles.textContainer}>
                 <Text style={[styles.itemLabel, { color: theme.colors.text }]}>{label}</Text>
@@ -120,8 +184,9 @@ export default function SettingsScreen({ navigation, route }) {
                 <Switch
                     value={value}
                     onValueChange={onValueChange}
-                    trackColor={{ false: themeMode === 'dark' ? '#1e293b' : '#e2e8f0', true: '#8b5cf6' }}
-                    thumbColor={Platform.OS === 'android' ? (value ? '#8b5cf6' : (themeMode === 'dark' ? '#94a3b8' : '#ffffff')) : undefined}
+                    disabled={disabled}
+                    trackColor={{ false: themeMode === 'dark' ? '#1e293b' : '#e2e8f0', true: '#EC4899' }}
+                    thumbColor={Platform.OS === 'android' ? (value ? '#FFFFFF' : '#94a3b8') : undefined}
                 />
             )}
         </TouchableOpacity>
@@ -132,7 +197,19 @@ export default function SettingsScreen({ navigation, route }) {
     );
 
     return (
-        <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
+        <View style={styles.container}>
+            {/* Background Image Layer identical to Profile Screen */}
+            <View style={styles.bgWrapper}>
+                <Image 
+                    source={require('../../assets/fiva_profile_banner.png')} 
+                    style={styles.backgroundImage}
+                />
+                <LinearGradient
+                    colors={['rgba(9, 2, 26, 0.15)', 'rgba(9, 2, 26, 0.8)', '#09021a']}
+                    style={StyleSheet.absoluteFill}
+                />
+            </View>
+
             <View style={[styles.header, { backgroundColor: 'transparent' }]}>
                 <TouchableOpacity onPress={() => navigation.goBack()} style={[styles.backButton, { backgroundColor: theme.colors.glass }]}>
                     <Ionicons name="chevron-back" size={24} color={theme.colors.text} />
@@ -141,122 +218,137 @@ export default function SettingsScreen({ navigation, route }) {
                 <View style={{ width: 40 }} />
             </View>
 
+            {loading && (
+                <View style={styles.loadingOverlay}>
+                    <ActivityIndicator size="large" color="#EC4899" />
+                </View>
+            )}
+
             <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
 
-                <SectionHeader title="HESAP" />
+                <SectionHeader title="FLÖRT & KEŞİF TERCİHLERİ" />
                 <View style={[styles.sectionCard, { backgroundColor: theme.colors.glass, borderColor: theme.colors.glassBorder }]}>
                     <SettingItem
                         icon="person-outline"
                         label="Profil Bilgilerini Düzenle"
+                        colors={['#FFC2EB', '#EC4899']}
                         onPress={() => navigation.navigate('Profil', { editMode: true })}
                     />
                     <SettingItem
                         icon="eye-off-outline"
                         label="Profilimi Gizle"
-                        sublabel="Başka kullanıcılar seni göremez"
+                        sublabel="Eşleşme havuzundan geçici olarak çıkarsın"
                         type="switch"
                         value={isProfileHidden}
                         onValueChange={handleToggleProfile}
-                    />
-                    <SettingItem
-                        icon="language-outline"
-                        label="Uygulama Dili"
-                        sublabel="Türkçe"
-                        onPress={() => setAlert({ visible: true, title: 'Dil Değiştir', message: 'Şu an sadece Türkçe desteklenmektedir.', type: 'info' })}
-                    />
-                </View>
-
-                <SectionHeader title="GÖRÜNÜM" />
-                <View style={[styles.sectionCard, { backgroundColor: theme.colors.glass, borderColor: theme.colors.glassBorder }]}>
-                    <SettingItem
-                        icon={themeMode === 'dark' ? "moon-outline" : "sunny-outline"}
-                        label={themeMode === 'dark' ? "Koyu Tema" : "Açık Tema"}
-                        sublabel="Uygulama görünümünü değiştir"
-                        type="switch"
-                        value={themeMode === 'dark'}
-                        onValueChange={toggleTheme}
-                    />
-                </View>
-
-                <SectionHeader title="GİZLİLİK" />
-                <View style={[styles.sectionCard, { backgroundColor: theme.colors.glass, borderColor: theme.colors.glassBorder }]}>
-                    <SettingItem
-                        icon="ban-outline"
-                        label="Engellenen Kişiler"
-                        onPress={() => setAlert({ visible: true, title: 'Geliştiriliyor', message: 'Engellenen listesi yakında eklenecektir.', type: 'info' })}
+                        colors={['#FF8A80', '#D50000']}
                     />
                     <SettingItem
                         icon="radio-button-on-outline"
                         label="Çevrimiçi Durumu"
+                        sublabel="Diğer kullanıcılar çevrimiçi olduğunu görür"
                         type="switch"
                         value={onlineStatus}
                         onValueChange={handleToggleOnline}
-                        iconColor="#10b981"
+                        colors={['#67E8F9', '#06B6D4']}
                     />
                 </View>
 
-                <SectionHeader title="BİLDİRİMLER" />
+                <SectionHeader title="MESAJ & ARAMA BİLDİRİMLERİ" />
                 <View style={[styles.sectionCard, { backgroundColor: theme.colors.glass, borderColor: theme.colors.glassBorder }]}>
                     <SettingItem
-                        icon="chatbubble-outline"
-                        label="Mesaj Bildirimleri"
+                        icon="notifications-outline"
+                        label="Tüm Bildirimler"
+                        sublabel="Genel bildirimleri aç veya kapat"
+                        type="switch"
+                        value={notifications.all}
+                        onValueChange={(v) => handleToggleNotification('all', v)}
+                        colors={['#8B5CF6', '#EC4899']}
+                    />
+                    <SettingItem
+                        icon="chatbubble-ellipses-outline"
+                        label="Yeni Mesaj Uyarısı"
+                        sublabel="Yeni bir mesaj aldığında bildir"
                         type="switch"
                         value={notifications.messages}
-                        onValueChange={(v) => setNotifications({ ...notifications, messages: v })}
+                        onValueChange={(v) => handleToggleNotification('messages', v)}
+                        colors={['#60A5FA', '#3B82F6']}
+                        disabled={!notifications.all}
                     />
                     <SettingItem
-                        icon="heart-outline"
-                        label="Eşleşme ve Beğeniler"
+                        icon="call-outline"
+                        label="Sesli Arama Bildirimi"
+                        sublabel="Gelen sesli aramaları bildir"
                         type="switch"
-                        value={notifications.matching}
-                        onValueChange={(v) => setNotifications({ ...notifications, matching: v })}
-                        iconColor="#f472b6"
+                        value={notifications.voiceCalls}
+                        onValueChange={(v) => handleToggleNotification('voiceCalls', v)}
+                        colors={['#34D399', '#059669']}
+                        disabled={!notifications.all}
                     />
                 </View>
 
-                <SectionHeader title="DESTEK VE BİLGİ" />
+                <SectionHeader title="HESAP AYARLARI" />
                 <View style={[styles.sectionCard, { backgroundColor: theme.colors.glass, borderColor: theme.colors.glassBorder }]}>
                     <SettingItem
-                        icon="document-text-outline"
-                        label="Kullanım Koşulları"
-                        onPress={() => navigation.navigate('Legal', { type: 'terms' })}
+                        icon="language-outline"
+                        label="Uygulama Dili"
+                        sublabel="Türkçe"
+                        colors={['#4DD0E1', '#00ACC1']}
+                        onPress={() => setAlert({ visible: true, title: 'Dil Değiştir', message: 'Şu an sadece Türkçe desteklenmektedir.', type: 'info' })}
                     />
                     <SettingItem
-                        icon="shield-checkmark-outline"
-                        label="Gizlilik Sözleşmesi"
-                        onPress={() => navigation.navigate('Legal', { type: 'privacy' })}
+                        icon="ban-outline"
+                        label="Engellenen Kişiler"
+                        colors={['#FFB74D', '#F57C00']}
+                        onPress={() => setAlert({ visible: true, title: 'Geliştiriliyor', message: 'Engellenen listesi yakında eklenecektir.', type: 'info' })}
                     />
-                    <SettingItem
-                        icon="mail-outline"
-                        label="E-posta Destek"
-                        sublabel="falkasoft@gmail.com"
-                        onPress={() => {
-                            Linking.openURL('mailto:falkasoft@gmail.com').catch(() => {
-                                setAlert({ visible: true, title: 'Hata', message: 'E-posta uygulaması bulunamadı.', type: 'error' });
-                            });
-                        }}
-                        iconColor="#3b82f6"
-                    />
+                </View>
+
+                <SectionHeader title="AŞK DESTEK VE BİLGİ" />
+                <View style={[styles.sectionCard, { backgroundColor: theme.colors.glass, borderColor: theme.colors.glassBorder }]}>
                     <SettingItem
                         icon="logo-whatsapp"
                         label="WhatsApp Destek"
                         sublabel="+90 541 473 87 00"
+                        colors={['#81C784', '#388E3C']}
                         onPress={() => {
                             Linking.openURL('https://wa.me/905414738700').catch(() => {
                                 setAlert({ visible: true, title: 'Hata', message: 'WhatsApp uygulaması bulunamadı.', type: 'error' });
                             });
                         }}
-                        iconColor="#10b981"
+                    />
+                    <SettingItem
+                        icon="mail-outline"
+                        label="E-posta Destek"
+                        sublabel="falkasoft@gmail.com"
+                        colors={['#90CAF9', '#1565C0']}
+                        onPress={() => {
+                            Linking.openURL('mailto:falkasoft@gmail.com').catch(() => {
+                                setAlert({ visible: true, title: 'Hata', message: 'E-posta uygulaması bulunamadı.', type: 'error' });
+                            });
+                        }}
+                    />
+                    <SettingItem
+                        icon="document-text-outline"
+                        label="Kullanım Koşulları"
+                        colors={['#B0BEC5', '#546E7A']}
+                        onPress={() => navigation.navigate('Legal', { type: 'terms' })}
+                    />
+                    <SettingItem
+                        icon="shield-checkmark-outline"
+                        label="Gizlilik Sözleşmesi"
+                        colors={['#B0BEC5', '#546E7A']}
+                        onPress={() => navigation.navigate('Legal', { type: 'privacy' })}
                     />
                     <SettingItem
                         icon="trash-outline"
                         label="Önbelleği Temizle"
+                        colors={['#94A3B8', '#475569']}
                         onPress={handleClearCache}
-                        iconColor="#64748b"
                     />
                 </View>
 
-                <TouchableOpacity style={[styles.logoutButton, { backgroundColor: themeMode === 'dark' ? 'rgba(239, 68, 68, 0.1)' : 'rgba(239, 68, 68, 0.05)' }]} onPress={handleLogout}>
+                <TouchableOpacity style={[styles.logoutButton, { backgroundColor: 'rgba(239, 68, 68, 0.1)' }]} onPress={handleLogout}>
                     <Ionicons name="log-out-outline" size={20} color="#ef4444" />
                     <Text style={styles.logoutText}>Çıkış Yap</Text>
                 </TouchableOpacity>
@@ -265,7 +357,7 @@ export default function SettingsScreen({ navigation, route }) {
                     <Text style={[styles.deleteText, { color: theme.colors.textSecondary }]}>Hesabı Sil</Text>
                 </TouchableOpacity>
 
-                <Text style={[styles.versionText, { color: theme.colors.textSecondary }]}>Versiyon 1.0.4 - Premium</Text>
+                <Text style={[styles.versionText, { color: theme.colors.textSecondary }]}>Versiyon 1.0.4 - Premium 💖</Text>
                 <View style={{ height: 50 }} />
             </ScrollView>
             <ModernAlert
@@ -285,6 +377,17 @@ export default function SettingsScreen({ navigation, route }) {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
+        backgroundColor: '#09021a', // Dark base matching profile
+    },
+    bgWrapper: {
+        position: 'absolute',
+        width: '100%',
+        height: 400,
+    },
+    backgroundImage: {
+        width: '100%',
+        height: '100%',
+        resizeMode: 'cover',
     },
     header: {
         flexDirection: 'row',
@@ -298,88 +401,88 @@ const styles = StyleSheet.create({
         width: 40,
         height: 40,
         borderRadius: 20,
-        backgroundColor: 'rgba(255,255,255,0.05)',
         alignItems: 'center',
         justifyContent: 'center',
+        borderWidth: 1,
+        borderColor: 'rgba(255, 255, 255, 0.08)',
     },
     headerTitle: {
-        fontSize: 20,
-        fontWeight: '900',
+        fontSize: 15,
+        fontWeight: '950',
+        letterSpacing: 0.5,
     },
     scrollContent: {
         paddingHorizontal: 20,
     },
     sectionHeader: {
-        color: '#64748b',
-        fontSize: 12,
+        fontSize: 8.5,
         fontWeight: '800',
-        letterSpacing: 1,
-        marginTop: 25,
-        marginBottom: 10,
+        letterSpacing: 1.5,
+        marginTop: 12,
+        marginBottom: 3,
         marginLeft: 5,
     },
     sectionCard: {
-        borderRadius: 24,
-        padding: 8,
+        borderRadius: 14,
+        padding: 4,
         borderWidth: 1,
     },
     settingItem: {
         flexDirection: 'row',
         alignItems: 'center',
-        padding: 12,
-        borderRadius: 16,
+        padding: 6,
+        borderRadius: 9,
     },
     iconContainer: {
-        width: 40,
-        height: 40,
-        borderRadius: 12,
+        width: 28,
+        height: 28,
+        borderRadius: 7,
         alignItems: 'center',
         justifyContent: 'center',
+        backgroundColor: 'rgba(255, 255, 255, 0.04)',
+        borderWidth: 1,
+        borderColor: 'rgba(255, 255, 255, 0.05)',
     },
     textContainer: {
         flex: 1,
-        marginLeft: 15,
+        marginLeft: 8,
     },
     itemLabel: {
-        fontSize: 15,
+        fontSize: 12.5,
         fontWeight: '600',
     },
     itemSublabel: {
-        color: '#64748b',
-        fontSize: 12,
+        fontSize: 9.5,
         marginTop: 2,
     },
     logoutButton: {
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'center',
-        backgroundColor: 'rgba(239, 68, 68, 0.1)',
-        padding: 16,
-        borderRadius: 20,
-        marginTop: 40,
+        padding: 10,
+        borderRadius: 12,
+        marginTop: 18,
         gap: 10,
     },
     logoutText: {
         color: '#ef4444',
-        fontSize: 16,
+        fontSize: 13,
         fontWeight: '700',
     },
     deleteButton: {
-        padding: 15,
+        padding: 8,
         alignItems: 'center',
-        marginTop: 10,
+        marginTop: 4,
     },
     deleteText: {
-        color: '#475569',
-        fontSize: 14,
+        fontSize: 11,
         fontWeight: '600',
         textDecorationLine: 'underline',
     },
     versionText: {
         textAlign: 'center',
-        color: '#334155',
-        fontSize: 10,
-        marginTop: 20,
+        fontSize: 9,
+        marginTop: 10,
         letterSpacing: 1,
         fontWeight: '800',
     },

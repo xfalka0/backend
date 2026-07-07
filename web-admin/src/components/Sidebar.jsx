@@ -78,7 +78,6 @@ export default function Sidebar() {
         {
             title: 'SİSTEM & YÖNETİM',
             items: [
-                { path: '/moderation', icon: <ShieldCheck size={18} />, label: 'Fotoğraf Onayı', roles: ['admin', 'super_admin'] },
                 { path: '/reports', icon: <ShieldCheck size={18} />, label: 'Destek / Raporlar', roles: ['admin', 'super_admin', 'moderator', 'staff'] },
                 { path: '/social', icon: <Video size={18} />, label: 'Keşfet Yönetimi', roles: ['admin', 'super_admin'] },
                 { path: '/notifications', icon: <BellRing size={18} />, label: 'Bildirimler', roles: ['admin', 'super_admin'] },

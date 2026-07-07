@@ -9,6 +9,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { API_URL, SOCKET_URL } from '../config';
 import { useTheme } from '../contexts/ThemeContext';
 import VipFrame from '../components/ui/VipFrame';
+import VipBadge from '../components/ui/VipBadge';
 import HiButton from '../components/ui/HiButton';
 import StoryRing from '../components/animated/StoryRing';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -56,19 +57,15 @@ const OperatorItem = React.memo(({ item, navigation, user, theme, onHiPress }) =
                     onPress={() => navigation.navigate('OperatorProfile', { operator: item, user })}
                 >
                     <View style={styles.avatarContainer}>
-                        <StoryRing hasNewStory={!!item.has_active_story} size={54}>
-                            <VipFrame level={profileGender === 'coin_bayisi' ? 'dealer' : (item.vip_level || 0)} avatar={item.avatar_url} size={50} isStatic={true} />
+                        <StoryRing hasNewStory={!!item.has_active_story} size={69}>
+                            <VipFrame level={profileGender === 'coin_bayisi' ? 'dealer' : (item.vip_level || 0)} avatar={item.avatar_url} size={65} isStatic={true} />
                         </StoryRing>
                         {item.is_online && <View style={styles.onlineBadge} />}
                     </View>
                     <View style={styles.infoContainer}>
                         <View style={styles.nameRow}>
                             <Text style={[styles.name, { color: theme.colors.text }]} numberOfLines={1}>{item.name}</Text>
-                            {item.vip_level > 0 && (
-                                <LinearGradient colors={['#a855f7', '#ec4899']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.premiumVipBadge}>
-                                    <Text style={styles.premiumVipText}>VIP {item.vip_level}</Text>
-                                </LinearGradient>
-                            )}
+                            <VipBadge level={item.vip_level} style={{ marginLeft: 2 }} />
                             <Ionicons name="checkmark-circle" size={16} color="#3b82f6" />
                         </View>
                         <View style={styles.chipsRow}>
@@ -84,6 +81,13 @@ const OperatorItem = React.memo(({ item, navigation, user, theme, onHiPress }) =
                             <View style={styles.infoChip}>
                                 <Ionicons name={profileGender === 'erkek' ? "male" : "female"} size={10} color={profileGender === 'erkek' ? '#3b82f6' : '#ec4899'} style={{ marginRight: 2 }} />
                                 <Text style={[styles.infoChipText, { color: theme.colors.textSecondary }]}>{item.age ? `${item.age}y` : '25y'}</Text>
+                            </View>
+
+                            <Text style={styles.chipDivider}>·</Text>
+
+                            <View style={[styles.infoChip, { maxWidth: 95 }]}>
+                                <Ionicons name="briefcase" size={10} color="#3b82f6" style={{ marginRight: 2 }} />
+                                <Text style={[styles.infoChipText, { color: theme.colors.textSecondary }]} numberOfLines={1}>{item.job || 'Serbest'}</Text>
                             </View>
 
                             <Text style={styles.chipDivider}>·</Text>
@@ -108,69 +112,13 @@ const OperatorItem = React.memo(({ item, navigation, user, theme, onHiPress }) =
                 <View style={{ transform: [{ scale: 0.9 }] }}>
                     <HiButton
                         operatorId={item.id}
-                        onPress={() => navigation.navigate('Chat', { operatorId: item.id, name: item.name, gender: item.gender, avatar_url: item.avatar_url, user })}
+                        onPress={() => navigation.navigate('Chat', { operatorId: item.id, name: item.name, gender: item.gender, avatar_url: item.avatar_url, vip_level: item.vip_level || 0, user })}
                         onHiPress={handleLocalHiPress}
                     />
                 </View>
             </View>
             {item.bio && <Text style={[styles.bioText, { color: theme.colors.textSecondary }]} numberOfLines={2}>{maskContactInfo(item.bio)}</Text>}
-            {(() => {
-                let ints = item.interests || [];
-                if (typeof ints === 'string') {
-                    try { ints = JSON.parse(ints); }
-                    catch (e) { ints = ints.split(',').map(i => i.trim()); }
-                }
-                if (!Array.isArray(ints)) ints = [];
-                let displayInts = ints.slice(0, 3).filter(Boolean);
-                
-                // If empty, generate deterministic random interests (0 to 3) based on operator ID
-                if (displayInts.length === 0) {
-                    const allInterests = ["Müzik", "Spor", "Seyahat", "Kitap", "Sinema", "Dans", "Oyun", "Sanat", "Doğa", "Fotoğraf", "Yazılım", "Yoga", "Kamp"];
-                    const idVal = item.id || 'default';
-                    let hash = 0;
-                    const str = String(idVal);
-                    for (let i = 0; i < str.length; i++) {
-                        hash = str.charCodeAt(i) + ((hash << 5) - hash);
-                    }
-                    const count = Math.abs(hash) % 4; // 0 to 3 interests
-                    const tempPool = [...allInterests];
-                    for (let j = 0; j < count; j++) {
-                        const index = Math.abs(hash + j) % tempPool.length;
-                        displayInts.push(tempPool[index]);
-                        tempPool.splice(index, 1);
-                    }
-                }
-                
-                if (displayInts.length === 0) return null;
-                return (
-                    <View style={styles.interestsContainer}>
-                        {displayInts.map((interest, idx) => {
-                            const clean = String(interest || '').trim();
-                            const emojiMap = {
-                                "müzik": "🎵 Müzik",
-                                "spor": "⚽ Spor",
-                                "seyahat": "✈️ Seyahat",
-                                "kitap": "📚 Kitap",
-                                "sinema": "🎬 Sinema",
-                                "dans": "💃 Dans",
-                                "oyun": "🎮 Oyun",
-                                "sanat": "🎨 Sanat",
-                                "doğa": "🌿 Doğa",
-                                "fotoğraf": "📷 Fotoğraf",
-                                "yazılım": "💻 Yazılım",
-                                "yoga": "🧘 Yoga",
-                                "kamp": "⛺ Kamp"
-                            };
-                            const withEmoji = emojiMap[clean.toLowerCase()] || clean;
-                            return (
-                                <View key={idx} style={[styles.interestBadge, { backgroundColor: 'rgba(139, 92, 246, 0.15)', borderColor: 'rgba(139, 92, 246, 0.3)' }]}>
-                                    <Text style={[styles.interestText, { color: '#c084fc' }]}>{withEmoji}</Text>
-                                </View>
-                            );
-                        })}
-                    </View>
-                );
-            })()}
+            
             {item.photos && item.photos.length > 0 && (
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.albumScroll}>
                     {item.photos.map((p, i) => (
@@ -594,7 +542,7 @@ const styles = StyleSheet.create({
     onlineBadge: { position: 'absolute', bottom: 0, right: 0, width: 13, height: 13, borderRadius: 6.5, backgroundColor: '#10b981', borderWidth: 2, borderColor: '#110C24' },
     infoContainer: { marginLeft: 12, flex: 1 },
     nameRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 1 },
-    name: { fontSize: 16, fontWeight: 'bold' },
+    name: { fontSize: 14.5, fontWeight: 'bold' },
     chipsRow: {
         flexDirection: 'row',
         alignItems: 'center',
@@ -611,7 +559,7 @@ const styles = StyleSheet.create({
         maxWidth: 80,
     },
     infoChipText: {
-        fontSize: 10,
+        fontSize: 9,
         fontWeight: '700',
     },
     chipDivider: {
@@ -622,7 +570,7 @@ const styles = StyleSheet.create({
     },
     premiumVipBadge: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6, marginRight: 4 },
     premiumVipText: { color: 'white', fontSize: 9, fontWeight: 'bold' },
-    bioText: { fontSize: 11, marginTop: 8, lineHeight: 16 },
+    bioText: { fontSize: 10, marginTop: 8, lineHeight: 15 },
     interestsContainer: {
         flexDirection: 'row',
         flexWrap: 'wrap',
@@ -636,7 +584,7 @@ const styles = StyleSheet.create({
         borderWidth: 1,
     },
     interestText: {
-        fontSize: 10,
+        fontSize: 9,
         fontWeight: '700',
     },
     albumScroll: { marginTop: 10 },

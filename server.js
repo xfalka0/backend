@@ -38,8 +38,10 @@ const agencyRoutes = require('./routes/agency');
 const starterPackRoutes = require('./routes/starterPackRoutes');
 const familyRoutes = require('./routes/family');
 const nobilityRoutes = require('./routes/nobilityRoutes');
+const storeRoutes = require('./routes/store');
 const { sanitizeUser, logActivity } = require('./utils/helpers');
 const { sendPushNotification } = require('./utils/notificationUtils');
+const { checkProfileText, checkPhotoSecurity } = require('./utils/moderationFilter');
 
 const app = express();
 const multer = require('multer');
@@ -219,6 +221,313 @@ const initializeDatabase = async () => {
                 );
             }
             console.log('[DB] Default coin packages seeded.');
+        }
+
+        // --- Store Items Table ---
+        try {
+            await db.query(`
+                CREATE TABLE IF NOT EXISTS store_items (
+                    id SERIAL PRIMARY KEY,
+                    key VARCHAR(100) UNIQUE NOT NULL,
+                    name VARCHAR(255) NOT NULL,
+                    description TEXT,
+                    category VARCHAR(50) NOT NULL,
+                    rarity VARCHAR(50) NOT NULL,
+                    price INTEGER NOT NULL,
+                    currency VARCHAR(50) DEFAULT 'gold',
+                    duration_days INTEGER,
+                    thumbnail_url VARCHAR(255),
+                    asset_url VARCHAR(255),
+                    preview_url VARCHAR(255),
+                    animation_type VARCHAR(50) DEFAULT 'static',
+                    metadata JSONB DEFAULT '{}'::jsonb,
+                    is_active BOOLEAN DEFAULT TRUE,
+                    sort_order INTEGER DEFAULT 0,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            `);
+            console.log('[DB] store_items table verified');
+        } catch (tableErr) {
+            console.error('[DB] Error creating store_items table:', tableErr.message);
+        }
+
+        // --- User Inventory Table ---
+        try {
+            await db.query(`
+                CREATE TABLE IF NOT EXISTS user_inventory (
+                    id SERIAL PRIMARY KEY,
+                    user_id TEXT NOT NULL,
+                    item_id INTEGER REFERENCES store_items(id) ON DELETE CASCADE,
+                    category VARCHAR(50) NOT NULL,
+                    purchased_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    expires_at TIMESTAMP,
+                    is_equipped BOOLEAN DEFAULT FALSE,
+                    source VARCHAR(50) DEFAULT 'purchase',
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            `);
+            console.log('[DB] user_inventory table verified');
+        } catch (tableErr) {
+            console.error('[DB] Error creating user_inventory table:', tableErr.message);
+        }
+
+        // --- Store Purchase Logs Table ---
+        try {
+            await db.query(`
+                CREATE TABLE IF NOT EXISTS store_purchase_logs (
+                    id SERIAL PRIMARY KEY,
+                    user_id TEXT NOT NULL,
+                    item_id INTEGER REFERENCES store_items(id) ON DELETE CASCADE,
+                    price INTEGER NOT NULL,
+                    currency VARCHAR(50) NOT NULL,
+                    duration_days INTEGER,
+                    purchased_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    balance_before INTEGER NOT NULL,
+                    balance_after INTEGER NOT NULL,
+                    transaction_id VARCHAR(255) UNIQUE NOT NULL
+                )
+            `);
+            console.log('[DB] store_purchase_logs table verified');
+        } catch (tableErr) {
+            console.error('[DB] Error creating store_purchase_logs table:', tableErr.message);
+        }
+
+        // Seed default store items if empty
+        try {
+            const storeCount = await db.query('SELECT COUNT(*) FROM store_items');
+            if (parseInt(storeCount.rows[0].count, 10) === 0) {
+                console.log('[DB] Seeding default store items...');
+                const defaultItems = [
+                    // Çerçeveler (avatar_frame)
+                    {
+                        key: 'kristal_vip_frame',
+                        name: 'Kristal VIP Çerçeve',
+                        description: 'Profil fotoğrafınız için kristal işlemeli VIP çerçeve.',
+                        category: 'avatar_frame',
+                        rarity: 'epic',
+                        price: 9999,
+                        duration_days: 30,
+                        thumbnail_url: 'vip1cerceve',
+                        animation_type: 'static'
+                    },
+                    {
+                        key: 'aurora_frame',
+                        name: 'Aurora Çerçeve',
+                        description: 'Kuzey ışıklarının büyülü renklerini taşıyan efsanevi çerçeve.',
+                        category: 'avatar_frame',
+                        rarity: 'legendary',
+                        price: 19999,
+                        duration_days: 30,
+                        thumbnail_url: 'vip2cerceve',
+                        animation_type: 'static'
+                    },
+                    {
+                        key: 'neon_heart_frame',
+                        name: 'Neon Kalp Çerçevesi',
+                        description: 'Aşk dolu parlayan neon pembe kalpler.',
+                        category: 'avatar_frame',
+                        rarity: 'rare',
+                        price: 2999,
+                        duration_days: 7,
+                        thumbnail_url: 'vip3cerceve',
+                        animation_type: 'static'
+                    },
+                    {
+                        key: 'royal_diamond_frame',
+                        name: 'Royal Diamond Frame',
+                        description: 'Kraliyet elmaslarıyla süslü, asil üyeler için.',
+                        category: 'avatar_frame',
+                        rarity: 'legendary',
+                        price: 29999,
+                        duration_days: 30,
+                        thumbnail_url: 'vip4cerceve',
+                        animation_type: 'static'
+                    },
+                    {
+                        key: 'cyber_violet_frame',
+                        name: 'Cyber Violet Frame',
+                        description: 'Cyberpunk temalı, fütüristik mor ışıklar.',
+                        category: 'avatar_frame',
+                        rarity: 'epic',
+                        price: 8999,
+                        duration_days: 30,
+                        thumbnail_url: 'vip5cerceve',
+                        animation_type: 'static'
+                    },
+                    // Giriş Efektleri (entrance_effect)
+                    {
+                        key: 'lux_car_entrance',
+                        name: 'Lüks Araba Girişi',
+                        description: 'Odaya lüks spor araba ile görkemli bir giriş yapın.',
+                        category: 'entrance_effect',
+                        rarity: 'legendary',
+                        price: 24999,
+                        duration_days: 30,
+                        thumbnail_url: 'car_icon',
+                        animation_type: 'video'
+                    },
+                    {
+                        key: 'helicopter_entrance',
+                        name: 'Helikopter Girişi',
+                        description: 'Göklerden süzülen özel helikopter ile odaya iniş yapın.',
+                        category: 'entrance_effect',
+                        rarity: 'legendary',
+                        price: 29999,
+                        duration_days: 30,
+                        thumbnail_url: 'heli_icon',
+                        animation_type: 'video'
+                    },
+                    {
+                        key: 'royal_light_entrance',
+                        name: 'Kraliyet Işığı',
+                        description: 'Altın sarısı kraliyet ışık huzmesi eşliğinde giriş.',
+                        category: 'entrance_effect',
+                        rarity: 'epic',
+                        price: 12999,
+                        duration_days: 30,
+                        thumbnail_url: 'light_icon',
+                        animation_type: 'video'
+                    },
+                    // Sohbet Balonları (chat_bubble)
+                    {
+                        key: 'neon_chat_bubble',
+                        name: 'Neon Chat Bubble',
+                        description: 'Sohbet mesajlarınız parlasın.',
+                        category: 'chat_bubble',
+                        rarity: 'rare',
+                        price: 4999,
+                        duration_days: 30,
+                        thumbnail_url: 'bubble_neon',
+                        animation_type: 'static'
+                    },
+                    {
+                        key: 'royal_bubble',
+                        name: 'Royal Bubble',
+                        description: 'Kraliyet desenli lüks mesaj balonu.',
+                        category: 'chat_bubble',
+                        rarity: 'epic',
+                        price: 7999,
+                        duration_days: 30,
+                        thumbnail_url: 'bubble_royal',
+                        animation_type: 'static'
+                    },
+                    // Profil Kartları (profile_card)
+                    {
+                        key: 'night_club_theme',
+                        name: 'Gece Kulübü Teması',
+                        description: 'Profiliniz neon parti renkleriyle parlasın.',
+                        category: 'profile_card',
+                        rarity: 'rare',
+                        price: 5999,
+                        duration_days: 30,
+                        thumbnail_url: 'card_party',
+                        animation_type: 'static'
+                    },
+                    {
+                        key: 'aurora_profile_card',
+                        name: 'Aurora Profil Kartı',
+                        description: 'Büyüleyici kuzey ışıkları profil arka planınız olsun.',
+                        category: 'profile_card',
+                        rarity: 'epic',
+                        price: 9999,
+                        duration_days: 30,
+                        thumbnail_url: 'card_aurora',
+                        animation_type: 'static'
+                    },
+                    // Rozetler (badge)
+                    {
+                        key: 'popular_badge',
+                        name: 'Popüler',
+                        description: 'İsminizin yanında popülerlik rozeti.',
+                        category: 'badge',
+                        rarity: 'normal',
+                        price: 1999,
+                        duration_days: null,
+                        thumbnail_url: 'badge_popular',
+                        animation_type: 'static'
+                    },
+                    {
+                        key: 'star_guest_badge',
+                        name: 'Star Guest',
+                        description: 'Prestijli Star Guest rozeti.',
+                        category: 'badge',
+                        rarity: 'epic',
+                        price: 9999,
+                        duration_days: null,
+                        thumbnail_url: 'badge_star',
+                        animation_type: 'static'
+                    },
+                    // Unvanlar (title)
+                    {
+                        key: 'princess_title',
+                        name: 'Prenses',
+                        description: 'Profilinizde "Prenses" unvanı sergilenir.',
+                        category: 'title',
+                        rarity: 'rare',
+                        price: 4999,
+                        duration_days: 30,
+                        thumbnail_url: 'title_princess',
+                        animation_type: 'static'
+                    },
+                    {
+                        key: 'king_title',
+                        name: 'Kral',
+                        description: 'Kraliyet üyelerine özel "Kral" unvanı.',
+                        category: 'title',
+                        rarity: 'legendary',
+                        price: 19999,
+                        duration_days: 30,
+                        thumbnail_url: 'title_king',
+                        animation_type: 'static'
+                    },
+                    // Hediyeler (gift_effect)
+                    {
+                        key: 'race_car_gift',
+                        name: 'Yarış Arabası',
+                        description: 'Premium yarış arabası hediye efekti.',
+                        category: 'gift_effect',
+                        rarity: 'epic',
+                        price: 4999,
+                        duration_days: null,
+                        thumbnail_url: 'gift_car',
+                        animation_type: 'video'
+                    },
+                    {
+                        key: 'castle_gift',
+                        name: 'Şato',
+                        description: 'Efsanevi şato hediye efekti.',
+                        category: 'gift_effect',
+                        rarity: 'legendary',
+                        price: 19999,
+                        duration_days: null,
+                        thumbnail_url: 'gift_castle',
+                        animation_type: 'video'
+                    }
+                ];
+
+                for (const item of defaultItems) {
+                    await db.query(`
+                        INSERT INTO store_items (key, name, description, category, rarity, price, duration_days, thumbnail_url, animation_type)
+                        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+                        ON CONFLICT (key) DO NOTHING
+                    `, [
+                        item.key,
+                        item.name,
+                        item.description,
+                        item.category,
+                        item.rarity,
+                        item.price,
+                        item.duration_days,
+                        item.thumbnail_url,
+                        item.animation_type
+                    ]);
+                }
+                console.log('[DB] Default store items seeded successfully.');
+            }
+        } catch (seedErr) {
+            console.error('[DB] Error seeding store items:', seedErr.message);
         }
 
         // Check for users table columns
@@ -1151,8 +1460,8 @@ app.get('/api/discovery', authenticateToken, async (req, res) => {
         } else if (tab === 'Popüler') {
             orderByClause = 'ORDER BY u.vip_level DESC, o.rating DESC NULLS LAST, u.created_at DESC, u.id DESC';
         } else {
-            // "Önerilen" or Default
-            orderByClause = 'ORDER BY o.is_online DESC NULLS LAST, (coalesce(cardinality(o.photos), 0) > 0) DESC, COALESCE(active_boosts.val, FALSE) DESC, u.created_at DESC, u.id DESC';
+            // "Önerilen" or Default: Boosted -> Online -> VIP levels
+            orderByClause = 'ORDER BY o.is_online DESC NULLS LAST, COALESCE(active_boosts.val, FALSE) DESC, u.vip_level DESC, (coalesce(cardinality(o.photos), 0) > 0) DESC, u.created_at DESC, u.id DESC';
         }
 
         const query = `
@@ -1257,6 +1566,7 @@ app.use('/api', agencyRoutes);
 app.use('/api/starter-pack', starterPackRoutes);
 app.use('/api/families', familyRoutes);
 app.use('/api/nobility', nobilityRoutes);
+app.use('/api/store', storeRoutes);
 
 // TEMPORARY: Fix Genders Route
 app.get('/api/admin/fix-genders', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
@@ -1502,6 +1812,21 @@ app.put('/api/users/:id', async (req, res) => {
     const { id } = req.params;
     const { name, display_name, age, gender, bio, job, edu } = req.body;
 
+    // Check text for phone numbers / forbidden words
+    const nameToCheck = name || display_name;
+    if (nameToCheck) {
+        const check = checkProfileText(nameToCheck);
+        if (!check.safe) {
+            return res.status(400).json({ error: `Adınızda uygunsuz içerik tespit edildi: ${check.reason}` });
+        }
+    }
+    if (bio) {
+        const check = checkProfileText(bio);
+        if (!check.safe) {
+            return res.status(400).json({ error: check.reason });
+        }
+    }
+
     // Synchronize name and display_name
     const finalName = name || display_name;
     const finalDisplayName = display_name || name;
@@ -1527,10 +1852,24 @@ app.put('/api/users/:id', async (req, res) => {
     }
 });
 
-// UPDATE USER PROFILE (LEGACY / ONBOARDING)
 app.put('/api/users/:id/profile', async (req, res) => {
     const { id } = req.params;
     const { display_name, name, bio, avatar_url, gender, interests, onboarding_completed, relationship, zodiac, age } = req.body;
+
+    // Check text for phone numbers / forbidden words
+    const nameToCheck = display_name || name;
+    if (nameToCheck) {
+        const check = checkProfileText(nameToCheck);
+        if (!check.safe) {
+            return res.status(400).json({ error: `Adınızda uygunsuz içerik tespit edildi: ${check.reason}` });
+        }
+    }
+    if (bio) {
+        const check = checkProfileText(bio);
+        if (!check.safe) {
+            return res.status(400).json({ error: check.reason });
+        }
+    }
 
     // Synchronize
     const finalDisplayName = req.body.display_name || req.body.name;
@@ -2620,6 +2959,20 @@ app.put('/api/users/:id/profile', authenticateToken, async (req, res) => {
         return res.status(403).json({ error: 'Yetkisiz işlem.' });
     }
 
+    // Check text for phone numbers / forbidden words
+    if (name) {
+        const check = checkProfileText(name);
+        if (!check.safe) {
+            return res.status(400).json({ error: `Adınızda uygunsuz içerik tespit edildi: ${check.reason}` });
+        }
+    }
+    if (bio) {
+        const check = checkProfileText(bio);
+        if (!check.safe) {
+            return res.status(400).json({ error: check.reason });
+        }
+    }
+
     try {
         const result = await db.query(
             `UPDATE users 
@@ -3455,17 +3808,61 @@ app.post('/api/moderation/submit', async (req, res) => {
     }
 
     try {
+        // 1. Run automatic security checks
+        const scan = await checkPhotoSecurity(url);
+        if (!scan.safe) {
+            console.log(`[MODERATION] Auto-Rejected upload from ${userId}. Reason: ${scan.reason}`);
+            
+            // Insert rejected record in pending_photos so we have a log
+            await db.query(
+                'INSERT INTO pending_photos (user_id, type, url, status) VALUES ($1, $2, $3, \'rejected\')',
+                [userId, type, url]
+            );
+            
+            // Clean up avatar if they uploaded as avatar
+            if (type === 'avatar') {
+                await db.query('UPDATE users SET avatar_url = NULL WHERE id = $1 AND avatar_url = $2', [userId, url]);
+            }
+            
+            return res.status(400).json({ error: scan.reason || 'Yüklediğiniz fotoğraf telefon numarası veya uygunsuz içerik barındırdığı için engellendi.' });
+        }
+
+        // 2. If Safe, mark as approved and apply updates directly
         const result = await db.query(
-            'INSERT INTO pending_photos (user_id, type, url) VALUES ($1, $2, $3) RETURNING *',
+            'INSERT INTO pending_photos (user_id, type, url, status) VALUES ($1, $2, $3, \'approved\') RETURNING *',
             [userId, type, url]
         );
-        res.json(result.rows[0]);
+
+        const photo = result.rows[0];
+
+        if (photo.type === 'avatar') {
+            await db.query('UPDATE users SET avatar_url = $1 WHERE id = $2', [photo.url, photo.user_id]);
+        } else if (photo.type === 'album') {
+            // Append to users photos array
+            await db.query(
+                'UPDATE users SET photos = array_append(COALESCE(photos, \'{}\'), $1) WHERE id = $2',
+                [photo.url, photo.user_id]
+            );
+            
+            // Check if user is an operator
+            const opRes = await db.query('SELECT 1 FROM operators WHERE user_id = $1', [photo.user_id]);
+            if (opRes.rows.length > 0) {
+                await db.query(
+                    'UPDATE operators SET photos = array_append(COALESCE(photos, \'{}\'), $1) WHERE user_id = $2',
+                    [photo.url, photo.user_id]
+                );
+            }
+        }
+
+        console.log(`[MODERATION] Auto-Approved upload from ${userId}. type: ${type}`);
+        logActivity(io, photo.user_id, 'system', `${photo.type === 'avatar' ? 'Profil' : 'Albüm'} fotoğrafı otomatik onaylandı.`);
+
+        res.json({ success: true, status: 'approved', photo });
     } catch (err) {
         console.error('❌ MODERATION SUBMIT ERROR [500]:', err.message, '| Data:', JSON.stringify(req.body));
         res.status(500).json({
             error: 'Modernasyon kaydı başarısız oldu.',
-            details: err.message,
-            debug_info: { table: 'pending_photos', schema_fix_attempted: true }
+            details: err.message
         });
     }
 });
@@ -4047,8 +4444,8 @@ app.post('/api/vip/purchase-xp', authenticateToken, async (req, res) => {
 
         // Update user
         await db.query(
-            'UPDATE users SET balance = $1, vip_xp = $2 WHERE id = $3',
-            [newBalance, newVipXp, userId]
+            'UPDATE users SET balance = $1, vip_xp = $2, vip_level = $3 WHERE id = $4',
+            [newBalance, newVipXp, newVipLevel, userId]
         );
 
         // Log activity

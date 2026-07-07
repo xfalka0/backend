@@ -66,6 +66,8 @@ import PartyRoomsListScreen from './src/screens/PartyRoomsListScreen';
 import PartyRoomScreen from './src/screens/PartyRoomScreen';
 import CreateRoomScreen from './src/screens/CreateRoomScreen';
 import FamilyScreen from './src/screens/FamilyScreen';
+import StoreScreen from './src/screens/StoreScreen';
+import BagScreen from './src/screens/BagScreen';
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -138,6 +140,8 @@ function AppContent() {
                     <Stack.Screen name="Vip" component={VipScreen} />
                     <Stack.Screen name="VipDetails" component={VipDetailsScreen} />
                     <Stack.Screen name="Shop" component={ShopScreen} />
+                    <Stack.Screen name="Store" component={StoreScreen} />
+                    <Stack.Screen name="Bag" component={BagScreen} />
                     <Stack.Screen name="Favorites" component={FavoritesScreen} />
                     <Stack.Screen name="ProfileVisitors" component={ProfileVisitorsScreen} />
                     <Stack.Screen name="Notifications" component={NotificationsScreen} />

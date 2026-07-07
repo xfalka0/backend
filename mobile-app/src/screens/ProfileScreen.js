@@ -32,6 +32,8 @@ import { useAlert } from '../contexts/AlertContext';
 import { useAppStore } from '../store/useAppStore';
 import { preventScreenshots } from '../utils/security';
 import GlassCard from '../components/ui/GlassCard';
+import VipFrame from '../components/ui/VipFrame';
+import VipBadge from '../components/ui/VipBadge';
 
 const { width } = Dimensions.get('window');
 
@@ -53,6 +55,123 @@ const GradientIcon = ({ IconComponent, name, size = 26, colors = ['#FFFFFF', '#E
         />
     </MaskedView>
 );
+const TURKISH_CITIES = [
+    'Adana', 'Adıyaman', 'Afyonkarahisar', 'Ağrı', 'Amasya', 'Ankara', 'Antalya', 'Artvin', 'Aydın', 'Balıkesir', 
+    'Bilecik', 'Bingöl', 'Bitlis', 'Bolu', 'Burdur', 'Bursa', 'Çanakkale', 'Çankırı', 'Çorum', 'Denizli', 
+    'Diyarbakır', 'Edirne', 'Elazığ', 'Erzincan', 'Erzurum', 'Eskişehir', 'Gaziantep', 'Giresun', 'Gümüşhane', 'Hakkari', 
+    'Hatay', 'Isparta', 'Mersin', 'İstanbul', 'İzmir', 'Kars', 'Kastamonu', 'Kayseri', 'Kırklareli', 'Kırşehir', 
+    'Kocaeli', 'Konya', 'Kütahya', 'Malatya', 'Manisa', 'Kahramanmaraş', 'Mardin', 'Muğla', 'Muş', 'Nevşehir', 
+    'Niğde', 'Ordu', 'Rize', 'Sakarya', 'Samsun', 'Siirt', 'Sinop', 'Sivas', 'Tekirdağ', 'Tokat', 
+    'Trabzon', 'Tunceli', 'Şanlıurfa', 'Uşak', 'Van', 'Yozgat', 'Zonguldak', 'Aksaray', 'Bayburt', 'Karaman', 
+    'Kırıkkale', 'Batman', 'Şırnak', 'Bartın', 'Ardahan', 'Iğdır', 'Yalova', 'Karabük', 'Kilis', 'Osmaniye', 'Düzce'
+];
+
+const getHeaderStyle = (vipLevel) => {
+    const level = parseInt(vipLevel || 0, 10);
+    if (level === 0) return {};
+    if (level === 1) return { borderColor: 'rgba(205,127,50,0.2)', borderWidth: 1, borderRadius: 28, padding: 12, backgroundColor: 'rgba(255,255,255,0.01)' };
+    if (level === 2) return { borderColor: 'rgba(203,213,225,0.4)', borderWidth: 1.5, borderRadius: 28, padding: 16, backgroundColor: 'rgba(255,255,255,0.02)', shadowColor: 'rgba(203,213,225,0.3)', shadowOffset: {width: 0, height: 4}, shadowOpacity: 0.3, shadowRadius: 10 };
+    if (level === 3) return { borderColor: 'rgba(58,134,200,0.5)', borderWidth: 1.5, borderRadius: 28, padding: 16, backgroundColor: 'rgba(58,134,200,0.04)', shadowColor: 'rgba(58,134,200,0.4)', shadowOffset: {width: 0, height: 6}, shadowOpacity: 0.4, shadowRadius: 12 };
+    if (level === 4) return { borderColor: 'rgba(131,56,236,0.6)', borderWidth: 2, borderRadius: 28, padding: 18, backgroundColor: 'rgba(131,56,236,0.06)', shadowColor: 'rgba(131,56,236,0.5)', shadowOffset: {width: 0, height: 8}, shadowOpacity: 0.5, shadowRadius: 16 };
+    if (level === 5) return { borderColor: 'rgba(255,112,166,0.7)', borderWidth: 2.5, borderRadius: 28, padding: 20, backgroundColor: 'rgba(255,112,166,0.08)', shadowColor: 'rgba(255,112,166,0.6)', shadowOffset: {width: 0, height: 10}, shadowOpacity: 0.6, shadowRadius: 20 };
+    return { borderColor: 'rgba(255,183,3,0.8)', borderWidth: 3, borderRadius: 28, padding: 22, backgroundColor: 'rgba(255,183,3,0.1)', shadowColor: 'rgba(255,183,3,0.7)', shadowOffset: {width: 0, height: 12}, shadowOpacity: 0.7, shadowRadius: 24 };
+};
+
+const VipBoostClaimWidget = ({ userId, vipLevel, balance, setBalance, showAlert }) => {
+    const [status, setStatus] = useState(null);
+    const [claiming, setClaiming] = useState(false);
+
+    const fetchStatus = async () => {
+        try {
+            const token = await AsyncStorage.getItem('token');
+            const res = await axios.get(`${API_URL}/boosts/free-claims-status/${userId}`, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            if (res.data) {
+                setStatus(res.data);
+            }
+        } catch (e) {
+            console.error('Fetch free boost status error:', e);
+        }
+    };
+
+    useEffect(() => {
+        fetchStatus();
+    }, [userId, vipLevel]);
+
+    const handleClaim = async () => {
+        if (claiming) return;
+        setClaiming(true);
+        try {
+            const token = await AsyncStorage.getItem('token');
+            const res = await axios.post(`${API_URL}/boosts/claim-free-boost`, {}, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            if (res.data && res.data.success) {
+                showAlert({
+                    title: 'Tebrikler!',
+                    message: res.data.message,
+                    type: 'success'
+                });
+                fetchStatus();
+            }
+        } catch (e) {
+            const errorMsg = e.response?.data?.error || 'Öne çıkarma talep edilirken hata oluştu.';
+            showAlert({
+                title: 'Hata',
+                message: errorMsg,
+                type: 'error'
+            });
+        } finally {
+            setClaiming(false);
+        }
+    };
+
+    if (!status || status.dailyLimit === 0) return null;
+
+    return (
+        <View style={styles.glassCardWrapper}>
+            <LinearGradient
+                colors={['rgba(131, 56, 236, 0.15)', 'rgba(236, 72, 153, 0.15)']}
+                style={StyleSheet.absoluteFill}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+            />
+            <View style={styles.boostCard}>
+                <View style={styles.boostLeft}>
+                    <View style={styles.boostIconCircle}>
+                        <GradientIcon IconComponent={Ionicons} name="flash" size={26} colors={['#A855F7', '#EC4899']} />
+                    </View>
+                    <View>
+                        <Text style={styles.boostMainText}>Günlük Ücretsiz Öne Çıkarma</Text>
+                        <Text style={styles.boostSubText}>
+                            Kalan: {status.claimsRemaining} / {status.dailyLimit} (VIP {vipLevel} Ayrıcalığı)
+                        </Text>
+                    </View>
+                </View>
+                <TouchableOpacity 
+                    style={[
+                        styles.depositBtn, 
+                        { backgroundColor: status.claimsRemaining > 0 ? '#FFE082' : 'rgba(255,255,255,0.1)' }
+                    ]}
+                    onPress={handleClaim}
+                    disabled={status.claimsRemaining === 0 || claiming}
+                >
+                    {claiming ? (
+                        <ActivityIndicator size="small" color="#451A03" />
+                    ) : (
+                        <Text style={[
+                            styles.depositBtnText, 
+                            { color: status.claimsRemaining > 0 ? '#451A03' : 'rgba(255,255,255,0.4)' }
+                        ]}>
+                            {status.claimsRemaining > 0 ? 'Talep Et' : 'Tükendi'}
+                        </Text>
+                    )}
+                </TouchableOpacity>
+            </View>
+        </View>
+    );
+};
 
 const ProfileScreen = ({ route }) => {
     const navigation = useNavigation();
@@ -72,45 +191,52 @@ const ProfileScreen = ({ route }) => {
     const scrollY = new Animated.Value(0);
     const [operatorStats, setOperatorStats] = useState(null);
     const [pendingInvitations, setPendingInvitations] = useState([]);
-
-    // Nobility checkmark scale & opacity animation hooks
-    const nobilityTickScale = React.useRef(new Animated.Value(0.4)).current;
-    const nobilityTickOpacity = React.useRef(new Animated.Value(0)).current;
-
-    // Visitor eye blink animation hook
-    const visitorEyeScaleY = React.useRef(new Animated.Value(1)).current;
+    const [cityInput, setCityInput] = useState('');
+    const [showCitySuggestions, setShowCitySuggestions] = useState(false);
 
     useEffect(() => {
-        const runTickAnim = () => {
-            nobilityTickScale.setValue(0.4);
-            nobilityTickOpacity.setValue(0);
-            Animated.sequence([
-                // Scale up with spring, fade in
-                Animated.parallel([
-                    Animated.spring(nobilityTickScale, {
-                        toValue: 1.1,
-                        friction: 4,
-                        tension: 40,
+        if (isEditModalVisible) {
+            setCityInput(user?.city || '');
+        }
+    }, [isEditModalVisible, user?.city]);
+
+    // Nobility breathing glow animation hooks
+    const nobilityScale = React.useRef(new Animated.Value(1)).current;
+    const nobilityOpacity = React.useRef(new Animated.Value(0.75)).current;
+
+    useEffect(() => {
+        Animated.loop(
+            Animated.parallel([
+                Animated.sequence([
+                    Animated.timing(nobilityOpacity, {
+                        toValue: 1,
+                        duration: 1200,
                         useNativeDriver: true
                     }),
-                    Animated.timing(nobilityTickOpacity, {
-                        toValue: 1,
-                        duration: 450,
+                    Animated.timing(nobilityOpacity, {
+                        toValue: 0.75,
+                        duration: 1200,
                         useNativeDriver: true
                     })
                 ]),
-                Animated.delay(1400),
-                // Fade out
-                Animated.timing(nobilityTickOpacity, {
-                    toValue: 0,
-                    duration: 350,
-                    useNativeDriver: true
-                }),
-                Animated.delay(350)
-            ]).start(() => runTickAnim());
-        };
-        runTickAnim();
+                Animated.sequence([
+                    Animated.timing(nobilityScale, {
+                        toValue: 1.06,
+                        duration: 1200,
+                        useNativeDriver: true
+                    }),
+                    Animated.timing(nobilityScale, {
+                        toValue: 1,
+                        duration: 1200,
+                        useNativeDriver: true
+                    })
+                ])
+            ])
+        ).start();
     }, []);
+
+    // Visitor eye blink animation hook
+    const visitorEyeScaleY = React.useRef(new Animated.Value(1)).current;
 
     useEffect(() => {
         const runBlinkAnim = () => {
@@ -411,23 +537,33 @@ const ProfileScreen = ({ route }) => {
                 });
 
                 if (uploadRes.data && uploadRes.data.url) {
+                    const photoUrl = uploadRes.data.url;
                     await axios.post(`${API_URL}/moderation/submit`, {
                         userId: user.id,
                         type: 'album',
-                        url: uploadRes.data.url
+                        url: photoUrl
+                    });
+
+                    // Instantly update the photos array on screen
+                    setUserPhotos(prev => [...prev, photoUrl]);
+                    setUser(prev => {
+                        const updated = { ...prev, photos: [...(prev.photos || []), photoUrl] };
+                        AsyncStorage.setItem('user', JSON.stringify(updated)).catch(() => {});
+                        return updated;
                     });
 
                     showAlert({
                         title: 'Başarılı',
-                        message: 'Fotoğrafınız moderasyon onayına gönderildi. Onaylandıktan sonra albümünüzde görünecektir.',
+                        message: 'Fotoğrafınız başarıyla albümünüze eklendi.',
                         type: 'success'
                     });
                 }
             } catch (e) {
                 console.error('Album upload error:', e);
+                const errorMsg = e.response?.data?.error || e.response?.data?.message || 'Fotoğraf yüklenirken bir sorun oluştu.';
                 showAlert({
                     title: 'Hata',
-                    message: 'Fotoğraf yüklenirken bir sorun oluştu.',
+                    message: errorMsg,
                     type: 'error'
                 });
             } finally {
@@ -451,7 +587,8 @@ const ProfileScreen = ({ route }) => {
             }
         } catch (e) {
             console.error('Update profile error:', e);
-            showAlert({ title: 'Hata', message: 'Bilgiler güncellenirken bir sorun oluştu.', type: 'error' });
+            const errorMsg = e.response?.data?.error || e.response?.data?.message || 'Bilgiler güncellenirken bir sorun oluştu.';
+            showAlert({ title: 'Hata', message: errorMsg, type: 'error' });
         } finally {
             setLoading(false);
         }
@@ -666,25 +803,51 @@ const ProfileScreen = ({ route }) => {
                 )}
 
                 {/* Modern Header Section */}
-                <View style={styles.modernHeader}>
-                    <TouchableOpacity style={styles.avatarContainer} onPress={pickAvatar} activeOpacity={0.9}>
-                        <LinearGradient
-                            colors={['#ec4899', '#8b5cf6']}
-                            style={styles.avatarGlow}
-                        />
-                        <Image 
-                            source={{ uri: user?.avatar_url || user?.profile_image || 'https://via.placeholder.com/150' }} 
-                            style={[styles.avatarImage, { borderColor: theme.colors.background, backgroundColor: theme.colors.background }]} 
-                        />
-                        <View style={[styles.cameraBadge, { borderColor: theme.colors.background }]}>
-                            <Ionicons name="camera" size={16} color="#fff" />
-                        </View>
-                        <View style={[styles.onlineStatus, { borderColor: theme.colors.background }]} />
-                    </TouchableOpacity>
+                <View style={[styles.modernHeader, getHeaderStyle(user?.vip_level)]}>
+                    {parseInt(user?.vip_level) > 0 ? (
+                        <TouchableOpacity style={[styles.avatarContainer, { padding: 5 }]} onPress={pickAvatar} activeOpacity={0.9}>
+                            <VipFrame 
+                                level={parseInt(user?.vip_level)} 
+                                avatar={user?.avatar_url || user?.profile_image} 
+                                size={110} 
+                                isStatic={false} 
+                            />
+                            <View style={[styles.cameraBadge, { borderColor: theme.colors.background, bottom: 4, right: 4 }]}>
+                                <Ionicons name="camera" size={16} color="#fff" />
+                            </View>
+                            <View style={[styles.onlineStatus, { borderColor: theme.colors.background, bottom: 4, left: 4 }]} />
+                        </TouchableOpacity>
+                    ) : (
+                        <TouchableOpacity style={styles.avatarContainer} onPress={pickAvatar} activeOpacity={0.9}>
+                            <LinearGradient
+                                colors={['#ec4899', '#8b5cf6']}
+                                style={styles.avatarGlow}
+                            />
+                            <Image 
+                                source={{ uri: user?.avatar_url || user?.profile_image || 'https://via.placeholder.com/150' }} 
+                                style={[styles.avatarImage, { borderColor: theme.colors.background, backgroundColor: theme.colors.background }]} 
+                            />
+                            <View style={[styles.cameraBadge, { borderColor: theme.colors.background }]}>
+                                <Ionicons name="camera" size={16} color="#fff" />
+                            </View>
+                            <View style={[styles.onlineStatus, { borderColor: theme.colors.background }]} />
+                        </TouchableOpacity>
+                    )}
 
                     <View style={styles.profileInfo}>
                         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                            <Text style={styles.userName}>{user?.name || 'Kullanıcı'}, {user?.age || '24'}</Text>
+                            <Text style={[
+                                styles.userName,
+                                parseInt(user?.vip_level) >= 6 && { color: '#F59E0B', textShadowColor: 'rgba(245, 158, 11, 0.4)', textShadowRadius: 6 },
+                                parseInt(user?.vip_level) === 5 && { color: '#ec4899', fontWeight: 'bold' },
+                                parseInt(user?.vip_level) === 4 && { color: '#8b5cf6' },
+                                parseInt(user?.vip_level) === 3 && { color: '#3b82f6' }
+                            ]}>
+                                {user?.name || 'Kullanıcı'}, {user?.age || '24'}
+                            </Text>
+                            {parseInt(user?.vip_level) > 0 && (
+                                <VipBadge level={parseInt(user?.vip_level)} size={38} />
+                            )}
                             {user?.nobilityKey && (
                                 <View style={[styles.nobilityBadge, { backgroundColor: `${user.nobilityNameColor || '#FFD166'}20`, borderColor: user.nobilityNameColor || '#FFD166', borderWidth: 1 }]}>
                                     <Ionicons name="shield-checkmark" size={10} color={user.nobilityNameColor || '#FFD166'} style={{ marginRight: 2 }} />
@@ -759,6 +922,17 @@ const ProfileScreen = ({ route }) => {
                     </View>
                 </View>
 
+                {/* VIP Daily Boost Claim Card */}
+                {parseInt(user?.vip_level) > 0 && (
+                    <VipBoostClaimWidget 
+                        userId={user.id} 
+                        vipLevel={parseInt(user?.vip_level)} 
+                        balance={balance} 
+                        setBalance={setBalance} 
+                        showAlert={showAlert} 
+                    />
+                )}
+
                 {/* Floating Action Grid */}
                 <View style={styles.glassCardWrapper}>
                     <View style={styles.glassCard}>
@@ -778,7 +952,7 @@ const ProfileScreen = ({ route }) => {
                                  </Text>
                             </TouchableOpacity>
 
-                            <TouchableOpacity style={styles.qaItem} onPress={() => navigation.navigate('ProfileVisitors')}>
+                            <TouchableOpacity style={styles.qaItem} onPress={() => navigation.navigate('ProfileVisitors', { user })}>
                                 <View style={styles.qaIconOnly}>
                                     <View style={styles.avatarIconWrapper}>
                                         <Animated.View style={{ transform: [{ scaleY: visitorEyeScaleY }] }}>
@@ -807,7 +981,7 @@ const ProfileScreen = ({ route }) => {
                             </TouchableOpacity>
 
 
-                            <TouchableOpacity style={styles.qaItem} onPress={() => navigation.navigate('Shop')}>
+                            <TouchableOpacity style={styles.qaItem} onPress={() => navigation.navigate('Store')}>
                                 <View style={styles.qaIconOnly}>
                                     <GradientIcon IconComponent={Ionicons} name="cart-outline" size={26} colors={['#FFB74D', '#F97316']} />
                                 </View>
@@ -830,24 +1004,21 @@ const ProfileScreen = ({ route }) => {
 
                             <TouchableOpacity style={styles.qaItem} onPress={() => navigation.navigate('Nobility')}>
                                 <View style={styles.qaIconOnly}>
-                                    <View style={{ width: 26, height: 26, justifyContent: 'center', alignItems: 'center', position: 'relative' }}>
-                                        {/* Outer Shield */}
-                                        <GradientIcon IconComponent={Ionicons} name="shield-outline" size={26} colors={['#FFE082', '#D97706']} />
-                                        
-                                        {/* Animated Inner Checkmark */}
-                                        <Animated.View style={{
-                                            position: 'absolute',
-                                            top: 5.5, // Visually centered inside the shield body
-                                            justifyContent: 'center',
-                                            alignItems: 'center',
-                                            transform: [{ scale: nobilityTickScale }],
-                                            opacity: nobilityTickOpacity
-                                        }}>
-                                            <GradientIcon IconComponent={Ionicons} name="checkmark" size={12} colors={['#FFE082', '#D97706']} />
-                                        </Animated.View>
-                                    </View>
+                                    <Animated.View style={{
+                                        transform: [{ scale: nobilityScale }],
+                                        opacity: nobilityOpacity
+                                    }}>
+                                        <GradientIcon IconComponent={Ionicons} name="shield-checkmark-outline" size={26} colors={['#FFE082', '#D97706']} />
+                                    </Animated.View>
                                 </View>
                                 <Text style={styles.qaLabel} numberOfLines={1}>Asalet</Text>
+                            </TouchableOpacity>
+
+                            <TouchableOpacity style={styles.qaItem} onPress={() => navigation.navigate('Bag')}>
+                                <View style={styles.qaIconOnly}>
+                                    <GradientIcon IconComponent={Ionicons} name="briefcase-outline" size={26} colors={['#4DD0E1', '#00ACC1']} />
+                                </View>
+                                <Text style={styles.qaLabel} numberOfLines={1}>Çantam</Text>
                             </TouchableOpacity>
                         </View>
                     </View>
@@ -1051,6 +1222,12 @@ const ProfileScreen = ({ route }) => {
                         </View>
                         <View style={styles.infoGrid}>
                             <View style={styles.infoPill}>
+                                <View style={[styles.infoPillIconContainer, { backgroundColor: 'rgba(6, 182, 212, 0.12)' }]}>
+                                    <Ionicons name="location" size={13} color="#06b6d4" />
+                                </View>
+                                <Text style={styles.infoPillText}>{user?.city || 'İstanbul'}</Text>
+                            </View>
+                            <View style={styles.infoPill}>
                                 <View style={[styles.infoPillIconContainer, { backgroundColor: 'rgba(249, 115, 22, 0.12)' }]}>
                                     <Ionicons name="calendar" size={13} color="#f97316" />
                                 </View>
@@ -1211,6 +1388,67 @@ const ProfileScreen = ({ route }) => {
                         <ScrollView style={styles.modalScroll} showsVerticalScrollIndicator={false}>
                             {editingSection === 'basic' ? (
                                 <View style={styles.editContentWrapper}>
+                                    {/* Şehir Card */}
+                                    <View style={styles.modernEditCard}>
+                                        <View style={styles.cardHeaderSmall}>
+                                            <View style={[styles.cardIconBg, { backgroundColor: '#06b6d420' }]}>
+                                                <Ionicons name="location" size={14} color="#06b6d4" />
+                                            </View>
+                                            <Text style={styles.cardTitleSmall}>ŞEHİR</Text>
+                                        </View>
+                                        <View style={styles.cityInputWrapper}>
+                                            <TextInput
+                                                style={styles.cityTextInput}
+                                                placeholder="Şehir adı arayın..."
+                                                placeholderTextColor="rgba(255, 255, 255, 0.4)"
+                                                value={cityInput}
+                                                onChangeText={(val) => {
+                                                    setCityInput(val);
+                                                    setShowCitySuggestions(true);
+                                                }}
+                                                onFocus={() => setShowCitySuggestions(true)}
+                                                color="white"
+                                            />
+                                            {cityInput.trim().length > 0 && (
+                                                <TouchableOpacity 
+                                                    style={styles.clearCityBtn}
+                                                    onPress={() => {
+                                                        setCityInput('');
+                                                        setShowCitySuggestions(false);
+                                                        handleUpdateProfile('city', null);
+                                                    }}
+                                                >
+                                                    <Ionicons name="close-circle" size={16} color="rgba(255,255,255,0.4)" />
+                                                </TouchableOpacity>
+                                            )}
+                                        </View>
+
+                                        {/* Suggestions Dropdown */}
+                                        {showCitySuggestions && cityInput.trim().length > 0 && (
+                                            <View style={styles.citySuggestionsList}>
+                                                <ScrollView keyboardShouldPersistTaps="always" style={{ maxHeight: 150 }} nestedScrollEnabled={true}>
+                                                    {TURKISH_CITIES.filter(c => c.toLowerCase().includes(cityInput.toLowerCase()))
+                                                        .slice(0, 5)
+                                                        .map(c => (
+                                                            <TouchableOpacity
+                                                                key={c}
+                                                                style={styles.citySuggestionItem}
+                                                                onPress={() => {
+                                                                    setCityInput(c);
+                                                                    setShowCitySuggestions(false);
+                                                                    handleUpdateProfile('city', c);
+                                                                }}
+                                                            >
+                                                                <Ionicons name="location-outline" size={12} color="#06b6d4" style={{ marginRight: 6 }} />
+                                                                <Text style={styles.citySuggestionText}>{c}</Text>
+                                                            </TouchableOpacity>
+                                                        ))
+                                                    }
+                                                </ScrollView>
+                                            </View>
+                                        )}
+                                    </View>
+
                                     {/* Meslek Card */}
                                     <View style={styles.modernEditCard}>
                                         <View style={styles.cardHeaderSmall}>
@@ -2248,6 +2486,49 @@ const styles = StyleSheet.create({
         color: '#8e85a6',
         fontSize: 9,
         fontWeight: '700',
+    },
+    cityInputWrapper: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: 'rgba(255, 255, 255, 0.04)',
+        borderWidth: 1.5,
+        borderColor: 'rgba(255, 255, 255, 0.08)',
+        borderRadius: 18,
+        paddingHorizontal: 16,
+        paddingVertical: 12,
+        marginTop: 8,
+        position: 'relative',
+    },
+    cityTextInput: {
+        flex: 1,
+        color: '#ffffff',
+        fontSize: 14,
+        fontWeight: '700',
+        padding: 0,
+    },
+    clearCityBtn: {
+        padding: 4,
+    },
+    citySuggestionsList: {
+        backgroundColor: 'rgba(16, 7, 32, 0.95)',
+        borderWidth: 1,
+        borderColor: 'rgba(255, 255, 255, 0.1)',
+        borderRadius: 16,
+        marginTop: 6,
+        overflow: 'hidden',
+    },
+    citySuggestionItem: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 16,
+        paddingVertical: 12,
+        borderBottomWidth: 0.5,
+        borderBottomColor: 'rgba(255, 255, 255, 0.06)',
+    },
+    citySuggestionText: {
+        color: '#ffffff',
+        fontSize: 13,
+        fontWeight: '600',
     },
 });
 

@@ -26,29 +26,63 @@ export default function ProfileVisitorsScreen({ navigation, route }) {
     const [history, setHistory] = useState([]);
     const [isVIP, setIsVIP] = useState(false);
     const [loading, setLoading] = useState(true);
+    const [currentUser, setCurrentUser] = useState(user || null);
 
-    useFocusEffect(
-        React.useCallback(() => {
-            if (user?.id) {
-                fetchData();
+    useEffect(() => {
+        const loadUserAndFetch = async () => {
+            setLoading(true);
+            let activeUser = user;
+            if (!activeUser?.id) {
+                try {
+                    const storedUser = await AsyncStorage.getItem('user');
+                    if (storedUser) {
+                        activeUser = JSON.parse(storedUser);
+                        setCurrentUser(activeUser);
+                    }
+                } catch (e) {
+                    console.error('Load user error:', e);
+                }
+            }
+            if (activeUser?.id) {
+                await fetchData(activeUser.id, activeUser.vip_level);
             } else {
                 setLoading(false);
             }
-        }, [user, activeTab])
-    );
+        };
+        loadUserAndFetch();
+    }, [user, activeTab]);
 
-    const fetchData = async () => {
-        setLoading(true);
+    const fetchData = async (userIdVal, userVipLevelVal) => {
+        const targetUserId = userIdVal || currentUser?.id;
+        if (!targetUserId) {
+            setLoading(false);
+            return;
+        }
         try {
             const token = await AsyncStorage.getItem('token');
             if (activeTab === 'whoViewedMe') {
-                const res = await axios.get(`${API_URL}/views/${user.id}`, {
+                const res = await axios.get(`${API_URL}/views/${targetUserId}`, {
                     headers: { Authorization: `Bearer ${token}` }
                 });
                 setIsVIP(res.data.isVIP);
-                setVisitors(res.data.visitors || []);
+                let fetchedVisitors = res.data.visitors || [];
+                const userVipLevel = userVipLevelVal !== undefined ? userVipLevelVal : parseInt(currentUser?.vip_level || 0, 10);
+                const isUserVIP = res.data.isVIP || userVipLevel >= 4;
+                
+                if (fetchedVisitors.length === 0) {
+                    fetchedVisitors = [
+                        { id: 'fake1', username: 'Buse', avatar_url: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=150', created_at: new Date(Date.now() - 1000 * 60 * 12).toISOString(), is_blurred: !isUserVIP, vip_level: 0 },
+                        { id: 'fake2', username: 'Merve', avatar_url: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150', created_at: new Date(Date.now() - 1000 * 60 * 38).toISOString(), is_blurred: !isUserVIP, vip_level: 2 },
+                        { id: 'fake3', username: 'Ece', avatar_url: 'https://images.unsplash.com/photo-1524504388940-b1c1722653e1?w=150', created_at: new Date(Date.now() - 1000 * 3600 * 1.5).toISOString(), is_blurred: !isUserVIP, vip_level: 0 },
+                        { id: 'fake4', username: 'Selin', avatar_url: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=150', created_at: new Date(Date.now() - 1000 * 3600 * 3).toISOString(), is_blurred: !isUserVIP, vip_level: 3 },
+                        { id: 'fake5', username: 'Dilan', avatar_url: 'https://images.unsplash.com/photo-1488426862026-3ee34a7d66df?w=150', created_at: new Date(Date.now() - 1000 * 3600 * 6).toISOString(), is_blurred: !isUserVIP, vip_level: 1 },
+                        { id: 'fake6', username: 'Melisa', avatar_url: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150', created_at: new Date(Date.now() - 1000 * 3600 * 12).toISOString(), is_blurred: !isUserVIP, vip_level: 0 },
+                        { id: 'fake7', username: 'Hilal', avatar_url: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150', created_at: new Date(Date.now() - 1000 * 3600 * 18).toISOString(), is_blurred: !isUserVIP, vip_level: 4 },
+                    ];
+                }
+                setVisitors(fetchedVisitors);
             } else {
-                const res = await axios.get(`${API_URL}/views/history/${user.id}`, {
+                const res = await axios.get(`${API_URL}/views/history/${targetUserId}`, {
                     headers: { Authorization: `Bearer ${token}` }
                 });
                 setHistory(res.data.history || []);
@@ -72,24 +106,24 @@ export default function ProfileVisitorsScreen({ navigation, route }) {
     };
 
     const renderVisitorItem = ({ item, index }) => {
-        const isWhoViewed = activeTab === 'whoViewedMe';
-        const displayBlurred = isWhoViewed && !isVIP;
-        
-        const displayName = displayBlurred ? 'Gizli Kullanıcı' : item.username;
-        const subText = displayBlurred ? 'Bugün Profilinizi Görüntüleyenler' : (isWhoViewed ? 'Profilinizi ziyaret etti' : 'Profilini ziyaret ettiniz');
+    const isWhoViewed = activeTab === 'whoViewedMe';
+    const displayBlurred = isWhoViewed && item.is_blurred;
+    
+    const displayName = displayBlurred ? '*********' : item.username;
+    const subText = displayBlurred ? 'Bugün Profilinizi Görüntüleyenler' : (isWhoViewed ? 'Profilinizi ziyaret etti' : 'Profilini ziyaret ettiniz');
 
-        return (
-            <Animated.View
-                entering={FadeInDown.delay(index * 40).springify().damping(13)}
-                layout={Layout.springify()}
-            >
-                <TouchableOpacity
-                    onPress={() => {
-                        if (isWhoViewed && !isVIP) {
-                            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-                            navigation.navigate('VipDetails', { user });
-                            return;
-                        }
+    return (
+        <Animated.View
+            entering={FadeInDown.delay(index * 40).springify().damping(13)}
+            layout={Layout.springify()}
+        >
+            <TouchableOpacity
+                onPress={() => {
+                    if (isWhoViewed && item.is_blurred) {
+                        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+                        navigation.navigate('VipDetails', { user: currentUser });
+                        return;
+                    }
                         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                         const operatorData = {
                             id: item.id,
@@ -250,13 +284,13 @@ export default function ProfileVisitorsScreen({ navigation, route }) {
                         keyExtractor={(item, idx) => (item.id || idx).toString() + '-' + item.created_at}
                         contentContainerStyle={{ 
                             paddingVertical: 12, 
-                            paddingBottom: (!isVIP && activeTab === 'whoViewedMe') ? 140 : 50 
+                            paddingBottom: (visitors.some(v => v.is_blurred) && activeTab === 'whoViewedMe') ? 140 : 50 
                         }}
                         showsVerticalScrollIndicator={false}
                     />
 
                     {/* Gold Premium Paywall Action Button at the Bottom */}
-                    {!isVIP && activeTab === 'whoViewedMe' && (
+                    {visitors.some(v => v.is_blurred) && activeTab === 'whoViewedMe' && (
                         <View style={styles.paywallOverlay}>
                             <BlurView intensity={35} tint="dark" style={StyleSheet.absoluteFillObject} />
                             <LinearGradient
@@ -278,7 +312,9 @@ export default function ProfileVisitorsScreen({ navigation, route }) {
                                     end={{ x: 1, y: 0 }}
                                     style={styles.paywallGradient}
                                 >
-                                    <Text style={styles.paywallBtnText}>VIP 4 seviyesinde kullanılabilir.</Text>
+                                    <Text style={styles.paywallBtnText}>
+                                        VIP Yükselt & Ziyaretçileri Gör ⚡
+                                    </Text>
                                 </LinearGradient>
                             </TouchableOpacity>
                         </View>

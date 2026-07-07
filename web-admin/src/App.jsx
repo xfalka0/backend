@@ -13,7 +13,6 @@ import PaymentsPage from './pages/Payments';
 import GiftsPage from './pages/Gifts';
 import VipPage from './pages/Vip';
 import ChatsPage from './pages/Chats';
-import Moderation from './components/Moderation';
 import ReportsPage from './pages/Reports';
 import QuickRepliesPage from './pages/QuickReplies';
 import SocialPage from './pages/Social';
@@ -125,7 +124,6 @@ function App() {
                                 <Route path="/agency-payouts" element={<AgencyPayoutsPage />} />
                                 <Route path="/staff-activity" element={<StaffActivity />} />
                                 <Route path="/referrals" element={<ReferralsPage />} />
-                                <Route path="/moderation" element={<Moderation />} />
                                 <Route path="/maintenance" element={<MaintenancePage />} />
                             </Route>
 

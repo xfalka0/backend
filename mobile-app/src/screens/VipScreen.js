@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, Dimensions, StatusBar, SafeAreaView, Image, ScrollView, Animated as RNAnimated } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, Dimensions, StatusBar, SafeAreaView, Image, ScrollView, Animated as RNAnimated, Platform } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import Animated, {
@@ -17,43 +17,82 @@ import Animated, {
 import VipUpgradeModal from '../components/ui/VipUpgradeModal';
 import { Motion } from '../components/motion/MotionSystem';
 import VipFrame from '../components/ui/VipFrame';
+import VipBadge from '../components/ui/VipBadge';
 import axios from 'axios';
 import { API_URL } from '../config';
 import { useFocusEffect } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { BlurView } from 'expo-blur';
 
 const { width, height } = Dimensions.get('window');
 
 const VIP_LEVELS = [
-    { level: 1, title: 'VIP 1', colors: ['#92400e', '#451a03'], frameColors: ['#cd7f32', '#a05a2c'], glow: 'rgba(146, 64, 14, 0.4)' }, // Bronze
-    { level: 2, title: 'VIP 2', colors: ['#475569', '#1e293b'], frameColors: ['#cbd5e1', '#94a3b8'], glow: 'rgba(71, 85, 105, 0.4)' }, // Silver
-    { level: 3, title: 'VIP 3', colors: ['#b45309', '#78350f'], frameColors: ['#fbbf24', '#d97706'], glow: 'rgba(180, 83, 9, 0.5)' }, // Gold
-    { level: 4, title: 'VIP 4', colors: ['#0e7490', '#164e63'], frameColors: ['#22d3ee', '#0891b2'], glow: 'rgba(14, 116, 144, 0.6)' }, // Platinum
-    { level: 5, title: 'VIP 5', colors: ['#be185d', '#831843'], frameColors: ['#e879f9', '#d946ef'], glow: 'rgba(190, 24, 93, 0.7)' }, // Diamond
-    { level: 6, title: 'VIP 6', colors: ['#1a1a1a', '#000000', '#451a03'], frameColors: ['#fbbf24', '#fde68a'], glow: 'rgba(251, 191, 36, 0.9)' },
+    { level: 1, title: 'VIP 1', colors: ['#1e1b4b', '#0f172a'], frameColors: ['#818cf8', '#6366f1'], glow: 'rgba(99, 102, 241, 0.4)' },
+    { level: 2, title: 'VIP 2', colors: ['#2e1065', '#0f172a'], frameColors: ['#a855f7', '#7c3aed'], glow: 'rgba(124, 58, 237, 0.5)' },
+    { level: 3, title: 'VIP 3', colors: ['#032b49', '#02111d'], frameColors: ['#38bdf8', '#0284c7'], glow: 'rgba(2, 132, 199, 0.6)' },
+    { level: 4, title: 'VIP 4', colors: ['#4c0519', '#0f172a'], frameColors: ['#f43f5e', '#be123c'], glow: 'rgba(244, 63, 94, 0.6)' },
+    { level: 5, title: 'VIP 5', colors: ['#4c052e', '#0f050b'], frameColors: ['#ec4899', '#db2777'], glow: 'rgba(236, 72, 153, 0.7)' },
+    { level: 6, title: 'VIP 6', colors: ['#2e1f03', '#0c0700'], frameColors: ['#FFE082', '#FBBF24'], glow: 'rgba(251, 191, 36, 0.85)' },
 ];
 
 const BENEFITS_DATA = {
     1: [
-        { id: 'kimlik', title: 'Kimlik', icon: 'person-circle-outline' },
-        { id: 'rozet', title: 'Temel Rozet', icon: 'ribbon-outline' },
+        { id: 'rozet', title: 'VIP 1 Rozeti', icon: 'ribbon-outline' },
+        { id: 'cerceve', title: 'VIP 1 Çerçevesi', icon: 'color-palette-outline' },
+        { id: 'boost', title: 'Günde 1 Boost', icon: 'flash-outline' },
+        { id: 'ziyaretci', title: '10 Ziyaretçi Gör', icon: 'eye-outline' },
+        { id: 'magaza', title: 'VIP 1 Mağaza', icon: 'cart-outline' },
+    ],
+    2: [
+        { id: 'rozet', title: 'VIP 2 Rozeti', icon: 'ribbon-outline' },
+        { id: 'cerceve', title: 'VIP 2 Çerçevesi', icon: 'color-palette-outline' },
+        { id: 'boost', title: 'Günde 2 Boost', icon: 'flash-outline' },
+        { id: 'ziyaretci', title: '30 Ziyaretçi Gör', icon: 'eye-outline' },
+        { id: 'glow', title: 'Profil Glow Etkisi', icon: 'sparkles-outline' },
+        { id: 'balon', title: 'VIP Sohbet Balonu', icon: 'chatbubble-ellipses-outline' },
+    ],
+    3: [
+        { id: 'rozet', title: 'VIP 3 Rozeti', icon: 'ribbon-outline' },
+        { id: 'cerceve', title: 'VIP 3 Çerçevesi', icon: 'color-palette-outline' },
+        { id: 'boost', title: 'Günde 3 Boost', icon: 'flash-outline' },
+        { id: 'ziyaretci', title: '50 Ziyaretçi Gör', icon: 'eye-outline' },
+        { id: 'isim', title: 'Oda İsim Rengi', icon: 'color-wand-outline' },
+        { id: 'giris', title: 'Küçük Giriş Efekti', icon: 'enter-outline' },
+        { id: 'magaza', title: 'VIP 3 Ürünleri', icon: 'cart-outline' },
+    ],
+    4: [
+        { id: 'rozet', title: 'VIP 4 Rozeti', icon: 'ribbon-outline' },
+        { id: 'cerceve', title: 'VIP 4 Çerçevesi', icon: 'color-palette-outline' },
+        { id: 'boost', title: 'Günde 5 Boost', icon: 'flash-outline' },
+        { id: 'ziyaretci', title: '100 Ziyaretçi Gör', icon: 'eye-outline' },
+        { id: 'fans', title: 'Hayranları Gör', icon: 'heart-outline' },
+        { id: 'giris', title: 'Orta Giriş Efekti', icon: 'enter-outline' },
+        { id: 'tema', title: 'Özel Profil Teması', icon: 'image-outline' },
+        { id: 'kesfet', title: 'Yüksek Görünürlük', icon: 'trending-up-outline' },
+    ],
+    5: [
+        { id: 'rozet', title: 'VIP 5 Rozeti', icon: 'ribbon-outline' },
+        { id: 'cerceve', title: 'VIP 5 Çerçevesi', icon: 'color-palette-outline' },
+        { id: 'boost', title: 'Günde 8 Boost', icon: 'flash-outline' },
+        { id: 'ziyaretci', title: 'Tüm Ziyaretçiler', icon: 'eye-outline' },
+        { id: 'fans', title: 'Hayranları Gör', icon: 'heart-outline' },
+        { id: 'giris', title: 'Premium Giriş', icon: 'enter-outline' },
+        { id: 'balon', title: 'Özel Sohbet Balonu', icon: 'chatbubble-ellipses-outline' },
+        { id: 'tema', title: 'Özel Profil Teması', icon: 'image-outline' },
     ],
     6: [
-        { id: 'kimlik', title: 'Kimlik', icon: 'person-circle-outline' },
-        { id: 'cerceve', title: 'Avatar Çerçevesi', icon: 'color-palette-outline' },
-        { id: 'madalya', title: 'Madalya', icon: 'medal-outline' },
-        { id: 'ceviri', title: 'Ücretsiz Çeviri', icon: 'language-outline' },
-        { id: 'kisitlama', title: 'Kısıtlamaları Kaldırın', icon: 'eye-outline' },
-        { id: 'balon', title: 'Konuşma Balonu', icon: 'chatbubble-ellipses-outline' },
-        { id: 'onecik', title: 'Öne Çık', icon: 'trending-up-outline' },
-        { id: 'ziyaretci', title: 'Ziyaretçileri Gör', icon: 'people-outline' },
-        { id: 'hediye', title: 'Hediye Bildirimi', icon: 'gift-outline' },
+        { id: 'rozet', title: 'VIP 6 Rozeti', icon: 'ribbon-outline' },
+        { id: 'cerceve', title: 'En Şık Çerçeve', icon: 'color-palette-outline' },
+        { id: 'boost', title: 'Günde 12 Boost', icon: 'flash-outline' },
+        { id: 'ziyaretci', title: 'Ziyaretçiler Açık', icon: 'eye-outline' },
+        { id: 'fans', title: 'Hayranlar Açık', icon: 'heart-outline' },
+        { id: 'giris', title: 'Özel Giriş Efekti', icon: 'enter-outline' },
+        { id: 'aura', title: 'Özel Oda Aurası', icon: 'sparkles-outline' },
+        { id: 'isim', title: 'İsim Glow & Rengi', icon: 'color-wand-outline' },
+        { id: 'magaza', title: 'VIP 6 Mağazası', icon: 'cart-outline' },
+        { id: 'destek', title: 'Destek Önceliği', icon: 'help-buoy-outline' },
     ],
 };
-
-[2, 3, 4, 5].forEach(lvl => {
-    BENEFITS_DATA[lvl] = BENEFITS_DATA[6].slice(0, lvl + 2);
-});
 
 const VipScreen = ({ route, navigation }) => {
     const [user, setUser] = useState(route.params?.user || {});
@@ -91,7 +130,7 @@ const VipScreen = ({ route, navigation }) => {
         React.useCallback(() => {
             if (user?.id) {
                 axios.get(`${API_URL}/vip/progress`, {
-                    headers: { 'Authorization': `Bearer ${user.token}` } // Assuming token is passed or managed globally
+                    headers: { 'Authorization': `Bearer ${user.token}` }
                 })
                     .then(res => setVipProgress(res.data))
                     .catch(err => console.log('Fetch VIP progress error:', err));
@@ -110,7 +149,6 @@ const VipScreen = ({ route, navigation }) => {
     const rotateY = useSharedValue(0);
 
     useEffect(() => {
-        // Continuous Floating Animation
         floatingY.value = withRepeat(
             withSequence(
                 withTiming(-12, { duration: 2500, easing: Easing.inOut(Easing.sin) }),
@@ -120,7 +158,6 @@ const VipScreen = ({ route, navigation }) => {
             true
         );
 
-        // Continuous 3D Rotation (Tilt)
         rotateX.value = withRepeat(
             withSequence(
                 withTiming(3, { duration: 3000, easing: Easing.inOut(Easing.sin) }),
@@ -139,14 +176,12 @@ const VipScreen = ({ route, navigation }) => {
             true
         );
 
-        // Frame Rotate (Constant)
         frameRotate.value = withRepeat(
             withTiming(360, { duration: 3500, easing: Easing.linear }),
             -1,
             false
         );
 
-        // Shine Sweep Effect (VIP 3+)
         if (selectedLevel >= 3) {
             shineX.value = withRepeat(
                 withSequence(
@@ -158,7 +193,6 @@ const VipScreen = ({ route, navigation }) => {
             );
         }
 
-        // Halo Aura Effect (VIP 5+)
         if (selectedLevel >= 5) {
             haloScale.value = withRepeat(
                 withTiming(1.5, { duration: 2200 }),
@@ -201,24 +235,13 @@ const VipScreen = ({ route, navigation }) => {
         ],
     }));
 
-    const shineStyle = useAnimatedStyle(() => ({
-        transform: [{ translateX: shineX.value }],
-    }));
-
-    const haloStyle = useAnimatedStyle(() => ({
-        transform: [{ scale: haloScale.value }],
-        opacity: haloOpacity.value,
-    }));
-
-    const frameStyle = useAnimatedStyle(() => ({
-        transform: [{ rotate: `${frameRotate.value}deg` }],
-    }));
-
-    const pulseStyle = useAnimatedStyle(() => ({
-        transform: [{ scale: pulseScale.value }],
-    }));
-
     const currentConfig = VIP_LEVELS.find(v => v.level === selectedLevel);
+
+    const userXp = vipProgress?.currentXp || 0;
+    const nextThreshold = vipProgress?.nextThreshold || THRESHOLDS[selectedLevel] || 100;
+    const progressPercent = vipProgress ? (vipProgress.progress * 100) : 0;
+    const xpNeeded = vipProgress?.xpNeeded || 0;
+    const nextLevel = vipProgress?.nextLevel || 1;
 
     const renderPaginationDots = () => {
         return (
@@ -254,33 +277,30 @@ const VipScreen = ({ route, navigation }) => {
         <View style={styles.container}>
             <StatusBar barStyle="light-content" />
             <LinearGradient
-                colors={[`${currentConfig.colors[0]}33`, '#030712']}
+                colors={['#090518', '#04020a']}
                 style={StyleSheet.absoluteFill}
             />
 
-            {/* Ambient Particles Removed due to missing JSON file */}
-            <View style={[StyleSheet.absoluteFill, { zIndex: 0 }]} pointerEvents="none" />
+            {/* Neon Glowing Background Effect */}
+            <View style={[styles.topLightGlow, { backgroundColor: currentConfig.glow }]} />
 
             <SafeAreaView style={styles.safeArea}>
                 {/* Header */}
                 <View style={styles.header}>
                     <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
-                        <Ionicons name="chevron-back" size={28} color="white" />
+                        <Ionicons name="chevron-back" size={24} color="white" />
                     </TouchableOpacity>
 
-                    <Text style={styles.headerTitle}>VIP AYRICALIKLARI</Text>
+                    <Text style={styles.headerTitle}>VIP MERKEZİ</Text>
 
                     <TouchableOpacity style={styles.infoButton}>
-                        <Ionicons name="help-circle-outline" size={28} color="white" />
+                        <Ionicons name="help-circle-outline" size={24} color="white" />
                     </TouchableOpacity>
                 </View>
 
-                <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 110 }}>
+                <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 120 }}>
                     {/* Elite Card Section */}
                     <Animated.View style={[styles.eliteCardContainer, floatingStyle]}>
-
-
-
                         <View style={[styles.eliteCardWrapper, { shadowColor: currentConfig.glow, zIndex: 1 }]}>
                             <LinearGradient
                                 colors={currentConfig.colors}
@@ -288,36 +308,47 @@ const VipScreen = ({ route, navigation }) => {
                                 end={{ x: 1, y: 1 }}
                                 style={styles.eliteCard}
                             >
-                                {/* VIP 4: Particle Stars removed as requested */}
-
-
-
-
                                 <View style={styles.cardHeader}>
                                     <View style={styles.avatarWrapper}>
                                         <VipFrame
                                             level={selectedLevel}
                                             avatar={user.profile_image || `https://ui-avatars.com/api/?name=${user.name || 'User'}&background=1e293b&color=fff`}
-                                            size={100}
+                                            size={84}
                                         />
                                     </View>
-
                                     <View style={styles.userInfo}>
-                                        <Text style={styles.userName}>{user.name || 'Elite Üye'}</Text>
-                                        <Text style={styles.expText}>
-                                            {selectedLevel === userVip
-                                                ? (userVip < 6
-                                                    ? `VIP ${userVip + 1} olmak için en az ${vipProgress?.nextThreshold || THRESHOLDS[userVip + 1]} coin gerekmektedir`
-                                                    : 'Maksimum seviyeye ulaştın!')
-                                                : `VIP ${selectedLevel} olmak için en az ${THRESHOLDS[selectedLevel]} coin gerekmektedir`}
+                                        <View style={styles.nameBadgeRow}>
+                                            <Text style={styles.userName} numberOfLines={1}>{user.name || 'Elite Üye'}</Text>
+                                            <VipBadge level={selectedLevel} size={44} />
+                                        </View>
+                                        <Text style={styles.userStatusText}>
+                                            {selectedLevel <= userVip ? 'Sahip Olduğun Seviye' : 'Önizleme Seviyesi'}
                                         </Text>
                                     </View>
                                 </View>
 
-                                <View style={styles.cardFooter}>
-                                    <View style={styles.vipTag}>
-                                        <Text style={styles.cardVipText}>LEVEL {selectedLevel}</Text>
+                                <View style={styles.progressSection}>
+                                    <View style={styles.progressHeader}>
+                                        <Text style={styles.progressLabel}>VIP Tecrübesi</Text>
+                                        <Text style={styles.progressValue}>{userXp} / {nextThreshold} XP</Text>
                                     </View>
+                                    <View style={styles.progressBarBg}>
+                                        <LinearGradient
+                                            colors={currentConfig.frameColors}
+                                            start={{ x: 0, y: 0 }}
+                                            end={{ x: 1, y: 0 }}
+                                            style={[styles.progressBarFill, { width: `${progressPercent}%` }]}
+                                        />
+                                    </View>
+                                    {userVip < 6 ? (
+                                        <Text style={styles.progressFooterText}>
+                                            VIP {nextLevel} olmak için {xpNeeded} XP daha gerekli
+                                        </Text>
+                                    ) : (
+                                        <Text style={styles.progressFooterText}>
+                                            Maksimum VIP Seviyesindesiniz! 🎉
+                                        </Text>
+                                    )}
                                 </View>
                             </LinearGradient>
                         </View>
@@ -328,33 +359,43 @@ const VipScreen = ({ route, navigation }) => {
 
                     <View style={styles.dividerContainer}>
                         <View style={styles.dividerLine} />
-                        <Text style={styles.dividerText}>ÖZEL AYRICALIKLAR</Text>
+                        <Text style={styles.dividerText}>AYRICALIKLAR</Text>
                         <View style={styles.dividerLine} />
                     </View>
 
-                    {/* Level Selector - Mini Grid Style */}
+                    {/* Level Selector - Premium Slider Bar */}
                     <View style={styles.levelSelectorContainer}>
                         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.levelSelectorScroll}>
-                            {VIP_LEVELS.map((item) => (
-                                <TouchableOpacity
-                                    key={item.level}
-                                    onPress={() => handleLevelSelect(item.level)}
-                                    style={[
-                                        styles.levelItem,
-                                        selectedLevel === item.level && styles.selectedLevelItem
-                                    ]}
-                                >
-                                    <Text style={[
-                                        styles.levelItemText,
-                                        selectedLevel === item.level && { color: item.frameColors[0], fontWeight: '900' }
-                                    ]}>
-                                        VIP{item.level}
-                                    </Text>
-                                    {selectedLevel === item.level && (
-                                        <Animated.View style={[styles.levelActiveIndicator, { backgroundColor: item.frameColors[0] }]} />
-                                    )}
-                                </TouchableOpacity>
-                            ))}
+                            {VIP_LEVELS.map((item) => {
+                                const isSelected = selectedLevel === item.level;
+                                const isUnlocked = item.level <= userVip;
+                                return (
+                                    <TouchableOpacity
+                                        key={item.level}
+                                        onPress={() => handleLevelSelect(item.level)}
+                                        style={[
+                                            styles.levelItem,
+                                            isSelected && { borderColor: item.frameColors[0], backgroundColor: 'rgba(255,255,255,0.05)' }
+                                        ]}
+                                        activeOpacity={0.8}
+                                    >
+                                        <View style={styles.tabIconTextRow}>
+                                            <Ionicons 
+                                                name={isUnlocked ? "shield-checkmark" : "lock-closed"} 
+                                                size={11} 
+                                                color={isUnlocked ? '#10b981' : 'rgba(255,255,255,0.4)'} 
+                                                style={{ marginRight: 4 }}
+                                            />
+                                            <Text style={[
+                                                styles.levelItemText,
+                                                isSelected && { color: 'white', fontWeight: '900' }
+                                            ]}>
+                                                VIP {item.level}
+                                            </Text>
+                                        </View>
+                                    </TouchableOpacity>
+                                );
+                            })}
                         </ScrollView>
                     </View>
 
@@ -362,34 +403,79 @@ const VipScreen = ({ route, navigation }) => {
                     <View style={styles.gridContainer}>
                         {BENEFITS_DATA[selectedLevel]?.map((benefit) => (
                             <View key={benefit.id} style={styles.benefitItemWrapper}>
-                                <View style={styles.benefitCard}>
-                                    <View style={styles.benefitIconBackground}>
-                                        <Ionicons name={benefit.icon} size={30} color={currentConfig.frameColors[0]} />
+                                <BlurView intensity={12} tint="dark" style={styles.benefitCardBlur}>
+                                    <View style={styles.benefitCard}>
+                                        <LinearGradient
+                                            colors={['rgba(255,255,255,0.01)', 'rgba(255,255,255,0.03)']}
+                                            style={StyleSheet.absoluteFill}
+                                        />
+                                        <View style={styles.benefitIconBackground}>
+                                            <LinearGradient
+                                                colors={['rgba(139, 92, 246, 0.15)', 'rgba(236, 72, 153, 0.15)']}
+                                                style={StyleSheet.absoluteFill}
+                                                start={{ x: 0, y: 0 }}
+                                                end={{ x: 1, y: 1 }}
+                                            />
+                                            <Ionicons name={benefit.icon} size={24} color={currentConfig.frameColors[0]} />
+                                        </View>
+                                        <Text style={styles.benefitTitleText} numberOfLines={2}>{benefit.title}</Text>
                                     </View>
-                                    <Text style={styles.benefitTitleText} numberOfLines={2}>{benefit.title}</Text>
-                                </View>
+                                </BlurView>
                             </View>
                         ))}
                     </View>
+
+                    {/* Next Level Unlocks Section */}
+                    {selectedLevel < 6 && (() => {
+                        const currentBenefits = BENEFITS_DATA[selectedLevel] || [];
+                        const nextBenefits = BENEFITS_DATA[selectedLevel + 1] || [];
+                        const extraBenefits = nextBenefits.filter(nb => !currentBenefits.some(cb => cb.id === nb.id));
+                        if (extraBenefits.length === 0) return null;
+                        return (
+                            <View style={styles.unlocksSection}>
+                                <Text style={styles.unlocksTitle}>VIP {selectedLevel + 1} Seviyesinde Açılacaklar</Text>
+                                <View style={styles.unlocksCard}>
+                                    <LinearGradient
+                                        colors={['rgba(139, 92, 246, 0.05)', 'rgba(236, 72, 153, 0.05)']}
+                                        style={StyleSheet.absoluteFill}
+                                    />
+                                    {extraBenefits.map((eb) => (
+                                        <View key={eb.id} style={styles.unlockItemRow}>
+                                            <View style={styles.unlockIconBg}>
+                                                <Ionicons name={eb.icon} size={15} color="#ec4899" />
+                                            </View>
+                                            <View style={{ flex: 1 }}>
+                                                <Text style={styles.unlockItemTitle}>{eb.title}</Text>
+                                                <Text style={styles.unlockItemDesc}>VIP {selectedLevel + 1} ile bu avantajı hemen kullan.</Text>
+                                            </View>
+                                            <Ionicons name="lock-closed" size={14} color="rgba(255,255,255,0.3)" />
+                                        </View>
+                                    ))}
+                                </View>
+                            </View>
+                        );
+                    })()}
                 </ScrollView>
 
                 {/* Fixed Footer Action */}
                 <View style={styles.absoluteFooter}>
-                    <TouchableOpacity
-                        style={[styles.upgradeButton, { shadowColor: currentConfig.glow }]}
-                        onPress={handleUpgrade}
-                    >
-                        <LinearGradient
-                            colors={currentConfig.frameColors}
-                            start={{ x: 0, y: 0 }}
-                            end={{ x: 1, y: 0 }}
-                            style={styles.buttonGradient}
+                    <BlurView intensity={25} tint="dark" style={styles.footerBlurContainer}>
+                        <TouchableOpacity
+                            style={[styles.upgradeButton, { shadowColor: currentConfig.glow }]}
+                            onPress={handleUpgrade}
                         >
-                            <Text style={styles.buttonText}>
-                                {selectedLevel > userVip ? 'HEMEN YÜKSELTİN' : 'AVANTAJLARI YÖNET'}
-                            </Text>
-                        </LinearGradient>
-                    </TouchableOpacity>
+                            <LinearGradient
+                                colors={currentConfig.frameColors}
+                                start={{ x: 0, y: 0 }}
+                                end={{ x: 1, y: 0 }}
+                                style={styles.buttonGradient}
+                            >
+                                <Text style={styles.buttonText}>
+                                    {selectedLevel > userVip ? `VIP ${selectedLevel}'e YÜKSELT` : 'AVANTAJLARI YÖNET'}
+                                </Text>
+                            </LinearGradient>
+                        </TouchableOpacity>
+                    </BlurView>
                 </View>
             </SafeAreaView>
 
@@ -403,231 +489,348 @@ const VipScreen = ({ route, navigation }) => {
 };
 
 const styles = StyleSheet.create({
-    container: { flex: 1 },
-    safeArea: { flex: 1 },
+    container: { 
+        flex: 1,
+        backgroundColor: '#04020a'
+    },
+    safeArea: { 
+        flex: 1 
+    },
+    topLightGlow: {
+        position: 'absolute',
+        top: -150,
+        left: -50,
+        right: -50,
+        height: 350,
+        borderRadius: 175,
+        backgroundColor: 'rgba(139, 92, 246, 0.15)',
+        zIndex: 0,
+    },
     header: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
         paddingHorizontal: 20,
-        paddingVertical: 15,
+        paddingTop: Platform.OS === 'ios' ? 20 : 15,
+        paddingBottom: 15,
+        zIndex: 10,
     },
-    backButton: { padding: 4 },
-    infoButton: { padding: 4 },
+    backButton: { 
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        backgroundColor: 'rgba(255,255,255,0.06)',
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.08)'
+    },
+    infoButton: { 
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        backgroundColor: 'rgba(255,255,255,0.06)',
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.08)'
+    },
     headerTitle: {
         color: 'white',
-        fontSize: 14,
+        fontSize: 16,
         fontWeight: '900',
-        letterSpacing: 2,
-        opacity: 0.9,
+        letterSpacing: 1.5,
     },
     eliteCardContainer: {
         padding: 20,
-        paddingBottom: 10,
-        overflow: 'visible', // Ensure container doesn't clip
+        paddingBottom: 15,
+        overflow: 'visible',
     },
     eliteCardWrapper: {
-        borderRadius: 28,
-        elevation: 30,
-        shadowOffset: { width: 0, height: 15 },
-        shadowOpacity: 0.7,
-        shadowRadius: 20,
-        overflow: 'visible', // Ensure wrapper doesn't clip
-        backgroundColor: 'transparent', // Important for shadow on Android with overflow visible
+        borderRadius: 24,
+        elevation: 20,
+        shadowOffset: { width: 0, height: 12 },
+        shadowOpacity: 0.5,
+        shadowRadius: 16,
+        backgroundColor: 'transparent',
     },
     eliteCard: {
         width: '100%',
-        borderRadius: 28,
-        padding: 24,
+        borderRadius: 24,
+        padding: 20,
         borderWidth: 1.5,
-        borderColor: 'rgba(255,255,255,0.12)',
-        overflow: 'visible', // Allow lottie to flow out
-    },
-    shineContainer: {
-        position: 'absolute',
-        top: 0,
-        width: 180,
-        height: '100%',
-        opacity: 0.6,
-        zIndex: 1,
+        borderColor: 'rgba(255,255,255,0.08)',
+        overflow: 'hidden',
     },
     cardHeader: {
         flexDirection: 'row',
         alignItems: 'center',
-        zIndex: 5,
-        overflow: 'visible', // Allow children to extend outside
     },
     avatarWrapper: {
-        width: 100,
-        height: 100,
+        width: 84,
+        height: 84,
         alignItems: 'center',
         justifyContent: 'center',
-        overflow: 'visible', // Allow children to extend outside
     },
     userInfo: {
-        marginLeft: 22,
+        marginLeft: 18,
         flex: 1,
+    },
+    nameBadgeRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+        flexWrap: 'wrap',
     },
     userName: {
         color: 'white',
-        fontSize: 24,
+        fontSize: 20,
         fontWeight: '900',
         letterSpacing: 0.5,
-        textShadowColor: 'rgba(0,0,0,0.5)',
-        textShadowOffset: { width: 0, height: 2 },
-        textShadowRadius: 4,
     },
-    expText: {
-        color: 'rgba(255,255,255,0.55)',
+    inlineBadge: {
+        borderRadius: 8,
+        overflow: 'hidden',
+    },
+    badgeGrad: {
+        paddingHorizontal: 8,
+        paddingVertical: 2,
+    },
+    badgeText: {
+        color: 'white',
+        fontSize: 9,
+        fontWeight: '900',
+    },
+    userStatusText: {
+        color: 'rgba(255,255,255,0.5)',
         fontSize: 11,
-        marginTop: 12,
-        lineHeight: 16,
+        marginTop: 4,
+        fontWeight: '600',
+    },
+    progressSection: {
+        marginTop: 20,
+    },
+    progressHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 6,
+    },
+    progressLabel: {
+        color: 'rgba(255,255,255,0.6)',
+        fontSize: 10,
         fontWeight: '700',
     },
-    cardFooter: {
-        marginTop: 20,
-        alignItems: 'flex-end',
-    },
-    vipTag: {
-        backgroundColor: 'rgba(0,0,0,0.2)',
-        paddingHorizontal: 15,
-        paddingVertical: 4,
-        borderRadius: 12,
-        borderWidth: 1,
-        borderColor: 'rgba(255,255,255,0.05)',
-    },
-    cardVipText: {
+    progressValue: {
         color: 'white',
-        fontSize: 32,
-        fontWeight: '900',
-        fontStyle: 'italic',
-        opacity: 0.15,
+        fontSize: 11,
+        fontWeight: '800',
+    },
+    progressBarBg: {
+        height: 6,
+        borderRadius: 3,
+        backgroundColor: 'rgba(255,255,255,0.08)',
+        overflow: 'hidden',
+    },
+    progressBarFill: {
+        height: '100%',
+        borderRadius: 3,
+    },
+    progressFooterText: {
+        color: 'rgba(255,255,255,0.4)',
+        fontSize: 9.5,
+        marginTop: 6,
+        fontWeight: '600',
     },
     paginationContainer: {
         flexDirection: 'row',
         justifyContent: 'center',
         alignItems: 'center',
-        gap: 8,
-        marginBottom: 10,
+        gap: 6,
+        marginBottom: 15,
     },
     dotTouchArea: {
-        padding: 5,
+        padding: 4,
     },
     dotWrapper: {
-        width: 10,
-        height: 10,
-        borderRadius: 5,
+        width: 8,
+        height: 8,
+        borderRadius: 4,
         alignItems: 'center',
         justifyContent: 'center',
     },
     activeDotWrapper: {
-        width: 24,
-        height: 10,
-        borderRadius: 5,
+        width: 20,
+        height: 8,
+        borderRadius: 4,
     },
     activeDot: {
         flex: 1,
         width: '100%',
-        borderRadius: 5,
+        borderRadius: 4,
     },
     inactiveDot: {
-        width: 8,
-        height: 8,
-        borderRadius: 4,
+        width: 6,
+        height: 6,
+        borderRadius: 3,
         backgroundColor: 'rgba(255,255,255,0.15)',
     },
     dividerContainer: {
         flexDirection: 'row',
         alignItems: 'center',
-        paddingHorizontal: 30,
-        marginVertical: 12,
+        paddingHorizontal: 20,
+        marginVertical: 10,
     },
     dividerLine: {
         flex: 1,
         height: 1,
-        backgroundColor: 'rgba(255,255,255,0.06)',
+        backgroundColor: 'rgba(255,255,255,0.05)',
     },
     dividerText: {
         color: '#475569',
-        fontSize: 12,
+        fontSize: 10.5,
         fontWeight: '900',
-        marginHorizontal: 16,
-        letterSpacing: 2.5,
+        marginHorizontal: 12,
+        letterSpacing: 2,
     },
     levelSelectorContainer: {
-        marginBottom: 20,
+        marginBottom: 15,
     },
     levelSelectorScroll: {
         paddingHorizontal: 20,
-        gap: 20,
+        gap: 10,
     },
     levelItem: {
-        paddingVertical: 10,
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingVertical: 8,
         paddingHorizontal: 12,
+        borderRadius: 16,
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.06)',
+        backgroundColor: 'rgba(255,255,255,0.01)',
+    },
+    tabIconTextRow: {
+        flexDirection: 'row',
         alignItems: 'center',
     },
     levelItemText: {
-        color: '#475569',
-        fontSize: 14,
-        fontWeight: '800',
+        color: 'rgba(255,255,255,0.5)',
+        fontSize: 12,
+        fontWeight: '700',
     },
     levelActiveIndicator: {
-        width: 18,
-        height: 3.5,
-        borderRadius: 2,
-        marginTop: 6,
+        position: 'absolute',
+        bottom: 0,
+        left: 12,
+        right: 12,
+        height: 2,
+        borderRadius: 1,
     },
     gridContainer: {
         flexDirection: 'row',
         flexWrap: 'wrap',
-        paddingHorizontal: 16,
+        paddingHorizontal: 14,
     },
     benefitItemWrapper: {
         width: '33.33%',
-        padding: 6,
+        padding: 5,
+    },
+    benefitCardBlur: {
+        borderRadius: 20,
+        overflow: 'hidden',
     },
     benefitCard: {
-        backgroundColor: 'rgba(255,255,255,0.025)',
-        borderRadius: 24,
-        padding: 16,
+        borderRadius: 20,
+        padding: 12,
         alignItems: 'center',
         justifyContent: 'center',
         aspectRatio: 1,
-        borderWidth: 1.5,
-        borderColor: 'rgba(255,255,255,0.05)',
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.06)',
     },
     benefitIconBackground: {
-        width: 52,
-        height: 52,
-        backgroundColor: 'rgba(255,255,255,0.035)',
-        borderRadius: 18,
+        width: 48,
+        height: 48,
+        borderRadius: 16,
         alignItems: 'center',
         justifyContent: 'center',
-        marginBottom: 10,
+        marginBottom: 8,
+        overflow: 'hidden',
     },
     benefitTitleText: {
         color: '#94a3b8',
-        fontSize: 10.5,
-        fontWeight: '900',
+        fontSize: 10,
+        fontWeight: '800',
         textAlign: 'center',
-        lineHeight: 13,
+        lineHeight: 12,
+    },
+    unlocksSection: {
+        paddingHorizontal: 20,
+        marginTop: 20,
+        marginBottom: 10,
+    },
+    unlocksTitle: {
+        color: '#f43f5e',
+        fontSize: 13,
+        fontWeight: '900',
+        letterSpacing: 0.5,
+        marginBottom: 10,
+    },
+    unlocksCard: {
+        borderRadius: 20,
+        borderWidth: 1,
+        borderColor: 'rgba(244, 63, 94, 0.15)',
+        padding: 16,
+        overflow: 'hidden',
+        gap: 12,
+    },
+    unlockItemRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 12,
+    },
+    unlockIconBg: {
+        width: 32,
+        height: 32,
+        borderRadius: 10,
+        backgroundColor: 'rgba(244, 63, 94, 0.12)',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    unlockItemTitle: {
+        color: 'white',
+        fontSize: 11.5,
+        fontWeight: '800',
+    },
+    unlockItemDesc: {
+        color: 'rgba(255,255,255,0.4)',
+        fontSize: 9.5,
+        marginTop: 2,
+        fontWeight: '600',
     },
     absoluteFooter: {
         position: 'absolute',
-        bottom: 25,
+        bottom: 0,
         left: 0,
         right: 0,
+    },
+    footerBlurContainer: {
         paddingHorizontal: 20,
+        paddingTop: 12,
+        paddingBottom: 25,
+        borderTopWidth: 1,
+        borderColor: 'rgba(255,255,255,0.05)',
     },
     upgradeButton: {
         width: '100%',
-        height: 60,
-        borderRadius: 30,
+        height: 54,
+        borderRadius: 27,
         overflow: 'hidden',
-        elevation: 20,
-        shadowOffset: { width: 0, height: 10 },
-        shadowOpacity: 0.5,
-        shadowRadius: 15,
+        elevation: 15,
+        shadowOffset: { width: 0, height: 8 },
+        shadowOpacity: 0.4,
+        shadowRadius: 12,
     },
     buttonGradient: {
         flex: 1,
@@ -636,9 +839,9 @@ const styles = StyleSheet.create({
     },
     buttonText: {
         color: 'white',
-        fontSize: 15,
+        fontSize: 14,
         fontWeight: '900',
-        letterSpacing: 1.5,
+        letterSpacing: 1,
     },
 });
 

@@ -73,24 +73,24 @@ export default function FavoritesScreen({ navigation, route }) {
     };
 
     const renderFavoriteItem = ({ item, index }) => {
-        const isWhoFavorited = activeTab === 'whoFavoritedMe';
-        const displayBlurred = isWhoFavorited && !isVIP;
-        
-        const displayName = displayBlurred ? 'Gizli Kullanıcı' : (item.name || item.username);
-        const subText = displayBlurred ? 'Bugün Sizi Favorilerine Ekleyenler' : (isWhoFavorited ? 'Sizi favorilerine ekledi' : 'Favorilerinizde kayıtlı');
+    const isWhoFavorited = activeTab === 'whoFavoritedMe';
+    const displayBlurred = isWhoFavorited && item.is_blurred;
+    
+    const displayName = displayBlurred ? 'Gizli Kullanıcı' : (item.name || item.username);
+    const subText = displayBlurred ? 'Bugün Sizi Favorilerine Ekleyenler' : (isWhoFavorited ? 'Sizi favorilerine ekledi' : 'Favorilerinizde kayıtlı');
 
-        return (
-            <Animated.View
-                entering={FadeInDown.delay(index * 40).springify().damping(13)}
-                layout={Layout.springify()}
-            >
-                <TouchableOpacity
-                    onPress={() => {
-                        if (isWhoFavorited && !isVIP) {
-                            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-                            navigation.navigate('VipDetails', { user });
-                            return;
-                        }
+    return (
+        <Animated.View
+            entering={FadeInDown.delay(index * 40).springify().damping(13)}
+            layout={Layout.springify()}
+        >
+            <TouchableOpacity
+                onPress={() => {
+                    if (isWhoFavorited && item.is_blurred) {
+                        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+                        navigation.navigate('VipDetails', { user });
+                        return;
+                    }
                         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                         const operatorData = {
                             id: item.id,
@@ -253,13 +253,13 @@ export default function FavoritesScreen({ navigation, route }) {
                         keyExtractor={(item, idx) => (item.id || idx).toString() + '-' + (item.created_at || idx)}
                         contentContainerStyle={{ 
                             paddingVertical: 12, 
-                            paddingBottom: (!isVIP && activeTab === 'whoFavoritedMe') ? 140 : 50 
+                            paddingBottom: (fans.some(f => f.is_blurred) && activeTab === 'whoFavoritedMe') ? 140 : 50 
                         }}
                         showsVerticalScrollIndicator={false}
                     />
 
                     {/* Gold Premium Paywall Action Button at the Bottom */}
-                    {!isVIP && activeTab === 'whoFavoritedMe' && (
+                    {fans.some(f => f.is_blurred) && activeTab === 'whoFavoritedMe' && (
                         <View style={styles.paywallOverlay}>
                             <BlurView intensity={35} tint="dark" style={StyleSheet.absoluteFillObject} />
                             <LinearGradient
@@ -281,7 +281,11 @@ export default function FavoritesScreen({ navigation, route }) {
                                     end={{ x: 1, y: 0 }}
                                     style={styles.paywallGradient}
                                 >
-                                    <Text style={styles.paywallBtnText}>VIP 4 seviyesinde kullanılabilir.</Text>
+                                    <Text style={styles.paywallBtnText}>
+                                        {parseInt(user?.vip_level || 0) > 0 
+                                            ? 'Hayranları görmek için VIP 4+ seviyesine yüksel!' 
+                                            : 'Hayranlarını görmek için VIP ol!'}
+                                    </Text>
                                 </LinearGradient>
                             </TouchableOpacity>
                         </View>

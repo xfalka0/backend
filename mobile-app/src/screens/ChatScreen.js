@@ -15,6 +15,7 @@ import MessageBubble from '../components/animated/MessageBubble';
 import TypingIndicator from '../components/animated/TypingIndicator';
 import ChatBackground from '../components/animated/ChatBackground';
 import VipFrame from '../components/ui/VipFrame';
+import VipBadge from '../components/ui/VipBadge';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAlert } from '../contexts/AlertContext';
 import { useStarterPack } from '../contexts/StarterPackContext';
@@ -297,22 +298,7 @@ export default function ChatScreen({ route, navigation }) {
                         )}
 
                         {vip_level > 0 && (
-                            <LinearGradient
-                                colors={vip_level >= 5 ? ['#e879f9', '#d946ef'] : (vip_level >= 3 ? ['#fbbf24', '#d97706'] : ['#8b5cf6', '#6366f1'])}
-                                start={{ x: 0, y: 0 }}
-                                end={{ x: 1, y: 0 }}
-                                style={{
-                                    flexDirection: 'row',
-                                    alignItems: 'center',
-                                    paddingHorizontal: 5,
-                                    paddingVertical: 1.5,
-                                    borderRadius: 6,
-                                    marginRight: 4
-                                }}
-                            >
-                                <Ionicons name="star" size={9} color="white" />
-                                <Text style={{ color: 'white', fontSize: 9, fontWeight: '900', marginLeft: 2 }}>VIP {vip_level}</Text>
-                            </LinearGradient>
+                            <VipBadge level={vip_level} size={42} style={{ marginRight: 2 }} />
                         )}
 
                         <Ionicons name="checkmark-circle" size={14} color="#3b82f6" />

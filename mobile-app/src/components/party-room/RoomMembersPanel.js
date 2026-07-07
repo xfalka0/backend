@@ -439,6 +439,7 @@ export default function RoomMembersPanel({ visible, roomId, currentUser, onClose
                 operatorId: member.user_id,
                 name: member.display_name || member.username,
                 avatar_url: member.avatar_url,
+                vip_level: member.vip_level || 0,
                 user: currentUser
             });
         }

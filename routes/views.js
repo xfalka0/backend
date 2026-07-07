@@ -80,7 +80,7 @@ router.get('/:userId', async (req, res) => {
     const { userId } = req.params;
     try {
         const userCheck = await pool.query(
-            'SELECT is_vip, vip_expire_date, gender FROM users WHERE id = $1',
+            'SELECT is_vip, vip_expire_date, gender, vip_level FROM users WHERE id = $1',
             [userId]
         );
 
@@ -91,7 +91,16 @@ router.get('/:userId', async (req, res) => {
         const user = userCheck.rows[0];
         const now = new Date();
         const expireDate = new Date(user.vip_expire_date);
-        const isVIP = user.is_vip && (expireDate > now || !user.vip_expire_date);
+        const isLegacyVIP = user.is_vip && (expireDate > now || !user.vip_expire_date);
+
+        // Tiered VIP limits
+        const vipLevel = parseInt(user.vip_level || 0, 10);
+        let clearCount = 0;
+        if (vipLevel === 1) clearCount = 10;
+        else if (vipLevel === 2) clearCount = 30;
+        else if (vipLevel === 3) clearCount = 50;
+        else if (vipLevel === 4) clearCount = 100;
+        else if (vipLevel >= 5 || isLegacyVIP) clearCount = Infinity;
 
         // Get unique recent real visitors
         const views = await pool.query(`
@@ -158,9 +167,13 @@ router.get('/:userId', async (req, res) => {
         const allViews = [...views.rows, ...fakeVisitors];
         const sortedViews = allViews.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
 
-        const processedViews = sortedViews.map(view => {
-            if (isVIP) {
-                return view;
+        const processedViews = sortedViews.map((view, index) => {
+            const isClear = index < clearCount;
+            if (isClear) {
+                return {
+                    ...view,
+                    is_blurred: false
+                };
             } else {
                 return {
                     id: view.id,
@@ -176,7 +189,9 @@ router.get('/:userId', async (req, res) => {
         });
 
         res.json({
-            isVIP: isVIP,
+            isVIP: vipLevel > 0 || isLegacyVIP,
+            vipLevel: vipLevel,
+            clearCount: clearCount,
             visitors: processedViews
         });
     } catch (err) {

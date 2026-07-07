@@ -19,6 +19,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '../contexts/ThemeContext';
 import { API_URL } from '../config';
 import VipFrame from '../components/ui/VipFrame';
+import VipBadge from '../components/ui/VipBadge';
 import GlassCard from '../components/ui/GlassCard';
 import SkeletonCard from '../components/ui/SkeletonCard';
 import AnimatedEmptyState from '../components/ui/AnimatedEmptyState';
@@ -295,6 +296,7 @@ export default function MessagesScreen({ navigation, route }) {
                             name: item.name,
                             gender: item.gender,
                             avatar_url: item.avatar_url,
+                            vip_level: item.vip_level || 0,
                             user
                         });
                     }}
@@ -343,19 +345,9 @@ export default function MessagesScreen({ navigation, route }) {
                                             >
                                                 <Text style={styles.vipText}>AJANS DAVETİ</Text>
                                             </LinearGradient>
-                                        ) : item.vip_level > 0 ? (
-                                            <LinearGradient
-                                                colors={
-                                                    item.vip_level >= 6 ? ['#1a1a1b', '#000000'] :
-                                                        item.vip_level >= 5 ? ['#e879f9', '#d946ef'] :
-                                                            (item.vip_level >= 3 ? ['#fbbf24', '#d97706'] : ['#8b5cf6', '#6366f1'])
-                                                }
-                                                start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.vipBadge}
-                                            >
-                                                <Ionicons name="star" size={8} color="white" />
-                                                <Text style={styles.vipText}>VIP {item.vip_level}</Text>
-                                            </LinearGradient>
-                                        ) : null}
+                                        ) : (
+                                            <VipBadge level={item.vip_level} style={{ marginLeft: 2 }} />
+                                        )}
                                         <Ionicons name="checkmark-circle" size={14} color="#3b82f6" />
                                     </View>
                                     {item.is_agency_invite ? (

@@ -17,6 +17,7 @@ import GlassCard from '../components/ui/GlassCard';
 import { useTheme } from '../contexts/ThemeContext';
 // import { Motion } from '../components/motion/MotionSystem';
 import VipFrame from '../components/ui/VipFrame';
+import VipBadge from '../components/ui/VipBadge';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import ImageViewing from 'react-native-image-viewing';
 import { resolveImageUrl } from '../utils/imageUtils';
@@ -285,7 +286,7 @@ export default function OperatorProfileScreen({ route, navigation }) {
                                     <VipFrame
                                         level={operator.gender === 'coin_bayisi' ? 'dealer' : operator.vip_level}
                                         avatar={resolveImageUrl(operator.avatar_url || operator.avatar)}
-                                        size={60}
+                                        size={95}
                                     />
                                 </View>
                                 <View>
@@ -307,24 +308,7 @@ export default function OperatorProfileScreen({ route, navigation }) {
                                                 <Text style={styles.ageBadgeText}>{operator.age}</Text>
                                             </View>
                                         )}
-                                        {operator.vip_level > 0 && (
-                                            <LinearGradient
-                                                colors={
-                                                    operator.vip_level === 1 ? ['#94a3b8', '#64748b'] :
-                                                        operator.vip_level === 2 ? ['#3b82f6', '#8b5cf6'] :
-                                                            operator.vip_level === 3 ? ['#a855f7', '#ec4899'] :
-                                                                operator.vip_level === 4 ? ['#fbbf24', '#7c3aed'] :
-                                                                    operator.vip_level === 5 ? ['#e879f9', '#d946ef'] :
-                                                                        ['#000000', '#1a1a1a']
-                                                }
-                                                start={{ x: 0, y: 0 }}
-                                                end={{ x: 1, y: 0 }}
-                                                style={styles.premiumVipBadge}
-                                            >
-                                                <Ionicons name="star" size={10} color={operator.vip_level >= 4 ? "#fff" : "#fbbf24"} />
-                                                <Text style={styles.premiumVipText}>VIP {operator.vip_level}</Text>
-                                            </LinearGradient>
-                                        )}
+                                        <VipBadge level={operator.vip_level} style={{ marginLeft: 2 }} />
                                     </View>
 
                                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
@@ -343,13 +327,40 @@ export default function OperatorProfileScreen({ route, navigation }) {
                                     {/* Follow Stats in Operator Profile */}
                                     <View style={{ flexDirection: 'row', gap: 15, marginTop: 10 }}>
                                         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                                            <Text style={{ color: 'white', fontWeight: '900', fontSize: 16 }}>{followerStats.followers}</Text>
-                                            <Text style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12, fontWeight: '600' }}>Takipçi</Text>
+                                            <Text style={{ color: 'white', fontWeight: 'bold', fontSize: 14 }}>{followerStats.followers}</Text>
+                                            <Text style={{ color: 'rgba(255,255,255,0.4)', fontSize: 11, fontWeight: '500' }}>Takipçi</Text>
                                         </View>
                                         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                                            <Text style={{ color: 'white', fontWeight: '900', fontSize: 16 }}>{followerStats.following}</Text>
-                                            <Text style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12, fontWeight: '600' }}>Takip</Text>
+                                            <Text style={{ color: 'white', fontWeight: 'bold', fontSize: 14 }}>{followerStats.following}</Text>
+                                            <Text style={{ color: 'rgba(255,255,255,0.4)', fontSize: 11, fontWeight: '500' }}>Takip</Text>
                                         </View>
+                                    </View>
+
+                                    {/* Profile Specific Info Chips */}
+                                    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 12 }}>
+                                        <View style={styles.profileInfoChip}>
+                                            <Ionicons name="location-sharp" size={11} color="#a855f7" style={{ marginRight: 3 }} />
+                                            <Text style={styles.profileInfoChipText}>{operator.city || 'İstanbul'}</Text>
+                                        </View>
+                                        
+                                        {operator.age && (
+                                            <View style={styles.profileInfoChip}>
+                                                <Ionicons 
+                                                    name={(operator.gender === 'erkek' || operator.gender === 'male') ? "male" : "female"} 
+                                                    size={11} 
+                                                    color="#ec4899" 
+                                                    style={{ marginRight: 3 }} 
+                                                />
+                                                <Text style={styles.profileInfoChipText}>{operator.age}y</Text>
+                                            </View>
+                                        )}
+                                        
+                                        {operator.boy && (
+                                            <View style={styles.profileInfoChip}>
+                                                <Ionicons name="body" size={11} color="#06b6d4" style={{ marginRight: 3 }} />
+                                                <Text style={styles.profileInfoChipText}>{operator.boy} cm</Text>
+                                            </View>
+                                        )}
                                     </View>
                                 </View>
                             </View>
@@ -656,10 +667,10 @@ const styles = StyleSheet.create({
         marginBottom: 25,
     },
     name: {
-        fontSize: 20, // Reduced from 28
-        fontWeight: '900',
+        fontSize: 16,
+        fontWeight: 'bold',
         color: 'white',
-        letterSpacing: -0.7,
+        letterSpacing: -0.4,
     },
     category: {
         fontSize: 13,
@@ -684,24 +695,24 @@ const styles = StyleSheet.create({
     ageBadge: {
         flexDirection: 'row',
         alignItems: 'center',
-        paddingHorizontal: 6,
-        paddingVertical: 2,
-        borderRadius: 12,
+        paddingHorizontal: 5,
+        paddingVertical: 1.5,
+        borderRadius: 10,
         marginLeft: 0
     },
     ageBadgeText: {
         color: 'white',
-        fontSize: 10, // Reduced from 13
-        fontWeight: '900',
+        fontSize: 9,
+        fontWeight: 'bold',
         marginLeft: 2
     },
     onlineBadge: {
         flexDirection: 'row',
         alignItems: 'center',
         backgroundColor: 'rgba(16, 185, 129, 0.1)',
-        paddingHorizontal: 5, // Reduced from 12
-        paddingVertical: 4, // Reduced from 6
-        borderRadius: 16,
+        paddingHorizontal: 5,
+        paddingVertical: 2.5,
+        borderRadius: 12,
         borderWidth: 1,
         borderColor: 'rgba(16, 185, 129, 0.2)',
     },
@@ -716,23 +727,23 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         backgroundColor: 'rgba(255, 255, 255, 0.05)',
-        paddingHorizontal: 8,
-        paddingVertical: 4,
+        paddingHorizontal: 6,
+        paddingVertical: 2.5,
         borderRadius: 12,
         borderWidth: 1,
         borderColor: 'rgba(255, 255, 255, 0.1)',
-        gap: 4,
+        gap: 3,
         marginTop: 0,
     },
     idBadgeText: {
         color: 'rgba(255, 255, 255, 0.6)',
-        fontSize: 11,
-        fontWeight: '700',
+        fontSize: 9.5,
+        fontWeight: '600',
     },
     onlineText: {
         color: '#10b981',
-        fontSize: 11, // Reduced from 12
-        fontWeight: '800',
+        fontSize: 9.5,
+        fontWeight: 'bold',
     },
     section: {
         marginBottom: 30,
@@ -833,5 +844,20 @@ const styles = StyleSheet.create({
         color: '#e2e8f0',
         fontSize: 12,
         fontWeight: '500',
+    },
+    profileInfoChip: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: 'rgba(255, 255, 255, 0.06)',
+        paddingHorizontal: 6,
+        paddingVertical: 2.5,
+        borderRadius: 8,
+        borderColor: 'rgba(255, 255, 255, 0.08)',
+        borderWidth: 1,
+    },
+    profileInfoChipText: {
+        color: 'rgba(255, 255, 255, 0.8)',
+        fontSize: 9.5,
+        fontWeight: '600',
     },
 });

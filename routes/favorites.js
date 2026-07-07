@@ -112,7 +112,7 @@ router.get('/:userId/fans', async (req, res) => {
     try {
         // First, check if the requested user is VIP
         const userCheck = await pool.query(
-            'SELECT is_vip, vip_expire_date, gender FROM users WHERE id = $1',
+            'SELECT is_vip, vip_expire_date, gender, vip_level FROM users WHERE id = $1',
             [userId]
         );
 
@@ -123,7 +123,8 @@ router.get('/:userId/fans', async (req, res) => {
         const user = userCheck.rows[0];
         const now = new Date();
         const expireDate = new Date(user.vip_expire_date);
-        const isVIP = user.is_vip && (expireDate > now || !user.vip_expire_date);
+        const isLegacyVIP = user.is_vip && (expireDate > now || !user.vip_expire_date);
+        const isVip4Plus = parseInt(user.vip_level || 0, 10) >= 4 || isLegacyVIP;
 
         const fans = await pool.query(`
             SELECT u.id, COALESCE(u.display_name, u.username) as name, u.username, u.avatar_url, u.gender, u.is_vip, f.created_at,
@@ -188,9 +189,9 @@ router.get('/:userId/fans', async (req, res) => {
         const allFans = [...fans.rows, ...fakeFans];
         const sortedFans = allFans.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
 
-        // If not VIP, obscure the data
+        // If not VIP 4+, obscure the data
         const processedFans = sortedFans.map(fan => {
-            if (isVIP) {
+            if (isVip4Plus) {
                 return fan;
             } else {
                 return {
@@ -207,7 +208,9 @@ router.get('/:userId/fans', async (req, res) => {
         });
 
         res.json({
-            isVIP: isVIP,
+            isVIP: parseInt(user.vip_level || 0, 10) > 0 || isLegacyVIP,
+            vipLevel: parseInt(user.vip_level || 0, 10),
+            isVip4Plus: isVip4Plus,
             fans: processedFans
         });
     } catch (err) {

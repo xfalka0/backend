@@ -203,6 +203,7 @@ export default function RoomUserBottomSheet({ visible, user, seat, currentUser, 
                 operatorId: user.id,
                 name: user.display_name || user.username,
                 avatar_url: user.avatar_url,
+                vip_level: user.vip_level || 0,
                 user: currentUser
             });
         }

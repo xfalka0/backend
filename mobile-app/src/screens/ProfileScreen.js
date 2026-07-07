@@ -988,7 +988,7 @@ const ProfileScreen = ({ route }) => {
                                 <Text style={styles.qaLabel} numberOfLines={1}>Mağaza</Text>
                             </TouchableOpacity>
 
-                            <TouchableOpacity style={styles.qaItem} onPress={() => navigation.navigate('Favorites')}>
+                            <TouchableOpacity style={styles.qaItem} onPress={() => navigation.navigate('Favorites', { user })}>
                                 <View style={styles.qaIconOnly}>
                                     <GradientIcon IconComponent={Ionicons} name="heart-outline" size={26} colors={['#FDA4AF', '#E11D48']} />
                                 </View>

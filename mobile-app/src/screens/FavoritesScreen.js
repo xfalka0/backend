@@ -21,34 +21,53 @@ export default function FavoritesScreen({ navigation, route }) {
     const { theme } = useTheme();
     const { user } = route.params || {};
     
-    const [activeTab, setActiveTab] = useState('whoFavoritedMe'); // 'whoFavoritedMe' or 'whoIFavorited'
+    const [activeTab, setActiveTab] = useState('whoFavoritedMe'); // 'whoFavoritedMe' or 'whoIForited'
     const [favorites, setFavorites] = useState([]); // People I favorited
     const [fans, setFans] = useState([]); // People who favorited me
     const [isVIP, setIsVIP] = useState(false);
     const [loading, setLoading] = useState(true);
+    const [currentUser, setCurrentUser] = useState(user || null);
 
-    useFocusEffect(
-        React.useCallback(() => {
-            if (user?.id) {
-                fetchData();
+    useEffect(() => {
+        const loadUserAndFetch = async () => {
+            setLoading(true);
+            let activeUser = user;
+            if (!activeUser?.id) {
+                try {
+                    const storedUser = await AsyncStorage.getItem('user');
+                    if (storedUser) {
+                        activeUser = JSON.parse(storedUser);
+                        setCurrentUser(activeUser);
+                    }
+                } catch (e) {
+                    console.error('Load user error:', e);
+                }
+            }
+            if (activeUser?.id) {
+                await fetchData(activeUser.id);
             } else {
                 setLoading(false);
             }
-        }, [user, activeTab])
-    );
+        };
+        loadUserAndFetch();
+    }, [user, activeTab]);
 
-    const fetchData = async () => {
-        setLoading(true);
+    const fetchData = async (userIdVal) => {
+        const targetUserId = userIdVal || currentUser?.id;
+        if (!targetUserId) {
+            setLoading(false);
+            return;
+        }
         try {
             const token = await AsyncStorage.getItem('token');
             if (activeTab === 'whoFavoritedMe') {
-                const res = await axios.get(`${API_URL}/favorites/${user.id}/fans`, {
+                const res = await axios.get(`${API_URL}/favorites/${targetUserId}/fans`, {
                     headers: { Authorization: `Bearer ${token}` }
                 });
                 setIsVIP(res.data.isVIP);
                 setFans(res.data.fans || []);
             } else {
-                const res = await axios.get(`${API_URL}/favorites/${user.id}`, {
+                const res = await axios.get(`${API_URL}/favorites/${targetUserId}`, {
                     headers: { Authorization: `Bearer ${token}` }
                 });
                 setFavorites(res.data || []);
@@ -72,11 +91,21 @@ export default function FavoritesScreen({ navigation, route }) {
         return `${Math.floor(diffInSeconds / 86400)} gün önce`;
     };
 
+    const cleanUsername = (name) => {
+        if (!name) return '';
+        let cleaned = name.replace(/^op_/i, '');
+        cleaned = cleaned.replace(/_\d+(-\d+)?$/g, '');
+        if (name.toLowerCase().startsWith('op_') && cleaned.length > 0) {
+            cleaned = cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
+        }
+        return cleaned;
+    };
+
     const renderFavoriteItem = ({ item, index }) => {
     const isWhoFavorited = activeTab === 'whoFavoritedMe';
     const displayBlurred = isWhoFavorited && item.is_blurred;
     
-    const displayName = displayBlurred ? 'Gizli Kullanıcı' : (item.name || item.username);
+    const displayName = displayBlurred ? '*********' : cleanUsername(item.name || item.username);
     const subText = displayBlurred ? 'Bugün Sizi Favorilerine Ekleyenler' : (isWhoFavorited ? 'Sizi favorilerine ekledi' : 'Favorilerinizde kayıtlı');
 
     return (
@@ -88,7 +117,7 @@ export default function FavoritesScreen({ navigation, route }) {
                 onPress={() => {
                     if (isWhoFavorited && item.is_blurred) {
                         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-                        navigation.navigate('VipDetails', { user });
+                        navigation.navigate('VipDetails', { user: currentUser });
                         return;
                     }
                         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -101,7 +130,7 @@ export default function FavoritesScreen({ navigation, route }) {
                             vip_level: item.vip_level || (item.is_vip ? 1 : 0),
                             is_online: item.is_online
                         };
-                        navigation.navigate('OperatorProfile', { operator: operatorData, user });
+                        navigation.navigate('OperatorProfile', { operator: operatorData, user: currentUser });
                     }}
                     style={styles.cardContainer}
                     activeOpacity={0.8}
@@ -111,13 +140,10 @@ export default function FavoritesScreen({ navigation, route }) {
                             <View style={styles.avatarWrapper}>
                                 <VipFrame
                                     level={item.vip_level || (item.is_vip ? 1 : 0)}
-                                    avatar={item.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(item.name || item.username || 'User')}&background=random&color=fff`}
+                                    avatar={displayBlurred ? null : (item.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(item.name || item.username || 'User')}&background=random&color=fff`)}
                                     size={50}
                                     isStatic={true}
                                 />
-                                {displayBlurred && (
-                                    <BlurView intensity={70} tint="dark" style={StyleSheet.absoluteFillObject} />
-                                )}
                             </View>
                             {item.is_online && !displayBlurred && (
                                 <View style={styles.onlineBadge} />

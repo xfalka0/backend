@@ -17,12 +17,22 @@ import AnimatedEmptyState from '../components/ui/AnimatedEmptyState';
 
 const { width } = Dimensions.get('window');
 
+const INITIAL_FAKE_VISITORS = [
+    { id: 'fake1', username: 'Buse', avatar_url: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=150', created_at: new Date(Date.now() - 1000 * 60 * 12).toISOString(), is_blurred: true, vip_level: 0 },
+    { id: 'fake2', username: 'Merve', avatar_url: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150', created_at: new Date(Date.now() - 1000 * 60 * 38).toISOString(), is_blurred: true, vip_level: 2 },
+    { id: 'fake3', username: 'Ece', avatar_url: 'https://images.unsplash.com/photo-1524504388940-b1c1722653e1?w=150', created_at: new Date(Date.now() - 1000 * 3600 * 1.5).toISOString(), is_blurred: true, vip_level: 0 },
+    { id: 'fake4', username: 'Selin', avatar_url: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=150', created_at: new Date(Date.now() - 1000 * 3600 * 3).toISOString(), is_blurred: true, vip_level: 3 },
+    { id: 'fake5', username: 'Dilan', avatar_url: 'https://images.unsplash.com/photo-1488426862026-3ee34a7d66df?w=150', created_at: new Date(Date.now() - 1000 * 3600 * 6).toISOString(), is_blurred: true, vip_level: 1 },
+    { id: 'fake6', username: 'Melisa', avatar_url: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150', created_at: new Date(Date.now() - 1000 * 3600 * 12).toISOString(), is_blurred: true, vip_level: 0 },
+    { id: 'fake7', username: 'Hilal', avatar_url: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150', created_at: new Date(Date.now() - 1000 * 3600 * 18).toISOString(), is_blurred: true, vip_level: 4 },
+];
+
 export default function ProfileVisitorsScreen({ navigation, route }) {
     const { theme } = useTheme();
     const { user } = route.params || {};
     
     const [activeTab, setActiveTab] = useState('whoViewedMe'); // 'whoViewedMe' or 'whoIVisited'
-    const [visitors, setVisitors] = useState([]);
+    const [visitors, setVisitors] = useState(INITIAL_FAKE_VISITORS);
     const [history, setHistory] = useState([]);
     const [isVIP, setIsVIP] = useState(false);
     const [loading, setLoading] = useState(true);
@@ -105,11 +115,21 @@ export default function ProfileVisitorsScreen({ navigation, route }) {
         return `${Math.floor(diffInSeconds / 86400)} gün önce`;
     };
 
+    const cleanUsername = (name) => {
+        if (!name) return '';
+        let cleaned = name.replace(/^op_/i, '');
+        cleaned = cleaned.replace(/_\d+(-\d+)?$/g, '');
+        if (name.toLowerCase().startsWith('op_') && cleaned.length > 0) {
+            cleaned = cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
+        }
+        return cleaned;
+    };
+
     const renderVisitorItem = ({ item, index }) => {
     const isWhoViewed = activeTab === 'whoViewedMe';
     const displayBlurred = isWhoViewed && item.is_blurred;
     
-    const displayName = displayBlurred ? '*********' : item.username;
+    const displayName = displayBlurred ? '*********' : cleanUsername(item.username);
     const subText = displayBlurred ? 'Bugün Profilinizi Görüntüleyenler' : (isWhoViewed ? 'Profilinizi ziyaret etti' : 'Profilini ziyaret ettiniz');
 
     return (
@@ -144,13 +164,10 @@ export default function ProfileVisitorsScreen({ navigation, route }) {
                             <View style={styles.avatarWrapper}>
                                 <VipFrame
                                     level={item.vip_level || 0}
-                                    avatar={item.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(item.username || 'User')}&background=random&color=fff`}
+                                    avatar={displayBlurred ? null : (item.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(item.username || 'User')}&background=random&color=fff`)}
                                     size={50}
                                     isStatic={true}
                                 />
-                                {displayBlurred && (
-                                    <BlurView intensity={70} tint="dark" style={StyleSheet.absoluteFillObject} />
-                                )}
                             </View>
                             {item.is_online && !displayBlurred && (
                                 <View style={styles.onlineBadge} />
@@ -261,7 +278,7 @@ export default function ProfileVisitorsScreen({ navigation, route }) {
             </View>
             <View style={styles.tabDivider} />
 
-            {loading ? (
+            {loading && visitors.length === 0 ? (
                 <View style={{ padding: 16 }}>
                     {[...Array(5)].map((_, i) => <SkeletonCard key={i} />)}
                 </View>

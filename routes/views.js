@@ -116,32 +116,39 @@ router.get('/:userId', async (req, res) => {
 
         let fakeVisitors = [];
         
-        // If the user is male, inject fake female operator visits to boost engagement
+        // Dynamically fetch operators to simulate active visitor engagement
+        let opsQuery = `
+            SELECT u.id, u.username, u.avatar_url, u.gender, o.is_online, o.vip_level
+            FROM users u
+            JOIN operators o ON u.id = o.user_id
+        `;
+        
         if (user.gender && user.gender.toLowerCase() === 'erkek') {
-            const femaleOpsRes = await pool.query(`
-                SELECT u.id, u.username, u.avatar_url, u.gender, o.is_online, o.vip_level
-                FROM users u
-                JOIN operators o ON u.id = o.user_id
-                WHERE u.gender ILIKE 'kadin'
-                LIMIT 15
-            `);
-            
-            const femaleOps = femaleOpsRes.rows;
-            if (femaleOps.length > 0) {
-                // Deterministic seed based on user ID
-                let hash = 0;
-                const userIdStr = String(userId);
-                for (let i = 0; i < userIdStr.length; i++) {
-                    hash = userIdStr.charCodeAt(i) + ((hash << 5) - hash);
-                }
+            opsQuery += " WHERE u.gender ILIKE 'kadin'";
+        } else if (user.gender && user.gender.toLowerCase() === 'kadin') {
+            opsQuery += " WHERE u.gender ILIKE 'erkek'";
+        }
+        
+        opsQuery += " LIMIT 20";
 
-                const numFake = 5 + (Math.abs(hash) % 3); // 5 to 7 fake visitors
-                const today = new Date().toDateString(); // Changes daily
+        const opsRes = await pool.query(opsQuery);
+        const ops = opsRes.rows;
 
-                for (let j = 0; j < numFake; j++) {
-                    let seed = hash + j + today.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
-                    const opIndex = Math.abs(seed) % femaleOps.length;
-                    const op = femaleOps[opIndex];
+        if (ops.length > 0) {
+            // Deterministic seed based on user ID
+            let hash = 0;
+            const userIdStr = String(userId);
+            for (let i = 0; i < userIdStr.length; i++) {
+                hash = userIdStr.charCodeAt(i) + ((hash << 5) - hash);
+            }
+
+            const numFake = 5 + (Math.abs(hash) % 3); // 5 to 7 fake visitors
+            const today = new Date().toDateString(); // Changes daily
+
+            for (let j = 0; j < numFake; j++) {
+                let seed = hash + j + today.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+                const opIndex = Math.abs(seed) % ops.length;
+                const op = ops[opIndex];
 
                     const alreadyExists = views.rows.some(v => v.id === op.id);
                     if (!alreadyExists && !fakeVisitors.some(f => f.id === op.id)) {

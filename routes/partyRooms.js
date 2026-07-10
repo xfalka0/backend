@@ -97,19 +97,7 @@ async function ensurePartyTables() {
 }
 ensurePartyTables();
 
-// Lazy Socket.io integration hook using Express middleware
-let socketInitialized = false;
-router.use((req, res, next) => {
-    const io = req.app.get('io');
-    if (io && !socketInitialized) {
-        io.on('connection', (socket) => {
-            handlePartyRoomSockets(io, socket);
-        });
-        socketInitialized = true;
-        console.log('📡 [SOCKET.IO] Party Room Socket Handlers mounted successfully!');
-    }
-    next();
-});
+
 
 // GET /api/party-rooms - List all active voice rooms
 router.get('/', authenticateToken, async (req, res) => {

@@ -17,19 +17,7 @@ if (process.env.REDIS_URL) {
 
 const { handleRoomsSockets } = require('../socket/roomsSocket');
 
-// Lazy Socket.io integration hook using Express middleware
-let socketInitialized = false;
-router.use((req, res, next) => {
-    const io = req.app.get('io');
-    if (io && !socketInitialized) {
-        io.on('connection', (socket) => {
-            handleRoomsSockets(io, socket);
-        });
-        socketInitialized = true;
-        console.log('📡 [SOCKET.IO] Room Seats Socket Handlers mounted successfully!');
-    }
-    next();
-});
+
 
 // Helper to support both snake_case and camelCase attributes
 function mapRoom(row) {

@@ -38,10 +38,11 @@ const agencyRoutes = require('./routes/agency');
 const starterPackRoutes = require('./routes/starterPackRoutes');
 const familyRoutes = require('./routes/family');
 const nobilityRoutes = require('./routes/nobilityRoutes');
-const storeRoutes = require('./routes/store');
 const { sanitizeUser, logActivity } = require('./utils/helpers');
 const { sendPushNotification } = require('./utils/notificationUtils');
 const { checkProfileText, checkPhotoSecurity } = require('./utils/moderationFilter');
+const { handleRoomsSockets } = require('./socket/roomsSocket');
+const { handlePartyRoomSockets } = require('./socket/partyRoomSocket');
 
 const app = express();
 const multer = require('multer');
@@ -4964,6 +4965,9 @@ io.on('connection', (socket) => {
             }
         }
     });
+
+    handleRoomsSockets(io, socket);
+    handlePartyRoomSockets(io, socket);
 
     socket.on('disconnect', () => {
         console.log('User disconnected:', socket.id);

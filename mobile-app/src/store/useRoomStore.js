@@ -192,8 +192,12 @@ export const useRoomStore = create((set, get) => ({
     // ─── Seat Actions ─────────────────────────────────────────────────────────
 
     takeSeat: (seatNumber) => {
+        console.log('[RoomStore] takeSeat called for seat:', seatNumber);
         const { room } = get();
-        if (!room) return;
+        if (!room) {
+            console.log('[RoomStore] takeSeat failed: room is null in store!');
+            return;
+        }
         SocketService.takeSeat(room.id, seatNumber);
     },
 

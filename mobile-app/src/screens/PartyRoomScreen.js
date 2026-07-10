@@ -454,6 +454,7 @@ export default function PartyRoomScreen({ route, navigation }) {
         }
 
         // Switch seat directly if already sitting, otherwise take seat directly
+        console.log('[PartyRoomScreen] handleSeatPress clicked seat:', seat.seat_number);
         takeSeat(seat.seat_number);
     }, [currentUser, mySeat, isHost, seats]);
 

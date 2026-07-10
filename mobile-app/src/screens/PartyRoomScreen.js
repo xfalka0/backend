@@ -3,7 +3,8 @@ import React, {
 } from 'react';
 import {
     View, Text, StyleSheet, FlatList, TouchableOpacity, Image,
-    Dimensions, Animated, Alert, StatusBar, ActivityIndicator, Modal
+    Dimensions, Animated, Alert, StatusBar, ActivityIndicator, Modal,
+    PermissionsAndroid, Platform
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -221,12 +222,46 @@ export default function PartyRoomScreen({ route, navigation }) {
     }, []);
 
     // ── Agora Engine State Synchronizer ────────────────────────────────────────
+    const requestMicPermission = async () => {
+        if (Platform.OS === 'android') {
+            try {
+                const granted = await PermissionsAndroid.request(
+                    PermissionsAndroid.PERMISSIONS.RECORD_AUDIO,
+                    {
+                        title: 'Mikrofon İzni',
+                        message: 'Sesli sohbette konuşabilmeniz için mikrofon izni vermeniz gerekmektedir.',
+                        buttonNeutral: 'Sonra Sor',
+                        buttonNegative: 'İptal',
+                        buttonPositive: 'İzin Ver',
+                    }
+                );
+                return granted === PermissionsAndroid.RESULTS.GRANTED;
+            } catch (err) {
+                console.warn('[Permission] request error:', err);
+                return false;
+            }
+        }
+        return true;
+    };
+
     useEffect(() => {
         if (!isAgoraInitialized || !agoraRef.current || !AgoraRTC) return;
 
         const syncAgora = async () => {
             try {
                 if (mySeat) {
+                    // Check and prompt for microphone permission first
+                    const hasPermission = await requestMicPermission();
+                    if (!hasPermission) {
+                        showAlert({
+                            title: 'İzin Gerekli',
+                            message: 'Mikrofon izni verilmediği için sesiniz gönderilemeyecektir.',
+                            type: 'warning'
+                        });
+                        await agoraRef.current.muteLocalAudioStream(true);
+                        return;
+                    }
+
                     // When on seat, ensure role is Broadcaster, and sync mic mute status
                     await agoraRef.current.setClientRole(AgoraRTC.ClientRoleType.ClientRoleBroadcaster);
                     await agoraRef.current.muteLocalAudioStream(!isMicEnabled);

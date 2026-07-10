@@ -79,7 +79,17 @@ async function ensurePartyTables() {
         await db.query('CREATE INDEX IF NOT EXISTS idx_party_rooms_host_id ON party_rooms(host_id)');
         await db.query('CREATE INDEX IF NOT EXISTS idx_party_room_seats_room_id ON party_room_seats(room_id)');
         await db.query('CREATE INDEX IF NOT EXISTS idx_party_room_members_lookup ON party_room_members(room_id, user_id)');
-        await db.query('CREATE INDEX IF NOT EXISTS idx_party_room_bans_lookup ON party_room_bans(room_id, user_id)');
+        // Automatic repair: ensure all existing rooms have exactly 16 seats
+        const existingRooms = await db.query('SELECT id FROM party_rooms');
+        for (const room of existingRooms.rows) {
+            for (let seatNum = 1; seatNum <= 16; seatNum++) {
+                await db.query(`
+                    INSERT INTO party_room_seats (room_id, seat_number, user_id)
+                    VALUES ($1, $2, NULL)
+                    ON CONFLICT (room_id, seat_number) DO NOTHING
+                `, [room.id, seatNum]);
+            }
+        }
         console.log('[DB] Party rooms, seats, members, and bans tables verified successfully!');
     } catch (err) {
         console.error('[DB-MIGRATION] Failed to create party tables:', err.message);

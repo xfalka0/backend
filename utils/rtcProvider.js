@@ -31,8 +31,8 @@ class AgoraRtcProvider extends RtcProvider {
         const currentTimestamp = Math.floor(Date.now() / 1000);
         const privilegeExpiredTs = currentTimestamp + expirationTimeInSeconds;
 
-        // Map role: host/speaker -> PUBLISHER, listener -> SUBSCRIBER
-        const agoraRole = (role === 'listener') ? RtcRole.SUBSCRIBER : RtcRole.PUBLISHER;
+        // Always generate publisher token to allow role switching (listener -> speaker) without token renewal
+        const agoraRole = RtcRole.PUBLISHER;
 
         try {
             const token = RtcTokenBuilder.buildTokenWithUid(

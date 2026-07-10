@@ -333,7 +333,11 @@ export default function PartyRoomScreen({ route, navigation }) {
         // Switch seat directly if already sitting, otherwise take seat directly
         takeSeat(seat.seat_number);
         if (agoraRef.current) {
-            agoraRef.current.setClientRole(AgoraRTC.ClientRoleType.ClientRoleBroadcaster).catch(() => {});
+            try {
+                agoraRef.current.setClientRole(AgoraRTC.ClientRoleType.ClientRoleBroadcaster);
+            } catch (err) {
+                console.warn('[Agora] setClientRole error:', err);
+            }
         }
     }, [currentUser, mySeat, isHost, seats]);
 
@@ -345,7 +349,11 @@ export default function PartyRoomScreen({ route, navigation }) {
         toggleMic();
         toggleSeatMute(mySeat.seat_number);
         if (agoraRef.current) {
-            agoraRef.current.muteLocalAudioStream(!isMicEnabled).catch(() => {});
+            try {
+                agoraRef.current.muteLocalAudioStream(!isMicEnabled);
+            } catch (err) {
+                console.warn('[Agora] muteLocalAudioStream error:', err);
+            }
         }
     };
 

@@ -64,7 +64,16 @@ class LiveKitRtcProvider extends RtcProvider {
 
 // Provider Factory based on environment variables
 function getRtcProvider() {
-    const providerName = (process.env.RTC_PROVIDER || 'mock').toLowerCase();
+    let providerName = (process.env.RTC_PROVIDER || '').toLowerCase();
+
+    // Automatically default to agora in production if not explicitly configured
+    if (!providerName) {
+        if (process.env.NODE_ENV === 'production') {
+            providerName = 'agora';
+        } else {
+            providerName = 'mock';
+        }
+    }
 
     switch (providerName) {
         case 'agora':

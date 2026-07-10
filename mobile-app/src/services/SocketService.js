@@ -106,9 +106,11 @@ class SocketService {
     }
 
     leaveRoom(roomId) {
+        console.log('[SocketService] leaveRoom called for roomId:', roomId);
         this._currentRoomId = null;
         this._roomJoinedCallback = null;
         if (this._socket?.connected) {
+            console.log('[SocketService] Emitting leave_party_room for roomId:', roomId);
             this._socket.emit('leave_party_room', { roomId });
         }
     }

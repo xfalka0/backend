@@ -218,10 +218,23 @@ export default function PartyRoomScreen({ route, navigation }) {
         syncBalanceWithServer(); // Sync balance from server on entry
 
         return () => {
+            console.log('[PartyRoomScreen] useEffect cleanup running');
             leaveRoom();
             _releaseAgora();
         };
     }, [currentUser?.id]);
+
+    useEffect(() => {
+        if (!navigation) return;
+
+        const unsubscribe = navigation.addListener('beforeRemove', () => {
+            console.log('[PartyRoomScreen] navigation beforeRemove triggered - leaving room');
+            leaveRoom();
+            _releaseAgora();
+        });
+
+        return unsubscribe;
+    }, [navigation]);
 
     // ── Agora Engine State Synchronizer ────────────────────────────────────────
     const requestMicPermission = async () => {

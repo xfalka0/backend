@@ -2,7 +2,7 @@ const axios = require('axios');
 const jwt = require('jsonwebtoken');
 const db = require('../db');
 
-const LIVE_URL = 'http://localhost:5000/api';
+const LIVE_URL = 'https://backend-kj17.onrender.com/api';
 const SECRET_KEY = 'falka_super_secret_2024_key_change_me';
 
 async function testLiveRtc() {

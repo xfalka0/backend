@@ -176,6 +176,7 @@ export const useRoomStore = create((set, get) => ({
     },
 
     leaveRoom: () => {
+        console.log('[RoomStore] leaveRoom called');
         const { room } = get();
         if (room) {
             SocketService.leaveRoom(room.id);

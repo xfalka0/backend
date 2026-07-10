@@ -1020,7 +1020,10 @@ router.post('/:id/rtc-token', authenticateToken, async (req, res) => {
         const provider = getRtcProvider();
         const token = await provider.createJoinToken(userId, id, role);
 
-        const providerName = process.env.RTC_PROVIDER || 'mock';
+        let providerName = process.env.RTC_PROVIDER;
+        if (!providerName) {
+            providerName = process.env.NODE_ENV === 'production' ? 'agora' : 'mock';
+        }
 
         res.json({
             provider: providerName,

@@ -292,6 +292,7 @@ export default function PartyRoomScreen({ route, navigation }) {
                         console.log('[Agora] Token renewed on engine');
                         await agoraRef.current.setClientRole(AgoraRTC.ClientRoleType.ClientRoleBroadcaster);
                         console.log('[Agora] Client role set to Broadcaster');
+                        await agoraRef.current.enableLocalAudio(isMicEnabled);
                         await agoraRef.current.muteLocalAudioStream(!isMicEnabled);
                         console.log('[Agora] Local audio stream state set to:', isMicEnabled ? 'OPEN (Transmitting Audio)' : 'MUTED (Silent)');
                     }
@@ -308,6 +309,7 @@ export default function PartyRoomScreen({ route, navigation }) {
                         console.log('[Agora] Token renewed on engine');
                         await agoraRef.current.setClientRole(AgoraRTC.ClientRoleType.ClientRoleAudience);
                         console.log('[Agora] Client role set to Audience');
+                        await agoraRef.current.enableLocalAudio(false);
                         await agoraRef.current.muteLocalAudioStream(true);
                         console.log('[Agora] Local audio stream muted for Audience');
                     }
@@ -389,10 +391,7 @@ export default function PartyRoomScreen({ route, navigation }) {
             console.log('[Agora] Enabling audio stream...');
             await engine.enableAudio();
             
-            // Enable volume indicator: check every 200ms
-            await engine.enableAudioVolumeIndication(200, 3, true);
-
-            // Register volume indicator and connection status event handler
+             // Register volume indicator and connection status event handler
             engine.registerEventHandler({
                 onConnectionStateChanged: (connection, state, reason) => {
                     console.log('[Agora] Connection state changed:', state, 'Reason:', reason);
@@ -417,6 +416,10 @@ export default function PartyRoomScreen({ route, navigation }) {
             console.log('[Agora] Joining channel:', channelName, 'with uid:', myAgoraUid);
             await engine.joinChannel(rtcToken, channelName, '', myAgoraUid);
             console.log('[Agora] Joined channel successfully.');
+
+            // Enable volume indicator: check every 200ms (Must be done after join on some devices)
+            await engine.enableAudioVolumeIndication(200, 3, true);
+            console.log('[Agora] Volume indication enabled after join.');
             setIsAgoraInitialized(true);
         } catch (e) {
             console.log('[Agora] Init warning:', e.message);

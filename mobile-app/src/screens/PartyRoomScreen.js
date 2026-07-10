@@ -268,6 +268,7 @@ export default function PartyRoomScreen({ route, navigation }) {
                     // Check and prompt for microphone permission first
                     const hasPermission = await requestMicPermission();
                     if (!hasPermission) {
+                        console.log('[Agora] Mic permission denied!');
                         showAlert({
                             title: 'İzin Gerekli',
                             message: 'Mikrofon izni verilmediği için sesiniz gönderilemeyecektir.',
@@ -286,10 +287,13 @@ export default function PartyRoomScreen({ route, navigation }) {
                     });
 
                     if (agoraRef.current) {
-                        console.log('[Agora] Seat token renewed for Broadcaster:', res.data.role);
+                        console.log('[Agora] Syncing Broadcaster role. Mic enabled:', isMicEnabled);
                         await agoraRef.current.renewToken(res.data.token);
+                        console.log('[Agora] Token renewed on engine');
                         await agoraRef.current.setClientRole(AgoraRTC.ClientRoleType.ClientRoleBroadcaster);
+                        console.log('[Agora] Client role set to Broadcaster');
                         await agoraRef.current.muteLocalAudioStream(!isMicEnabled);
+                        console.log('[Agora] Local audio stream mute state set to:', !isMicEnabled);
                     }
                 } else {
                     // Request a fresh listener token from the server
@@ -299,10 +303,13 @@ export default function PartyRoomScreen({ route, navigation }) {
                     });
 
                     if (agoraRef.current) {
-                        console.log('[Agora] Seat token renewed for Audience:', res.data.role);
+                        console.log('[Agora] Syncing Audience role');
                         await agoraRef.current.renewToken(res.data.token);
+                        console.log('[Agora] Token renewed on engine');
                         await agoraRef.current.setClientRole(AgoraRTC.ClientRoleType.ClientRoleAudience);
+                        console.log('[Agora] Client role set to Audience');
                         await agoraRef.current.muteLocalAudioStream(true);
+                        console.log('[Agora] Local audio stream muted for Audience');
                     }
                 }
             } catch (err) {
@@ -370,10 +377,16 @@ export default function PartyRoomScreen({ route, navigation }) {
             console.log('[Agora] Token response received:', res.data);
             const { token: rtcToken, channelName } = res.data;
             const myAgoraUid = Number(currentUser?.id) || 0;
+            console.log('[Agora] Creating Agora engine instance...');
             const engine = await AgoraRTC.createAgoraRtcEngine();
             agoraRef.current = engine;
+            console.log('[Agora] Initializing Agora engine...');
             await engine.initialize({ appId: res.data.appId || 'f80faf42fd0845a9816658ea7e16a755' });
+            console.log('[Agora] Setting channel profile...');
+            await engine.setChannelProfile(AgoraRTC.ChannelProfileType.ChannelProfileLiveBroadcasting);
+            console.log('[Agora] Setting default role to Audience...');
             await engine.setClientRole(AgoraRTC.ClientRoleType.ClientRoleAudience);
+            console.log('[Agora] Enabling audio stream...');
             await engine.enableAudio();
             
             // Enable volume indicator: check every 200ms
@@ -385,6 +398,9 @@ export default function PartyRoomScreen({ route, navigation }) {
                     console.log('[Agora] Connection state changed:', state, 'Reason:', reason);
                 },
                 onAudioVolumeIndication: (speakers, speakerNumber, totalVolume) => {
+                    if (totalVolume > 0) {
+                        console.log('[Agora] Audio volume indication speakers:', speakers, 'totalVolume:', totalVolume);
+                    }
                     const speakingMap = {};
                     speakers.forEach(sp => {
                         if (sp.volume > 5) {
@@ -396,7 +412,9 @@ export default function PartyRoomScreen({ route, navigation }) {
                 }
             });
 
+            console.log('[Agora] Joining channel:', channelName, 'with uid:', myAgoraUid);
             await engine.joinChannel(rtcToken, channelName, '', myAgoraUid);
+            console.log('[Agora] Joined channel successfully.');
             setIsAgoraInitialized(true);
         } catch (e) {
             console.log('[Agora] Init warning:', e.message);
@@ -463,8 +481,9 @@ export default function PartyRoomScreen({ route, navigation }) {
             showAlert({ title: 'Mikrofon', message: 'Mikrofonu kullanmak için bir koltuğa oturmalısınız.', type: 'info' });
             return;
         }
+        const nextMicState = !isMicEnabled;
         toggleMic();
-        toggleSeatMute(mySeat.seat_number);
+        toggleSeatMute(mySeat.seat_number, !nextMicState);
     };
 
     const handleSendMessage = () => {

@@ -194,10 +194,10 @@ function handlePartyRoomSockets(io, socket) {
 
             // Insert the seat
             await db.query(`
-                INSERT INTO party_room_seats (room_id, seat_number, user_id)
-                VALUES ($1, $2, $3::text)
+                INSERT INTO party_room_seats (room_id, seat_number, user_id, is_muted)
+                VALUES ($1, $2, $3::text, FALSE)
                 ON CONFLICT (room_id, seat_number) 
-                DO UPDATE SET user_id = EXCLUDED.user_id
+                DO UPDATE SET user_id = EXCLUDED.user_id, is_muted = FALSE
             `, [roomId, seatNumber, socket.user.id]);
 
             // Fetch latest user details (display_name, avatar_url, vip_level)
@@ -206,6 +206,9 @@ function handlePartyRoomSockets(io, socket) {
                 [socket.user.id]
             );
             const dbUser = userRes.rows[0] || socket.user;
+
+            if (!global.payoutLogs) global.payoutLogs = [];
+            global.payoutLogs.push({ timestamp: new Date().toISOString(), type: 'SOCKET_TAKE_SEAT_SUCCESS', userId: socket.user.id, seatNumber, roomId });
 
             io.to(roomName).emit('party_seat_updated', {
                 seat_number: seatNumber,
@@ -218,6 +221,8 @@ function handlePartyRoomSockets(io, socket) {
             });
         } catch (err) {
             console.error('[SOCKET] Take seat error:', err.message);
+            if (!global.payoutLogs) global.payoutLogs = [];
+            global.payoutLogs.push({ timestamp: new Date().toISOString(), type: 'SOCKET_TAKE_SEAT_ERROR', error: err.message, stack: err.stack, userId: socket.user?.id, seatNumber });
             socket.emit('party_room_error', { message: 'Koltuk alma işlemi başarısız.' });
         }
     });
@@ -254,7 +259,7 @@ function handlePartyRoomSockets(io, socket) {
 
     // 5. TOGGLE SEAT MUTE (HOST OR MIC OWNER)
     socket.on('toggle_seat_mute', async (data) => {
-        const { roomId, seatNumber } = data;
+        const { roomId, seatNumber, isMuted } = data;
         if (!roomId || !seatNumber || !socket.user) return;
 
         const roomName = `party_room_${roomId}`;
@@ -262,7 +267,7 @@ function handlePartyRoomSockets(io, socket) {
         try {
             // Verify if user is host or is currently sitting on the seat
             const authRes = await db.query(`
-                SELECT prs.user_id, pr.host_id 
+                SELECT prs.user_id, pr.host_id, prs.is_muted 
                 FROM party_room_seats prs
                 JOIN party_rooms pr ON prs.room_id = pr.id
                 WHERE prs.room_id = $1 AND prs.seat_number = $2
@@ -270,7 +275,7 @@ function handlePartyRoomSockets(io, socket) {
 
             if (authRes.rows.length === 0) return;
 
-            const { user_id, host_id } = authRes.rows[0];
+            const { user_id, host_id, is_muted: currentMuted } = authRes.rows[0];
             const isHost = host_id.toString() === socket.user.id.toString();
             const isOccupant = user_id && user_id.toString() === socket.user.id.toString();
 
@@ -279,13 +284,18 @@ function handlePartyRoomSockets(io, socket) {
                 return;
             }
 
+            const targetMuted = typeof isMuted === 'boolean' ? isMuted : !currentMuted;
+
             const updateRes = await db.query(
-                'UPDATE party_room_seats SET is_muted = NOT is_muted WHERE room_id = $1 AND seat_number = $2 RETURNING is_muted, user_id',
-                [roomId, seatNumber]
+                'UPDATE party_room_seats SET is_muted = $3 WHERE room_id = $1 AND seat_number = $2 RETURNING is_muted, user_id',
+                [roomId, seatNumber, targetMuted]
             );
 
             if (updateRes.rows.length > 0) {
                 const seat = updateRes.rows[0];
+                if (!global.payoutLogs) global.payoutLogs = [];
+                global.payoutLogs.push({ timestamp: new Date().toISOString(), type: 'SOCKET_TOGGLE_MUTE_SUCCESS', userId: socket.user.id, seatNumber, isMuted: seat.is_muted });
+
                 io.to(roomName).emit('party_seat_mute_changed', {
                     seat_number: seatNumber,
                     is_muted: seat.is_muted,
@@ -294,6 +304,8 @@ function handlePartyRoomSockets(io, socket) {
             }
         } catch (err) {
             console.error('[SOCKET] Toggle mute error:', err.message);
+            if (!global.payoutLogs) global.payoutLogs = [];
+            global.payoutLogs.push({ timestamp: new Date().toISOString(), type: 'SOCKET_TOGGLE_MUTE_ERROR', error: err.message, stack: err.stack, userId: socket.user?.id, seatNumber });
         }
     });
 

@@ -2,21 +2,9 @@ const db = require('../db');
 
 async function run() {
     try {
-        const columnsRes = await db.query(`
-            SELECT column_name, data_type 
-            FROM information_schema.columns 
-            WHERE table_name = 'party_room_members'
-        `);
-        console.log('Columns of party_room_members:');
-        console.table(columnsRes.rows);
-
-        const columnsSeats = await db.query(`
-            SELECT column_name, data_type 
-            FROM information_schema.columns 
-            WHERE table_name = 'party_room_seats'
-        `);
-        console.log('Columns of party_room_seats:');
-        console.table(columnsSeats.rows);
+        const activeSeatsRes = await db.query("SELECT * FROM party_room_seats WHERE room_id = '326fb982-2646-416a-bfb4-8b0edd8b6abf'");
+        console.log('All seats in active room 326fb982-2646-416a-bfb4-8b0edd8b6abf:');
+        console.table(activeSeatsRes.rows);
     } catch (err) {
         console.error('Error:', err);
     } finally {

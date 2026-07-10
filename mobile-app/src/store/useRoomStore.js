@@ -208,10 +208,10 @@ export const useRoomStore = create((set, get) => ({
         set({ isMicEnabled: false });
     },
 
-    toggleSeatMute: (seatNumber) => {
+    toggleSeatMute: (seatNumber, isMuted) => {
         const { room } = get();
         if (!room) return;
-        SocketService.toggleSeatMute(room.id, seatNumber);
+        SocketService.toggleSeatMute(room.id, seatNumber, isMuted);
     },
 
     lockSeat: (seatNumber, isLocked) => {

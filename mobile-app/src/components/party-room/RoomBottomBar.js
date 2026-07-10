@@ -96,13 +96,13 @@ export default function RoomBottomBar({
 
                         {/* 3. Mic Toggle */}
                         <TouchableOpacity
-                            style={[styles.barIconBtn, !micMuted && styles.barIconBtnActive]}
+                            style={[styles.barIconBtn, micMuted && styles.barIconBtnActive]}
                             onPress={onToggleMic}
                         >
                             <Ionicons
-                                name={!micMuted ? 'mic-sharp' : 'mic-off-sharp'}
+                                name={micMuted ? 'mic-off-sharp' : 'mic-sharp'}
                                 size={16}
-                                color={!micMuted ? '#ff007f' : 'rgba(255, 255, 255, 0.85)'}
+                                color={micMuted ? '#ff007f' : 'rgba(255, 255, 255, 0.85)'}
                             />
                         </TouchableOpacity>
 

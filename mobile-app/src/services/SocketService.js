@@ -176,8 +176,8 @@ class SocketService {
         this.emit('leave_seat', { roomId, seatNumber });
     }
 
-    toggleSeatMute(roomId, seatNumber) {
-        this.emit('toggle_seat_mute', { roomId, seatNumber });
+    toggleSeatMute(roomId, seatNumber, isMuted) {
+        this.emit('toggle_seat_mute', { roomId, seatNumber, isMuted });
     }
 
     lockSeat(roomId, seatNumber, isLocked) {

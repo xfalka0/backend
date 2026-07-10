@@ -18,6 +18,16 @@ function formatGiftPoints(value) {
     return val.toFixed(1).replace('.0', '') + 'M';
 }
 
+const cleanUsername = (name) => {
+    if (!name) return '';
+    let cleaned = name.replace(/^op_/i, '');
+    cleaned = cleaned.replace(/_\d+(-\d+)?$/g, '');
+    if (name.toLowerCase().startsWith('op_') && cleaned.length > 0) {
+        cleaned = cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
+    }
+    return cleaned;
+};
+
 export default function RoomSeat({ seat, currentUserId, onPress, isHost }) {
     const isOccupied = !!seat.user_id;
     const isMe = isOccupied && seat.user_id?.toString() === currentUserId?.toString();
@@ -229,7 +239,7 @@ export default function RoomSeat({ seat, currentUserId, onPress, isHost }) {
             {/* Username Row, absolute position */}
             <View style={styles.nameRow}>
                 <Text style={styles.seatName} numberOfLines={1}>
-                    {isOccupied ? (seat.display_name || seat.username || 'Katılımcı') : seat.seat_number}
+                    {isOccupied ? (cleanUsername(seat.display_name || seat.username) || 'Katılımcı') : seat.seat_number}
                 </Text>
             </View>
         </TouchableOpacity>

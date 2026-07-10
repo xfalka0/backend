@@ -10,7 +10,9 @@ class RtcProvider {
 // 1. Mock RTC Provider (Default for local/mobile client tests)
 class MockRtcProvider extends RtcProvider {
     async createJoinToken(userId, roomId, role) {
-        const mockToken = `mock_token_${role}_usr_${userId.substring(0, 8)}_rm_${roomId.substring(0, 8)}_${Date.now()}`;
+        const uStr = String(userId);
+        const rStr = String(roomId);
+        const mockToken = `mock_token_${role}_usr_${uStr.substring(0, 8)}_rm_${rStr.substring(0, 8)}_${Date.now()}`;
         return mockToken;
     }
 }
@@ -52,8 +54,10 @@ class AgoraRtcProvider extends RtcProvider {
 // 3. LiveKit RTC Provider
 class LiveKitRtcProvider extends RtcProvider {
     async createJoinToken(userId, roomId, role) {
+        const uStr = String(userId);
+        const rStr = String(roomId);
         // Simple JWT/Token stub for LiveKit
-        const livekitToken = `livekit_stub_token_${role}_usr_${userId.substring(0, 8)}_rm_${roomId.substring(0, 8)}`;
+        const livekitToken = `livekit_stub_token_${role}_usr_${uStr.substring(0, 8)}_rm_${rStr.substring(0, 8)}`;
         return livekitToken;
     }
 }

@@ -10,9 +10,19 @@ import { useGiftStore } from '../../store/useGiftStore';
 
 const { width, height } = Dimensions.get('window');
 
+const cleanUsername = (name) => {
+    if (!name) return '';
+    let cleaned = name.replace(/^op_/i, '');
+    cleaned = cleaned.replace(/_\d+(-\d+)?$/g, '');
+    if (name.toLowerCase().startsWith('op_') && cleaned.length > 0) {
+        cleaned = cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
+    }
+    return cleaned;
+};
+
 // ─── Sub-Component: UserMiniProfileHeader ─────────────────────────────────
 function UserMiniProfileHeader({ user }) {
-    const initials = (user.display_name || user.username || 'K').charAt(0).toUpperCase();
+    const initials = (cleanUsername(user.display_name || user.username) || 'K').charAt(0).toUpperCase();
     
     return (
         <View style={styles.headerContainer}>
@@ -39,7 +49,7 @@ function UserMiniProfileHeader({ user }) {
             <View style={styles.profileInfo}>
                 <View style={styles.nameRow}>
                     <Text style={styles.profileName} numberOfLines={1}>
-                        {user.display_name || user.username}
+                        {cleanUsername(user.display_name || user.username)}
                     </Text>
                     {user.vip_level > 0 && (
                         <LinearGradient
@@ -201,7 +211,7 @@ export default function RoomUserBottomSheet({ visible, user, seat, currentUser, 
         } else if (navigation && user.id) {
             navigation.navigate('Chat', {
                 operatorId: user.id,
-                name: user.display_name || user.username,
+                name: cleanUsername(user.display_name || user.username),
                 avatar_url: user.avatar_url,
                 vip_level: user.vip_level || 0,
                 user: currentUser
@@ -210,11 +220,11 @@ export default function RoomUserBottomSheet({ visible, user, seat, currentUser, 
     };
 
     const handleFollow = () => {
-        Alert.alert('Başarılı', `${user.display_name || user.username} takip edildi!`);
+        Alert.alert('Başarılı', `${cleanUsername(user.display_name || user.username)} takip edildi!`);
     };
 
     const handleBan = () => {
-        Alert.alert('Odadan At', `${user.display_name || user.username} odadan uzaklaştırılıyor.`, [
+        Alert.alert('Odadan At', `${cleanUsername(user.display_name || user.username)} odadan uzaklaştırılıyor.`, [
             { text: 'Evet', onPress: () => {
                 onKick?.();
                 onClose();

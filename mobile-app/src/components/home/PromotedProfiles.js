@@ -63,7 +63,7 @@ const ProfileItem = React.memo(({ profile, index, onPress, theme, sharedPulse, s
                         />
                         <View style={[styles.avatarContainer, { backgroundColor: theme.colors.glass }]}>
                             <Image
-                                source={{ uri: resolveImageUrl(profile.avatar_url || profile.avatar) }}
+                                source={{ uri: resolveImageUrl(profile.avatar_url || profile.avatar, 'avatar') }}
                                 style={styles.avatar}
                                 resizeMode="cover"
                             />

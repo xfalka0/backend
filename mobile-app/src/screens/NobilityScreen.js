@@ -659,8 +659,8 @@ export function NobilityDualActionButtons({
     );
 }
 
-const PREMIUM_BTN_HEIGHT = 58;
-const PREMIUM_BTN_RADIUS = 29;
+const PREMIUM_BTN_HEIGHT = 48;
+const PREMIUM_BTN_RADIUS = 24;
 const PREMIUM_BORDER_WIDTH = 2;
 const SPINNER_SIZE = width * 1.4;
 
@@ -1349,13 +1349,13 @@ const styles = StyleSheet.create({
     purchaseBarPosition: { position: 'absolute', left: 12, right: 12, bottom: 0 },
     purchaseBarGlow: { position: 'absolute', top: -10, left: 28, right: 28, height: 30, borderRadius: 20 },
     purchaseBar: {
-        minHeight: 190,
-        borderRadius: 30,
+        minHeight: 144,
+        borderRadius: 25,
         borderWidth: 1,
         borderColor: 'rgba(255,255,255,0.16)',
         paddingHorizontal: 18,
-        paddingTop: 19,
-        paddingBottom: 15,
+        paddingTop: 11,
+        paddingBottom: 8,
         overflow: 'hidden',
         shadowColor: '#000',
         shadowOffset: { width: 0, height: -6 },
@@ -1366,9 +1366,9 @@ const styles = StyleSheet.create({
     panelAccent: { position: 'absolute', top: 0, left: '28%', right: '28%', height: 1, opacity: 0.7 },
     priceRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5 },
     coinMark: { width: 24, height: 24, borderRadius: 12, borderWidth: 1, alignItems: 'center', justifyContent: 'center', marginRight: 2 },
-    priceText: { color: '#FAFAFA', fontSize: 22, fontWeight: '800', letterSpacing: 0.2 },
+    priceText: { color: '#FAFAFA', fontSize: 18, fontWeight: '800', letterSpacing: 0.2 },
     durationText: { color: 'rgba(255,255,255,0.61)', fontSize: 14, fontWeight: '600' },
-    purchaseDescription: { color: 'rgba(255,255,255,0.43)', textAlign: 'center', fontSize: 11.5, marginTop: 6, marginBottom: 16 },
+    purchaseDescription: { color: 'rgba(255,255,255,0.43)', textAlign: 'center', fontSize: 11, marginTop: 4, marginBottom: 10 },
     dualButtonOuter: {
         width: '100%',
         height: 58,

@@ -170,7 +170,9 @@ export default function OperatorProfileScreen({ route, navigation }) {
                 style={[styles.imageContainer, animatedImageStyle]}
             >
                 <Image
-                    source={{ uri: resolveImageUrl(operator.avatar_url || operator.avatar) }}
+                    source={{ uri: resolveImageUrl(operator.avatar_url || operator.avatar, 'large') }}
+                    onError={(e) => console.log(`[DEBUG MainImage Error] URI: ${resolveImageUrl(operator.avatar_url || operator.avatar, 'large')}, Error:`, e.nativeEvent.error)}
+                    onLoad={() => console.log(`[DEBUG MainImage Success] URI: ${resolveImageUrl(operator.avatar_url || operator.avatar, 'large')} loaded successfully`)}
                     style={styles.mainImage}
                 />
                 <LinearGradient
@@ -377,7 +379,12 @@ export default function OperatorProfileScreen({ route, navigation }) {
                                                 setCurrentImageIndex(index);
                                                 setIsImageViewerVisible(true);
                                             }}>
-                                                <Image source={{ uri: resolveImageUrl(photo) }} style={styles.albumPhoto} />
+                                                <Image 
+                                                    source={{ uri: resolveImageUrl(photo) }} 
+                                                    onError={(e) => console.log(`[DEBUG AlbumPhoto Error] Index: ${index}, URI: ${resolveImageUrl(photo)}, Error:`, e.nativeEvent.error)}
+                                                    onLoad={() => console.log(`[DEBUG AlbumPhoto Success] Index: ${index}, URI: ${resolveImageUrl(photo)} loaded successfully`)}
+                                                    style={styles.albumPhoto} 
+                                                />
                                             </Pressable>
                                         ))}
                                     </Animated.ScrollView>

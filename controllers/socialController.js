@@ -52,6 +52,17 @@ exports.getExplore = async (req, res) => {
                     u.gender,
                     (SELECT COUNT(*) FROM post_likes WHERE post_id = p.id) as "likes_count",
                     (SELECT COUNT(*) FROM post_comments WHERE post_id = p.id) as "comments_count",
+                    COALESCE((
+                        SELECT json_agg(comment_row ORDER BY comment_row.created_at ASC)
+                        FROM (
+                            SELECT c.id, c.content, c.created_at, u2.display_name as "userName", u2.avatar_url as "avatar"
+                            FROM post_comments c
+                            JOIN users u2 ON c.user_id = u2.id
+                            WHERE c.post_id = p.id
+                            ORDER BY c.created_at DESC
+                            LIMIT 2
+                        ) comment_row
+                    ), '[]'::json) as "preview_comments",
                     CASE WHEN $1::TEXT IS NOT NULL AND $1::TEXT <> '' AND EXISTS(SELECT 1 FROM post_likes WHERE post_id = p.id AND user_id = NULLIF($1, '')::${userIdType}) THEN true ELSE false END as "liked",
                     EXISTS(SELECT 1 FROM stories s WHERE s.operator_id = u.id AND s.expires_at > NOW()) as "hasStory"
                 FROM posts p

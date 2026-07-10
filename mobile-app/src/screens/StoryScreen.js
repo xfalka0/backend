@@ -104,7 +104,7 @@ export default function StoryScreen({ route, navigation }) {
         <View style={styles.container}>
             {/* Story Image */}
             <Image
-                source={{ uri: resolveImageUrl(story.image_url || story.avatar) }}
+                source={{ uri: resolveImageUrl(story.image_url || story.avatar, 'large') }}
                 style={styles.storyImage}
             />
 
@@ -120,7 +120,7 @@ export default function StoryScreen({ route, navigation }) {
                 </View>
 
                 <View style={styles.userHeader}>
-                    <Image source={{ uri: resolveImageUrl(story.avatar) }} style={styles.avatar} />
+                    <Image source={{ uri: resolveImageUrl(story.avatar, 'avatar') }} style={styles.avatar} />
                     <Text style={styles.userName}>{story.name}</Text>
                     <Text style={styles.timeAgo}>3s</Text>
                     <TouchableOpacity style={styles.closeButton} onPress={() => navigation.goBack()}>

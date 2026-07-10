@@ -4,6 +4,16 @@ import axios from 'axios';
 import { API_URL } from '../config';
 import SocketService from '../services/SocketService';
 
+const cleanUsername = (name) => {
+    if (!name) return '';
+    let cleaned = name.replace(/^op_/i, '');
+    cleaned = cleaned.replace(/_\d+(-\d+)?$/g, '');
+    if (name.toLowerCase().startsWith('op_') && cleaned.length > 0) {
+        cleaned = cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
+    }
+    return cleaned;
+};
+
 const MAX_CHAT_MESSAGES = 100;
 const GIFT_BANNER_DURATION_MS = 4000;
 
@@ -287,7 +297,7 @@ export const useRoomStore = create((set, get) => ({
                 )
             }));
             if (updatedSeat.user_id) {
-                store.addSystemMessage(`${updatedSeat.display_name || updatedSeat.username} koltuğa oturdu.`);
+                store.addSystemMessage(`${cleanUsername(updatedSeat.display_name || updatedSeat.username)} koltuğa oturdu.`);
             } else {
                 store.addSystemMessage(`Bir kullanıcı koltuğu boşalttı.`);
             }
@@ -358,7 +368,7 @@ export const useRoomStore = create((set, get) => ({
 
         SocketService.on('user_joined_party', (data) => {
             set(s => ({ onlineCount: s.onlineCount + 1 }));
-            store.addSystemMessage(`${data.display_name || data.username} odaya girdi.`);
+            store.addSystemMessage(`${cleanUsername(data.display_name || data.username)} odaya girdi.`);
             const currentRoom = store.room;
             if (currentRoom) {
                 store.fetchMembers(currentRoom.id);
@@ -376,7 +386,7 @@ export const useRoomStore = create((set, get) => ({
             store.pushGiftBanner(giftData);
             const icon = giftData.giftIcon || '🎁';
             store.addSystemMessage(
-                `${giftData.sender?.display_name || giftData.sender?.username} → ${giftData.receiver?.display_name || giftData.receiver?.username}: ${icon} ${giftData.giftName || 'Hediye'} gönderdi!`,
+                `${cleanUsername(giftData.sender?.display_name || giftData.sender?.username)} → ${cleanUsername(giftData.receiver?.display_name || giftData.receiver?.username)}: ${icon} ${giftData.giftName || 'Hediye'} gönderdi!`,
                 'gift'
             );
         });

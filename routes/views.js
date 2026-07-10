@@ -150,22 +150,21 @@ router.get('/:userId', async (req, res) => {
                 const opIndex = Math.abs(seed) % ops.length;
                 const op = ops[opIndex];
 
-                    const alreadyExists = views.rows.some(v => v.id === op.id);
-                    if (!alreadyExists && !fakeVisitors.some(f => f.id === op.id)) {
-                        const minutesAgo = 10 + (Math.abs(seed * 7) % 1400); // 10 mins to ~23 hours ago
-                        const fakeTime = new Date(Date.now() - minutesAgo * 60 * 1000);
+                const alreadyExists = views.rows.some(v => v.id === op.id);
+                if (!alreadyExists && !fakeVisitors.some(f => f.id === op.id)) {
+                    const minutesAgo = 10 + (Math.abs(seed * 7) % 1400); // 10 mins to ~23 hours ago
+                    const fakeTime = new Date(Date.now() - minutesAgo * 60 * 1000);
 
-                        fakeVisitors.push({
-                            view_id: `fake-${userId}-${op.id}-${j}`,
-                            id: op.id,
-                            username: op.username,
-                            avatar_url: op.avatar_url,
-                            gender: op.gender,
-                            created_at: fakeTime.toISOString(),
-                            is_online: op.is_online,
-                            vip_level: op.vip_level || 0
-                        });
-                    }
+                    fakeVisitors.push({
+                        view_id: `fake-${userId}-${op.id}-${j}`,
+                        id: op.id,
+                        username: op.username,
+                        avatar_url: op.avatar_url,
+                        gender: op.gender,
+                        created_at: fakeTime.toISOString(),
+                        is_online: op.is_online,
+                        vip_level: op.vip_level || 0
+                    });
                 }
             }
         }

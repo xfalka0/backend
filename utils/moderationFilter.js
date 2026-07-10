@@ -71,7 +71,7 @@ async function checkPhotoSecurity(url) {
 
     // 1. NSFW Image Classification Check
     try {
-        const mcApiKey = 'd4e5a9ee6cb1613adcd42807f7c4613c';
+        const mcApiKey = process.env.MODERATECONTENT_API_KEY || 'd4e5a9ee6cb1613adcd42807f7c4613c';
         const mcUrl = `http://api.moderatecontent.com/moderate/?key=${mcApiKey}&url=${encodeURIComponent(url)}`;
         const mcRes = await axios.get(mcUrl, { timeout: 8000 });
         
@@ -89,7 +89,8 @@ async function checkPhotoSecurity(url) {
 
     // 2. OCR Text Analysis (Phone numbers / NSFW text in image)
     try {
-        const ocrUrl = `https://api.ocr.space/parse/imageurl?apikey=helloworld&url=${encodeURIComponent(url)}&language=tur`;
+        const ocrApiKey = process.env.OCR_SPACE_API_KEY || 'helloworld';
+        const ocrUrl = `https://api.ocr.space/parse/imageurl?apikey=${ocrApiKey}&url=${encodeURIComponent(url)}&language=tur`;
         const ocrRes = await axios.get(ocrUrl, { timeout: 8000 });
         
         if (ocrRes.data && ocrRes.data.ParsedResults && ocrRes.data.ParsedResults[0]) {

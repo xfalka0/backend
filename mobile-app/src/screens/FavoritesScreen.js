@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, Image, Dimensions, Platform } from 'react-native';
 import Animated, { FadeInDown, Layout } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
@@ -17,13 +17,23 @@ import AnimatedEmptyState from '../components/ui/AnimatedEmptyState';
 
 const { width } = Dimensions.get('window');
 
+const INITIAL_FAKE_FANS = [
+    { id: 'fake1', name: 'Buse', username: 'Buse', avatar_url: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=150', created_at: new Date(Date.now() - 1000 * 60 * 12).toISOString(), is_blurred: true, vip_level: 0 },
+    { id: 'fake2', name: 'Merve', username: 'Merve', avatar_url: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150', created_at: new Date(Date.now() - 1000 * 60 * 38).toISOString(), is_blurred: true, vip_level: 2 },
+    { id: 'fake3', name: 'Ece', username: 'Ece', avatar_url: 'https://images.unsplash.com/photo-1524504388940-b1c1722653e1?w=150', created_at: new Date(Date.now() - 1000 * 3600 * 1.5).toISOString(), is_blurred: true, vip_level: 0 },
+    { id: 'fake4', name: 'Selin', username: 'Selin', avatar_url: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=150', created_at: new Date(Date.now() - 1000 * 3600 * 3).toISOString(), is_blurred: true, vip_level: 3 },
+    { id: 'fake5', name: 'Dilan', username: 'Dilan', avatar_url: 'https://images.unsplash.com/photo-1488426862026-3ee34a7d66df?w=150', created_at: new Date(Date.now() - 1000 * 3600 * 6).toISOString(), is_blurred: true, vip_level: 1 },
+    { id: 'fake6', name: 'Melisa', username: 'Melisa', avatar_url: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150', created_at: new Date(Date.now() - 1000 * 3600 * 12).toISOString(), is_blurred: true, vip_level: 0 },
+    { id: 'fake7', name: 'Hilal', username: 'Hilal', avatar_url: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150', created_at: new Date(Date.now() - 1000 * 3600 * 18).toISOString(), is_blurred: true, vip_level: 4 },
+];
+
 export default function FavoritesScreen({ navigation, route }) {
     const { theme } = useTheme();
     const { user } = route.params || {};
     
     const [activeTab, setActiveTab] = useState('whoFavoritedMe'); // 'whoFavoritedMe' or 'whoIForited'
     const [favorites, setFavorites] = useState([]); // People I favorited
-    const [fans, setFans] = useState([]); // People who favorited me
+    const [fans, setFans] = useState(INITIAL_FAKE_FANS); // People who favorited me
     const [isVIP, setIsVIP] = useState(false);
     const [loading, setLoading] = useState(true);
     const [currentUser, setCurrentUser] = useState(user || null);
@@ -65,7 +75,17 @@ export default function FavoritesScreen({ navigation, route }) {
                     headers: { Authorization: `Bearer ${token}` }
                 });
                 setIsVIP(res.data.isVIP);
-                setFans(res.data.fans || []);
+                let fetchedFans = res.data.fans || [];
+                const userVipLevel = parseInt(currentUser?.vip_level || 0, 10);
+                const isUserVIP = res.data.isVIP || userVipLevel >= 4;
+                
+                if (fetchedFans.length === 0) {
+                    fetchedFans = INITIAL_FAKE_FANS.map(f => ({
+                        ...f,
+                        is_blurred: !isUserVIP
+                    }));
+                }
+                setFans(fetchedFans);
             } else {
                 const res = await axios.get(`${API_URL}/favorites/${targetUserId}`, {
                     headers: { Authorization: `Bearer ${token}` }
@@ -256,7 +276,7 @@ export default function FavoritesScreen({ navigation, route }) {
             </View>
             <View style={styles.tabDivider} />
 
-            {loading ? (
+            {loading && fans.length === 0 && favorites.length === 0 ? (
                 <View style={{ padding: 16 }}>
                     {[...Array(5)].map((_, i) => <SkeletonCard key={i} />)}
                 </View>
@@ -308,9 +328,7 @@ export default function FavoritesScreen({ navigation, route }) {
                                     style={styles.paywallGradient}
                                 >
                                     <Text style={styles.paywallBtnText}>
-                                        {parseInt(user?.vip_level || 0) > 0 
-                                            ? 'Hayranları görmek için VIP 4+ seviyesine yüksel!' 
-                                            : 'Hayranlarını görmek için VIP ol!'}
+                                        VIP Yükselt & Hayranları Gör ⚡
                                     </Text>
                                 </LinearGradient>
                             </TouchableOpacity>
@@ -414,8 +432,8 @@ const styles = StyleSheet.create({
     avatarWrapper: {
         width: 50,
         height: 50,
-        borderRadius: 25,
-        overflow: 'hidden',
+        alignItems: 'center',
+        justifyContent: 'center',
     },
     onlineBadge: {
         position: 'absolute',

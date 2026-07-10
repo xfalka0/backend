@@ -96,13 +96,8 @@ const VIP_FRAME_CONFIGS = {
 
 const VipFrame = memo(({ level = 0, avatar, size = 80, isStatic = false }) => {
     const { theme } = useTheme();
-    const [hasError, setHasError] = useState(false);
     const config = VIP_FRAME_CONFIGS[level];
     const pulseValue = useSharedValue(1);
-
-    useEffect(() => {
-        setHasError(false); // Reset error when avatar changes
-    }, [avatar]);
 
     useEffect(() => {
         if (config?.hasPulse && !isStatic) {
@@ -125,7 +120,7 @@ const VipFrame = memo(({ level = 0, avatar, size = 80, isStatic = false }) => {
 
     // Robust image source handler
     const getAvatarSource = () => {
-        const resolved = resolveImageUrl(avatar);
+        const resolved = resolveImageUrl(avatar, 'avatar');
         if (resolved) {
             return { uri: resolved };
         }
@@ -139,41 +134,51 @@ const VipFrame = memo(({ level = 0, avatar, size = 80, isStatic = false }) => {
         const source = getAvatarSource();
         const avatarOffset = config?.avatarOffset || { top: 0, left: 0 };
 
-        if (!source || hasError) {
-            return (
-                <View style={{
-                    width: innerSizeValue,
-                    height: innerSizeValue,
-                    borderRadius: innerSizeValue / 2,
-                    backgroundColor: theme.colors.backgroundSecondary || '#1e293b',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    transform: isInsideFrame ? [
-                        { translateX: avatarOffset.left },
-                        { translateY: avatarOffset.top }
-                    ] : []
-                }}>
-                    <Ionicons name="person" size={innerSizeValue * 0.6} color={theme.colors.textSecondary || '#64748b'} />
-                </View>
-            );
-        }
+        const fallback = (
+            <View style={{
+                width: innerSizeValue,
+                height: innerSizeValue,
+                borderRadius: innerSizeValue / 2,
+                backgroundColor: theme.colors.backgroundSecondary || '#1e293b',
+                alignItems: 'center',
+                justifyContent: 'center',
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                transform: isInsideFrame ? [
+                    { translateX: avatarOffset.left },
+                    { translateY: avatarOffset.top }
+                ] : []
+            }}>
+                <Ionicons name="person" size={innerSizeValue * 0.6} color={theme.colors.textSecondary || '#64748b'} />
+            </View>
+        );
 
         return (
-            <Image
-                key={source.uri || (typeof avatar === 'string' ? avatar : JSON.stringify(avatar))}
-                source={source}
-                style={{
-                    width: isInsideFrame ? '100%' : innerSizeValue,
-                    height: isInsideFrame ? '100%' : innerSizeValue,
-                    borderRadius: innerSizeValue / 2,
-                    resizeMode: 'cover',
-                    transform: isInsideFrame ? [
-                        { translateX: avatarOffset.left },
-                        { translateY: avatarOffset.top }
-                    ] : []
-                }}
-                onError={() => setHasError(true)}
-            />
+            <View style={{ width: innerSizeValue, height: innerSizeValue }}>
+                {fallback}
+                {source && (
+                    <Image
+                        key={source.uri || (typeof avatar === 'string' ? avatar : JSON.stringify(avatar))}
+                        source={source}
+                        onError={(e) => console.log(`[DEBUG VipFrame Error] URI: ${source.uri || 'no-uri'}, Error:`, e.nativeEvent.error)}
+                        onLoad={() => console.log(`[DEBUG VipFrame Success] URI: ${source.uri || 'no-uri'} loaded successfully`)}
+                        style={{
+                            position: 'absolute',
+                            top: 0,
+                            left: 0,
+                            width: isInsideFrame ? '100%' : innerSizeValue,
+                            height: isInsideFrame ? '100%' : innerSizeValue,
+                            borderRadius: innerSizeValue / 2,
+                            resizeMode: 'cover',
+                            transform: isInsideFrame ? [
+                                { translateX: avatarOffset.left },
+                                { translateY: avatarOffset.top }
+                            ] : []
+                        }}
+                    />
+                )}
+            </View>
         );
     };
 

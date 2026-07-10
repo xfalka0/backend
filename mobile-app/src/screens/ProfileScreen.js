@@ -478,23 +478,37 @@ const ProfileScreen = ({ route }) => {
                 });
 
                 if (uploadRes.data && uploadRes.data.url) {
+                    const newAvatarUrl = uploadRes.data.url;
                     await axios.post(`${API_URL}/moderation/submit`, {
                         userId: user.id,
                         type: 'avatar',
-                        url: uploadRes.data.url
+                        url: newAvatarUrl
+                    });
+
+                    // Instantly update on screen & local storage
+                    setUser(prev => {
+                        const updated = { ...prev, avatar_url: newAvatarUrl, profile_image: newAvatarUrl };
+                        AsyncStorage.setItem('user', JSON.stringify(updated)).catch(() => {});
+                        
+                        // Update Zustand store if available
+                        const setUserState = useAppStore.getState().setUser;
+                        if (setUserState) setUserState(updated);
+                        
+                        return updated;
                     });
 
                     showAlert({
                         title: 'Başarılı',
-                        message: 'Profil fotoğrafınız moderasyon onayına gönderildi.',
+                        message: 'Profil fotoğrafınız başarıyla güncellendi.',
                         type: 'success'
                     });
                 }
             } catch (e) {
                 console.error('Avatar upload error:', e);
+                const errorMsg = e.response?.data?.error || e.response?.data?.message || 'Fotoğraf yüklenirken bir sorun oluştu.';
                 showAlert({
                     title: 'Hata',
-                    message: 'Fotoğraf yüklenirken bir sorun oluştu.',
+                    message: errorMsg,
                     type: 'error'
                 });
             } finally {

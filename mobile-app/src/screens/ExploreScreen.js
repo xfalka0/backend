@@ -8,7 +8,6 @@ import Animated, {
 } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
-import AnimatedPostCard from '../components/animated/AnimatedPostCard';
 import LikeAnimation from '../components/animated/LikeAnimation';
 import StoryRing from '../components/animated/StoryRing';
 import VipFrame from '../components/ui/VipFrame';
@@ -85,6 +84,49 @@ const FallbackImage = ({ url, style, isAvatar = false, theme }) => {
     );
 };
 
+const cleanUsername = (name) => {
+    if (!name) return '';
+    let cleaned = name.replace(/^op_/i, '');
+    cleaned = cleaned.replace(/_\d+(-\d+)?$/g, '');
+    cleaned = cleaned
+        .replace(/[♡♥❤❣💕💖💗💘💙💚💛💜🖤🤍🤎💝💞💟💓💔💌💋]/gu, '')
+        .replace(/\uFE0F/g, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+    if (name.toLowerCase().startsWith('op_') && cleaned.length > 0) {
+        cleaned = cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
+    }
+    return cleaned;
+};
+
+const formatDate = (isoString) => {
+    if (!isoString) return '';
+    try {
+        const date = new Date(isoString);
+        const y = date.getFullYear();
+        const m = String(date.getMonth() + 1).padStart(2, '0');
+        const d = String(date.getDate()).padStart(2, '0');
+        const hr = String(date.getHours()).padStart(2, '0');
+        const min = String(date.getMinutes()).padStart(2, '0');
+        return `${y}-${m}-${d} ${hr}:${min}`;
+    } catch (e) {
+        return '';
+    }
+};
+
+const getCategoryTag = (item) => {
+    if (item.jobTitle) return item.jobTitle;
+    const tags = ['Günün Favorileri', 'Dating', 'Sohbet', 'Aşk & İlişkiler', 'Yemek', 'Seyahat', 'Müzik'];
+    const idx = (item.id || 0) % tags.length;
+    return tags[idx];
+};
+
+const EXPLORE_TABS = [
+    { key: 'popular', label: 'Popüler' },
+    { key: 'new', label: 'Yeni' },
+    { key: 'following', label: 'Takip Edilen' },
+];
+
 export default function ExploreScreen({ navigation, route }) {
     const { showAlert } = useAlert();
     const { theme, themeMode } = useTheme();
@@ -102,6 +144,21 @@ export default function ExploreScreen({ navigation, route }) {
     const [selectedPostForOptions, setSelectedPostForOptions] = useState(null);
     const scrollY = useSharedValue(0);
     const lastFetchedUserId = useRef(null);
+
+    const [chatMap, setChatMap] = useState({}); // { [operatorId]: chatId }
+    const [favoriteIds, setFavoriteIds] = useState(new Set()); // Set of operator IDs favorited by user
+    const [sentHiList, setSentHiList] = useState(new Set()); // Session-level sent Hi's
+    const [hiSheetVisible, setHiSheetVisible] = useState(false);
+    const [selectedPostForHi, setSelectedPostForHi] = useState(null);
+    const [isSendingHi, setIsSendingHi] = useState(false);
+    const [activeFeedTab, setActiveFeedTab] = useState('popular');
+    const [commentPreviewMap, setCommentPreviewMap] = useState({});
+
+    // Inline comment states
+    const [expandedPosts, setExpandedPosts] = useState({});
+    const [postCommentsMap, setPostCommentsMap] = useState({});
+    const [postNewCommentMap, setPostNewCommentMap] = useState({});
+    const [isPostingCommentMap, setIsPostingCommentMap] = useState({});
 
     const handleOpenOptions = (post) => {
         setSelectedPostForOptions(post);
@@ -164,6 +221,157 @@ export default function ExploreScreen({ navigation, route }) {
         }
     };
 
+    const fetchUserChats = async (currentUser) => {
+        if (!currentUser?.id) return;
+        try {
+            const token = await AsyncStorage.getItem('token');
+            const res = await axios.get(`${API_URL}/users/${currentUser.id}/chats?limit=100&offset=0`, {
+                headers: token ? { Authorization: `Bearer ${token}` } : {}
+            });
+            const mapping = {};
+            res.data.forEach(chat => {
+                if (chat.operator_id) {
+                    mapping[chat.operator_id.toString()] = chat.id;
+                }
+            });
+            setChatMap(mapping);
+        } catch (e) {
+            console.error('Fetch user chats error:', e);
+        }
+    };
+
+    const fetchUserFavorites = async (currentUser) => {
+        if (!currentUser?.id) return;
+        try {
+            const token = await AsyncStorage.getItem('token');
+            const res = await axios.get(`${API_URL}/favorites/${currentUser.id}`, {
+                headers: token ? { Authorization: `Bearer ${token}` } : {}
+            });
+            const favs = new Set(res.data.map(op => op.id));
+            setFavoriteIds(favs);
+        } catch (e) {
+            console.error('Fetch user favorites error:', e);
+        }
+    };
+
+    const toggleFavorite = async (operatorId) => {
+        if (!user?.id) return;
+        const targetId = operatorId;
+        const isFav = favoriteIds.has(targetId);
+        
+        // Optimistic UI Update
+        setFavoriteIds(prev => {
+            const next = new Set(prev);
+            if (isFav) {
+                next.delete(targetId);
+            } else {
+                next.add(targetId);
+            }
+            return next;
+        });
+
+        try {
+            const token = await AsyncStorage.getItem('token');
+            const url = isFav ? `${API_URL}/favorites/${targetId}` : `${API_URL}/favorites`;
+            if (isFav) {
+                await axios.delete(url, { 
+                    data: { userId: user.id },
+                    headers: { Authorization: `Bearer ${token}` }
+                });
+            } else {
+                await axios.post(url, { 
+                    userId: user.id, 
+                    targetUserId: targetId 
+                }, {
+                    headers: { Authorization: `Bearer ${token}` }
+                });
+            }
+        } catch (e) {
+            console.error('Toggle favorite error:', e);
+            // Revert state on error by refetching favorites
+            fetchUserFavorites(user);
+        }
+    };
+
+    const sendQuickHi = async (item) => {
+        if (!user?.id || !item) return;
+        const opId = (item.operator_id || item.user_id).toString();
+        
+        if (isSendingHi) return;
+        setIsSendingHi(true);
+        
+        try {
+            const token = await AsyncStorage.getItem('token');
+            
+            // 1. Create or get chat
+            const chatRes = await axios.post(`${API_URL}/chats`, {
+                userId: user.id,
+                operatorId: item.operator_id || item.user_id
+            }, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+
+            const chatId = chatRes.data?.id;
+
+            if (chatId) {
+                // 2. Send the message
+                await axios.post(`${API_URL}/messages`, {
+                    chatId: chatId,
+                    senderId: user.id,
+                    content: `Merhaba 👋`,
+                    type: 'text'
+                }, {
+                    headers: { Authorization: `Bearer ${token}` }
+                });
+
+                // Update maps
+                setChatMap(prev => ({
+                    ...prev,
+                    [opId]: chatId
+                }));
+                setSentHiList(prev => {
+                    const next = new Set(prev);
+                    next.add(opId);
+                    return next;
+                });
+
+                showAlert({
+                    title: "Selam Gönderildi 👋",
+                    message: `Merhaba mesajı başarıyla gönderildi!`,
+                    type: "success"
+                });
+            }
+        } catch (error) {
+            console.error('Error sending quick Hi:', error);
+            showAlert({
+                title: "Hata",
+                message: "Mesaj gönderilirken bir hata oluştu.",
+                type: "error"
+            });
+        } finally {
+            setIsSendingHi(false);
+            setHiSheetVisible(false);
+            setSelectedPostForHi(null);
+        }
+    };
+
+    const handleHiPress = (item) => {
+        const opId = (item.operator_id || item.user_id).toString();
+        const existingChatId = chatMap[opId];
+        if (existingChatId) {
+            navigation.navigate('Chat', {
+                operatorId: item.operator_id || item.user_id,
+                name: cleanUsername(item.userName || item.name),
+                avatar_url: item.avatar || item.avatar_url,
+                vip_level: item.vipLevel || item.vip_level || 0,
+                user
+            });
+        } else {
+            setSelectedPostForHi(item);
+            setHiSheetVisible(true);
+        }
+    };
+
     useFocusEffect(
         React.useCallback(() => {
             const loadAndFetch = async () => {
@@ -182,6 +390,10 @@ export default function ExploreScreen({ navigation, route }) {
                     if (posts.length === 0 || (currentUser && currentUser.id !== lastFetchedUserId.current)) {
                         await fetchExploreData(currentUser);
                     }
+                    if (currentUser) {
+                        await fetchUserChats(currentUser);
+                        await fetchUserFavorites(currentUser);
+                    }
                 } catch (e) {
                     console.error('Error in focus effect:', e);
                 }
@@ -197,9 +409,42 @@ export default function ExploreScreen({ navigation, route }) {
             if (userStr) {
                 const userData = JSON.parse(userStr);
                 setUser(userData);
+                await fetchUserChats(userData);
+                await fetchUserFavorites(userData);
             }
         } catch (e) {
             console.error('User load error:', e);
+        }
+    };
+
+    const fetchPostCommentPreviews = async (sourcePosts = []) => {
+        const postsWithComments = sourcePosts
+            .filter(post => (parseInt(post.comments_count) || 0) > 0)
+            .filter(post => !Array.isArray(post.preview_comments) || post.preview_comments.length === 0)
+            .slice(0, 20);
+
+        if (postsWithComments.length === 0) return;
+
+        try {
+            const results = await Promise.all(postsWithComments.map(async post => {
+                try {
+                    const res = await axios.get(`${API_URL}/social/post/${post.id}/comments`);
+                    return [post.id, (res.data || []).slice(0, 2)];
+                } catch (error) {
+                    console.error('Fetch preview comments error:', error);
+                    return [post.id, []];
+                }
+            }));
+
+            setCommentPreviewMap(prev => {
+                const next = { ...prev };
+                results.forEach(([postId, preview]) => {
+                    next[postId] = preview;
+                });
+                return next;
+            });
+        } catch (error) {
+            console.error('Fetch post comment previews error:', error);
         }
     };
 
@@ -234,6 +479,7 @@ export default function ExploreScreen({ navigation, route }) {
             });
 
             setPosts(filteredPosts);
+            fetchPostCommentPreviews(filteredPosts);
             setStories(filteredStories);
             setOperators(operatorsRes.data.filter(op => {
                 const profileGender = getProfileGender(op);
@@ -322,14 +568,112 @@ export default function ExploreScreen({ navigation, route }) {
             // Update comments_count in posts list
             setPosts(prev => prev.map(p => {
                 if (p.id === activePostId) {
-                    return { ...p, comments_count: (parseInt(p.comments_count) || 0) + 1 };
+                    const currentPreview = Array.isArray(p.preview_comments) ? p.preview_comments : [];
+                    return {
+                        ...p,
+                        comments_count: (parseInt(p.comments_count) || 0) + 1,
+                        preview_comments: [...currentPreview, res.data].slice(-2)
+                    };
                 }
                 return p;
             }));
+            setCommentPreviewMap(prev => {
+                const currentPreview = Array.isArray(prev[activePostId]) ? prev[activePostId] : [];
+                return {
+                    ...prev,
+                    [activePostId]: [...currentPreview, res.data].slice(-2)
+                };
+            });
         } catch (err) {
             console.error('Post Comment Error:', err);
         } finally {
             setIsPostingComment(false);
+        }
+    };
+
+    const toggleExpandComments = async (postId) => {
+        const isCurrentlyExpanded = !!expandedPosts[postId];
+        
+        // Toggle expansion state
+        setExpandedPosts(prev => ({
+            ...prev,
+            [postId]: !isCurrentlyExpanded
+        }));
+
+        // Fetch comments if expanding and not loaded yet
+        if (!isCurrentlyExpanded && !postCommentsMap[postId]) {
+            try {
+                const res = await axios.get(`${API_URL}/social/post/${postId}/comments`);
+                setPostCommentsMap(prev => ({
+                    ...prev,
+                    [postId]: res.data || []
+                }));
+            } catch (err) {
+                console.error('Fetch inline comments error:', err);
+            }
+        }
+    };
+
+    const submitInlineComment = async (postId) => {
+        const typedComment = postNewCommentMap[postId] || '';
+        if (!typedComment.trim() || !user?.id || isPostingCommentMap[postId]) return;
+
+        setIsPostingCommentMap(prev => ({
+            ...prev,
+            [postId]: true
+        }));
+
+        try {
+            const token = await AsyncStorage.getItem('token');
+            const res = await axios.post(`${API_URL}/social/post/${postId}/comments`, {
+                user_id: user.id,
+                content: typedComment
+            }, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+
+            // Update comments mapping
+            setPostCommentsMap(prev => {
+                const currentList = prev[postId] || [];
+                return {
+                    ...prev,
+                    [postId]: [...currentList, res.data]
+                };
+            });
+
+            // Reset text input field
+            setPostNewCommentMap(prev => ({
+                ...prev,
+                [postId]: ''
+            }));
+
+            // Increment comments count on post
+            setPosts(prev => prev.map(p => {
+                if (p.id === postId) {
+                    return {
+                        ...p,
+                        comments_count: (parseInt(p.comments_count) || 0) + 1
+                    };
+                }
+                return p;
+            }));
+
+            // Sync with local comment preview map
+            setCommentPreviewMap(prev => {
+                const currentPreview = Array.isArray(prev[postId]) ? prev[postId] : [];
+                return {
+                    ...prev,
+                    [postId]: [...currentPreview, res.data].slice(-2)
+                };
+            });
+
+        } catch (err) {
+            console.error('Submit inline comment error:', err);
+        } finally {
+            setIsPostingCommentMap(prev => ({
+                ...prev,
+                [postId]: false
+            }));
         }
     };
 
@@ -372,25 +716,25 @@ export default function ExploreScreen({ navigation, route }) {
         }
     };
 
-    const renderStory = React.useCallback(({ item, index }) => {
+        const renderStory = React.useCallback(({ item, index }) => {
         if (item.id === 'add') {
             const hasStory = !!user?.hasStory;
             return (
-                <View style={[styles.storyContainer, { height: 95, justifyContent: 'center' }]}>
+                <View style={[styles.storyContainer, { height: 70, justifyContent: 'center' }]}>
                     <TouchableOpacity
                         style={styles.addStoryContainer}
                         onPress={handleStoryCreation}
                     >
-                        <View style={{ width: 80, height: 80, alignItems: 'center', justifyContent: 'center' }}>
+                        <View style={{ width: 60, height: 60, alignItems: 'center', justifyContent: 'center' }}>
                             <VipFrame
                                 level={(user?.gender === 'coin_bayisi') ? 'dealer' : (user?.vip_level || user?.level || 0)}
                                 avatar={user?.avatar_url || user?.avatar}
-                                size={76}
+                                size={56}
                                 isStatic={true}
                             />
                             {hasStory && (
                                 <View style={{ position: 'absolute', pointerEvents: 'none' }}>
-                                    <StoryRing hasNewStory={true} size={62} />
+                                    <StoryRing hasNewStory={true} size={48} />
                                 </View>
                             )}
                             {!hasStory && (
@@ -407,20 +751,20 @@ export default function ExploreScreen({ navigation, route }) {
             );
         }
         return (
-            <View style={[styles.storyContainer, { height: 95, justifyContent: 'center' }]}>
+            <View style={[styles.storyContainer, { height: 70, justifyContent: 'center' }]}>
                 <TouchableOpacity
                     style={styles.addStoryContainer}
                     onPress={() => navigation.navigate('Story', { story: item })}
                 >
-                    <View style={{ width: 80, height: 80, alignItems: 'center', justifyContent: 'center' }}>
+                    <View style={{ width: 60, height: 60, alignItems: 'center', justifyContent: 'center' }}>
                         <VipFrame
                             level={(item.gender === 'coin_bayisi') ? 'dealer' : (item.level || 0)}
                             avatar={item.avatar}
-                            size={item.level >= 5 ? 76 : 66}
+                            size={item.level >= 5 ? 56 : 48}
                             isStatic={true}
                         />
                         <View style={{ position: 'absolute', pointerEvents: 'none' }}>
-                            <StoryRing hasNewStory={true} size={60} />
+                            <StoryRing hasNewStory={true} size={48} />
                         </View>
                     </View>
                 </TouchableOpacity>
@@ -449,6 +793,32 @@ export default function ExploreScreen({ navigation, route }) {
         }));
     }, [operators]);
 
+    const visiblePosts = useMemo(() => {
+        if (activeFeedTab === 'following') {
+            return posts.filter(post => favoriteIds.has(post.operator_id || post.user_id));
+        }
+
+        if (activeFeedTab === 'popular') {
+            return [...posts].sort((a, b) => (parseInt(b.likes_count) || 0) - (parseInt(a.likes_count) || 0));
+        }
+
+        // 'new' tab: returns as is (already sorted by created_at DESC from API)
+        return posts;
+    }, [activeFeedTab, favoriteIds, posts]);
+
+    useEffect(() => {
+        const missingPreviewPosts = posts.filter(post => {
+            const commentCount = parseInt(post.comments_count) || 0;
+            const hasServerPreview = Array.isArray(post.preview_comments) && post.preview_comments.length > 0;
+            const hasFetchedPreview = Object.prototype.hasOwnProperty.call(commentPreviewMap, post.id);
+            return commentCount > 0 && !hasServerPreview && !hasFetchedPreview;
+        });
+
+        if (missingPreviewPosts.length > 0) {
+            fetchPostCommentPreviews(missingPreviewPosts);
+        }
+    }, [posts, commentPreviewMap]);
+
     const scrollHandler = useAnimatedScrollHandler({
         onScroll: (event) => {
             scrollY.value = event.contentOffset.y;
@@ -464,8 +834,64 @@ export default function ExploreScreen({ navigation, route }) {
     };
 
     const renderHeader = () => (
-        <View>
-            <View style={[styles.storiesContainer, { borderBottomWidth: 0, marginTop: 10 }]}>
+        <View style={styles.feedHeaderWrap}>
+            <LinearGradient
+                colors={themeMode === 'dark'
+                    ? ['rgba(168, 85, 247, 0.18)', 'rgba(236, 72, 153, 0.08)', 'rgba(13, 20, 41, 0)']
+                    : ['rgba(139, 92, 246, 0.16)', 'rgba(217, 70, 239, 0.07)', 'rgba(248, 250, 252, 0)']}
+                locations={[0, 0.55, 1]}
+                style={styles.referenceHeaderBg}
+            >
+                <View style={[styles.confettiDot, { left: 28, top: 8, backgroundColor: '#F7A64A' }]} />
+                <View style={[styles.confettiDot, { left: 86, top: 18, backgroundColor: '#80D66E' }]} />
+                <View style={[styles.confettiDot, { left: 184, top: 9, backgroundColor: '#F58B76' }]} />
+                <View style={[styles.confettiDot, { right: 94, top: 21, backgroundColor: '#65C8EF' }]} />
+                <View style={[styles.confettiDot, { right: 42, top: 10, backgroundColor: '#F2B56B' }]} />
+                <View style={styles.stadiumArc} />
+            </LinearGradient>
+            <View style={styles.feedTopBar}>
+                <View style={styles.feedTabs}>
+                    {EXPLORE_TABS.map(tab => {
+                        const isActive = activeFeedTab === tab.key;
+                        return (
+                            <TouchableOpacity
+                                key={tab.key}
+                                activeOpacity={0.8}
+                                onPress={() => setActiveFeedTab(tab.key)}
+                                style={styles.feedTabButton}
+                            >
+                                <Text style={[
+                                    styles.feedTabText,
+                                    { color: isActive ? theme.colors.primary : theme.colors.textSecondary },
+                                    isActive && styles.feedTabTextActive
+                                ]}>
+                                    {tab.label}
+                                </Text>
+                                <View style={[
+                                    styles.feedTabIndicator,
+                                    { backgroundColor: isActive ? theme.colors.primary : 'transparent' }
+                                ]} />
+                            </TouchableOpacity>
+                        );
+                    })}
+                </View>
+
+                <TouchableOpacity
+                    activeOpacity={0.85}
+                    style={[
+                        styles.notificationButton,
+                        {
+                            backgroundColor: 'transparent',
+                            borderColor: 'transparent'
+                        }
+                    ]}
+                    onPress={() => navigation.navigate('Notifications', { user })}
+                >
+                    <Ionicons name="notifications" size={24} color={theme.colors.accent} />
+                </TouchableOpacity>
+            </View>
+
+            <View style={[styles.storiesContainer, { borderBottomWidth: 0 }]}>
                 <FlatList
                     horizontal
                     data={[{ id: 'add', online: false }, ...stories]}
@@ -475,47 +901,6 @@ export default function ExploreScreen({ navigation, route }) {
                     contentContainerStyle={styles.storiesList}
                 />
             </View>
-
-            <View style={{ height: 1, backgroundColor: 'rgba(255,255,255,0.08)', marginHorizontal: 20, marginTop: 5 }} />
-
-            {/* Featured Section */}
-            <View style={styles.featuredContainer}>
-                <View style={styles.sectionHeader}>
-                    <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Günün Favorileri 🔥</Text>
-                </View>
-                <FlatList
-                    horizontal
-                    showsHorizontalScrollIndicator={false}
-                    data={dailyFavorites}
-                    renderItem={({ item }) => (
-                        <TouchableOpacity
-                            activeOpacity={0.8}
-                            style={[
-                                styles.featuredCard,
-                                {
-                                    backgroundColor: themeMode === 'dark' ? 'rgba(30, 41, 59, 0.5)' : 'rgba(255,255,255,0.8)',
-                                    borderColor: theme.colors.glassBorder
-                                }
-                            ]}
-                            onPress={() => navigation.navigate('OperatorProfile', { operator: item, user })}
-                        >
-                            <LinearGradient
-                                colors={['rgba(139, 92, 246, 0.2)', 'rgba(217, 70, 239, 0.05)']}
-                                style={StyleSheet.absoluteFill}
-                            />
-                            <View style={styles.featuredAvatarWrapper}>
-                                <VipFrame level={item.level} avatar={item.avatar} size={55} isStatic={true} />
-                            </View>
-                            <Text style={[styles.featuredName, { color: theme.colors.text }]}>{item.name}</Text>
-
-                        </TouchableOpacity>
-                    )}
-                    keyExtractor={item => item.id}
-                    contentContainerStyle={styles.featuredList}
-                />
-            </View>
-
-            <View style={{ height: 1, backgroundColor: 'rgba(255,255,255,0.08)', marginHorizontal: 20, marginTop: 15, marginBottom: 10 }} />
         </View>
     );
 
@@ -527,113 +912,242 @@ export default function ExploreScreen({ navigation, route }) {
         setIsLightboxVisible(true);
     };
 
-    const renderPost = React.useCallback(({ item, index }) => (
-        <AnimatedPostCard index={index} scrollY={scrollY}>
-            <TouchableOpacity 
-                activeOpacity={0.9} 
-                onPress={() => handleImagePress(resolveImageUrl(item.image_url || item.image))}
-                style={styles.modernCardContainer}
-            >
-                {/* Main Post Image */}
-                <FallbackImage 
-                    url={resolveImageUrl(item.image_url || item.image)} 
-                    style={styles.modernImage} 
-                    theme={theme} 
-                />
-                
-                {/* Top Overlay Gradient */}
-                <LinearGradient
-                    colors={['rgba(0,0,0,0.6)', 'transparent']}
-                    style={styles.modernTopGradient}
-                />
-
-                {/* User Info Overlay (Top) */}
-                <View style={styles.modernHeader}>
+    const renderPost = React.useCallback(({ item }) => {
+        const isConnected = !!(chatMap[(item.operator_id || item.user_id).toString()] || sentHiList.has((item.operator_id || item.user_id).toString()));
+        const isFav = favoriteIds.has(item.operator_id || item.user_id);
+        const actionMuted = themeMode === 'dark' ? 'rgba(255,255,255,0.45)' : 'rgba(100,116,139,0.55)';
+        const previewComments = Array.isArray(item.preview_comments) && item.preview_comments.length > 0
+            ? item.preview_comments.slice(0, 2)
+            : Array.isArray(commentPreviewMap[item.id])
+                ? commentPreviewMap[item.id].slice(0, 2)
+                : Array.isArray(item.comments)
+                    ? item.comments.slice(0, 2)
+                    : [];
+        const commentCount = parseInt(item.comments_count) || 0;
+        
+        return (
+            <View style={[
+                styles.restructuredCard,
+                {
+                    backgroundColor: 'transparent',
+                    borderColor: themeMode === 'dark' ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.06)'
+                }
+            ]}>
+                {/* Header Row */}
+                <View style={styles.cardHeaderRow}>
                     <TouchableOpacity 
-                        onPress={() => navigation.navigate('OperatorProfile', { operator: item, user })}
-                        style={styles.modernUserInfo}
+                        onPress={() => navigation.navigate('OperatorProfile', { 
+                            operator: {
+                                ...item,
+                                id: item.operator_id || item.user_id,
+                                name: item.userName || item.name,
+                                avatar_url: item.avatar
+                            }, 
+                            user 
+                        })}
+                        style={styles.headerLeftCol}
                     >
-                        <View style={{ width: 56, height: 56, alignItems: 'center', justifyContent: 'center' }}>
+                        <View style={styles.headerAvatarContainer}>
                             <VipFrame
-                                level={(item.gender === 'coin_bayisi') ? 'dealer' : (item.level || 0)}
+                                level={(item.gender === 'coin_bayisi') ? 'dealer' : (item.vipLevel || item.vip_level || 0)}
                                 avatar={item.avatar}
-                                size={56}
+                                size={46}
                                 isStatic={true}
                             />
                             {!!item.hasStory && (
                                 <View style={{ position: 'absolute', pointerEvents: 'none' }}>
-                                    <StoryRing hasNewStory={true} size={48} />
+                                    <StoryRing hasNewStory={true} size={40} />
                                 </View>
                             )}
                         </View>
-                        <View style={styles.modernNameContainer}>
-                            <View style={{ flexDirection: 'row', alignItems: 'center', height: 24 }}>
-                                <Text style={[styles.modernUserName, { lineHeight: 24 }]} numberOfLines={1}>{item.userName}</Text>
+                        <View style={styles.headerMetaCol}>
+                            <View style={styles.headerNameBadgeRow}>
+                                <Text style={[styles.headerNameText, { color: theme.colors.text }]} numberOfLines={1}>
+                                    {cleanUsername(item.userName || item.name)}
+                                </Text>
+                                <View style={[styles.headerAgeBadge, { backgroundColor: (item.gender === 'male' || item.gender === 'erkek') ? '#3b82f6' : '#ec4899' }]}>
+                                    <Ionicons name={(item.gender === 'male' || item.gender === 'erkek') ? "male" : "female"} size={8} color="white" />
+                                    <Text style={styles.headerAgeText}>{item.age || '18'}</Text>
+                                </View>
                                 {item.is_verified && (
-                                    <Ionicons name="checkmark-circle" size={13} color="#3b82f6" style={{ marginLeft: 4 }} />
+                                    <Ionicons name="checkmark-circle" size={13} color="#3b82f6" />
                                 )}
-                                {/* VIP Badge for Header */}
-                                {(item.level > 0 || item.gender === 'coin_bayisi') && (
+                                {(item.vipLevel > 0 || item.gender === 'coin_bayisi') && (
                                     <LinearGradient
-                                        colors={item.gender === 'coin_bayisi' ? ['#10b981', '#059669'] : getVipColor(item.level)}
-                                        style={[styles.modernVipTag, { marginLeft: 12, marginBottom: 0 }]}
+                                        colors={item.gender === 'coin_bayisi' ? ['#10b981', '#059669'] : getVipColor(item.vipLevel || item.vip_level)}
+                                        style={styles.headerVipBadge}
                                     >
-                                        <Ionicons name="star" size={8} color="white" />
-                                        <Text style={styles.modernVipText}>
-                                            {item.gender === 'coin_bayisi' ? 'BAYİ' : `VIP ${item.level}`}
+                                        <Text style={styles.headerVipText}>
+                                            {item.gender === 'coin_bayisi' ? 'BAYI' : 'VIP'}
                                         </Text>
                                     </LinearGradient>
                                 )}
                             </View>
-                            <View style={[styles.modernAgeBadge, { backgroundColor: (item.gender === 'male' || item.gender === 'erkek') ? 'rgba(59, 130, 246, 0.4)' : 'rgba(236, 72, 153, 0.4)' }]}>
-                                <Text style={styles.modernAgeText}>{item.age || '18'}</Text>
-                            </View>
+                            <Text style={[styles.headerTimeText, { color: theme.colors.textSecondary }]}>
+                                {formatDate(item.created_at)}
+                            </Text>
                         </View>
                     </TouchableOpacity>
 
-                    <TouchableOpacity onPress={() => handleOpenOptions(item)} style={styles.modernMenuButton}>
-                        <Ionicons name="ellipsis-horizontal" size={20} color="white" />
+                    {/* Pill Hi Button */}
+                    <TouchableOpacity 
+                        onPress={() => handleHiPress(item)} 
+                        style={styles.pillHiButton}
+                        activeOpacity={0.8}
+                    >
+                        <LinearGradient
+                            colors={isConnected ? ['#10B981', '#059669'] : ['#8b5cf6', '#d946ef']}
+                            start={{ x: 0, y: 0 }}
+                            end={{ x: 1, y: 0 }}
+                            style={styles.pillHiGradient}
+                        >
+                            <Text style={styles.pillHiButtonText}>
+                                {isConnected ? "💬 Mesaj" : "👋 Hi"}
+                            </Text>
+                        </LinearGradient>
                     </TouchableOpacity>
                 </View>
 
-                {/* Bottom Overlay Gradient */}
-                <LinearGradient
-                    colors={['transparent', 'rgba(0,0,0,0.3)', 'rgba(0,0,0,0.6)', 'rgba(0,0,0,0.9)']}
-                    style={styles.modernBottomGradient}
-                />
+                {/* Caption / Content text (Moved above the image) */}
+                {(item.content || item.caption) ? (
+                    <Text style={[styles.restructuredCaption, { color: theme.colors.text }]} numberOfLines={2}>
+                        {maskContactInfo(item.content || item.caption)}
+                    </Text>
+                ) : null}
 
-                {/* Bottom Info & Actions */}
-                <View style={styles.modernFooter}>
-                    <View style={styles.modernCaptionSection}>
-                        <Text style={styles.modernCaption} numberOfLines={2}>
-                            {maskContactInfo(item.content || item.caption || "Merhaba! Beni takip etmeyi unutma! ✨")}
-                        </Text>
-                    </View>
+                {/* Centered Post Image */}
+                <TouchableOpacity 
+                    activeOpacity={0.9} 
+                    onPress={() => handleImagePress(resolveImageUrl(item.image_url || item.image))}
+                    style={[
+                        styles.imageCardContainer,
+                        { backgroundColor: themeMode === 'dark' ? 'rgba(255,255,255,0.05)' : theme.colors.backgroundSecondary }
+                    ]}
+                >
+                    <FallbackImage 
+                        url={resolveImageUrl(item.image_url || item.image)} 
+                        style={styles.restructuredImage} 
+                        theme={theme} 
+                    />
+                    <LikeAnimation
+                        onLike={() => handleDoubleTapLike(item.id)}
+                        showIcon={false}
+                    />
+                </TouchableOpacity>
 
-                    <View style={styles.modernActions}>
-                        <TouchableOpacity onPress={() => likePost(item.id)} style={styles.modernActionButton}>
+                {/* Horizontal Footer row */}
+                <View style={styles.restructuredFooter}>
+                    <View style={styles.footerLeftActions}>
+                        {/* Like Action */}
+                        <TouchableOpacity onPress={() => likePost(item.id)} style={styles.footerActionBtn}>
                             <Ionicons
                                 name={item.liked ? "heart" : "heart-outline"}
-                                size={24}
-                                color={item.liked ? "#f472b6" : "white"}
+                                size={22}
+                                color={item.liked ? "#ff4d8d" : actionMuted}
                             />
-                            <Text style={styles.modernActionText}>{item.likes_count || 0}</Text>
+                            <Text style={[styles.footerActionText, { color: item.liked ? "#ff4d8d" : actionMuted }]}>
+                                {item.likes_count || 0}
+                            </Text>
                         </TouchableOpacity>
-                        
-                        <TouchableOpacity onPress={() => fetchComments(item.id)} style={styles.modernActionButton}>
-                            <Ionicons name="chatbubble-outline" size={22} color="white" />
-                            <Text style={styles.modernActionText}>{item.comments_count || 0}</Text>
+
+                        {/* Comment Action */}
+                        <TouchableOpacity onPress={() => toggleExpandComments(item.id)} style={styles.footerActionBtn}>
+                            <Ionicons name="chatbubble-outline" size={20} color={actionMuted} />
+                            <Text style={[styles.footerActionText, { color: actionMuted }]}>
+                                {commentCount > 99 ? '99+' : commentCount}
+                            </Text>
+                        </TouchableOpacity>
+
+                        {/* Share Action */}
+                        <TouchableOpacity onPress={() => {}} style={styles.footerActionBtn}>
+                            <Ionicons name="paper-plane-outline" size={20} color={actionMuted} />
+                        </TouchableOpacity>
+
+                        {/* Favorite Action / Follow */}
+                        <TouchableOpacity onPress={() => toggleFavorite(item.operator_id || item.user_id)} style={styles.footerActionBtn}>
+                            <Ionicons 
+                                name={isFav ? "bookmark" : "bookmark-outline"} 
+                                size={20} 
+                                color={isFav ? "#FFD700" : actionMuted} 
+                            />
                         </TouchableOpacity>
                     </View>
+
+                    {/* More Menu options (Far Right) */}
+                    <TouchableOpacity onPress={() => handleOpenOptions(item)} style={styles.footerMoreBtn}>
+                        <Ionicons name="ellipsis-horizontal" size={20} color={actionMuted} />
+                    </TouchableOpacity>
                 </View>
 
-                <LikeAnimation
-                    onLike={() => handleDoubleTapLike(item.id)}
-                    showIcon={false}
-                />
-            </TouchableOpacity>
-        </AnimatedPostCard>
-    ), [scrollY, navigation, user, theme, likePost, fetchComments, handleDoubleTapLike, handleImagePress]);
+                {/* Inline Comment Block */}
+                {(previewComments.length > 0 || commentCount > 0 || expandedPosts[item.id]) && (
+                    <View style={styles.commentPreviewBlock}>
+                        {/* If expanded, render allComments, otherwise render previewComments */}
+                        {(expandedPosts[item.id] ? (postCommentsMap[item.id] || previewComments) : previewComments).map(comment => (
+                            <View key={comment.id} style={styles.commentPreviewRow}>
+                                <FallbackImage 
+                                    url={resolveImageUrl(comment.avatar, 'avatar')} 
+                                    style={styles.commentPreviewAvatar} 
+                                    isAvatar={true}
+                                    theme={theme} 
+                                />
+                                <Text style={styles.commentPreviewTextContainer} numberOfLines={1}>
+                                    <Text style={[styles.commentPreviewName, { color: theme.colors.text }]}>
+                                        {cleanUsername(comment.userName || comment.name)}
+                                    </Text>
+                                    <Text style={{ color: theme.colors.textSecondary }}>
+                                        {"  "}{maskContactInfo(comment.content || '')}
+                                    </Text>
+                                </Text>
+                            </View>
+                        ))}
+                        
+                        {/* Toggle button */}
+                        {expandedPosts[item.id] ? (
+                            <TouchableOpacity onPress={() => toggleExpandComments(item.id)} activeOpacity={0.75}>
+                                <Text style={[styles.viewAllComments, { color: theme.colors.secondary }]}>
+                                    Yorumları Gizle
+                                </Text>
+                            </TouchableOpacity>
+                        ) : (
+                            commentCount > previewComments.length && (
+                                <TouchableOpacity onPress={() => toggleExpandComments(item.id)} activeOpacity={0.75}>
+                                    <Text style={[styles.viewAllComments, { color: theme.colors.secondary }]}>
+                                        Tüm {commentCount} yorumu gör...
+                                    </Text>
+                                </TouchableOpacity>
+                            )
+                        )}
+
+                        {/* Inline comment composer when expanded */}
+                        {expandedPosts[item.id] && (
+                            <View style={styles.inlineCommentInputRow}>
+                                <TextInput
+                                    placeholder="Yorum yaz..."
+                                    placeholderTextColor={theme.colors.textSecondary}
+                                    style={[styles.inlineCommentInput, { color: theme.colors.text, backgroundColor: themeMode === 'dark' ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.03)' }]}
+                                    value={postNewCommentMap[item.id] || ''}
+                                    onChangeText={(text) => setPostNewCommentMap(prev => ({ ...prev, [item.id]: text }))}
+                                    onSubmitEditing={() => submitInlineComment(item.id)}
+                                />
+                                <TouchableOpacity 
+                                    onPress={() => submitInlineComment(item.id)}
+                                    disabled={isPostingCommentMap[item.id]}
+                                    style={styles.inlineCommentSendBtn}
+                                >
+                                    {isPostingCommentMap[item.id] ? (
+                                        <ActivityIndicator size="small" color={theme.colors.primary} />
+                                    ) : (
+                                        <Ionicons name="send" size={16} color={theme.colors.primary} />
+                                    )}
+                                </TouchableOpacity>
+                            </View>
+                        )}
+                    </View>
+                )}
+            </View>
+        );
+    }, [navigation, user, theme, themeMode, likePost, handleDoubleTapLike, handleImagePress, chatMap, favoriteIds, sentHiList, toggleFavorite, handleHiPress, commentPreviewMap, toggleExpandComments, submitInlineComment, expandedPosts, postCommentsMap, postNewCommentMap, isPostingCommentMap]);
 
     return (
         <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
@@ -646,13 +1160,24 @@ export default function ExploreScreen({ navigation, route }) {
 
             <Animated.FlatList
                 onScroll={scrollHandler}
-                data={posts}
+                data={visiblePosts}
                 keyExtractor={item => item.id}
                 renderItem={renderPost}
                 showsVerticalScrollIndicator={false}
                 contentContainerStyle={styles.feedList}
                 scrollEventThrottle={16}
                 ListHeaderComponent={renderHeader}
+                ListEmptyComponent={() => (
+                    <View style={styles.emptyFeed}>
+                        {loading ? (
+                            <ActivityIndicator color={theme.colors.primary} />
+                        ) : (
+                            <Text style={[styles.emptyFeedText, { color: theme.colors.textSecondary }]}>
+                                Bu sekmede henüz gönderi yok.
+                            </Text>
+                        )}
+                    </View>
+                )}
                 removeClippedSubviews={Platform.OS === 'android'}
                 maxToRenderPerBatch={5}
                 windowSize={5}
@@ -692,12 +1217,12 @@ export default function ExploreScreen({ navigation, route }) {
 
             {/* Floating Action Button for New Post */}
             <TouchableOpacity
-                style={styles.fabContainer}
+                style={[styles.fabContainer, { shadowColor: theme.colors.primary }]}
                 onPress={handlePostCreation}
                 activeOpacity={0.8}
             >
                 <LinearGradient
-                    colors={['#8b5cf6', '#d946ef']}
+                    colors={theme.gradients.primary}
                     style={styles.fabGradient}
                     start={{ x: 0, y: 0 }}
                     end={{ x: 1, y: 1 }}
@@ -723,9 +1248,9 @@ export default function ExploreScreen({ navigation, route }) {
                             keyExtractor={item => item.id}
                             renderItem={({ item }) => (
                                 <View style={styles.commentItem}>
-                                    <FallbackImage url={resolveImageUrl(item.avatar)} style={styles.commentAvatar} isAvatar={true} theme={theme} />
+                                    <FallbackImage url={resolveImageUrl(item.avatar, 'avatar')} style={styles.commentAvatar} isAvatar={true} theme={theme} />
                                     <View style={{ flex: 1 }}>
-                                        <Text style={[styles.commentUser, { color: theme.colors.text }]}>{item.userName}</Text>
+                                        <Text style={[styles.commentUser, { color: theme.colors.text }]}>{cleanUsername(item.userName)}</Text>
                                         <Text style={[styles.commentText, { color: theme.colors.textSecondary }]}>{item.content}</Text>
                                     </View>
                                 </View>
@@ -799,6 +1324,124 @@ export default function ExploreScreen({ navigation, route }) {
                     </View>
                 </View>
             </Modal>
+
+            {/* Hi Button Bottom Sheet Modal */}
+            <Modal
+                visible={hiSheetVisible}
+                transparent
+                animationType="slide"
+                onRequestClose={() => {
+                    setHiSheetVisible(false);
+                    setSelectedPostForHi(null);
+                }}
+            >
+                <View style={styles.sheetBackdrop}>
+                    <TouchableOpacity 
+                        style={StyleSheet.absoluteFill} 
+                        onPress={() => {
+                            setHiSheetVisible(false);
+                            setSelectedPostForHi(null);
+                        }} 
+                    />
+                    <View style={[styles.hiSheetContent, { backgroundColor: theme.colors.backgroundSecondary || '#100720' }]}>
+                        <View style={styles.hiSheetHandle} />
+                        
+                        <View style={styles.hiSheetHeader}>
+                            {selectedPostForHi && (
+                                <Image 
+                                    source={{ uri: resolveImageUrl(selectedPostForHi.avatar, 'avatar') }} 
+                                    style={styles.hiSheetAvatar} 
+                                />
+                            )}
+                            <Text style={[styles.hiSheetTitle, { color: theme.colors.text }]}>
+                                {selectedPostForHi ? `${cleanUsername(selectedPostForHi.userName || selectedPostForHi.name)} ile İletişim Kur` : 'İletişim Kur'}
+                            </Text>
+                            <Text style={styles.hiSheetSubtitle}>Hızlı bir etkileşim başlatın</Text>
+                        </View>
+
+                        <View style={styles.hiSheetOptions}>
+                            {/* Hızlı Selam Gönder */}
+                            <TouchableOpacity 
+                                style={[styles.hiOptionItem, { backgroundColor: 'rgba(244, 72, 153, 0.1)', borderColor: 'rgba(244, 72, 153, 0.2)' }]}
+                                onPress={() => {
+                                    if (selectedPostForHi) {
+                                        sendQuickHi(selectedPostForHi);
+                                    }
+                                }}
+                                disabled={isSendingHi}
+                            >
+                                {isSendingHi ? (
+                                    <ActivityIndicator size="small" color="#ec4899" style={{ alignSelf: 'center', width: '100%' }} />
+                                ) : (
+                                    <>
+                                        <View style={[styles.hiOptionIconBg, { backgroundColor: '#ec4899' }]}>
+                                            <Ionicons name="hand-left" size={18} color="white" />
+                                        </View>
+                                        <View style={styles.hiOptionMeta}>
+                                            <Text style={[styles.hiOptionLabel, { color: '#fbcfe8' }]}>Hızlı Selam Gönder</Text>
+                                            <Text style={styles.hiOptionDesc}>"Merhaba 👋" otomatik mesajı gönderir</Text>
+                                        </View>
+                                    </>
+                                )}
+                            </TouchableOpacity>
+
+                            {/* Mesaj Yaz */}
+                            <TouchableOpacity 
+                                style={[styles.hiOptionItem, { backgroundColor: 'rgba(139, 92, 246, 0.1)', borderColor: 'rgba(139, 92, 246, 0.2)' }]}
+                                onPress={() => {
+                                    if (selectedPostForHi) {
+                                        setHiSheetVisible(false);
+                                        navigation.navigate('Chat', {
+                                            operatorId: selectedPostForHi.operator_id || selectedPostForHi.user_id,
+                                            name: cleanUsername(selectedPostForHi.userName || selectedPostForHi.name),
+                                            avatar_url: selectedPostForHi.avatar,
+                                            vip_level: selectedPostForHi.vipLevel || selectedPostForHi.vip_level || 0,
+                                            user
+                                        });
+                                        setSelectedPostForHi(null);
+                                    }
+                                }}
+                            >
+                                <View style={[styles.hiOptionIconBg, { backgroundColor: '#8b5cf6' }]}>
+                                    <Ionicons name="chatbubble-ellipses" size={18} color="white" />
+                                </View>
+                                <View style={styles.hiOptionMeta}>
+                                    <Text style={[styles.hiOptionLabel, { color: '#ddd6fe' }]}>Mesaj Yaz</Text>
+                                    <Text style={styles.hiOptionDesc}>Sohbet ekranına gidip kendi mesajınızı yazın</Text>
+                                </View>
+                            </TouchableOpacity>
+
+                            {/* Profili Gör */}
+                            <TouchableOpacity 
+                                style={[styles.hiOptionItem, { backgroundColor: 'rgba(59, 130, 246, 0.1)', borderColor: 'rgba(59, 130, 246, 0.2)' }]}
+                                onPress={() => {
+                                    if (selectedPostForHi) {
+                                        setHiSheetVisible(false);
+                                        navigation.navigate('OperatorProfile', { 
+                                            operator: {
+                                                ...selectedPostForHi,
+                                                id: selectedPostForHi.operator_id || selectedPostForHi.user_id,
+                                                name: selectedPostForHi.userName || selectedPostForHi.name,
+                                                avatar_url: selectedPostForHi.avatar
+                                            }, 
+                                            user 
+                                        });
+                                        setSelectedPostForHi(null);
+                                    }
+                                }}
+                            >
+                                <View style={[styles.hiOptionIconBg, { backgroundColor: '#3b82f6' }]}>
+                                    <Ionicons name="person" size={18} color="white" />
+                                </View>
+                                <View style={styles.hiOptionMeta}>
+                                    <Text style={[styles.hiOptionLabel, { color: '#dbeafe' }]}>Profili Gör</Text>
+                                    <Text style={styles.hiOptionDesc}>Kullanıcının detaylı profilini inceleyin</Text>
+                                </View>
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                </View>
+            </Modal>
         </View>
     );
 }
@@ -837,28 +1480,109 @@ const styles = StyleSheet.create({
         paddingTop: 0,
     },
     feedList: {
-        paddingBottom: 130,
+        paddingBottom: 118,
+    },
+    feedHeaderWrap: {
+        paddingTop: 42,
+        paddingBottom: 8,
+        overflow: 'hidden',
+    },
+    referenceHeaderBg: {
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        height: 115,
+    },
+    confettiDot: {
+        position: 'absolute',
+        width: 4,
+        height: 4,
+        borderRadius: 2,
+        opacity: 0.75,
+    },
+    stadiumArc: {
+        position: 'absolute',
+        left: -32,
+        right: -32,
+        top: 3,
+        height: 72,
+        borderTopWidth: 2,
+        borderColor: 'rgba(148, 163, 184, 0.18)',
+        borderRadius: 160,
+    },
+    feedTopBar: {
+        minHeight: 48,
+        paddingLeft: 0,
+        paddingRight: 6,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    feedTabs: {
+        flex: 1,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    feedTabButton: {
+        minWidth: 86,
+        height: 48,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    feedTabText: {
+        fontSize: 19,
+        fontWeight: '600',
+    },
+    feedTabTextActive: {
+        fontWeight: '900',
+    },
+    feedTabIndicator: {
+        width: 10,
+        height: 6,
+        borderRadius: 3,
+        marginTop: 6,
+    },
+    notificationButton: {
+        width: 42,
+        height: 42,
+        borderRadius: 21,
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderWidth: 1,
+    },
+    emptyFeed: {
+        minHeight: 180,
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingHorizontal: 24,
+    },
+    emptyFeedText: {
+        fontSize: 13,
+        fontWeight: '700',
+        textAlign: 'center',
     },
     storiesContainer: {
         borderBottomWidth: 1,
     },
     storiesList: {
-        paddingHorizontal: 15,
-        paddingVertical: 5, // Boşluk azaltıldı
+        paddingHorizontal: 12,
+        paddingVertical: 2,
     },
     storyContainer: {
         alignItems: 'center',
         marginHorizontal: 10,
     },
     addStoryContainer: {
-        width: 68,
-        height: 68,
+        width: 60,
+        height: 60,
         position: 'relative',
     },
     instagramAddBadge: {
         position: 'absolute',
-        bottom: 0,
-        right: 0,
+        bottom: -2,
+        right: -2,
         width: 22,
         height: 22,
         borderRadius: 11,
@@ -1079,23 +1803,23 @@ const styles = StyleSheet.create({
     },
     fabContainer: {
         position: 'absolute',
-        bottom: 100, // Restore original position
-        right: 25,
-        borderRadius: 30,
+        bottom: 65,
+        right: 12,
+        borderRadius: 32,
         elevation: 8,
-        shadowColor: '#8b5cf6',
+        shadowColor: '#A855F7',
         shadowOffset: {
             width: 0,
             height: 4,
         },
-        shadowOpacity: 0.3,
-        shadowRadius: 4.65,
+        shadowOpacity: 0.28,
+        shadowRadius: 6,
         zIndex: 50,
     },
     fabGradient: {
-        width: 56,
-        height: 56,
-        borderRadius: 28,
+        width: 64,
+        height: 64,
+        borderRadius: 32,
         alignItems: 'center',
         justifyContent: 'center',
     },
@@ -1149,28 +1873,27 @@ const styles = StyleSheet.create({
         fontWeight: '600',
     },
     fabGradient: {
-        width: 60,
-        height: 60,
-        borderRadius: 30,
+        width: 64,
+        height: 64,
+        borderRadius: 32,
         alignItems: 'center',
         justifyContent: 'center',
-        borderWidth: 1,
-        borderColor: 'rgba(255,255,255,0.2)',
+        borderWidth: 0,
     },
     featuredContainer: {
-        marginVertical: 10,
+        marginTop: 4,
+        marginBottom: 8,
     },
     sectionHeader: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        paddingHorizontal: 20,
-        marginBottom: 10,
+        paddingHorizontal: 14,
+        marginBottom: 8,
     },
     sectionTitle: {
-        fontSize: 16,
+        fontSize: 13,
         fontWeight: '900',
-        letterSpacing: 0.8,
     },
     seeAll: {
         fontSize: 12,
@@ -1178,14 +1901,14 @@ const styles = StyleSheet.create({
         opacity: 0.8,
     },
     featuredList: {
-        paddingHorizontal: 15,
+        paddingHorizontal: 8,
     },
     featuredCard: {
-        width: 105, // Much more compact
-        borderRadius: 20,
-        padding: 10,
+        width: 86,
+        borderRadius: 18,
+        padding: 8,
         alignItems: 'center',
-        marginHorizontal: 6,
+        marginHorizontal: 4,
         borderWidth: 1,
         borderColor: 'rgba(139, 92, 246, 0.15)',
         overflow: 'hidden',
@@ -1197,7 +1920,7 @@ const styles = StyleSheet.create({
         shadowOpacity: 0.3,
         shadowRadius: 8,
         elevation: 6,
-        padding: 5, // Add space for the frame to breathe
+        padding: 3,
     },
     featuredCategoryBadge: {
         backgroundColor: 'rgba(217, 70, 239, 0.1)',
@@ -1216,8 +1939,168 @@ const styles = StyleSheet.create({
         letterSpacing: 0.5,
     },
     featuredName: {
-        marginTop: 6,
+        marginTop: 4,
+        fontSize: 11,
+        fontWeight: '800',
+    },
+    // --- MODERN PREMIUM POST STYLES ---
+    modernCardContainer: {
+        height: 380,
+        borderRadius: 28,
+        overflow: 'hidden',
+        position: 'relative',
+    },
+    modernImage: {
+        width: '100%',
+        height: '100%',
+        borderRadius: 28,
+    },
+    modernTopGradient: {
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        height: 80,
+    },
+    modernBottomGradient: {
+        position: 'absolute',
+        bottom: 0,
+        left: 0,
+        right: 0,
+        height: 160,
+    },
+    modernHeader: {
+        position: 'absolute',
+        top: 12,
+        left: 12,
+        right: 12,
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+    },
+    modernUserInfo: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: 'rgba(0,0,0,0.3)',
+        padding: 4,
+        paddingRight: 12,
+        borderRadius: 30,
+        backdropFilter: 'blur(10px)',
+        borderWidth: 0.5,
+        borderColor: 'rgba(255,255,255,0.2)',
+    },
+    modernNameContainer: {
+        marginLeft: 8,
+    },
+    modernUserName: {
+        color: 'white',
+        fontSize: 13,
+        fontWeight: '800',
+    },
+    modernAgeBadge: {
+        paddingHorizontal: 6,
+        paddingVertical: 1,
+        borderRadius: 6,
+        marginTop: 1,
+        alignSelf: 'flex-start',
+    },
+    modernAgeText: {
+        color: 'white',
+        fontSize: 9,
+        fontWeight: '900',
+    },
+    modernMenuButton: {
+        width: 32,
+        height: 32,
+        borderRadius: 16,
+        backgroundColor: 'rgba(0,0,0,0.3)',
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderWidth: 0.5,
+        borderColor: 'rgba(255,255,255,0.2)',
+    },
+    modernFooter: {
+        position: 'absolute',
+        bottom: 12,
+        left: 15,
+        right: 15,
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'flex-end',
+    },
+    modernCaptionSection: {
+        flex: 1,
+        marginRight: 15,
+    },
+    modernVipTag: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 8,
+        paddingVertical: 3,
+        borderRadius: 8,
+    },
+    modernVipText: {
+        color: 'white',
+        fontSize: 8,
+        fontWeight: '900',
+        marginLeft: 2,
+    },
+    modernCaption: {
+        color: 'rgba(255,255,255,0.95)',
         fontSize: 12,
+        fontWeight: '600',
+        lineHeight: 16,
+    },
+    modernActions: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 12,
+    },
+    modernActionButton: {
+        alignItems: 'center',
+        backgroundColor: 'rgba(255,255,255,0.15)',
+        paddingHorizontal: 10,
+        paddingVertical: 6,
+        borderRadius: 15,
+        borderWidth: 0.5,
+        borderColor: 'rgba(255,255,255,0.2)',
+    },
+    modernActionText: {
+        color: 'white',
+        fontSize: 10,
+        fontWeight: '800',
+        marginTop: 2,
+    },
+    // Lightbox Styles
+    lightboxContainer: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    lightboxOverlay: {
+        backgroundColor: 'rgba(0,0,0,0.9)',
+    },
+    lightboxContent: {
+    },
+    featuredCategoryBadge: {
+        backgroundColor: 'rgba(217, 70, 239, 0.1)',
+        paddingHorizontal: 8,
+        paddingVertical: 2,
+        borderRadius: 8,
+        marginTop: 5,
+        borderWidth: 0.5,
+        borderColor: 'rgba(217, 70, 239, 0.2)',
+    },
+    featuredCategoryText: {
+        color: '#f472b6',
+        fontSize: 8,
+        fontWeight: '900',
+        textTransform: 'uppercase',
+        letterSpacing: 0.5,
+    },
+    featuredName: {
+        marginTop: 4,
+        fontSize: 11,
         fontWeight: '800',
     },
     // --- MODERN PREMIUM POST STYLES ---
@@ -1372,5 +2255,298 @@ const styles = StyleSheet.create({
         top: 50,
         right: 25,
         zIndex: 100,
+    },
+    // --- RESTRICTURED SOCIAL CARD STYLES ---
+    restructuredCard: {
+        width: '100%',
+        marginHorizontal: 0,
+        marginVertical: 0,
+        borderRadius: 0,
+        paddingHorizontal: 16,
+        paddingTop: 12,
+        paddingBottom: 20,
+        borderWidth: 0,
+        borderBottomWidth: 1,
+    },
+    cardHeaderRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        marginBottom: 8,
+    },
+    headerLeftCol: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        flex: 1,
+        marginRight: 8,
+    },
+    headerAvatarContainer: {
+        width: 48,
+        height: 48,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    headerMetaCol: {
+        flex: 1,
+        marginLeft: 10,
+    },
+    headerNameBadgeRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
+        flexWrap: 'wrap',
+    },
+    headerNameText: {
+        fontSize: 15,
+        fontWeight: '800',
+    },
+    headerAgeBadge: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 6,
+        paddingVertical: 1.5,
+        borderRadius: 8,
+        gap: 2,
+    },
+    headerAgeText: {
+        color: 'white',
+        fontSize: 9,
+        fontWeight: 'bold',
+    },
+    headerVipBadge: {
+        paddingHorizontal: 5,
+        paddingVertical: 1.5,
+        borderRadius: 6,
+    },
+    headerVipText: {
+        color: 'white',
+        fontSize: 8,
+        fontWeight: '900',
+    },
+    headerTimeText: {
+        fontSize: 11,
+        fontWeight: '400',
+        marginTop: 2,
+    },
+    pillHiButton: {
+        borderRadius: 18,
+        overflow: 'hidden',
+        shadowColor: '#ec4899',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.15,
+        shadowRadius: 4,
+        elevation: 2,
+    },
+    pillHiGradient: {
+        paddingHorizontal: 16,
+        paddingVertical: 7,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    pillHiButtonText: {
+        color: 'white',
+        fontSize: 11.5,
+        fontWeight: '800',
+    },
+    imageCardContainer: {
+        width: width * 0.65,
+        height: width * 0.65,
+        borderRadius: 16,
+        overflow: 'hidden',
+        marginTop: 10,
+        marginBottom: 10,
+    },
+    restructuredImage: {
+        width: '100%',
+        height: '100%',
+    },
+    restructuredCaption: {
+        fontSize: 13,
+        fontWeight: '500',
+        lineHeight: 18,
+        marginHorizontal: 2,
+        marginBottom: 8,
+        maxWidth: width - 56,
+    },
+    hashtagContainer: {
+        flexDirection: 'row',
+        marginTop: 2,
+        marginBottom: 8,
+        marginHorizontal: 2,
+    },
+    hashtagBadge: {
+        backgroundColor: 'rgba(168, 85, 247, 0.08)',
+        borderColor: 'rgba(168, 85, 247, 0.15)',
+        borderWidth: 0.5,
+        paddingHorizontal: 8,
+        paddingVertical: 3.5,
+        borderRadius: 8,
+    },
+    hashtagText: {
+        color: '#a855f7',
+        fontSize: 11,
+        fontWeight: '700',
+    },
+    hashtagHash: {
+        color: '#d946ef',
+        fontWeight: '900',
+    },
+    restructuredFooter: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        marginTop: 4,
+        paddingHorizontal: 2,
+        borderTopWidth: 0.5,
+        borderTopColor: 'rgba(255,255,255,0.06)',
+        paddingTop: 10,
+    },
+    footerLeftActions: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 24,
+    },
+    footerActionBtn: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
+        paddingVertical: 4,
+    },
+    footerActionText: {
+        fontSize: 12,
+        fontWeight: '600',
+    },
+    footerMoreBtn: {
+        padding: 4,
+    },
+    commentPreviewBlock: {
+        marginTop: 10,
+        paddingHorizontal: 2,
+        gap: 4,
+    },
+    commentPreviewRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginVertical: 4,
+        gap: 8,
+    },
+    commentPreviewAvatar: {
+        width: 20,
+        height: 20,
+        borderRadius: 10,
+    },
+    commentPreviewTextContainer: {
+        flex: 1,
+        fontSize: 12,
+        lineHeight: 16,
+    },
+    commentPreviewName: {
+        fontWeight: '700',
+    },
+    commentPreviewText: {
+        fontWeight: '400',
+    },
+    viewAllComments: {
+        fontSize: 11,
+        fontWeight: '700',
+        marginTop: 4,
+    },
+    inlineCommentInputRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginTop: 10,
+        gap: 8,
+    },
+    inlineCommentInput: {
+        flex: 1,
+        height: 36,
+        borderRadius: 18,
+        paddingHorizontal: 12,
+        fontSize: 12,
+        borderWidth: 0.5,
+        borderColor: 'rgba(255, 255, 255, 0.08)',
+    },
+    inlineCommentSendBtn: {
+        width: 32,
+        height: 32,
+        borderRadius: 16,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    sheetBackdrop: {
+        flex: 1,
+        backgroundColor: 'rgba(7, 4, 18, 0.75)',
+        justifyContent: 'flex-end',
+    },
+    hiSheetContent: {
+        width: '100%',
+        borderTopLeftRadius: 28,
+        borderTopRightRadius: 28,
+        padding: 24,
+        paddingBottom: 40,
+        borderWidth: 1,
+        borderColor: 'rgba(255, 255, 255, 0.08)',
+    },
+    hiSheetHandle: {
+        width: 42,
+        height: 4,
+        backgroundColor: 'rgba(255, 255, 255, 0.15)',
+        borderRadius: 2,
+        alignSelf: 'center',
+        marginBottom: 20,
+    },
+    hiSheetHeader: {
+        alignItems: 'center',
+        marginBottom: 24,
+    },
+    hiSheetAvatar: {
+        width: 64,
+        height: 64,
+        borderRadius: 32,
+        borderWidth: 2,
+        borderColor: '#ec4899',
+        marginBottom: 12,
+    },
+    hiSheetTitle: {
+        fontSize: 18,
+        fontWeight: '800',
+        textAlign: 'center',
+        marginBottom: 4,
+    },
+    hiSheetSubtitle: {
+        color: 'rgba(255, 255, 255, 0.45)',
+        fontSize: 12,
+        fontWeight: '600',
+    },
+    hiSheetOptions: {
+        gap: 12,
+    },
+    hiOptionItem: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        padding: 16,
+        borderRadius: 20,
+        borderWidth: 1,
+        gap: 14,
+    },
+    hiOptionIconBg: {
+        width: 36,
+        height: 36,
+        borderRadius: 18,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    hiOptionMeta: {
+        flex: 1,
+    },
+    hiOptionLabel: {
+        fontSize: 14,
+        fontWeight: '800',
+    },
+    hiOptionDesc: {
+        color: 'rgba(255, 255, 255, 0.45)',
+        fontSize: 11,
+        fontWeight: '500',
+        marginTop: 2,
     },
 });

@@ -44,6 +44,16 @@ try {
     console.warn('[Agora] Native module not linked. Rebuild with npx expo run:android to enable voice.');
 }
 
+const cleanUsername = (name) => {
+    if (!name) return '';
+    let cleaned = name.replace(/^op_/i, '');
+    cleaned = cleaned.replace(/_\d+(-\d+)?$/g, '');
+    if (name.toLowerCase().startsWith('op_') && cleaned.length > 0) {
+        cleaned = cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
+    }
+    return cleaned;
+};
+
 // ─── Chat Message Row Component ───────────────────────────────────────────
 const ChatMessageRow = React.memo(({ item, currentUserId }) => {
     if (item.isSystem) {
@@ -54,11 +64,11 @@ const ChatMessageRow = React.memo(({ item, currentUserId }) => {
         
         if (item.content.includes(' odaya girdi.')) {
             const parts = item.content.split(' odaya girdi.');
-            namePart = '@' + parts[0];
+            namePart = '@' + cleanUsername(parts[0]);
             actionPart = ' odaya girdi.';
         } else if (item.content.includes(' koltuğa oturdu.')) {
             const parts = item.content.split(' koltuğa oturdu.');
-            namePart = '@' + parts[0];
+            namePart = '@' + cleanUsername(parts[0]);
             actionPart = ' koltuğa oturdu.';
         }
 
@@ -109,7 +119,7 @@ const ChatMessageRow = React.memo(({ item, currentUserId }) => {
                     isMe && styles.chatSenderMe,
                     senderNobilityNameColor && { color: senderNobilityNameColor }
                 ]}>
-                    {item.sender?.display_name || item.sender?.username || 'Katılımcı'}
+                    {cleanUsername(item.sender?.display_name || item.sender?.username) || 'Katılımcı'}
                 </Text>
             </View>
             <Text style={styles.chatMsgText}>{item.content}</Text>

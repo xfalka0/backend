@@ -10,6 +10,16 @@ import { resolveImageUrl } from '../../utils/imageUtils';
 
 const { width, height } = Dimensions.get('window');
 
+const cleanUsername = (name) => {
+    if (!name) return '';
+    let cleaned = name.replace(/^op_/i, '');
+    cleaned = cleaned.replace(/_\d+(-\d+)?$/g, '');
+    if (name.toLowerCase().startsWith('op_') && cleaned.length > 0) {
+        cleaned = cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
+    }
+    return cleaned;
+};
+
 // ─── Sub-Component: MemberRoleBadge ──────────────────────────────────────────
 export function MemberRoleBadge({ role }) {
     let colors = ['#6B7280', '#4B5563'];
@@ -52,7 +62,7 @@ export function MemberRoleBadge({ role }) {
 
 // ─── Sub-Component: MemberListItem ───────────────────────────────────────────
 export function MemberListItem({ item, onSelect, isBannedTab, onUnban }) {
-    const initials = (item.display_name || item.username || 'K').charAt(0).toUpperCase();
+    const initials = (cleanUsername(item.display_name || item.username) || 'K').charAt(0).toUpperCase();
 
     return (
         <View style={styles.listItem}>
@@ -70,7 +80,7 @@ export function MemberListItem({ item, onSelect, isBannedTab, onUnban }) {
                 <View style={styles.memberInfo}>
                     <View style={styles.nameRow}>
                         <Text style={styles.memberName} numberOfLines={1}>
-                            {item.display_name || item.username}
+                            {cleanUsername(item.display_name || item.username)}
                         </Text>
                         {item.vip_level > 0 && (
                             <LinearGradient
@@ -188,7 +198,7 @@ export function MemberManagementSheet({
                 <TouchableOpacity style={StyleSheet.absoluteFill} onPress={onClose} />
                 <View style={styles.sheetContent}>
                     <View style={styles.sheetHandle} />
-                    <Text style={styles.sheetTitle}>{targetMember.display_name || targetMember.username}</Text>
+                    <Text style={styles.sheetTitle}>{cleanUsername(targetMember.display_name || targetMember.username)}</Text>
                     <Text style={styles.sheetSubtitle}>ID: {targetId?.slice(0, 8)?.toUpperCase()}</Text>
 
                     <View style={styles.sheetGrid}>
@@ -401,7 +411,7 @@ export default function RoomMembersPanel({ visible, roomId, currentUser, onClose
         const seats = useRoomStore.getState().seats;
         const freeSeat = seats.find(s => !s.user_id && !s.is_locked);
         if (freeSeat) {
-            Alert.alert('Koltuğa Davet Et', `${member.display_name || member.username} koltuğa alınacaktır. Onaylıyor musunuz?`, [
+            Alert.alert('Koltuğa Davet Et', `${cleanUsername(member.display_name || member.username)} koltuğa alınacaktır. Onaylıyor musunuz?`, [
                 { text: 'Onayla', onPress: () => {
                     const SocketService = require('../../services/SocketService').default;
                     // Direct socket assign for moderation invite
@@ -416,7 +426,7 @@ export default function RoomMembersPanel({ visible, roomId, currentUser, onClose
 
     const handleRemoveFromSeat = (member) => {
         if (member.seat_number !== undefined && member.seat_number !== null) {
-            Alert.alert('Koltuktan İndir', `${member.display_name || member.username} koltuktan indirilsin mi?`, [
+            Alert.alert('Koltuktan İndir', `${cleanUsername(member.display_name || member.username)} koltuktan indirilsin mi?`, [
                 { text: 'Evet', style: 'destructive', onPress: () => lockSeat(member.seat_number, true) },
                 { text: 'İptal', style: 'cancel' }
             ]);
@@ -437,7 +447,7 @@ export default function RoomMembersPanel({ visible, roomId, currentUser, onClose
         } else if (navigation) {
             navigation.navigate('Chat', {
                 operatorId: member.user_id,
-                name: member.display_name || member.username,
+                name: cleanUsername(member.display_name || member.username),
                 avatar_url: member.avatar_url,
                 vip_level: member.vip_level || 0,
                 user: currentUser
@@ -446,11 +456,11 @@ export default function RoomMembersPanel({ visible, roomId, currentUser, onClose
     };
 
     const handleFollow = (member) => {
-        Alert.alert('Başarılı', `${member.display_name || member.username} takip edildi!`);
+        Alert.alert('Başarılı', `${cleanUsername(member.display_name || member.username)} takip edildi!`);
     };
 
     const handleReport = (member) => {
-        Alert.alert('Şikayet Et', `${member.display_name || member.username} şikayet edildi. İncelemeye alındı.`);
+        Alert.alert('Şikayet Et', `${cleanUsername(member.display_name || member.username)} şikayet edildi. İncelemeye alındı.`);
     };
 
     // Tabs definition

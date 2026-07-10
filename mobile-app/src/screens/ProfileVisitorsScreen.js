@@ -434,8 +434,8 @@ const styles = StyleSheet.create({
     avatarWrapper: {
         width: 50,
         height: 50,
-        borderRadius: 25,
-        overflow: 'hidden',
+        alignItems: 'center',
+        justifyContent: 'center',
     },
     onlineBadge: {
         position: 'absolute',

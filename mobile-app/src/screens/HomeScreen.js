@@ -44,6 +44,7 @@ const getProfileGender = (profile) => {
 };
 
 const OperatorItem = React.memo(({ item, navigation, user, theme, onHiPress }) => {
+    console.log('[DEBUG OPERATOR ITEM]', item.name, 'avatar:', item.avatar_url, 'photos:', item.photos);
     const profileGender = getProfileGender(item);
     const handleLocalHiPress = React.useCallback(() => {
         if (onHiPress) onHiPress(item);
@@ -122,7 +123,13 @@ const OperatorItem = React.memo(({ item, navigation, user, theme, onHiPress }) =
             {item.photos && item.photos.length > 0 && (
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.albumScroll}>
                     {item.photos.map((p, i) => (
-                        <Image key={i} source={{ uri: resolveImageUrl(p) }} style={styles.albumImage} />
+                        <Image 
+                            key={i} 
+                            source={{ uri: resolveImageUrl(p) }} 
+                            onError={(e) => console.log(`[DEBUG ListAlbumPhoto Error] User: ${item.name}, Index: ${i}, URI: ${resolveImageUrl(p)}, Error:`, e.nativeEvent.error)}
+                            onLoad={() => console.log(`[DEBUG ListAlbumPhoto Success] User: ${item.name}, Index: ${i}, URI: ${resolveImageUrl(p)} loaded successfully`)}
+                            style={styles.albumImage} 
+                        />
                     ))}
                 </ScrollView>
             )}
@@ -184,6 +191,7 @@ export default function HomeScreen({ navigation, route }) {
             }
 
             const data = res.data?.data || res.data || [];
+            console.log('[DEBUG FETCH OPERATORS] Loaded length:', data.length, 'data names:', data.map(op => op.name));
             
             if (pageNum === 1) {
                 setOperators(data);
@@ -380,7 +388,7 @@ export default function HomeScreen({ navigation, route }) {
 
 
     const filteredData = React.useMemo(() => {
-        return operators.filter(op => {
+        const resList = operators.filter(op => {
             const matchesSearch = normalizeText(op.name).includes(normalizeText(searchText)) ||
                                   normalizeText(op.job || '').includes(normalizeText(searchText));
             
@@ -401,6 +409,8 @@ export default function HomeScreen({ navigation, route }) {
 
             return matchesSearch && matchesGender && matchesAge;
         });
+        console.log('[DEBUG FILTERED DATA] Length:', resList.length, 'names:', resList.map(op => op.name));
+        return resList;
     }, [operators, searchText, currentFilters]);
 
     const renderItem = React.useCallback(({ item }) => (
@@ -445,7 +455,7 @@ export default function HomeScreen({ navigation, route }) {
                 onEndReached={handleLoadMore}
                 onEndReachedThreshold={0.4}
                 showsVerticalScrollIndicator={false}
-                removeClippedSubviews={Platform.OS === 'android'}
+                removeClippedSubviews={false}
                 maxToRenderPerBatch={10}
                 windowSize={5}
             />

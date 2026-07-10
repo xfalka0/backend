@@ -1008,13 +1008,13 @@ router.post('/:id/rtc-token', authenticateToken, async (req, res) => {
     const userId = req.user.id;
 
     try {
-        // 1. Fetch room owner to check if user is host
-        const roomRes = await db.query('SELECT owner_user_id FROM rooms WHERE id = $1', [id]);
+        // 1. Fetch room host to check if user is host
+        const roomRes = await db.query('SELECT host_id FROM party_rooms WHERE id = $1', [id]);
         if (roomRes.rows.length === 0) {
             return res.status(404).json({ error: 'Oda bulunamadı.' });
         }
         
-        const isOwner = roomRes.rows[0].owner_user_id.toString() === userId.toString();
+        const isOwner = roomRes.rows[0].host_id.toString() === userId.toString();
 
         let role = 'listener';
 
@@ -1022,7 +1022,7 @@ router.post('/:id/rtc-token', authenticateToken, async (req, res) => {
             role = 'host';
         } else {
             // Check if user is sitting on a seat in this room
-            const seatRes = await db.query('SELECT id FROM room_seats WHERE room_id = $1 AND user_id = $2', [id, userId]);
+            const seatRes = await db.query('SELECT id FROM party_room_seats WHERE room_id = $1 AND user_id = $2::text', [id, userId]);
             if (seatRes.rows.length > 0) {
                 role = 'speaker';
             }
@@ -1046,6 +1046,22 @@ router.post('/:id/rtc-token', authenticateToken, async (req, res) => {
         res.status(500).json({ error: 'RTC token üretilemedi.' });
     }
 });
+
+// DELETE /rooms/:id/messages - Clear chat history (broadcast socket event)
+router.delete('/:id/messages', authenticateToken, async (req, res) => {
+    const { id } = req.params;
+    try {
+        const io = req.app.get('io');
+        if (io) {
+            io.to(`party_room_${id}`).emit('party_chat_cleared', { roomId: id });
+        }
+        res.json({ success: true, message: 'Oda sohbeti temizlendi.' });
+    } catch (err) {
+        console.error('[Rooms API] Clear chat error:', err.message);
+        res.status(500).json({ error: 'Sohbet temizlenirken hata oluştu.' });
+    }
+});
+
 
 // ==========================================
 // FAZ 8: MODERASYON ENDPOINTS

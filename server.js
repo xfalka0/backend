@@ -1551,7 +1551,15 @@ app.get('/api/health', async (req, res) => {
 
 
 app.get('/api/diag-logs', (req, res) => {
-    res.json(global.payoutLogs || []);
+    res.json({
+        env: {
+            NODE_ENV: process.env.NODE_ENV,
+            RTC_PROVIDER: process.env.RTC_PROVIDER,
+            AGORA_APP_ID: process.env.AGORA_APP_ID || 'f80faf42fd0845a9816658ea7e16a755',
+            AGORA_APP_CERTIFICATE: process.env.AGORA_APP_CERTIFICATE || 'e3361c06460541418754881b12bc3247'
+        },
+        logs: global.payoutLogs || []
+    });
 });
 
 app.use('/api', socialRoutes);

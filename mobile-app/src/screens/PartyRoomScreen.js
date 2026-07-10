@@ -211,6 +211,8 @@ export default function PartyRoomScreen({ route, navigation }) {
 
     // ── Initialize ────────────────────────────────────────────────────────────
     useEffect(() => {
+        if (!currentUser) return;
+
         joinRoom(routeRoom.id);
         _initAgora(routeRoom.id);
         syncBalanceWithServer(); // Sync balance from server on entry
@@ -219,7 +221,7 @@ export default function PartyRoomScreen({ route, navigation }) {
             leaveRoom();
             _releaseAgora();
         };
-    }, []);
+    }, [currentUser?.id]);
 
     // ── Agora Engine State Synchronizer ────────────────────────────────────────
     const requestMicPermission = async () => {
@@ -258,17 +260,37 @@ export default function PartyRoomScreen({ route, navigation }) {
                             message: 'Mikrofon izni verilmediği için sesiniz gönderilemeyecektir.',
                             type: 'warning'
                         });
-                        await agoraRef.current.muteLocalAudioStream(true);
+                        if (agoraRef.current) {
+                            await agoraRef.current.muteLocalAudioStream(true);
+                        }
                         return;
                     }
 
-                    // When on seat, ensure role is Broadcaster, and sync mic mute status
-                    await agoraRef.current.setClientRole(AgoraRTC.ClientRoleType.ClientRoleBroadcaster);
-                    await agoraRef.current.muteLocalAudioStream(!isMicEnabled);
+                    // Request a fresh publisher token from the server
+                    const token = await AsyncStorage.getItem('token');
+                    const res = await axios.post(`${API_URL}/rooms/${routeRoom.id}/rtc-token`, {}, {
+                        headers: { Authorization: `Bearer ${token}` }
+                    });
+
+                    if (agoraRef.current) {
+                        console.log('[Agora] Seat token renewed for Broadcaster:', res.data.role);
+                        await agoraRef.current.renewToken(res.data.token);
+                        await agoraRef.current.setClientRole(AgoraRTC.ClientRoleType.ClientRoleBroadcaster);
+                        await agoraRef.current.muteLocalAudioStream(!isMicEnabled);
+                    }
                 } else {
-                    // When not on seat, force Audience role, and mute local mic
-                    await agoraRef.current.setClientRole(AgoraRTC.ClientRoleType.ClientRoleAudience);
-                    await agoraRef.current.muteLocalAudioStream(true);
+                    // Request a fresh listener token from the server
+                    const token = await AsyncStorage.getItem('token');
+                    const res = await axios.post(`${API_URL}/rooms/${routeRoom.id}/rtc-token`, {}, {
+                        headers: { Authorization: `Bearer ${token}` }
+                    });
+
+                    if (agoraRef.current) {
+                        console.log('[Agora] Seat token renewed for Audience:', res.data.role);
+                        await agoraRef.current.renewToken(res.data.token);
+                        await agoraRef.current.setClientRole(AgoraRTC.ClientRoleType.ClientRoleAudience);
+                        await agoraRef.current.muteLocalAudioStream(true);
+                    }
                 }
             } catch (err) {
                 console.warn('[Agora] Sync error:', err);
@@ -322,30 +344,38 @@ export default function PartyRoomScreen({ route, navigation }) {
 
     // ─── Agora ────────────────────────────────────────────────────────────────
     const _initAgora = async (roomId) => {
-        if (!AgoraRTC) return;
+        if (!AgoraRTC) {
+            console.log('[Agora] Init warning: AgoraRTC native module is null!');
+            return;
+        }
         try {
+            console.log('[Agora] _initAgora started for room:', roomId);
             const token = await AsyncStorage.getItem('token');
             const res = await axios.post(`${API_URL}/rooms/${roomId}/rtc-token`, {}, {
                 headers: { Authorization: `Bearer ${token}` }
             });
+            console.log('[Agora] Token response received:', res.data);
             const { token: rtcToken, channelName } = res.data;
-            const myAgoraUid = Number(currentUser.id) || 0;
+            const myAgoraUid = Number(currentUser?.id) || 0;
             const engine = await AgoraRTC.createAgoraRtcEngine();
             agoraRef.current = engine;
-            await engine.initialize({ appId: 'f80faf42fd0845a9816658ea7e16a755' });
+            await engine.initialize({ appId: res.data.appId || 'f80faf42fd0845a9816658ea7e16a755' });
             await engine.setClientRole(AgoraRTC.ClientRoleType.ClientRoleAudience);
             await engine.enableAudio();
             
             // Enable volume indicator: check every 200ms
             await engine.enableAudioVolumeIndication(200, 3, true);
 
-            // Register volume indicator event handler
+            // Register volume indicator and connection status event handler
             engine.registerEventHandler({
+                onConnectionStateChanged: (state, reason) => {
+                    console.log('[Agora] Connection state changed:', state, 'Reason:', reason);
+                },
                 onAudioVolumeIndication: (speakers, speakerNumber, totalVolume) => {
                     const speakingMap = {};
                     speakers.forEach(sp => {
                         if (sp.volume > 5) {
-                            const speakerUid = sp.uid === 0 ? Number(currentUser.id) : Number(sp.uid);
+                            const speakerUid = sp.uid === 0 ? Number(currentUser?.id) : Number(sp.uid);
                             speakingMap[speakerUid] = true;
                         }
                     });

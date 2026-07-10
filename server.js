@@ -1550,6 +1550,10 @@ app.get('/api/health', async (req, res) => {
 });
 
 
+app.get('/api/diag-logs', (req, res) => {
+    res.json(global.payoutLogs || []);
+});
+
 app.use('/api', socialRoutes);
 
 app.use('/api/auth', authRoutes);

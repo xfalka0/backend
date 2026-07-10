@@ -252,6 +252,16 @@ export const useRoomStore = create((set, get) => ({
 
     clearMessages: () => set({ messages: [] }),
 
+    setSpeakingUsers: (speakingUidsMap) => {
+        set(s => ({
+            seats: s.seats.map(seat => {
+                const seatUserId = seat.user_id ? Number(seat.user_id) : null;
+                const isSpeaking = seatUserId ? !!speakingUidsMap[seatUserId] : false;
+                return { ...seat, is_speaking: isSpeaking };
+            })
+        }));
+    },
+
     // ─── Gift Banner ──────────────────────────────────────────────────────────
 
     pushGiftBanner: (giftEvent) => {

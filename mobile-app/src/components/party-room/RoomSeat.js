@@ -33,6 +33,8 @@ export default function RoomSeat({ seat, currentUserId, onPress, isHost }) {
     const isMe = isOccupied && seat.user_id?.toString() === currentUserId?.toString();
     const isSpeaking = seat.is_speaking; 
     const pulseAnim = useRef(new Animated.Value(1)).current;
+    const ripple1 = useRef(new Animated.Value(0)).current;
+    const ripple2 = useRef(new Animated.Value(0)).current;
 
     // Points Animation State
     const prevPointsRef = useRef(seat.room_gift_points || 0);
@@ -62,15 +64,48 @@ export default function RoomSeat({ seat, currentUserId, onPress, isHost }) {
 
     useEffect(() => {
         if (isSpeaking) {
-            Animated.loop(
+            const pulseLoop = Animated.loop(
                 Animated.sequence([
                     Animated.timing(pulseAnim, { toValue: 1.08, duration: 600, useNativeDriver: true }),
                     Animated.timing(pulseAnim, { toValue: 1, duration: 600, useNativeDriver: true }),
                 ])
-            ).start();
+            );
+
+            const ripple1Loop = Animated.loop(
+                Animated.timing(ripple1, {
+                    toValue: 1,
+                    duration: 1500,
+                    useNativeDriver: true,
+                })
+            );
+            
+            const ripple2Loop = Animated.loop(
+                Animated.sequence([
+                    Animated.delay(750),
+                    Animated.timing(ripple2, {
+                        toValue: 1,
+                        duration: 1500,
+                        useNativeDriver: true,
+                    })
+                ])
+            );
+
+            pulseLoop.start();
+            ripple1Loop.start();
+            ripple2Loop.start();
+
+            return () => {
+                pulseLoop.stop();
+                ripple1Loop.stop();
+                ripple2Loop.stop();
+                pulseAnim.setValue(1);
+                ripple1.setValue(0);
+                ripple2.setValue(0);
+            };
         } else {
-            pulseAnim.stopAnimation();
             pulseAnim.setValue(1);
+            ripple1.setValue(0);
+            ripple2.setValue(0);
         }
     }, [isSpeaking]);
 
@@ -112,6 +147,34 @@ export default function RoomSeat({ seat, currentUserId, onPress, isHost }) {
         >
             {/* Absolute container for the seat circle to prevent grid layout shifting */}
             <View style={styles.avatarWrapper}>
+                {isSpeaking && (
+                    <>
+                        <Animated.View style={[styles.ripple, {
+                            transform: [{
+                                scale: ripple1.interpolate({
+                                    inputRange: [0, 1],
+                                    outputRange: [1, 1.7]
+                                })
+                            }],
+                            opacity: ripple1.interpolate({
+                                inputRange: [0, 0.8, 1],
+                                outputRange: [0.6, 0.4, 0]
+                            })
+                        }]} />
+                        <Animated.View style={[styles.ripple, {
+                            transform: [{
+                                scale: ripple2.interpolate({
+                                    inputRange: [0, 1],
+                                    outputRange: [1, 1.7]
+                                })
+                            }],
+                            opacity: ripple2.interpolate({
+                                inputRange: [0, 0.8, 1],
+                                outputRange: [0.6, 0.4, 0]
+                            })
+                        }]} />
+                    </>
+                )}
                 <Animated.View style={{ transform: [{ scale: isSpeaking ? pulseAnim : 1 }] }}>
                     {isOccupied ? (
                         <View style={styles.seatOccupied}>
@@ -286,6 +349,16 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'center',
         overflow: 'hidden',
+    },
+    ripple: {
+        position: 'absolute',
+        width: 48,
+        height: 48,
+        borderRadius: 24,
+        borderWidth: 1.5,
+        borderColor: '#00f3ff',
+        backgroundColor: 'rgba(0, 243, 255, 0.08)',
+        zIndex: -1,
     },
     speakingRing: {
         position: 'absolute',

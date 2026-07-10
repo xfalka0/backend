@@ -293,7 +293,7 @@ export default function PartyRoomScreen({ route, navigation }) {
                         await agoraRef.current.setClientRole(AgoraRTC.ClientRoleType.ClientRoleBroadcaster);
                         console.log('[Agora] Client role set to Broadcaster');
                         await agoraRef.current.muteLocalAudioStream(!isMicEnabled);
-                        console.log('[Agora] Local audio stream mute state set to:', !isMicEnabled);
+                        console.log('[Agora] Local audio stream state set to:', isMicEnabled ? 'OPEN (Transmitting Audio)' : 'MUTED (Silent)');
                     }
                 } else {
                     // Request a fresh listener token from the server
@@ -394,20 +394,22 @@ export default function PartyRoomScreen({ route, navigation }) {
 
             // Register volume indicator and connection status event handler
             engine.registerEventHandler({
-                onConnectionStateChanged: (state, reason) => {
+                onConnectionStateChanged: (connection, state, reason) => {
                     console.log('[Agora] Connection state changed:', state, 'Reason:', reason);
                 },
-                onAudioVolumeIndication: (speakers, speakerNumber, totalVolume) => {
+                onAudioVolumeIndication: (connection, speakers, speakerNumber, totalVolume) => {
                     if (totalVolume > 0) {
                         console.log('[Agora] Audio volume indication speakers:', speakers, 'totalVolume:', totalVolume);
                     }
                     const speakingMap = {};
-                    speakers.forEach(sp => {
-                        if (sp.volume > 5) {
-                            const speakerUid = sp.uid === 0 ? Number(currentUser?.id) : Number(sp.uid);
-                            speakingMap[speakerUid] = true;
-                        }
-                    });
+                    if (speakers && Array.isArray(speakers)) {
+                        speakers.forEach(sp => {
+                            if (sp.volume > 5) {
+                                const speakerUid = sp.uid === 0 ? Number(currentUser?.id) : Number(sp.uid);
+                                speakingMap[speakerUid] = true;
+                            }
+                        });
+                    }
                     setSpeakingUsers(speakingMap);
                 }
             });

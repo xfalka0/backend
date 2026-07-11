@@ -26,7 +26,7 @@ class AgoraRtcProvider extends RtcProvider {
         const channelName = `room_${roomId}`;
         
         // Agora classical token parameters
-        const uid = 0; // 0 allows any numeric UID
+        const uid = Number(userId) || 0; // Use actual user ID instead of wildcard
         const expirationTimeInSeconds = 3600; // 1 hour
         const currentTimestamp = Math.floor(Date.now() / 1000);
         const privilegeExpiredTs = currentTimestamp + expirationTimeInSeconds;

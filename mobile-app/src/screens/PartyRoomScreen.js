@@ -372,6 +372,13 @@ export default function PartyRoomScreen({ route, navigation }) {
         }
         try {
             console.log('[Agora] _initAgora started for room:', roomId);
+            
+            // Check and prompt for microphone permission first on entry
+            const hasPermission = await requestMicPermission();
+            if (!hasPermission) {
+                console.log('[Agora] Mic permission denied on room entry!');
+            }
+
             const token = await AsyncStorage.getItem('token');
             const res = await axios.post(`${API_URL}/rooms/${roomId}/rtc-token`, {}, {
                 headers: { Authorization: `Bearer ${token}` }
@@ -382,21 +389,27 @@ export default function PartyRoomScreen({ route, navigation }) {
             console.log('[Agora] Creating Agora engine instance...');
             const engine = await AgoraRTC.createAgoraRtcEngine();
             agoraRef.current = engine;
+
             console.log('[Agora] Initializing Agora engine...');
             await engine.initialize({ appId: res.data.appId || 'f80faf42fd0845a9816658ea7e16a755' });
-            console.log('[Agora] Setting channel profile...');
-            await engine.setChannelProfile(AgoraRTC.ChannelProfileType.ChannelProfileLiveBroadcasting);
-            console.log('[Agora] Setting default role to Audience...');
-            await engine.setClientRole(AgoraRTC.ClientRoleType.ClientRoleAudience);
-            console.log('[Agora] Enabling audio stream...');
-            await engine.enableAudio();
-            
-             // Register volume indicator and connection status event handler
+
+            // Register volume indicator and connection status event handler (MUST be done after initialize)
+            let volumeLogCounter = 0;
             engine.registerEventHandler({
+                onJoinChannelSuccess: (connection, elapsed) => {
+                    console.log('[Agora Debug] onJoinChannelSuccess! Connection:', connection, 'Elapsed:', elapsed);
+                },
+                onError: (err, msg) => {
+                    console.warn('[Agora Debug] onError. Error:', err, 'Message:', msg);
+                },
                 onConnectionStateChanged: (connection, state, reason) => {
-                    console.log('[Agora] Connection state changed:', state, 'Reason:', reason);
+                    console.log('[Agora Debug] Connection state changed. State:', state, 'Reason:', reason);
                 },
                 onAudioVolumeIndication: (connection, speakers, speakerNumber, totalVolume) => {
+                    volumeLogCounter++;
+                    if (volumeLogCounter % 5 === 0) {
+                        console.log(`[Agora Debug] Volume Check #${volumeLogCounter} - Speakers: ${speakers?.length || 0}, Total Volume: ${totalVolume}`);
+                    }
                     if (totalVolume > 0) {
                         console.log('[Agora] Audio volume indication speakers:', speakers, 'totalVolume:', totalVolume);
                     }
@@ -412,6 +425,13 @@ export default function PartyRoomScreen({ route, navigation }) {
                     setSpeakingUsers(speakingMap);
                 }
             });
+
+            console.log('[Agora] Setting channel profile...');
+            await engine.setChannelProfile(AgoraRTC.ChannelProfileType.ChannelProfileLiveBroadcasting);
+            console.log('[Agora] Setting default role to Audience...');
+            await engine.setClientRole(AgoraRTC.ClientRoleType.ClientRoleAudience);
+            console.log('[Agora] Enabling audio stream...');
+            await engine.enableAudio();
 
             console.log('[Agora] Joining channel:', channelName, 'with uid:', myAgoraUid);
             await engine.joinChannel(rtcToken, channelName, '', myAgoraUid);

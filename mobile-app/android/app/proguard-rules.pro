@@ -11,4 +11,6 @@
 -keep class com.swmansion.reanimated.** { *; }
 -keep class com.facebook.react.turbomodule.** { *; }
 
-# Add any project specific keep options here:
+# Agora SDK
+-keep class io.agora.** { *; }
+-keep class io.agora.rtc2.** { *; }

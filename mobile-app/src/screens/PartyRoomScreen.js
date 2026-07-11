@@ -290,9 +290,24 @@ export default function PartyRoomScreen({ route, navigation }) {
                         console.log('[Agora] Syncing Broadcaster role. Mic enabled:', isMicEnabled);
                         await agoraRef.current.renewToken(res.data.token);
                         console.log('[Agora] Token renewed on engine');
-                        await agoraRef.current.setClientRole(AgoraRTC.ClientRoleType.ClientRoleBroadcaster);
-                        console.log('[Agora] Client role set to Broadcaster');
+
+                        console.log("SET_ROLE_BROADCASTER_CALLED");
+                        await agoraRef.current.updateChannelMediaOptions({
+                            channelProfile: AgoraRTC.ChannelProfileType.ChannelProfileLiveBroadcasting,
+                            clientRoleType: AgoraRTC.ClientRoleType.ClientRoleBroadcaster,
+                            publishMicrophoneTrack: isMicEnabled,
+                            autoSubscribeAudio: true,
+                        });
+                        console.log('[Agora] Client role updated via media options to Broadcaster');
+
+                        if (isMicEnabled) {
+                            console.log("ENABLE_LOCAL_AUDIO_TRUE_CALLED");
+                        }
                         await agoraRef.current.enableLocalAudio(isMicEnabled);
+
+                        if (isMicEnabled) {
+                            console.log("MUTE_LOCAL_AUDIO_FALSE_CALLED");
+                        }
                         await agoraRef.current.muteLocalAudioStream(!isMicEnabled);
                         console.log('[Agora] Local audio stream state set to:', isMicEnabled ? 'OPEN (Transmitting Audio)' : 'MUTED (Silent)');
                     }
@@ -307,8 +322,14 @@ export default function PartyRoomScreen({ route, navigation }) {
                         console.log('[Agora] Syncing Audience role');
                         await agoraRef.current.renewToken(res.data.token);
                         console.log('[Agora] Token renewed on engine');
-                        await agoraRef.current.setClientRole(AgoraRTC.ClientRoleType.ClientRoleAudience);
-                        console.log('[Agora] Client role set to Audience');
+                        
+                        await agoraRef.current.updateChannelMediaOptions({
+                            channelProfile: AgoraRTC.ChannelProfileType.ChannelProfileLiveBroadcasting,
+                            clientRoleType: AgoraRTC.ClientRoleType.ClientRoleAudience,
+                            publishMicrophoneTrack: false,
+                            autoSubscribeAudio: true,
+                        });
+                        console.log('[Agora] Client role updated via media options to Audience');
                         await agoraRef.current.enableLocalAudio(false);
                         await agoraRef.current.muteLocalAudioStream(true);
                         console.log('[Agora] Local audio stream muted for Audience');
@@ -320,7 +341,7 @@ export default function PartyRoomScreen({ route, navigation }) {
         };
 
         syncAgora();
-    }, [mySeat, isMicEnabled, isAgoraInitialized]);
+    }, [!!mySeat, isMicEnabled, isAgoraInitialized]);
 
     // ── User friendly connection error handling ──────────────────────────────
     useEffect(() => {
@@ -372,9 +393,11 @@ export default function PartyRoomScreen({ route, navigation }) {
         }
         try {
             console.log('[Agora] _initAgora started for room:', roomId);
+            console.log("ROOM_JOIN", { roomId, userId: currentUser?.id });
             
             // Check and prompt for microphone permission first on entry
             const hasPermission = await requestMicPermission();
+            console.log("MIC_PERMISSION_RESULT", hasPermission);
             if (!hasPermission) {
                 console.log('[Agora] Mic permission denied on room entry!');
             }
@@ -386,45 +409,97 @@ export default function PartyRoomScreen({ route, navigation }) {
             console.log('[Agora] Token response received:', res.data);
             const { token: rtcToken, channelName } = res.data;
             const myAgoraUid = Number(currentUser?.id) || 0;
+            
+            console.log("AGORA_TOKEN", { tokenExists: !!rtcToken, channelName, uid: myAgoraUid });
+
             console.log('[Agora] Creating Agora engine instance...');
             const engine = await AgoraRTC.createAgoraRtcEngine();
             agoraRef.current = engine;
 
             console.log('[Agora] Initializing Agora engine...');
-            await engine.initialize({ appId: res.data.appId || 'f80faf42fd0845a9816658ea7e16a755' });
+            const appId = res.data.appId || 'f80faf42fd0845a9816658ea7e16a755';
+            console.log("AGORA_INIT", { appIdExists: !!appId });
+            await engine.initialize({ appId });
 
-            // Register volume indicator and connection status event handler (MUST be done after initialize)
-            let volumeLogCounter = 0;
-            engine.registerEventHandler({
-                onJoinChannelSuccess: (connection, elapsed) => {
-                    console.log('[Agora Debug] onJoinChannelSuccess! Connection:', connection, 'Elapsed:', elapsed);
-                },
-                onError: (err, msg) => {
-                    console.warn('[Agora Debug] onError. Error:', err, 'Message:', msg);
-                },
-                onConnectionStateChanged: (connection, state, reason) => {
-                    console.log('[Agora Debug] Connection state changed. State:', state, 'Reason:', reason);
-                },
-                onAudioVolumeIndication: (connection, speakers, speakerNumber, totalVolume) => {
-                    volumeLogCounter++;
-                    if (volumeLogCounter % 5 === 0) {
-                        console.log(`[Agora Debug] Volume Check #${volumeLogCounter} - Speakers: ${speakers?.length || 0}, Total Volume: ${totalVolume}`);
-                    }
-                    if (totalVolume > 0) {
-                        console.log('[Agora] Audio volume indication speakers:', speakers, 'totalVolume:', totalVolume);
-                    }
-                    const speakingMap = {};
-                    if (speakers && Array.isArray(speakers)) {
-                        speakers.forEach(sp => {
-                            if (sp.volume > 5) {
-                                const speakerUid = sp.uid === 0 ? Number(currentUser?.id) : Number(sp.uid);
-                                speakingMap[speakerUid] = true;
-                            }
-                        });
-                    }
-                    setSpeakingUsers(speakingMap);
+            const logVolume = (connection, speakers, speakerNumber, totalVolume) => {
+                const speakingMap = {};
+                if (speakers && Array.isArray(speakers)) {
+                    speakers.forEach(sp => {
+                        if (sp.volume > 5) {
+                            const speakerUid = sp.uid === 0 ? Number(currentUser?.id) : Number(sp.uid);
+                            speakingMap[speakerUid] = true;
+                        }
+                    });
                 }
-            });
+                setSpeakingUsers(speakingMap);
+            };
+
+            const logConnection = (connection, state, reason) => {
+                console.log('[Agora Debug] Connection state changed. State:', state, 'Reason:', reason);
+            };
+
+            const logJoinSuccess = (connection, elapsed) => {
+                console.log("AGORA_JOIN_SUCCESS", {
+                    channel: connection.channelId,
+                    callbackUid: connection.localUid,
+                    expectedUid: myAgoraUid,
+                    same: connection.localUid === myAgoraUid
+                });
+                console.log('[Agora Debug] onJoinChannelSuccess! Connection:', connection, 'Elapsed:', elapsed);
+            };
+
+            const logError = (err, msg) => {
+                console.warn('[Agora Debug] onError. Error:', err, 'Message:', msg);
+            };
+
+            const logRemoteUserJoined = (connection, uid, elapsed) => {
+                console.log("REMOTE_USER_JOINED", uid);
+                console.log('[Agora Debug] onUserJoined:', uid);
+            };
+
+            const logRemoteAudioStateChanged = (connection, uid, state, reason, elapsed) => {
+                console.log("REMOTE_AUDIO_STATE_CHANGED", { uid, state, reason });
+                console.log('[Agora Debug] onRemoteAudioStateChanged:', { uid, state, reason });
+            };
+
+            const logUserOffline = (connection, uid, reason) => {
+                console.log('[Agora Debug] onUserOffline:', uid, 'Reason:', reason);
+            };
+
+            const logUserMuteAudio = (connection, uid, muted) => {
+                console.log('[Agora Debug] onUserMuteAudio:', uid, 'Muted:', muted);
+            };
+
+            try {
+                // Method 1: registerEventHandler
+                engine.registerEventHandler({
+                    onJoinChannelSuccess: logJoinSuccess,
+                    onError: logError,
+                    onConnectionStateChanged: logConnection,
+                    onAudioVolumeIndication: logVolume,
+                    onUserJoined: logRemoteUserJoined,
+                    onUserOffline: logUserOffline,
+                    onUserMuteAudio: logUserMuteAudio,
+                    onRemoteAudioStateChanged: logRemoteAudioStateChanged
+                });
+            } catch (regErr) {
+                console.log('[Agora] registerEventHandler warning:', regErr.message);
+            }
+
+            try {
+                // Method 2: addListener (EventEmitter pattern)
+                engine.addListener('onJoinChannelSuccess', logJoinSuccess);
+                engine.addListener('onError', logError);
+                engine.addListener('onConnectionStateChanged', logConnection);
+                engine.addListener('onAudioVolumeIndication', logVolume);
+                engine.addListener('onUserJoined', logRemoteUserJoined);
+                engine.addListener('onUserOffline', logUserOffline);
+                engine.addListener('onUserMuteAudio', logUserMuteAudio);
+                engine.addListener('onRemoteAudioStateChanged', logRemoteAudioStateChanged);
+                console.log('[Agora] Event listeners registered via addListener successfully.');
+            } catch (addErr) {
+                console.log('[Agora] addListener warning:', addErr.message);
+            }
 
             console.log('[Agora] Setting channel profile...');
             await engine.setChannelProfile(AgoraRTC.ChannelProfileType.ChannelProfileLiveBroadcasting);
@@ -432,9 +507,24 @@ export default function PartyRoomScreen({ route, navigation }) {
             await engine.setClientRole(AgoraRTC.ClientRoleType.ClientRoleAudience);
             console.log('[Agora] Enabling audio stream...');
             await engine.enableAudio();
+            
+            console.log("ENABLE_AUDIO_CALLED");
+            await engine.setEnableSpeakerphone(true);
+            console.log('[Agora] Speakerphone enabled.');
 
+            console.log("JOIN_CHANNEL_CALLED", { channelName, uid: myAgoraUid });
             console.log('[Agora] Joining channel:', channelName, 'with uid:', myAgoraUid);
-            await engine.joinChannel(rtcToken, channelName, '', myAgoraUid);
+            await engine.joinChannel(
+                rtcToken,
+                channelName,
+                myAgoraUid,
+                {
+                    channelProfile: AgoraRTC.ChannelProfileType.ChannelProfileLiveBroadcasting,
+                    clientRoleType: AgoraRTC.ClientRoleType.ClientRoleAudience,
+                    publishMicrophoneTrack: false,
+                    autoSubscribeAudio: true,
+                }
+            );
             console.log('[Agora] Joined channel successfully.');
 
             // Enable volume indicator: check every 200ms (Must be done after join on some devices)
@@ -451,6 +541,11 @@ export default function PartyRoomScreen({ route, navigation }) {
             setIsAgoraInitialized(false);
             if (agoraRef.current) {
                 await agoraRef.current.leaveChannel();
+                try {
+                    agoraRef.current.removeAllListeners();
+                } catch (err) {
+                    console.log('[Agora] removeAllListeners error:', err.message);
+                }
                 await agoraRef.current.release();
                 agoraRef.current = null;
             }

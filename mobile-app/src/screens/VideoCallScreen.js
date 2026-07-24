@@ -267,6 +267,9 @@ export default function VideoCallScreen({ route, navigation }) {
                 onJoinChannelSuccess: (connection, elapsed) => {
                     console.log("VIDEO_AGORA_JOIN_SUCCESS", { channelName: connection.channelId, uid: connection.localUid });
                     isJoinedRef.current = true;
+                    setStatusText('Bağlandı');
+                    setCallState('active');
+                    startTimer();
                     if (socket) {
                         socket.emit('call_connected', { chatId });
                     }
@@ -276,12 +279,13 @@ export default function VideoCallScreen({ route, navigation }) {
                     setRemoteUid(remoteUid);
                 },
                 onUserOffline: (connection, remoteUid, reason) => {
-                    console.log('[Agora] Remote user went offline:', remoteUid);
-                    handleHangup();
+                    console.log('[Agora Video] Remote user went offline:', remoteUid, 'reason:', reason);
+                    if (reason === 0) {
+                        handleHangup();
+                    }
                 },
                 onRemoteVideoStateChanged: (connection, uid, state, reason, elapsed) => {
                     console.log("REMOTE_VIDEO_STATE_CHANGED", { uid, state, reason });
-                    // state 0 = REMOTE_VIDEO_STATE_STOPPED, 2 = REMOTE_VIDEO_STATE_DECODING (active)
                     if (state === 0) {
                         setIsRemoteVideoOn(false);
                     } else if (state === 2) {
@@ -294,7 +298,11 @@ export default function VideoCallScreen({ route, navigation }) {
             });
 
             // Join Channel
-            const myUid = Number(useAppStore.getState().user?.id) || 0;
+            const currentUserId = useAppStore.getState().user?.id || routeUser?.id;
+            const myUid = (Number(currentUserId) && !isNaN(Number(currentUserId)))
+                ? Number(currentUserId)
+                : (Math.floor(Math.random() * 899999) + 100000);
+
             console.log("VIDEO_JOIN_CHANNEL_CALLED", { channelName, uid: myUid });
             await engine.joinChannel(token, channelName, myUid, {
                 channelProfile: ChannelProfileType.ChannelProfileCommunication,
@@ -419,24 +427,27 @@ export default function VideoCallScreen({ route, navigation }) {
         }
     };
 
-    // Socket Event: Call Request Ringing
+    // Socket Event: Call Request Ringing / Started
     const handleSocketCallStarted = async () => {
         console.log('[SOCKET] Call Started Event Received');
         await cleanupAudio();
         setCallState('active');
-        setStatusText('Bağlanıyor...');
+        setStatusText('Bağlandı');
+        startTimer();
 
-        // Fetch token and join channel
-        try {
-            const token = await AsyncStorage.getItem('token');
-            const callId = callIdRef.current;
-            const res = await axios.post(`${API_URL}/chats/${chatId}/rtc-token`, { callId }, {
-                headers: { Authorization: `Bearer ${token}` }
-            });
-            const { token: rtcToken, channelName } = res.data;
-            await initAgora(rtcToken, channelName);
-        } catch (err) {
-            console.error('[Agora Start Call] Error:', err.message);
+        // Only init Agora if not already initialized by accept button
+        if (!isJoinedRef.current && !agoraEngineRef.current) {
+            try {
+                const token = await AsyncStorage.getItem('token');
+                const callId = callIdRef.current;
+                const res = await axios.post(`${API_URL}/chats/${chatId}/rtc-token`, { callId }, {
+                    headers: { Authorization: `Bearer ${token}` }
+                });
+                const { token: rtcToken, channelName } = res.data;
+                await initAgora(rtcToken, channelName);
+            } catch (err) {
+                console.error('[Agora Start Call] Error:', err.message);
+            }
         }
     };
 

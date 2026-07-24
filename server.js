@@ -68,6 +68,24 @@ const path = require('path');
 const os = require('os');
 const fs = require('fs');
 const sharp = require('sharp');
+
+app.get('/fiva-dev-client.apk', (req, res) => {
+    const apkPath = path.join(__dirname, 'fiva-dev-client.apk');
+    if (fs.existsSync(apkPath)) {
+        res.download(apkPath, 'fiva-dev-client.apk');
+    } else {
+        res.status(404).send('APK File not found');
+    }
+});
+
+app.get('/fiva-release.apk', (req, res) => {
+    const apkPath = path.join(__dirname, 'fiva-release.apk');
+    if (fs.existsSync(apkPath)) {
+        res.download(apkPath, 'fiva-release.apk');
+    } else {
+        res.status(404).send('APK File not found');
+    }
+});
 const cloudinary = require('cloudinary').v2;
 
 // Trust proxy for Render/HTTPS

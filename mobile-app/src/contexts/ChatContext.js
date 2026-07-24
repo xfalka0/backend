@@ -15,6 +15,7 @@ export const ChatProvider = ({ children }) => {
     const [activeChatId, setActiveChatId] = useState(null);
     const [balance, setBalance] = useState(0);
     const socketRef = useRef(null);
+    const processedCallIdsRef = useRef(new Set());
     const [socket, setSocket] = useState(null);
     const [user, setUser] = useState(null);
     const { showNotification } = useInAppNotification();
@@ -118,10 +119,6 @@ export const ChatProvider = ({ children }) => {
             });
         });
 
-        socketRef.current.on('chats_updated', () => {
-            fetchUnreadCount(userId);
-        });
-
         // Listen for balance updates
         socketRef.current.on('balance_updated', (data) => {
             if (data && typeof data.balance === 'number') {
@@ -133,15 +130,31 @@ export const ChatProvider = ({ children }) => {
         // Listen for 1-to-1 incoming voice calls
         const handleIncomingCall = (data) => {
             console.log('[CALL LOG 📱] ChatContext: incoming_call payload received:', JSON.stringify(data));
+            if (!data || !data.callId) return;
+
+            // Deduplicate by callId
+            if (processedCallIdsRef.current.has(data.callId)) {
+                console.log(`[CALL LOG ⏭️] Duplicate callId ${data.callId} received. Ignoring packet.`);
+                return;
+            }
+
             const currentUser = useAppStore.getState().user;
             if (data.receiverId && currentUser && data.receiverId.toString() !== currentUser.id?.toString()) {
                 console.log(`[CALL LOG ⏭️] Call is for user ${data.receiverId}, but current user is ${currentUser.id}. Bypassing.`);
                 return;
             }
 
+            // Mark callId as processed to prevent duplicate packet execution
+            processedCallIdsRef.current.add(data.callId);
+            if (processedCallIdsRef.current.size > 20) {
+                const first = processedCallIdsRef.current.values().next().value;
+                processedCallIdsRef.current.delete(first);
+            }
+
             const activeCallChatId = useAppStore.getState().activeCallChatId;
-            if (activeCallChatId) {
-                console.log('[CALL LOG ⚠️] User already in call activeCallChatId=' + activeCallChatId + ', sending call_busy.');
+            // Only consider busy if user is in a DIFFERENT active call
+            if (activeCallChatId && activeCallChatId.toString() !== data.chatId.toString()) {
+                console.log('[CALL LOG ⚠️] User in different call activeCallChatId=' + activeCallChatId + ', sending call_busy.');
                 newSocket.emit('call_busy', { chatId: data.chatId, callerId: data.callerId });
                 return;
             }

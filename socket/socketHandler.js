@@ -5,11 +5,27 @@ const { sendPushNotification } = require('../utils/notificationUtils');
 // ─── Call Sessions & Billing Management ──────────────────────────────────
 const activeCallSessions = new Map(); // Key: chatId, Value: { callId, callerId, receiverId, status, startedAt, acceptedAt, endedAt, billingIntervalId }
 
-function isUserInAnyActiveCall(userId) {
+function isUserInAnyActiveCall(userId, excludeChatId = null) {
     if (!userId) return false;
     const uIdStr = userId.toString();
-    for (const session of activeCallSessions.values()) {
-        if (session.status !== 'ended' && (session.callerId.toString() === uIdStr || session.receiverId.toString() === uIdStr)) {
+    const exclStr = excludeChatId ? excludeChatId.toString() : null;
+    const now = Date.now();
+    for (const [key, session] of activeCallSessions.entries()) {
+        if (!session) {
+            activeCallSessions.delete(key);
+            continue;
+        }
+        if (exclStr && key.toString() === exclStr) {
+            continue;
+        }
+        // Auto-cleanup stale sessions older than 30s that are still in ringing state
+        if (session.status === 'ringing' && session.startedAt && (now - new Date(session.startedAt).getTime() > 30000)) {
+            console.log(`[CALL CLEANUP 🧹] Auto-purged stale ringing session for key ${key}`);
+            if (session.connectionTimeoutId) clearTimeout(session.connectionTimeoutId);
+            activeCallSessions.delete(key);
+            continue;
+        }
+        if (session.status !== 'ended' && (session.callerId?.toString() === uIdStr || session.receiverId?.toString() === uIdStr)) {
             return true;
         }
     }
@@ -22,47 +38,79 @@ async function chargeCallMinute(io, chatId, callerId, receiverId) {
         client = await db.pool.connect();
         await client.query('BEGIN');
 
-        const userRes = await client.query('SELECT balance, role FROM users WHERE id = $1 FOR UPDATE', [callerId]);
-        if (userRes.rows.length === 0) throw new Error('Caller not found');
+        const callerRes = await client.query('SELECT balance, role, gender FROM users WHERE id = $1 FOR UPDATE', [callerId]);
+        const receiverRes = await client.query('SELECT balance, role, gender FROM users WHERE id = $1 FOR UPDATE', [receiverId]);
+        if (callerRes.rows.length === 0 || receiverRes.rows.length === 0) throw new Error('Call participants not found');
 
-        const currentBalance = parseFloat(userRes.rows[0].balance || 0);
-        const userRole = userRes.rows[0].role;
-        const isManagement = ['admin', 'super_admin', 'moderator', 'staff', 'operator'].includes(userRole);
+        const caller = callerRes.rows[0];
+        const receiver = receiverRes.rows[0];
 
-        const callerGenderRes = await client.query('SELECT gender FROM users WHERE id = $1', [callerId]);
-        const callerGender = (callerGenderRes.rows[0]?.gender || '').toLowerCase();
-        const isFreeCaller = isManagement || callerGender === 'kadin';
+        const callerGender = (caller.gender || '').toLowerCase();
+        const receiverGender = (receiver.gender || '').toLowerCase();
+
+        const callerIsMale = callerGender === 'erkek';
+        const receiverIsMale = receiverGender === 'erkek';
+
+        const isCallerManagement = ['admin', 'super_admin', 'moderator', 'staff', 'operator'].includes(caller.role);
+        const isReceiverManagement = ['admin', 'super_admin', 'moderator', 'staff', 'operator'].includes(receiver.role);
 
         const session = activeCallSessions.get(chatId);
         const callType = session ? (session.callType || 'audio') : 'audio';
         const costPerMinute = callType === 'video' ? 120 : 50;
 
-        if (!isFreeCaller) {
-            if (currentBalance < costPerMinute) {
-                console.log(`[CALL BILLING] Insufficient balance for caller ${callerId}.`);
-                await client.query('ROLLBACK');
-                return { success: false, reason: 'insufficient_funds' };
-            }
+        // Rules:
+        // 1. Kadın users NEVER pay coins.
+        // 2. Male calling Female: Only Male caller pays.
+        // 3. Female calling Male: Only Male receiver pays.
+        // 4. Male calling Male: BOTH Male participants pay.
+        const shouldChargeCaller = callerIsMale && !isCallerManagement;
+        const shouldChargeReceiver = receiverIsMale && !isReceiverManagement;
 
-            const updateRes = await client.query('UPDATE users SET balance = balance - $2 WHERE id = $1 RETURNING balance', [callerId, costPerMinute]);
-            const newBalance = parseFloat(updateRes.rows[0].balance);
-            
-            // Commit changes to ensure lock is released quickly
-            await client.query('COMMIT');
+        let callerBalance = parseFloat(caller.balance || 0);
+        let receiverBalance = parseFloat(receiver.balance || 0);
 
-            // Emit balance updates to users
-            io.emit('admin_balance_update', { userId: callerId, newBalance });
-            io.to(callerId.toString()).emit('balance_update', { userId: callerId, newBalance });
+        // Pre-check balances
+        if (shouldChargeCaller && callerBalance < costPerMinute) {
+            console.log(`[CALL BILLING] Insufficient balance for male caller ${callerId} (${callerBalance} < ${costPerMinute}).`);
+            await client.query('ROLLBACK');
+            return { success: false, reason: 'insufficient_funds' };
+        }
 
-            // Start a sub-transaction for operator commission to make it robust
+        if (shouldChargeReceiver && receiverBalance < costPerMinute) {
+            console.log(`[CALL BILLING] Insufficient balance for male receiver ${receiverId} (${receiverBalance} < ${costPerMinute}).`);
+            await client.query('ROLLBACK');
+            return { success: false, reason: 'insufficient_funds' };
+        }
+
+        // Deduct from caller if applicable
+        if (shouldChargeCaller) {
+            const updRes = await client.query('UPDATE users SET balance = balance - $2 WHERE id = $1 RETURNING balance', [callerId, costPerMinute]);
+            callerBalance = parseFloat(updRes.rows[0].balance);
+            io.emit('admin_balance_update', { userId: callerId, newBalance: callerBalance });
+            io.to(callerId.toString()).emit('balance_update', { userId: callerId, newBalance: callerBalance });
+            console.log(`[CALL BILLING 💰] Deducted ${costPerMinute} coins from male caller ${callerId}. New balance: ${callerBalance}`);
+        }
+
+        // Deduct from receiver if applicable
+        if (shouldChargeReceiver) {
+            const updRes = await client.query('UPDATE users SET balance = balance - $2 WHERE id = $1 RETURNING balance', [receiverId, costPerMinute]);
+            receiverBalance = parseFloat(updRes.rows[0].balance);
+            io.emit('admin_balance_update', { userId: receiverId, newBalance: receiverBalance });
+            io.to(receiverId.toString()).emit('balance_update', { userId: receiverId, newBalance: receiverBalance });
+            console.log(`[CALL BILLING 💰] Deducted ${costPerMinute} coins from male receiver ${receiverId}. New balance: ${receiverBalance}`);
+        }
+
+        await client.query('COMMIT');
+
+        // Record operator commission if female is an operator
+        if (!callerIsMale || !receiverIsMale) {
             let commClient;
             try {
                 commClient = await db.pool.connect();
                 await commClient.query('BEGIN');
-                const session = activeCallSessions.get(chatId);
                 const callId = session ? session.callId : null;
-                const callType = session ? (session.callType || 'audio') : 'audio';
-                const commissionInfo = await recordOperatorCommission(commClient, chatId, receiverId, costPerMinute, callType === 'video' ? 'video' : 'audio', callId);
+                const femaleId = !callerIsMale ? callerId : receiverId;
+                const commissionInfo = await recordOperatorCommission(commClient, chatId, femaleId, costPerMinute, callType === 'video' ? 'video' : 'audio', callId);
                 await commClient.query('COMMIT');
                 if (commissionInfo) {
                     io.to(chatId.toString()).emit('message_updated', commissionInfo);
@@ -73,12 +121,9 @@ async function chargeCallMinute(io, chatId, callerId, receiverId) {
             } finally {
                 if (commClient) commClient.release();
             }
-
-            return { success: true, newBalance };
-        } else {
-            await client.query('COMMIT');
-            return { success: true, newBalance: currentBalance, isFree: true };
         }
+
+        return { success: true, callerBalance, receiverBalance };
     } catch (err) {
         if (client) await client.query('ROLLBACK');
         console.error('[CALL BILLING] Error charging minute:', err.message);
@@ -870,17 +915,26 @@ function initializeSockets(io) {
                     return;
                 }
 
-                // Busy Check: check if caller or receiver is currently in another call
-                if (isUserInAnyActiveCall(callerId)) {
-                    console.log(`[CALL LOG ⚠️] Caller ${callerId} is already in an active call.`);
-                    socket.emit('call_error', { message: 'Zaten aktif bir aramadasınız.' });
+                // Busy Check: check if caller or receiver is currently in ANOTHER call
+                if (isUserInAnyActiveCall(callerId, chatId)) {
+                    console.log(`[CALL LOG ⚠️] Caller ${callerId} is already in an active call in another chat.`);
+                    socket.emit('call_error', { message: 'Zaten başka bir aktif aramadasınız.' });
                     return;
                 }
-                if (isUserInAnyActiveCall(receiverId)) {
-                    console.log(`[CALL LOG ⚠️] Receiver ${receiverId} is currently busy.`);
-                    socket.emit('call_error', { message: 'Aradığınız kişi meşgul.' });
+                if (isUserInAnyActiveCall(receiverId, chatId)) {
+                    console.log(`[CALL LOG ⚠️] Receiver ${receiverId} is currently busy in another call.`);
+                    socket.emit('call_error', { message: 'Aradığınız kişi başka bir görüşmede (meşgul).' });
                     socket.emit('call_busy', { chatId });
                     return;
+                }
+
+                // If a stale ringing session exists for this same chat, clean it up before starting new call
+                const existingSession = activeCallSessions.get(chatId.toString());
+                if (existingSession) {
+                    console.log(`[CALL LOG 🧹] Clearing previous stale session for chatId=${chatId}`);
+                    if (existingSession.connectionTimeoutId) clearTimeout(existingSession.connectionTimeoutId);
+                    if (existingSession.billingIntervalId) clearInterval(existingSession.billingIntervalId);
+                    activeCallSessions.delete(chatId.toString());
                 }
 
                 // Balance check
@@ -936,12 +990,10 @@ function initializeSockets(io) {
                     callType: type
                 };
 
-                console.log(`[CALL LOG 🔔] Emitting incoming_call payload to receiver ${receiverId} (room: ${receiverId.toString()}) & chat room ${chatId}:`, callPayload);
+                console.log(`[CALL LOG 🔔] Emitting incoming_call payload to receiver ${receiverId} (room: ${receiverId.toString()}):`, callPayload);
 
-                // Emit incoming_call event to receiver's personal room & chat room & global broadcast
+                // Emit incoming_call event ONCE strictly to receiver's personal socket room
                 io.to(receiverId.toString()).emit('incoming_call', callPayload);
-                io.to(chatId.toString()).emit('incoming_call', callPayload);
-                io.emit('incoming_call_global', callPayload);
 
                 socket.emit('call_ringing', { chatId, receiverId });
 
@@ -1070,6 +1122,20 @@ function initializeSockets(io) {
                 await logMissedCall(io, roomKey, session.callerId, session.receiverId, 'cancelled');
             } else if (session.status === 'active') {
                 await endCallSession(io, roomKey, 'ended');
+            }
+        });
+
+        socket.on('force_clear_call', () => {
+            const userId = socket.user?.id || (socket.handshake?.query?.userId || socket.handshake?.auth?.userId);
+            if (!userId) return;
+            const uIdStr = userId.toString();
+            for (const [chatId, session] of activeCallSessions.entries()) {
+                if (session.callerId?.toString() === uIdStr || session.receiverId?.toString() === uIdStr) {
+                    console.log(`[CALL CLEANUP 🧹] Force clearing active call session for user ${userId} in chat ${chatId}`);
+                    if (session.connectionTimeoutId) clearTimeout(session.connectionTimeoutId);
+                    if (session.billingIntervalId) clearInterval(session.billingIntervalId);
+                    activeCallSessions.delete(chatId);
+                }
             }
         });
 

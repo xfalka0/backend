@@ -111,18 +111,17 @@ async function recordOperatorCommission(client, chatId, senderId, cost, type, ca
     const userCheck = await client.query('SELECT total_spent FROM users WHERE id = $1', [customerId]);
     const userLifetimeSpent = userCheck.rows.length > 0 ? parseFloat(userCheck.rows[0].total_spent || 0) : 0;
     
-    // Economic Model: 2000 Diamonds = 1 USD (47.35 TL).
-    // 50% Revenue Share: 1 spent Coin = 10.5 Diamonds earned.
-    let baseRate = 10.5;
+    // Financial Model: 1 spent Coin = 4.35 Diamonds earned.
+    let baseRate = 4.35;
     
-    // If customer has never spent money, use bonus rate (1/5th) to prevent spam/abuse
+    // If customer has never spent money, use bonus rate to prevent spam/abuse
     if (userLifetimeSpent <= 0 && customerId) {
         const adminAddCheck = await client.query(
             "SELECT id FROM transactions WHERE user_id = $1 AND (type = 'admin_add' OR type = 'admin_edit' OR type = 'purchase') LIMIT 1", 
             [customerId]
         );
         if (adminAddCheck.rows.length === 0) {
-            baseRate = 2.1; // Lower rate for non-paying organic users
+            baseRate = 0.87; // Lower rate for non-paying organic users
         }
     }
     
@@ -138,11 +137,19 @@ async function recordOperatorCommission(client, chatId, senderId, cost, type, ca
         [earned, actualPayeeId]
     );
 
-    // 3.1 Update the last customer message as replied with the earned diamonds count
+    // 3.1 Update ALL unreplied customer messages in this chat as replied
     let updatedMessageInfo = null;
     if (customerId && earned > 0) {
         try {
-            // Find the latest message sent by the customer in this chat
+            // First mark ALL unreplied customer messages in this chat as replied so older messages don't stay unreplied
+            await client.query(
+                `UPDATE messages 
+                 SET is_replied = true 
+                 WHERE chat_id = $1 AND sender_id = $2 AND (is_replied = false OR is_replied IS NULL)`,
+                [chatId, customerId]
+            );
+
+            // Find the latest message sent by the customer in this chat and attach the earned diamonds badge
             const lastMsgRes = await client.query(
                 `SELECT id FROM messages 
                  WHERE chat_id = $1 AND sender_id = $2 AND content_type != 'gift'
@@ -157,7 +164,7 @@ async function recordOperatorCommission(client, chatId, senderId, cost, type, ca
                      WHERE id = $2`,
                     [earned, lastMsgId]
                 );
-                console.log(`[REPLY-TRACK] Marked message ${lastMsgId} as replied. Earned: ${earned} diamonds.`);
+                console.log(`[REPLY-TRACK] Marked message ${lastMsgId} as replied (${earned} diamonds) and cleared all earlier unreplied badges.`);
                 updatedMessageInfo = { id: lastMsgId, is_replied: true, earned_diamonds: earned };
             }
         } catch (msgErr) {

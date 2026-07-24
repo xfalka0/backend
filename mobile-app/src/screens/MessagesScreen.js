@@ -67,11 +67,8 @@ const OnlinePulse = ({ themeMode, theme }) => {
 import { useChat } from '../contexts/ChatContext';
 
 export default function MessagesScreen({ navigation, route }) {
-    const { fetchUnreadCount, balance, fetchBalance, user: contextUser } = useChat();
+    const { fetchUnreadCount, balance, fetchBalance, user: contextUser, socket } = useChat();
     const user = contextUser || route.params?.user || {};
-    
-    console.log('[MessagesScreen] Current balance:', balance);
-    console.log('[MessagesScreen] User ID:', user?.id);
 
     const insets = useSafeAreaInsets();
     const { theme, themeMode } = useTheme();
@@ -96,6 +93,29 @@ export default function MessagesScreen({ navigation, route }) {
             }
         }, [user?.id])
     );
+
+    // Instant real-time socket listener for incoming/outgoing messages
+    useEffect(() => {
+        if (!socket || !user?.id) return;
+
+        const handleRealtimeUpdate = (data) => {
+            console.log('[MessagesScreen] Realtime socket update:', data);
+            fetchChats(0, true);
+            fetchUnreadCount(user.id);
+        };
+
+        socket.on('new_message', handleRealtimeUpdate);
+        socket.on('receive_message', handleRealtimeUpdate);
+        socket.on('chat_updated', handleRealtimeUpdate);
+        socket.on('message_sent', handleRealtimeUpdate);
+
+        return () => {
+            socket.off('new_message', handleRealtimeUpdate);
+            socket.off('receive_message', handleRealtimeUpdate);
+            socket.off('chat_updated', handleRealtimeUpdate);
+            socket.off('message_sent', handleRealtimeUpdate);
+        };
+    }, [socket, user?.id]);
 
     const fetchInvitations = async () => {
         try {

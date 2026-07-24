@@ -153,8 +153,8 @@ android {
         }
         release {
             signingConfig signingConfigs.release
-            shrinkResources true
-            minifyEnabled enableProguardInReleaseBuilds
+            shrinkResources false
+            minifyEnabled false
             proguardFiles getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro"
             crunchPngs (findProperty('android.enablePngCrunchInReleaseBuilds')?.toBoolean() ?: true)
         }

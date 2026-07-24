@@ -23,17 +23,19 @@ import { API_URL } from '../config';
 import { useChat } from '../contexts/ChatContext';
 import { useAppStore } from '../store/useAppStore';
 import { resolveImageUrl } from '../utils/imageUtils';
+import { useKeepAwake } from 'expo-keep-awake';
 
 const { width, height } = Dimensions.get('window');
 
-// ─── Crash-safe Agora Dynamic Import ─────────────────────────────────────────
 let AgoraRTC = null;
 let RtcSurfaceView = null;
+let RtcTextureView = null;
 let ChannelProfileType = {};
 let ClientRoleType = {};
 try {
     AgoraRTC = require('react-native-agora');
     RtcSurfaceView = AgoraRTC.RtcSurfaceView;
+    RtcTextureView = AgoraRTC.RtcTextureView;
     ChannelProfileType = AgoraRTC.ChannelProfileType;
     ClientRoleType = AgoraRTC.ClientRoleType;
 } catch (e) {
@@ -41,6 +43,7 @@ try {
 }
 
 export default function VideoCallScreen({ route, navigation }) {
+    useKeepAwake();
     const { receiver, isIncoming: initialIsIncoming, chatId: routeChatId, rtcToken: initialRtcToken, channelName: initialChannelName, callId: initialCallId } = route.params || {};
     const otherUser = receiver || {};
     const otherUserName = otherUser.name || otherUser.display_name || otherUser.username || 'Fiva Kullanıcısı';
@@ -48,6 +51,9 @@ export default function VideoCallScreen({ route, navigation }) {
 
     const { socket } = useChat();
     const role = useAppStore(state => state.role);
+    const currentUser = useAppStore(state => state.user);
+    const myGender = (currentUser?.gender || '').toLowerCase();
+    const isFemale = myGender === 'kadin' || role === 'operator';
     const activeCallChatId = useAppStore(state => state.activeCallChatId);
 
     // Call ID tracking to prevent collisions
@@ -103,7 +109,41 @@ export default function VideoCallScreen({ route, navigation }) {
     const handleSocketCallConnected = () => {
         console.log('[SOCKET] Both users connected. Call active.');
         setStatusText('Bağlandı');
+        setCallState('active');
         startTimer();
+    };
+
+    const handleSocketCallStarted = async () => {
+        console.log('[SOCKET] Call Started Event Received');
+        await cleanupAudio();
+        setCallState('active');
+        setStatusText('Bağlandı');
+        startTimer();
+    };
+
+    const handleSocketCallEnded = (data) => {
+        console.log('[SOCKET] Call Ended Event Received:', data);
+        handleHangupTransition(data.reason === 'insufficient_funds' ? 'Yetersiz Bakiye. Arama Sonlandı.' : 'Arama Sonlandı.');
+    };
+
+    const handleSocketCallRejected = () => {
+        console.log('[SOCKET] Call Rejected Event Received');
+        handleHangupTransition('Arama Reddedildi');
+    };
+
+    const handleSocketCallCancelled = () => {
+        console.log('[SOCKET] Call Cancelled Event Received');
+        handleHangupTransition('Arama İptal Edildi');
+    };
+
+    const handleSocketCallBusy = () => {
+        console.log('[SOCKET] Call Busy Event Received');
+        handleHangupTransition('Meşgul');
+    };
+
+    const handleSocketCallError = (data) => {
+        console.log('[SOCKET] Call Error Event Received:', data);
+        handleHangupTransition(data?.message || 'Hata Oluştu');
     };
 
     useEffect(() => {
@@ -259,24 +299,24 @@ export default function VideoCallScreen({ route, navigation }) {
             // Enable Audio & Video
             await engine.enableAudio();
             await engine.enableVideo();
+            await engine.enableLocalVideo(true);
             await engine.startPreview();
             await engine.setEnableSpeakerphone(isSpeaker);
 
             // Register Event Handlers
             engine.registerEventHandler({
-                onJoinChannelSuccess: (connection, elapsed) => {
+                onJoinChannelSuccess: async (connection, elapsed) => {
                     console.log("VIDEO_AGORA_JOIN_SUCCESS", { channelName: connection.channelId, uid: connection.localUid });
                     isJoinedRef.current = true;
-                    setStatusText('Bağlandı');
-                    setCallState('active');
-                    startTimer();
-                    if (socket) {
-                        socket.emit('call_connected', { chatId });
-                    }
+                    try {
+                        await engine.enableLocalVideo(true);
+                        await engine.startPreview();
+                    } catch (e) {}
                 },
                 onUserJoined: (connection, remoteUid, elapsed) => {
                     console.log("REMOTE_USER_JOINED", remoteUid);
                     setRemoteUid(remoteUid);
+                    setIsRemoteVideoOn(true);
                 },
                 onUserOffline: (connection, remoteUid, reason) => {
                     console.log('[Agora Video] Remote user went offline:', remoteUid, 'reason:', reason);
@@ -286,9 +326,10 @@ export default function VideoCallScreen({ route, navigation }) {
                 },
                 onRemoteVideoStateChanged: (connection, uid, state, reason, elapsed) => {
                     console.log("REMOTE_VIDEO_STATE_CHANGED", { uid, state, reason });
-                    if (state === 0) {
+                    if (state === 0 && (reason === 5 || reason === 6)) {
                         setIsRemoteVideoOn(false);
-                    } else if (state === 2) {
+                    } else {
+                        if (uid) setRemoteUid(uid);
                         setIsRemoteVideoOn(true);
                     }
                 },
@@ -407,6 +448,9 @@ export default function VideoCallScreen({ route, navigation }) {
 
                 const { token: rtcToken, channelName } = res.data;
 
+                // Caller immediately initializes local camera preview & Agora channel
+                await initAgora(rtcToken, channelName);
+
                 if (socket) {
                     socket.emit('call_request', {
                         chatId,
@@ -425,55 +469,6 @@ export default function VideoCallScreen({ route, navigation }) {
                 setTimeout(() => navigation.goBack(), 2000);
             }
         }
-    };
-
-    // Socket Event: Call Request Ringing / Started
-    const handleSocketCallStarted = async () => {
-        console.log('[SOCKET] Call Started Event Received');
-        await cleanupAudio();
-        setCallState('active');
-        setStatusText('Bağlandı');
-        startTimer();
-
-        // Only init Agora if not already initialized by accept button
-        if (!isJoinedRef.current && !agoraEngineRef.current) {
-            try {
-                const token = await AsyncStorage.getItem('token');
-                const callId = callIdRef.current;
-                const res = await axios.post(`${API_URL}/chats/${chatId}/rtc-token`, { callId }, {
-                    headers: { Authorization: `Bearer ${token}` }
-                });
-                const { token: rtcToken, channelName } = res.data;
-                await initAgora(rtcToken, channelName);
-            } catch (err) {
-                console.error('[Agora Start Call] Error:', err.message);
-            }
-        }
-    };
-
-    const handleSocketCallEnded = (data) => {
-        console.log('[SOCKET] Call Ended Event Received:', data);
-        handleHangupTransition(data.reason === 'insufficient_funds' ? 'Yetersiz Bakiye. Arama Sonlandı.' : 'Arama Sonlandı.');
-    };
-
-    const handleSocketCallRejected = () => {
-        console.log('[SOCKET] Call Rejected Event Received');
-        handleHangupTransition('Arama Reddedildi');
-    };
-
-    const handleSocketCallCancelled = () => {
-        console.log('[SOCKET] Call Cancelled Event Received');
-        handleHangupTransition('Arama İptal Edildi');
-    };
-
-    const handleSocketCallBusy = () => {
-        console.log('[SOCKET] Call Busy Event Received');
-        handleHangupTransition('Meşgul');
-    };
-
-    const handleSocketCallError = (data) => {
-        console.log('[SOCKET] Call Error Event Received:', data);
-        handleHangupTransition(data.message || 'Hata Oluştu');
     };
 
     // ─── Button Press Actions ────────────────────────────────────────────────
@@ -550,9 +545,10 @@ export default function VideoCallScreen({ route, navigation }) {
     return (
         <View style={styles.container}>
             {/* Background Stream View */}
-            {callState === 'active' && remoteUid && isRemoteVideoOn && RtcSurfaceView ? (
+            {callState === 'active' && remoteUid !== null && remoteUid !== undefined && isRemoteVideoOn !== false && RtcSurfaceView ? (
                 <RtcSurfaceView 
-                    canvas={{ uid: remoteUid }}
+                    canvas={{ uid: Number(remoteUid), renderMode: 1 }}
+                    zOrderMediaOverlay={true}
                     style={StyleSheet.absoluteFill}
                 />
             ) : (
@@ -573,12 +569,21 @@ export default function VideoCallScreen({ route, navigation }) {
             )}
 
             {/* Local Preview Sub-Window */}
-            {callState === 'active' && isCameraOn && RtcSurfaceView && (
-                <View style={styles.localVideoContainer}>
-                    <RtcSurfaceView 
-                        canvas={{ uid: 0 }}
-                        style={styles.localVideo}
+            {callState === 'active' && isCameraOn && (
+                <View style={[styles.localVideoContainer, { zIndex: 999 }]}>
+                    <Image 
+                        source={{ uri: resolveImageUrl(currentUser?.avatar_url || currentUser?.avatar) }} 
+                        style={StyleSheet.absoluteFill} 
+                        resizeMode="cover"
                     />
+                    {RtcSurfaceView && (
+                        <RtcSurfaceView 
+                            canvas={{ uid: 0 }}
+                            zOrderOnTop={true}
+                            zOrderMediaOverlay={true}
+                            style={StyleSheet.absoluteFill}
+                        />
+                    )}
                 </View>
             )}
 
@@ -591,7 +596,9 @@ export default function VideoCallScreen({ route, navigation }) {
                     <Text style={styles.statusLabel}>
                         {callState === 'active' ? formatDuration(duration) : statusText}
                     </Text>
-                    <Text style={styles.priceLabel}>120 Coin / Dakika</Text>
+                    <Text style={isFemale ? styles.diamondLabel : styles.priceLabel}>
+                        {isFemale ? '💎 +522 Elmas / Dakika' : '✨ 120 Coin / Dakika'}
+                    </Text>
                 </View>
 
                 {/* Incoming Ringing Controls */}
@@ -748,7 +755,14 @@ const styles = StyleSheet.create({
     },
     priceLabel: {
         fontSize: 12,
-        color: 'rgba(255, 255, 255, 0.6)',
+        color: '#FFD700',
+        fontWeight: '700',
+        marginTop: 4,
+    },
+    diamondLabel: {
+        fontSize: 12,
+        color: '#00F0FF',
+        fontWeight: '700',
         marginTop: 4,
     },
     incomingControlsWrap: {

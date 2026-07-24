@@ -19,11 +19,13 @@ import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { Audio } from 'expo-av';
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useKeepAwake } from 'expo-keep-awake';
 
 import { API_URL } from '../config';
 import { useChat } from '../contexts/ChatContext';
 import { useAppStore } from '../store/useAppStore';
 import { resolveImageUrl } from '../utils/imageUtils';
+import VipBadge from '../components/ui/VipBadge';
 
 const { width, height } = Dimensions.get('window');
 
@@ -35,39 +37,62 @@ try {
     console.warn('[Agora] Native module not linked. Using mock mode.');
 }
 
-const WaveformBar = ({ index }) => {
-    const heightVal = useSharedValue(10);
+// ─── Real Speech-Driven Neon Waveform ─────────────────────────────────────────
+const TOTAL_BARS = 16;
+const WaveformBar = ({ index, isActive, volume = 0 }) => {
+    const heightVal = useSharedValue(12);
 
     useEffect(() => {
-        const delay = index * 80;
-        const timeoutId = setTimeout(() => {
-            heightVal.value = withRepeat(
-                withSequence(
-                    withTiming(30 + Math.random() * 50, { duration: 350, easing: Easing.inOut(Easing.ease) }),
-                    withTiming(10 + Math.random() * 15, { duration: 350, easing: Easing.inOut(Easing.ease) })
-                ),
-                -1,
-                true
-            );
-        }, delay);
-        return () => clearTimeout(timeoutId);
-    }, []);
+        if (!isActive) {
+            heightVal.value = withTiming(8, { duration: 250 });
+            return;
+        }
+
+        // Gaussian bell-curve factor centered at middle bars (7.5)
+        const center = (TOTAL_BARS - 1) / 2;
+        const bellCurve = Math.exp(-Math.pow(index - center, 2) / 14);
+
+        // Effective voice height
+        const minHeight = 12;
+        const maxGain = 48;
+        
+        // If speaking volume is low or muted, keep slight organic baseline, otherwise expand with voice amplitude
+        const voiceGain = volume > 0.05 ? volume : 0.08 + Math.sin(index * 1.2) * 0.04;
+        const targetH = minHeight + maxGain * voiceGain * bellCurve;
+
+        heightVal.value = withSpring(targetH, { damping: 12, stiffness: 180 });
+    }, [isActive, volume, index]);
 
     const animatedStyle = useAnimatedStyle(() => ({
         height: heightVal.value,
     }));
 
-    return <Animated.View style={[styles.bar, animatedStyle]} />;
+    return (
+        <Animated.View style={[styles.neonBarWrapper, animatedStyle, { shadowColor: '#FF007F' }]}>
+            <LinearGradient
+                colors={['#FF007F', '#FF4D94']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 0, y: 1 }}
+                style={styles.neonBarGradient}
+            />
+        </Animated.View>
+    );
 };
 
 export default function VoiceCallScreen({ route, navigation }) {
+    useKeepAwake();
     const { receiver, isIncoming: initialIsIncoming, chatId: routeChatId, rtcToken: initialRtcToken, channelName: initialChannelName, callId: initialCallId } = route.params || {};
     const otherUser = receiver || {};
     const otherUserName = otherUser.name || otherUser.display_name || otherUser.username || 'Fiva Kullanıcısı';
     const otherUserImage = resolveImageUrl(otherUser.avatar_url || otherUser.avatar);
+    const vipLevel = otherUser.vip_level || 0;
+    const agencyName = otherUser.agency_name || 'FİVA VIP';
 
     const { socket } = useChat();
     const role = useAppStore(state => state.role);
+    const currentUser = useAppStore(state => state.user);
+    const myGender = (currentUser?.gender || '').toLowerCase();
+    const isFemale = myGender === 'kadin' || role === 'operator';
     const isOperator = role === 'operator';
     const activeCallChatId = useAppStore(state => state.activeCallChatId);
 
@@ -79,7 +104,8 @@ export default function VoiceCallScreen({ route, navigation }) {
     const [duration, setDuration] = useState(0);
     const [isMuted, setIsMuted] = useState(false);
     const [isSpeaker, setIsSpeaker] = useState(true);
-    const [statusText, setStatusText] = useState(initialIsIncoming ? 'Gelen Arama...' : 'Aranıyor...');
+    const [statusText, setStatusText] = useState(initialIsIncoming ? 'Gelen Sesli Arama...' : 'Aranıyor...');
+    const [speechVolume, setSpeechVolume] = useState(0);
 
     // Refs
     const agoraEngineRef = useRef(null);
@@ -92,21 +118,18 @@ export default function VoiceCallScreen({ route, navigation }) {
 
     // Animations
     const overlayOpacity = useSharedValue(0);
-    const scale = useSharedValue(0.9);
-    const ringScale = useSharedValue(1);
+    const scale = useSharedValue(0.92);
+    const avatarBreathing = useSharedValue(1);
+    const ringPulse = useSharedValue(1);
+    const particlePulse = useSharedValue(0.4);
 
-    // Intercept back navigation / Android back button to ensure proper cleanup
+    // Intercept back navigation / Android back button
     useEffect(() => {
         const unsubscribeBeforeRemove = navigation.addListener('beforeRemove', (e) => {
-            // Allow navigation to proceed if call is already ended
-            if (callState === 'ended') {
-                return;
-            }
+            if (callState === 'ended') return;
 
-            // Prevent default behavior
             e.preventDefault();
 
-            // Run appropriate hangup sequence
             if (callState === 'incoming') {
                 handleDecline();
             } else if (callState === 'outgoing') {
@@ -127,23 +150,80 @@ export default function VoiceCallScreen({ route, navigation }) {
     const handleSocketCallConnected = () => {
         console.log('[SOCKET] Both users connected. Call active.');
         setStatusText('Bağlandı');
+        setCallState('active');
         startTimer();
     };
 
-    useEffect(() => {
-        overlayOpacity.value = withTiming(1, { duration: 500 });
-        scale.value = withSpring(1, { damping: 15 });
-        ringScale.value = withRepeat(withTiming(1.6, { duration: 1800 }), -1, false);
+    const handleSocketCallStarted = async () => {
+        console.log('[SOCKET] Call Started Event Received');
+        await cleanupAudio();
+        setCallState('active');
+        setStatusText('Bağlandı');
+        startTimer();
+    };
 
-        // Keep track of call state in AppStore
+    const handleSocketCallEnded = (data) => {
+        console.log('[SOCKET] Call Ended Event Received:', data);
+        handleHangupTransition(data.reason === 'insufficient_funds' ? 'Yetersiz Bakiye. Arama Sonlandı.' : 'Arama Sonlandı.');
+    };
+
+    const handleSocketCallRejected = () => {
+        console.log('[SOCKET] Call Rejected Event Received');
+        handleHangupTransition('Arama Reddedildi');
+    };
+
+    const handleSocketCallCancelled = () => {
+        console.log('[SOCKET] Call Cancelled Event Received');
+        handleHangupTransition('Arama İptal Edildi');
+    };
+
+    const handleSocketCallBusy = () => {
+        console.log('[SOCKET] Call Busy Event Received');
+        handleHangupTransition('Meşgul');
+    };
+
+    const handleSocketCallError = (data) => {
+        console.log('[SOCKET] Call Error Event Received:', data);
+        handleHangupTransition(data?.message || 'Hata Oluştu');
+    };
+
+    useEffect(() => {
+        overlayOpacity.value = withTiming(1, { duration: 600 });
+        scale.value = withSpring(1, { damping: 14 });
+
+        // Breathing avatar animation
+        avatarBreathing.value = withRepeat(
+            withSequence(
+                withTiming(1.04, { duration: 1800, easing: Easing.inOut(Easing.ease) }),
+                withTiming(1.0, { duration: 1800, easing: Easing.inOut(Easing.ease) })
+            ),
+            -1,
+            true
+        );
+
+        // Ringing pulse for avatar
+        ringPulse.value = withRepeat(
+            withTiming(1.5, { duration: 1600, easing: Easing.out(Easing.ease) }),
+            -1,
+            false
+        );
+
+        // Particle pulse
+        particlePulse.value = withRepeat(
+            withSequence(
+                withTiming(0.8, { duration: 2500 }),
+                withTiming(0.3, { duration: 2500 })
+            ),
+            -1,
+            true
+        );
+
         if (chatId) {
             useAppStore.getState().setActiveCallChatId(chatId);
         }
 
-        // Initialize Call Lifecycle
         handleCallInit();
 
-        // Register Call Socket Listeners
         if (socket) {
             socket.on('disconnect', handleSocketDisconnect);
             socket.on('call_connected', handleSocketCallConnected);
@@ -156,7 +236,6 @@ export default function VoiceCallScreen({ route, navigation }) {
         }
 
         return () => {
-            // Clean up socket listeners
             if (socket) {
                 socket.off('disconnect', handleSocketDisconnect);
                 socket.off('call_connected', handleSocketCallConnected);
@@ -174,7 +253,6 @@ export default function VoiceCallScreen({ route, navigation }) {
         };
     }, []);
 
-    // ─── Call Timer ──────────────────────────────────────────────────────────
     const startTimer = () => {
         stopTimer();
         timerIntervalRef.current = setInterval(() => {
@@ -192,14 +270,12 @@ export default function VoiceCallScreen({ route, navigation }) {
     const formatDuration = (sec) => {
         const m = Math.floor(sec / 60);
         const s = sec % 60;
-        return `${m}:${s < 10 ? '0' : ''}${s}`;
+        return `${m < 10 ? '0' : ''}${m}:${s < 10 ? '0' : ''}${s}`;
     };
 
-    // ─── Audio Ringtone Player ────────────────────────────────────────────────
     const playSound = async (type) => {
         try {
             await cleanupAudio();
-
             const url = type === 'ringtone' 
                 ? 'https://www.soundjay.com/phone/telephone-ring-03a.mp3'
                 : 'https://www.soundjay.com/phone/phone-calling-1.mp3';
@@ -230,18 +306,11 @@ export default function VoiceCallScreen({ route, navigation }) {
         }
     };
 
-    // ─── Agora Engine Lifecycle ──────────────────────────────────────────────
     const requestMicPermission = async () => {
         if (Platform.OS === 'android') {
             try {
                 const granted = await PermissionsAndroid.request(
-                    PermissionsAndroid.PERMISSIONS.RECORD_AUDIO,
-                    {
-                        title: 'Mikrofon İzni',
-                        message: 'Sesli arama için mikrofon izni gereklidir.',
-                        buttonPositive: 'İzin Ver',
-                        buttonNegative: 'İptal',
-                    }
+                    PermissionsAndroid.PERMISSIONS.RECORD_AUDIO
                 );
                 return granted === PermissionsAndroid.RESULTS.GRANTED;
             } catch (err) {
@@ -256,6 +325,9 @@ export default function VoiceCallScreen({ route, navigation }) {
         if (!AgoraRTC) {
             console.log('[Agora] Mock Mode: Joining simulated channel.');
             isJoinedRef.current = true;
+            setStatusText('Bağlandı');
+            setCallState('active');
+            startTimer();
             if (socket) {
                 socket.emit('call_connected', { chatId });
             }
@@ -273,14 +345,10 @@ export default function VoiceCallScreen({ route, navigation }) {
             const engine = await AgoraRTC.createAgoraRtcEngine();
             agoraEngineRef.current = engine;
 
-            // Initialize App
             const appId = 'f80faf42fd0845a9816658ea7e16a755';
             await engine.initialize({ appId });
-
-            // Set Communication Profile for 1-to-1 Calls
             await engine.setChannelProfile(AgoraRTC.ChannelProfileType.ChannelProfileCommunication);
 
-            // Register Event Handlers
             engine.registerEventHandler({
                 onJoinChannelSuccess: (connection, elapsed) => {
                     console.log('[Agora] Joined channel success:', connection.channelId);
@@ -292,9 +360,12 @@ export default function VoiceCallScreen({ route, navigation }) {
                         socket.emit('call_connected', { chatId });
                     }
                 },
+                onAudioVolumeIndication: (connection, speakers, speakerNumber, totalVolume) => {
+                    const volRatio = Math.min(Math.max(totalVolume / 140, 0), 1);
+                    setSpeechVolume(volRatio);
+                },
                 onUserOffline: (connection, remoteUid, reason) => {
                     console.log('[Agora] Remote user went offline:', remoteUid, 'reason:', reason);
-                    // Only hangup if remote user explicitly quit (reason === 0)
                     if (reason === 0) {
                         handleHangup();
                     }
@@ -305,15 +376,14 @@ export default function VoiceCallScreen({ route, navigation }) {
             });
 
             await engine.enableAudio();
+            await engine.enableAudioVolumeIndication(200, 3, true);
             await engine.setEnableSpeakerphone(isSpeaker);
 
-            // Join Channel
-            const currentUserId = useAppStore.getState().user?.id || routeUser?.id;
+            const currentUserId = useAppStore.getState().user?.id;
             const myUid = (Number(currentUserId) && !isNaN(Number(currentUserId)))
                 ? Number(currentUserId)
                 : (Math.floor(Math.random() * 899999) + 100000);
 
-            console.log(`[Agora] Joining channel ${channelName} with UID ${myUid} (UserId: ${currentUserId})`);
             await engine.joinChannel(token, channelName, myUid, {
                 channelProfile: AgoraRTC.ChannelProfileType.ChannelProfileCommunication,
                 clientRoleType: AgoraRTC.ClientRoleType.ClientRoleBroadcaster,
@@ -341,7 +411,6 @@ export default function VoiceCallScreen({ route, navigation }) {
         }
     };
 
-    // Toggle Mic Muted
     const handleToggleMute = async () => {
         if (!agoraEngineRef.current) {
             setIsMuted(prev => !prev);
@@ -356,7 +425,6 @@ export default function VoiceCallScreen({ route, navigation }) {
         }
     };
 
-    // Toggle Speakerphone
     const handleToggleSpeaker = async () => {
         if (!agoraEngineRef.current) {
             setIsSpeaker(prev => !prev);
@@ -371,13 +439,10 @@ export default function VoiceCallScreen({ route, navigation }) {
         }
     };
 
-    // ─── Call Signaling Flows ───────────────────────────────────────────────
     const handleCallInit = async () => {
         if (callState === 'incoming') {
-            // Incoming Call: play ringtone, wait for accept
             await playSound('ringtone');
         } else {
-            // Outgoing Call: check balance, request token, emit call_request, play dialback tone
             await playSound('dialtone');
             try {
                 const token = await AsyncStorage.getItem('token');
@@ -388,6 +453,9 @@ export default function VoiceCallScreen({ route, navigation }) {
 
                 const { token: rtcToken, channelName } = res.data;
 
+                // Caller immediately initializes Agora channel
+                await initAgora(rtcToken, channelName);
+
                 if (socket) {
                     socket.emit('call_request', {
                         chatId,
@@ -396,7 +464,8 @@ export default function VoiceCallScreen({ route, navigation }) {
                         callerAvatar: useAppStore.getState().user?.avatar_url,
                         rtcToken,
                         channelName,
-                        callId
+                        callId,
+                        callType: 'audio'
                     });
                 }
             } catch (err) {
@@ -407,104 +476,36 @@ export default function VoiceCallScreen({ route, navigation }) {
         }
     };
 
-    // Socket Event: Call Request Ringing / Started
-    const handleSocketCallStarted = async () => {
-        console.log('[SOCKET] Call Started Event Received');
-        await cleanupAudio();
-        setCallState('active');
-        setStatusText('Bağlandı');
-        startTimer();
-
-        // Only init Agora if not already initialized by accept button
-        if (!isJoinedRef.current && !agoraEngineRef.current) {
-            try {
-                const token = await AsyncStorage.getItem('token');
-                const callId = callIdRef.current;
-                const res = await axios.post(`${API_URL}/chats/${chatId}/rtc-token`, { callId }, {
-                    headers: { Authorization: `Bearer ${token}` }
-                });
-                const { token: rtcToken, channelName } = res.data;
-                await initAgora(rtcToken, channelName);
-            } catch (err) {
-                console.error('[Agora Start Call] Error:', err.message);
-            }
-        }
-    };
-
-    const handleSocketCallEnded = (data) => {
-        console.log('[SOCKET] Call Ended Event Received:', data);
-        handleHangupTransition(data.reason === 'insufficient_funds' ? 'Yetersiz Bakiye. Arama Sonlandı.' : 'Arama Sonlandı.');
-    };
-
-    const handleSocketCallRejected = () => {
-        console.log('[SOCKET] Call Rejected Event Received');
-        handleHangupTransition('Arama Reddedildi');
-    };
-
-    const handleSocketCallCancelled = () => {
-        console.log('[SOCKET] Call Cancelled Event Received');
-        handleHangupTransition('Arama İptal Edildi');
-    };
-
-    const handleSocketCallBusy = () => {
-        console.log('[SOCKET] Call Busy Event Received');
-        handleHangupTransition('Meşgul');
-    };
-
-    const handleSocketCallError = (data) => {
-        console.log('[SOCKET] Call Error Event Received:', data);
-        handleHangupTransition(data.message || 'Hata Oluştu');
-    };
-
-    // ─── Button Press Actions ────────────────────────────────────────────────
-    
-    // Caller cancels outgoing call before answer
     const handleCancel = () => {
-        if (socket) {
-            socket.emit('call_cancel', { chatId, receiverId: otherUser.id });
-        }
+        if (socket) socket.emit('call_cancel', { chatId, receiverId: otherUser.id });
         handleHangupTransition('Çağrı İptal Edildi');
     };
 
-    // Receiver declines incoming call
     const handleDecline = () => {
-        if (socket) {
-            socket.emit('call_reject', { chatId, callerId: otherUser.id });
-        }
+        if (socket) socket.emit('call_reject', { chatId, callerId: otherUser.id });
         handleHangupTransition('Çağrı Reddedildi');
     };
 
-    // Receiver accepts incoming call
     const handleAccept = async () => {
         await cleanupAudio();
         setCallState('active');
         setStatusText('Bağlanıyor...');
-        
         try {
             const token = await AsyncStorage.getItem('token');
             const callId = callIdRef.current;
             const res = await axios.post(`${API_URL}/chats/${chatId}/rtc-token`, { callId }, {
                 headers: { Authorization: `Bearer ${token}` }
             });
-            
             const { token: rtcToken, channelName } = res.data;
-            
-            if (socket) {
-                socket.emit('call_accept', { chatId, callerId: otherUser.id });
-            }
-
+            if (socket) socket.emit('call_accept', { chatId, callerId: otherUser.id });
             await initAgora(rtcToken, channelName);
         } catch (err) {
-            console.error('[Accept Call API] Error:', err.message);
             handleDecline();
         }
     };
 
-    // Either party hangs up ongoing active call
     const handleHangup = () => {
-        if (socket) {
-            socket.emit('call_end', { chatId });
-        }
+        if (socket) socket.emit('call_end', { chatId });
         handleHangupTransition('Kapatılıyor...');
     };
 
@@ -514,38 +515,34 @@ export default function VoiceCallScreen({ route, navigation }) {
         await cleanupAgora();
         setCallState('ended');
         setStatusText(statusLabel);
-        setTimeout(() => {
-            navigation.goBack();
-        }, 1800);
+        setTimeout(() => { navigation.goBack(); }, 1800);
     };
 
-    // Animated Ringing Styles
-    const ringStyle = useAnimatedStyle(() => ({
-        transform: [{ scale: ringScale.value }],
-        opacity: interpolate(ringScale.value, [1, 1.6], [0.5, 0]),
+    const avatarBreathingStyle = useAnimatedStyle(() => ({ transform: [{ scale: avatarBreathing.value }] }));
+    const ringPulseStyle = useAnimatedStyle(() => ({
+        transform: [{ scale: ringPulse.value }],
+        opacity: interpolate(ringPulse.value, [1, 1.5], [0.6, 0])
     }));
-
+    const particleStyle = useAnimatedStyle(() => ({ opacity: particlePulse.value }));
     const animatedStyle = useAnimatedStyle(() => ({
         opacity: overlayOpacity.value,
         transform: [{ scale: scale.value }],
     }));
 
-    // ─── Rendering Helper ─────────────────────────────────────────────────────
     const renderControls = () => {
         if (callState === 'incoming') {
             return (
                 <View style={styles.controlsRow}>
                     <TouchableOpacity onPress={handleDecline} style={styles.controlBtnWrapper} activeOpacity={0.8}>
-                        <View style={[styles.circleBtn, styles.declineBg]}>
-                            <Ionicons name="call" size={28} color="white" style={{ transform: [{ rotate: '135deg' }] }} />
-                        </View>
+                        <LinearGradient colors={['#EF4444', '#B91C1C']} style={styles.actionCircleBtn}>
+                            <Ionicons name="call" size={32} color="white" style={{ transform: [{ rotate: '135deg' }] }} />
+                        </LinearGradient>
                         <Text style={styles.controlBtnText}>Reddet</Text>
                     </TouchableOpacity>
-
                     <TouchableOpacity onPress={handleAccept} style={styles.controlBtnWrapper} activeOpacity={0.8}>
-                        <View style={[styles.circleBtn, styles.acceptBg]}>
-                            <Ionicons name="call" size={28} color="white" />
-                        </View>
+                        <LinearGradient colors={['#10B981', '#047857']} style={styles.actionCircleBtn}>
+                            <Ionicons name="call" size={32} color="white" />
+                        </LinearGradient>
                         <Text style={styles.controlBtnText}>Kabul Et</Text>
                     </TouchableOpacity>
                 </View>
@@ -556,9 +553,9 @@ export default function VoiceCallScreen({ route, navigation }) {
             return (
                 <View style={styles.controlsRow}>
                     <TouchableOpacity onPress={handleCancel} style={styles.controlBtnWrapper} activeOpacity={0.8}>
-                        <View style={[styles.circleBtn, styles.declineBg]}>
-                            <Ionicons name="call" size={28} color="white" style={{ transform: [{ rotate: '135deg' }] }} />
-                        </View>
+                        <LinearGradient colors={['#EF4444', '#B91C1C']} style={styles.actionCircleBtn}>
+                            <Ionicons name="call" size={32} color="white" style={{ transform: [{ rotate: '135deg' }] }} />
+                        </LinearGradient>
                         <Text style={styles.controlBtnText}>İptal</Text>
                     </TouchableOpacity>
                 </View>
@@ -567,84 +564,101 @@ export default function VoiceCallScreen({ route, navigation }) {
 
         if (callState === 'active') {
             return (
-                <View style={styles.controlsRowActive}>
-                    {/* Mute Button */}
-                    <TouchableOpacity onPress={handleToggleMute} style={styles.controlBtnWrapper} activeOpacity={0.8}>
-                        <View style={[styles.circleBtnSmall, isMuted && styles.activeIndicator]}>
-                            <Ionicons name={isMuted ? "mic-off" : "mic"} size={22} color="white" />
+                <BlurView intensity={35} tint="dark" style={styles.floatingGlassDock}>
+                    <TouchableOpacity onPress={handleToggleMute} style={styles.dockBtnWrapper} activeOpacity={0.75}>
+                        <View style={[styles.dockIconBtn, isMuted && styles.dockIconBtnMuted]}>
+                            <Ionicons name={isMuted ? "mic-off" : "mic"} size={24} color={isMuted ? "#FF4D94" : "white"} />
                         </View>
-                        <Text style={styles.controlBtnTextSmall}>Sessiz</Text>
+                        <Text style={styles.dockBtnText}>{isMuted ? 'Sessiz' : 'Mikrofon'}</Text>
                     </TouchableOpacity>
-
-                    {/* End Call Button */}
-                    <TouchableOpacity onPress={handleHangup} style={styles.controlBtnWrapper} activeOpacity={0.8}>
-                        <View style={[styles.circleBtn, styles.declineBg]}>
-                            <Ionicons name="call" size={28} color="white" style={{ transform: [{ rotate: '135deg' }] }} />
+                    <TouchableOpacity onPress={handleHangup} style={styles.dockBtnWrapper} activeOpacity={0.85}>
+                        <LinearGradient colors={['#FF007F', '#DC2626']} style={styles.dockEndCallBtn}>
+                            <Ionicons name="call" size={32} color="white" style={{ transform: [{ rotate: '135deg' }] }} />
+                        </LinearGradient>
+                        <Text style={styles.dockBtnTextEnd}>Kapat</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity onPress={handleToggleSpeaker} style={styles.dockBtnWrapper} activeOpacity={0.75}>
+                        <View style={[styles.dockIconBtn, isSpeaker && styles.dockIconBtnSpeaker]}>
+                            <Ionicons name={isSpeaker ? "volume-high" : "volume-mute"} size={24} color={isSpeaker ? "#FFD700" : "white"} />
                         </View>
-                        <Text style={styles.controlBtnText}>Kapat</Text>
+                        <Text style={styles.dockBtnText}>{isSpeaker ? 'Hoparlör' : 'Ahize'}</Text>
                     </TouchableOpacity>
-
-                    {/* Speakerphone Button */}
-                    <TouchableOpacity onPress={handleToggleSpeaker} style={styles.controlBtnWrapper} activeOpacity={0.8}>
-                        <View style={[styles.circleBtnSmall, isSpeaker && styles.activeIndicator]}>
-                            <Ionicons name="volume-high" size={22} color="white" />
-                        </View>
-                        <Text style={styles.controlBtnTextSmall}>Hoparlör</Text>
-                    </TouchableOpacity>
-                </View>
+                </BlurView>
             );
         }
 
-        return <ActivityIndicator size="large" color="#EC4899" />;
+        return <ActivityIndicator size="large" color="#FF007F" />;
     };
 
     return (
         <View style={styles.container}>
-            {/* Blurred Background with other user avatar */}
-            <Image source={{ uri: otherUserImage }} style={StyleSheet.absoluteFill} blurRadius={22} />
-            <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(9, 2, 26, 0.88)' }]} />
+            {/* Rich Cyberpunk Nobility Radial Gradient Background */}
+            <LinearGradient
+                colors={['#0C0219', '#240748', '#460C6E', '#1D0538', '#080112']}
+                locations={[0, 0.3, 0.65, 0.85, 1]}
+                start={{ x: 0.2, y: 0 }}
+                end={{ x: 0.8, y: 1 }}
+                style={StyleSheet.absoluteFill}
+            />
+            
+            {/* Soft Blurred User Avatar Overlay */}
+            <Image source={{ uri: otherUserImage }} style={StyleSheet.absoluteFill} blurRadius={50} opacity={0.22} />
+            <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(10, 2, 22, 0.45)' }]} />
 
             <Animated.View style={[styles.content, animatedStyle]}>
-                
-                {/* Caller Information */}
-                <View style={styles.callerInfoContainer}>
-                    <View style={styles.avatarWrapper}>
-                        {callState !== 'active' && callState !== 'ended' && (
-                            <Animated.View style={[styles.ring, ringStyle]} />
-                        )}
-                        <View style={styles.avatarBorder}>
-                            <Image source={{ uri: otherUserImage }} style={styles.avatar} />
-                        </View>
-                    </View>
-                    <Text style={styles.callerName}>{otherUserName}</Text>
-                    <Text style={styles.statusLabel}>{statusText}</Text>
-                    {callState === 'active' && (
-                        <Text style={styles.durationLabel}>{formatDuration(duration)}</Text>
+                <View style={styles.headerSection}>
+                    {isFemale ? (
+                        <BlurView intensity={25} tint="dark" style={styles.diamondPill}>
+                            <Ionicons name="diamond" size={14} color="#00F0FF" style={{ marginRight: 6 }} />
+                            <Text style={styles.diamondPillText}>+217.5 Elmas / Dk</Text>
+                        </BlurView>
+                    ) : (
+                        <BlurView intensity={25} tint="dark" style={styles.pricePill}>
+                            <Ionicons name="sparkles" size={14} color="#FFD700" style={{ marginRight: 6 }} />
+                            <Text style={styles.pricePillText}>50 Coin / Dk</Text>
+                        </BlurView>
                     )}
                 </View>
 
-                {/* Waveform/Visual Section */}
+                <View style={styles.avatarContainer}>
+                    {callState !== 'active' && callState !== 'ended' && <Animated.View style={[styles.ringingRing, ringPulseStyle]} />}
+                    <Animated.View style={[styles.avatarBreathingBox, avatarBreathingStyle]}>
+                        <LinearGradient colors={callState === 'active' ? ['#FF007F', '#9D4EDD', '#FFD700'] : ['#9D4EDD', '#7B2CBF', '#FF007F']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.avatarGradientBorder}>
+                            <View style={styles.avatarInnerFrame}>
+                                <Image source={{ uri: otherUserImage }} style={styles.avatarImage} />
+                            </View>
+                        </LinearGradient>
+                    </Animated.View>
+                </View>
+
+                <View style={styles.userInfoSection}>
+                    <View style={styles.userNameRow}>
+                        <Text style={styles.userNameText}>{otherUserName}</Text>
+                        <Ionicons name="shield-checkmark-sharp" size={20} color="#3B82F6" style={{ marginLeft: 6 }} />
+                    </View>
+
+                    {vipLevel > 0 && (
+                        <View style={styles.badgesRow}>
+                            <VipBadge level={vipLevel} size={42} />
+                        </View>
+                    )}
+
+                    <View style={styles.statusRow}>
+                        <View style={[styles.statusDot, callState === 'active' ? styles.statusDotActive : styles.statusDotRinging]} />
+                        <Text style={styles.statusText}>{statusText}</Text>
+                    </View>
+                    {callState === 'active' && <Text style={styles.timerText}>{formatDuration(duration)}</Text>}
+                </View>
+
                 <View style={styles.waveformContainer}>
                     {callState === 'active' && (
-                        <View style={styles.waveform}>
-                            {[...Array(15)].map((_, i) => (
-                                <WaveformBar key={i} index={i} />
-                            ))}
-                        </View>
-                    )}
-                    {callState === 'outgoing' && !isOperator && (
-                        <View style={styles.priceTipCard}>
-                            <Ionicons name="cash-outline" size={16} color="#fbbf24" style={{ marginRight: 6 }} />
-                            <Text style={styles.priceTipText}>Arama Ücreti: 50 Coin/Dk</Text>
+                        <View style={styles.waveformRow}>
+                            {[...Array(16)].map((_, i) => <WaveformBar key={i} index={i} isActive={!isMuted} volume={speechVolume} />)}
                         </View>
                     )}
                 </View>
 
-                {/* Control Action Buttons */}
-                <View style={styles.controlsContainer}>
-                    {renderControls()}
-                </View>
-
+                <View style={styles.controlsDockContainer}>{renderControls()}</View>
             </Animated.View>
         </View>
     );
@@ -653,108 +667,238 @@ export default function VoiceCallScreen({ route, navigation }) {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#09021a',
+        backgroundColor: '#0A0314',
+    },
+    ambientOrbTop: {
+        position: 'absolute',
+        top: height * 0.12,
+        left: width * 0.15,
+        width: 220,
+        height: 220,
+        borderRadius: 110,
+        backgroundColor: 'rgba(157, 78, 221, 0.18)',
+    },
+    ambientOrbBottom: {
+        position: 'absolute',
+        bottom: height * 0.2,
+        right: width * 0.1,
+        width: 260,
+        height: 260,
+        borderRadius: 130,
+        backgroundColor: 'rgba(255, 0, 127, 0.14)',
     },
     content: {
         flex: 1,
         justifyContent: 'space-between',
         alignItems: 'center',
-        paddingVertical: height * 0.1,
+        paddingVertical: Platform.OS === 'ios' ? 60 : 40,
+        paddingHorizontal: 20,
     },
-    callerInfoContainer: {
+    headerSection: {
         alignItems: 'center',
-        marginTop: 40,
+        width: '100%',
+        marginTop: 10,
     },
-    avatarWrapper: {
-        width: 140,
-        height: 140,
+    pricePill: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingVertical: 6,
+        paddingHorizontal: 16,
+        borderRadius: 20,
+        borderWidth: 1,
+        borderColor: 'rgba(255, 215, 0, 0.35)',
+        backgroundColor: 'rgba(255, 215, 0, 0.08)',
+        overflow: 'hidden',
+    },
+    pricePillText: {
+        color: '#FFD700',
+        fontSize: 13,
+        fontWeight: '800',
+        letterSpacing: 0.5,
+    },
+    diamondPill: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingVertical: 6,
+        paddingHorizontal: 16,
+        borderRadius: 20,
+        borderWidth: 1,
+        borderColor: 'rgba(0, 240, 255, 0.4)',
+        backgroundColor: 'rgba(0, 240, 255, 0.1)',
+        overflow: 'hidden',
+    },
+    diamondPillText: {
+        color: '#00F0FF',
+        fontSize: 13,
+        fontWeight: '800',
+        letterSpacing: 0.5,
+    },
+    avatarContainer: {
         justifyContent: 'center',
         alignItems: 'center',
-        marginBottom: 20,
+        marginVertical: 10,
     },
-    avatarBorder: {
-        width: 120,
-        height: 120,
-        borderRadius: 60,
-        borderWidth: 4,
-        borderColor: 'rgba(236, 72, 153, 0.45)',
+    radialBackglow: {
+        position: 'absolute',
+        width: 190,
+        height: 190,
+        borderRadius: 95,
+        backgroundColor: 'rgba(255, 0, 127, 0.22)',
+    },
+    ringingRing: {
+        position: 'absolute',
+        width: 140,
+        height: 140,
+        borderRadius: 70,
+        borderWidth: 2,
+        borderColor: '#FF007F',
+    },
+    avatarBreathingBox: {
+        width: 136,
+        height: 136,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    avatarGradientBorder: {
+        width: 134,
+        height: 134,
+        borderRadius: 67,
+        padding: 3.5,
+        justifyContent: 'center',
+        alignItems: 'center',
+        elevation: 12,
+        shadowColor: '#FF007F',
+        shadowOffset: { width: 0, height: 6 },
+        shadowOpacity: 0.5,
+        shadowRadius: 14,
+    },
+    avatarInnerFrame: {
+        width: '100%',
+        height: '100%',
+        borderRadius: 63,
         overflow: 'hidden',
-        zIndex: 2,
+        borderWidth: 2,
+        borderColor: 'rgba(255, 255, 255, 0.4)',
+        backgroundColor: '#1E0A38',
     },
-    avatar: {
+    avatarImage: {
         width: '100%',
         height: '100%',
         resizeMode: 'cover',
     },
-    ring: {
-        position: 'absolute',
-        width: 120,
-        height: 120,
-        borderRadius: 60,
-        borderWidth: 2,
-        borderColor: '#EC4899',
-        zIndex: 1,
+    userInfoSection: {
+        alignItems: 'center',
+        width: '100%',
     },
-    callerName: {
-        fontSize: 28,
+    userNameRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    userNameText: {
+        fontSize: 26,
         fontWeight: '900',
-        color: 'white',
+        color: '#FFFFFF',
         letterSpacing: 0.5,
-        textShadowColor: 'rgba(0, 0, 0, 0.35)',
+        textShadowColor: 'rgba(0, 0, 0, 0.6)',
         textShadowOffset: { width: 0, height: 2 },
-        textShadowRadius: 4,
+        textShadowRadius: 6,
     },
-    statusLabel: {
-        fontSize: 15,
-        color: 'rgba(255, 255, 255, 0.65)',
-        marginTop: 10,
-        fontWeight: '700',
-        letterSpacing: 0.5,
+    badgesRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginTop: 8,
     },
-    durationLabel: {
-        fontSize: 20,
+    agencyBadge: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingVertical: 3.5,
+        paddingHorizontal: 10,
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: 'rgba(255, 215, 0, 0.35)',
+        backgroundColor: 'rgba(255, 215, 0, 0.1)',
+        overflow: 'hidden',
+    },
+    agencyBadgeText: {
+        color: '#FFD700',
+        fontSize: 10,
         fontWeight: '900',
-        color: '#EC4899',
-        marginTop: 15,
-        letterSpacing: 1,
+        letterSpacing: 0.6,
+    },
+    statusRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginTop: 12,
+    },
+    statusDot: {
+        width: 8,
+        height: 8,
+        borderRadius: 4,
+        marginRight: 8,
+    },
+    statusDotActive: {
+        backgroundColor: '#10B981',
+        shadowColor: '#10B981',
+        shadowOffset: { width: 0, height: 0 },
+        shadowOpacity: 0.8,
+        shadowRadius: 6,
+    },
+    statusDotRinging: {
+        backgroundColor: '#FFD700',
+        shadowColor: '#FFD700',
+        shadowOffset: { width: 0, height: 0 },
+        shadowOpacity: 0.8,
+        shadowRadius: 6,
+    },
+    statusText: {
+        color: 'rgba(255, 255, 255, 0.75)',
+        fontSize: 14,
+        fontWeight: '700',
+        letterSpacing: 0.4,
+    },
+    timerText: {
+        fontSize: 34,
+        fontWeight: '900',
+        color: '#FF007F',
+        marginTop: 10,
+        letterSpacing: 2,
+        textShadowColor: 'rgba(255, 0, 127, 0.4)',
+        textShadowOffset: { width: 0, height: 2 },
+        textShadowRadius: 8,
     },
     waveformContainer: {
-        height: 120,
+        height: 60,
         justifyContent: 'center',
         alignItems: 'center',
         width: '100%',
     },
-    waveform: {
+    waveformRow: {
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'center',
-        height: 80,
-        gap: 5,
+        gap: 6,
+        height: 55,
     },
-    bar: {
-        width: 4,
-        backgroundColor: '#8B5CF6',
-        borderRadius: 2,
+    neonBarWrapper: {
+        width: 6,
+        borderRadius: 3,
+        overflow: 'hidden',
+        shadowOffset: { width: 0, height: 0 },
+        shadowOpacity: 0.95,
+        shadowRadius: 10,
+        elevation: 10,
     },
-    priceTipCard: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: 'rgba(251, 191, 36, 0.15)',
-        borderColor: 'rgba(251, 191, 36, 0.3)',
-        borderWidth: 1,
-        paddingVertical: 8,
-        paddingHorizontal: 16,
-        borderRadius: 20,
-    },
-    priceTipText: {
-        color: '#fbbf24',
-        fontSize: 13,
-        fontWeight: '700',
-    },
-    controlsContainer: {
+    neonBarGradient: {
         width: '100%',
-        paddingHorizontal: 40,
-        marginBottom: 20,
+        height: '100%',
+        borderRadius: 3,
+    },
+    controlsDockContainer: {
+        width: '100%',
+        paddingHorizontal: 10,
+        marginBottom: 10,
     },
     controlsRow: {
         flexDirection: 'row',
@@ -762,57 +906,87 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         width: '100%',
     },
-    controlsRowActive: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        width: '100%',
-    },
     controlBtnWrapper: {
         alignItems: 'center',
     },
-    circleBtn: {
-        width: 70,
-        height: 70,
-        borderRadius: 35,
+    actionCircleBtn: {
+        width: 72,
+        height: 72,
+        borderRadius: 36,
         justifyContent: 'center',
         alignItems: 'center',
+        elevation: 10,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 8 },
+        shadowOpacity: 0.4,
+        shadowRadius: 10,
+    },
+    controlBtnText: {
+        color: '#FFFFFF',
+        marginTop: 8,
+        fontSize: 13,
+        fontWeight: '800',
+    },
+    floatingGlassDock: {
+        flexDirection: 'row',
+        justifyContent: 'space-around',
+        alignItems: 'center',
+        paddingVertical: 14,
+        paddingHorizontal: 20,
+        borderRadius: 40,
+        borderWidth: 1,
+        borderColor: 'rgba(255, 255, 255, 0.14)',
+        backgroundColor: 'rgba(21, 8, 42, 0.65)',
+        overflow: 'hidden',
+        elevation: 12,
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 10 },
-        shadowOpacity: 0.35,
-        shadowRadius: 10,
-        elevation: 8,
+        shadowOpacity: 0.5,
+        shadowRadius: 16,
     },
-    circleBtnSmall: {
+    dockBtnWrapper: {
+        alignItems: 'center',
+    },
+    dockIconBtn: {
         width: 54,
         height: 54,
         borderRadius: 27,
-        backgroundColor: 'rgba(255, 255, 255, 0.12)',
-        borderColor: 'rgba(255, 255, 255, 0.15)',
+        backgroundColor: 'rgba(255, 255, 255, 0.1)',
+        borderColor: 'rgba(255, 255, 255, 0.18)',
         borderWidth: 1,
         justifyContent: 'center',
         alignItems: 'center',
     },
-    declineBg: {
-        backgroundColor: '#EF4444',
+    dockIconBtnMuted: {
+        backgroundColor: 'rgba(255, 0, 127, 0.25)',
+        borderColor: '#FF007F',
     },
-    acceptBg: {
-        backgroundColor: '#10B981',
+    dockIconBtnSpeaker: {
+        backgroundColor: 'rgba(255, 215, 0, 0.2)',
+        borderColor: '#FFD700',
     },
-    activeIndicator: {
-        backgroundColor: '#EC4899',
-        borderColor: '#EC4899',
+    dockEndCallBtn: {
+        width: 72,
+        height: 72,
+        borderRadius: 36,
+        justifyContent: 'center',
+        alignItems: 'center',
+        elevation: 12,
+        shadowColor: '#DC2626',
+        shadowOffset: { width: 0, height: 6 },
+        shadowOpacity: 0.6,
+        shadowRadius: 12,
     },
-    controlBtnText: {
-        color: 'white',
-        marginTop: 10,
-        fontSize: 13,
-        fontWeight: '700',
-    },
-    controlBtnTextSmall: {
-        color: 'rgba(255, 255, 255, 0.65)',
-        marginTop: 8,
+    dockBtnText: {
+        color: 'rgba(255, 255, 255, 0.8)',
         fontSize: 12,
-        fontWeight: '600',
+        fontWeight: '700',
+        marginTop: 6,
+    },
+    dockBtnTextEnd: {
+        color: '#FFFFFF',
+        fontSize: 13,
+        fontWeight: '900',
+        marginTop: 6,
     }
 });

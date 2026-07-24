@@ -6,5 +6,7 @@ build/
 .expo/
 *.log
 web-admin/dist/
-mobile-app/.expo/
 *.msi
+*.apk
+fiva-release.apk
+fiva-dev-client.apk

@@ -1015,6 +1015,13 @@ function initializeSockets(io) {
             io.to(roomKey).emit('call_started', { chatId: roomKey });
         });
 
+        socket.on('call_connected', (data) => {
+            const { chatId } = data;
+            const roomKey = chatId ? chatId.toString() : '';
+            console.log(`[CALL LOG 🟢] call_connected received for chat ${roomKey}. Broadcasting call_connected to room.`);
+            io.to(roomKey).emit('call_connected', { chatId: roomKey });
+        });
+
         socket.on('call_reject', async (data) => {
             const { chatId, callerId } = data;
             const receiverId = socket.user?.id || (socket.handshake?.query?.userId || socket.handshake?.auth?.userId);

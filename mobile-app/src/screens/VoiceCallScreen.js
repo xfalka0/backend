@@ -285,6 +285,9 @@ export default function VoiceCallScreen({ route, navigation }) {
                 onJoinChannelSuccess: (connection, elapsed) => {
                     console.log('[Agora] Joined channel success:', connection.channelId);
                     isJoinedRef.current = true;
+                    setStatusText('Bağlandı');
+                    setCallState('active');
+                    startTimer();
                     if (socket) {
                         socket.emit('call_connected', { chatId });
                     }

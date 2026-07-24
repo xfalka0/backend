@@ -32,13 +32,14 @@ let RtcSurfaceView = null;
 let RtcTextureView = null;
 let ChannelProfileType = {};
 let ClientRoleType = {};
-let VideoSourceType = {};
+let VideoSourceType = { VideoSourceCamera: 0, VideoSourceRemote: 9 };
 try {
     AgoraRTC = require('react-native-agora');
     RtcSurfaceView = AgoraRTC.RtcSurfaceView;
     RtcTextureView = AgoraRTC.RtcTextureView;
     ChannelProfileType = AgoraRTC.ChannelProfileType;
     ClientRoleType = AgoraRTC.ClientRoleType;
+    if (AgoraRTC.VideoSourceType) VideoSourceType = AgoraRTC.VideoSourceType;
     console.log('[Agora Video] Native module loaded successfully.');
 } catch (e) {
     console.warn('[Agora Video] Native module not loaded:', e.message);
@@ -577,35 +578,21 @@ export default function VideoCallScreen({ route, navigation }) {
     }));
 
     const myAvatarImage = resolveImageUrl(currentUser?.avatar_url || currentUser?.avatar || currentUser?.photo);
-    const VideoView = RtcSurfaceView || RtcTextureView;
-    const renderRtcVideo = (canvas, style, options = {}) => {
-        if (!VideoView) return null;
-
-        const props = {
-            key: options.key,
-            canvas: {
-                renderMode: 1,
-                ...canvas,
-            },
-            style,
-        };
-
-        if (VideoView === RtcSurfaceView && options.overlay) {
-            props.zOrderMediaOverlay = true;
-        }
-
-        return <VideoView {...props} />;
-    };
+    // Remote: use SurfaceView (full-screen, fastest). Local: ALWAYS use TextureView to prevent
+    // Android SurfaceFlinger z-order bleed where the remote stream appears in the local window.
+    const RemoteVideoView = RtcSurfaceView || RtcTextureView;
+    const LocalVideoView = RtcTextureView || RtcSurfaceView;
 
     return (
         <View style={styles.container}>
-            {/* Background Stream View */}
-            {callState === 'active' && remoteUid !== null && remoteUid !== undefined && isRemoteVideoOn !== false && VideoView ? (
-                renderRtcVideo(
-                    { uid: Number(remoteUid), sourceType: VideoSourceType.VideoSourceRemote ?? 9 },
-                    StyleSheet.absoluteFill,
-                    { key: `remote-${remoteUid}-${videoViewKey}` }
-                )
+            {/* Background Stream View - Remote user full screen */}
+            {callState === 'active' && remoteUid !== null && remoteUid !== undefined && isRemoteVideoOn !== false && RemoteVideoView ? (
+                <RemoteVideoView
+                    key={`remote-${remoteUid}-${videoViewKey}`}
+                    canvas={{ uid: Number(remoteUid), renderMode: 1, sourceType: VideoSourceType.VideoSourceRemote }}
+                    style={StyleSheet.absoluteFill}
+                    zOrderMediaOverlay={false}
+                />
             ) : (
                 // Falling back to avatar representation if not connected or remote video is off
                 <View style={styles.fallbackRemoteContainer}>
@@ -631,12 +618,13 @@ export default function VideoCallScreen({ route, navigation }) {
                         style={StyleSheet.absoluteFill} 
                         resizeMode="cover"
                     />
-                    {isCameraOn && VideoView && (
-                        renderRtcVideo(
-                            { uid: 0, sourceType: VideoSourceType.VideoSourceCamera ?? 0 },
-                            StyleSheet.absoluteFill,
-                            { key: `local-${videoViewKey}`, overlay: true }
-                        )
+                    {isCameraOn && LocalVideoView && (
+                        // TextureView for local: never bleeds remote content, no z-order issues
+                        <LocalVideoView
+                            key={`local-${videoViewKey}`}
+                            canvas={{ uid: 0, renderMode: 1, sourceType: VideoSourceType.VideoSourceCamera }}
+                            style={StyleSheet.absoluteFill}
+                        />
                     )}
                     {!isCameraOn && (
                         <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(15, 23, 42, 0.85)', justifyContent: 'center', alignItems: 'center' }]}>

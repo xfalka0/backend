@@ -350,7 +350,7 @@ export default function MessagesScreen({ navigation, route }) {
                                             <>
                                                 <VipBadge level={item.vip_level} style={{ marginLeft: 2 }} />
                                                 {(item.agency_name || item.agencyName) && (
-                                                    <AgencyBadge agencyName={item.agency_name || item.agencyName} size={18} style={{ marginLeft: 4 }} />
+                                                    <AgencyBadge agencyName={item.agency_name || item.agencyName} size={16} style={{ marginLeft: 4 }} />
                                                 )}
                                             </>
                                         )}

@@ -68,14 +68,7 @@ const TURKISH_CITIES = [
 ];
 
 const getHeaderStyle = (vipLevel) => {
-    const level = parseInt(vipLevel || 0, 10);
-    if (level === 0) return {};
-    if (level === 1) return { borderColor: 'rgba(205,127,50,0.2)', borderWidth: 1, borderRadius: 28, padding: 12, backgroundColor: 'rgba(255,255,255,0.01)' };
-    if (level === 2) return { borderColor: 'rgba(203,213,225,0.4)', borderWidth: 1.5, borderRadius: 28, padding: 16, backgroundColor: 'rgba(255,255,255,0.02)', shadowColor: 'rgba(203,213,225,0.3)', shadowOffset: {width: 0, height: 4}, shadowOpacity: 0.3, shadowRadius: 10 };
-    if (level === 3) return { borderColor: 'rgba(58,134,200,0.5)', borderWidth: 1.5, borderRadius: 28, padding: 16, backgroundColor: 'rgba(58,134,200,0.04)', shadowColor: 'rgba(58,134,200,0.4)', shadowOffset: {width: 0, height: 6}, shadowOpacity: 0.4, shadowRadius: 12 };
-    if (level === 4) return { borderColor: 'rgba(131,56,236,0.6)', borderWidth: 2, borderRadius: 28, padding: 18, backgroundColor: 'rgba(131,56,236,0.06)', shadowColor: 'rgba(131,56,236,0.5)', shadowOffset: {width: 0, height: 8}, shadowOpacity: 0.5, shadowRadius: 16 };
-    if (level === 5) return { borderColor: 'rgba(255,112,166,0.7)', borderWidth: 2.5, borderRadius: 28, padding: 20, backgroundColor: 'rgba(255,112,166,0.08)', shadowColor: 'rgba(255,112,166,0.6)', shadowOffset: {width: 0, height: 10}, shadowOpacity: 0.6, shadowRadius: 20 };
-    return { borderColor: 'rgba(255,183,3,0.8)', borderWidth: 3, borderRadius: 28, padding: 22, backgroundColor: 'rgba(255,183,3,0.1)', shadowColor: 'rgba(255,183,3,0.7)', shadowOffset: {width: 0, height: 12}, shadowOpacity: 0.7, shadowRadius: 24 };
+    return {};
 };
 
 const VipBoostClaimWidget = ({ userId, vipLevel, balance, setBalance, showAlert }) => {
@@ -865,7 +858,7 @@ const ProfileScreen = ({ route }) => {
                                 <VipBadge level={parseInt(user?.vip_level)} size={38} />
                             )}
                             {(user?.agency_name || user?.agencyName) && (
-                                <AgencyBadge agencyName={user.agency_name || user.agencyName} size={22} style={{ marginLeft: 4 }} />
+                                <AgencyBadge agencyName={user.agency_name || user.agencyName} size={16} style={{ marginLeft: 4 }} />
                             )}
                             {user?.nobilityKey && (
                                 <View style={[styles.nobilityBadge, { backgroundColor: `${user.nobilityNameColor || '#FFD166'}20`, borderColor: user.nobilityNameColor || '#FFD166', borderWidth: 1 }]}>

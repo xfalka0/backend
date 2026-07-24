@@ -2,31 +2,63 @@ import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
 
-const SEAT_OPTIONS = [4, 8, 12, 16];
+const SEAT_OPTIONS = [
+    { count: 8, label: '8 Koltuk', isAvailable: true, level: 'Seviye 1' },
+    { count: 12, label: '12 Koltuk', isAvailable: false, level: 'Seviye 2' },
+    { count: 16, label: '16 Koltuk', isAvailable: false, level: 'Seviye 3' },
+    { count: 20, label: '20 Koltuk', isAvailable: false, level: 'Seviye 4' },
+];
 
-export default function SeatCountSelector({ selectedSeats, onSelectSeats }) {
+export default function SeatCountSelector({ selectedSeats, onSelectSeats, onLockedPress }) {
+    const handlePress = (option) => {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        if (option.isAvailable) {
+            onSelectSeats(option.count);
+        } else {
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+            if (onLockedPress) {
+                onLockedPress(option);
+            }
+        }
+    };
+
     return (
         <View style={styles.container}>
-            <Text style={styles.label}>Koltuk Sayısı</Text>
+            <View style={styles.headerRow}>
+                <Text style={styles.label}>KOLTUK KAPASİTESİ</Text>
+                <View style={styles.activeLevelTag}>
+                    <Ionicons name="sparkles" size={10} color="#a855f7" />
+                    <Text style={styles.activeLevelText}>Oda Seviyesi 1</Text>
+                </View>
+            </View>
             
-            <View style={styles.optionsRow}>
-                {SEAT_OPTIONS.map((count) => {
-                    const isSelected = selectedSeats === count;
+            <View style={styles.gridContainer}>
+                {SEAT_OPTIONS.map((option) => {
+                    const isSelected = selectedSeats === option.count && option.isAvailable;
                     
                     if (isSelected) {
                         return (
                             <TouchableOpacity 
-                                key={count} 
-                                style={styles.optionWrapper}
+                                key={option.count} 
+                                style={styles.activeWrapper}
                                 activeOpacity={0.9}
                             >
                                 <LinearGradient
-                                    colors={['#8b5cf6', '#ec4899']}
-                                    style={styles.activeOption}
+                                    colors={['#a855f7', '#ec4899']}
+                                    start={{ x: 0, y: 0 }}
+                                    end={{ x: 1, y: 1 }}
+                                    style={styles.activeGradient}
                                 >
-                                    <Ionicons name="people" size={18} color="#FFF" />
-                                    <Text style={styles.activeText}>{count} Koltuk</Text>
+                                    <View style={styles.activeIconCircle}>
+                                        <Ionicons name="people" size={15} color="#FFF" />
+                                    </View>
+                                    <View style={styles.activeTextGroup}>
+                                        <Text style={styles.activeTitle}>{option.label}</Text>
+                                        <Text style={styles.activeSub}>Aktif Kullanımda</Text>
+                                    </View>
+                                    <Ionicons name="checkmark-circle" size={16} color="#FFF" style={styles.checkIcon} />
                                 </LinearGradient>
                             </TouchableOpacity>
                         );
@@ -34,13 +66,42 @@ export default function SeatCountSelector({ selectedSeats, onSelectSeats }) {
 
                     return (
                         <TouchableOpacity
-                            key={count}
-                            style={styles.option}
-                            onPress={() => onSelectSeats(count)}
-                            activeOpacity={0.7}
+                            key={option.count}
+                            style={[
+                                styles.optionCard,
+                                !option.isAvailable && styles.lockedCard
+                            ]}
+                            onPress={() => handlePress(option)}
+                            activeOpacity={0.75}
                         >
-                            <Ionicons name="people-outline" size={18} color="#9DA3B8" />
-                            <Text style={styles.optionText}>{count} Koltuk</Text>
+                            <View style={styles.cardHeader}>
+                                <View style={[
+                                    styles.iconBox,
+                                    !option.isAvailable && styles.lockedIconBox
+                                ]}>
+                                    <Ionicons 
+                                        name={option.isAvailable ? "people-outline" : "lock-closed"} 
+                                        size={13} 
+                                        color={option.isAvailable ? "#ec4899" : "#64748B"} 
+                                    />
+                                </View>
+                                {!option.isAvailable && (
+                                    <View style={styles.levelBadge}>
+                                        <Text style={styles.levelBadgeText}>{option.level}</Text>
+                                    </View>
+                                )}
+                            </View>
+                            <View style={{ marginTop: 4 }}>
+                                <Text style={[
+                                    styles.optionTitle,
+                                    !option.isAvailable && styles.lockedTitle
+                                ]}>
+                                    {option.label}
+                                </Text>
+                                <Text style={styles.optionSub}>
+                                    {option.isAvailable ? 'Seçilebilir' : 'İleride Açılacak'}
+                                </Text>
+                            </View>
                         </TouchableOpacity>
                     );
                 })}
@@ -52,60 +113,135 @@ export default function SeatCountSelector({ selectedSeats, onSelectSeats }) {
 const styles = StyleSheet.create({
     container: {
         width: '100%',
-        marginBottom: 30,
+        marginBottom: 24,
     },
-    label: {
-        color: '#9DA3B8',
-        fontSize: 13,
-        fontWeight: '800',
-        textTransform: 'uppercase',
-        letterSpacing: 1,
+    headerRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
         marginBottom: 12,
     },
-    optionsRow: {
+    label: {
+        color: '#94A3B8',
+        fontSize: 11,
+        fontWeight: '900',
+        letterSpacing: 1.2,
+    },
+    activeLevelTag: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: 'rgba(168, 85, 247, 0.12)',
+        paddingHorizontal: 8,
+        paddingVertical: 3,
+        borderRadius: 8,
+        borderWidth: 1,
+        borderColor: 'rgba(168, 85, 247, 0.25)',
+        gap: 4,
+    },
+    activeLevelText: {
+        color: '#c084fc',
+        fontSize: 10,
+        fontWeight: '800',
+    },
+    gridContainer: {
         flexDirection: 'row',
         flexWrap: 'wrap',
         gap: 10,
     },
-    optionWrapper: {
-        flex: 1,
-        minWidth: '45%',
+    activeWrapper: {
+        width: '48.5%',
         borderRadius: 18,
-        overflow: 'hidden',
-        shadowColor: '#ec4899',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.15,
-        shadowRadius: 6,
-        elevation: 2,
+        backgroundColor: 'transparent',
     },
-    activeOption: {
+    activeGradient: {
+        width: '100%',
+        padding: 12,
+        borderRadius: 18,
         flexDirection: 'row',
         alignItems: 'center',
-        justifyContent: 'center',
-        paddingVertical: 14,
-        gap: 6,
+        gap: 8,
+        minHeight: 68,
     },
-    activeText: {
+    activeIconCircle: {
+        width: 30,
+        height: 30,
+        borderRadius: 15,
+        backgroundColor: 'rgba(255, 255, 255, 0.2)',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    activeTextGroup: {
+        flex: 1,
+    },
+    activeTitle: {
         color: '#FFFFFF',
-        fontWeight: 'bold',
-        fontSize: 14.5,
+        fontWeight: '900',
+        fontSize: 13,
     },
-    option: {
-        flex: 1,
-        minWidth: '45%',
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-        paddingVertical: 14,
-        backgroundColor: 'rgba(255, 255, 255, 0.03)',
-        borderWidth: 1.2,
-        borderColor: 'rgba(255, 255, 255, 0.08)',
-        borderRadius: 18,
-        gap: 6,
-    },
-    optionText: {
-        color: '#9DA3B8',
+    activeSub: {
+        color: 'rgba(255, 255, 255, 0.85)',
+        fontSize: 9,
         fontWeight: '600',
-        fontSize: 14.5,
+        marginTop: 1,
+    },
+    checkIcon: {
+        marginLeft: 0,
+    },
+    optionCard: {
+        width: '48.5%',
+        padding: 12,
+        minHeight: 68,
+        backgroundColor: 'rgba(255, 255, 255, 0.03)',
+        borderWidth: 1,
+        borderColor: 'rgba(255, 255, 255, 0.07)',
+        borderRadius: 18,
+        justifyContent: 'space-between',
+    },
+    lockedCard: {
+        backgroundColor: 'rgba(15, 23, 42, 0.4)',
+        borderColor: 'rgba(255, 255, 255, 0.04)',
+    },
+    cardHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+    },
+    iconBox: {
+        width: 26,
+        height: 26,
+        borderRadius: 13,
+        backgroundColor: 'rgba(236, 72, 153, 0.12)',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    lockedIconBox: {
+        backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    },
+    levelBadge: {
+        backgroundColor: 'rgba(255, 255, 255, 0.06)',
+        paddingHorizontal: 6,
+        paddingVertical: 2,
+        borderRadius: 6,
+        borderWidth: 1,
+        borderColor: 'rgba(255, 255, 255, 0.08)',
+    },
+    levelBadgeText: {
+        color: '#64748B',
+        fontSize: 8.5,
+        fontWeight: '800',
+    },
+    optionTitle: {
+        color: '#F1F5F9',
+        fontWeight: '800',
+        fontSize: 13,
+    },
+    lockedTitle: {
+        color: '#64748B',
+    },
+    optionSub: {
+        color: '#475569',
+        fontSize: 9,
+        fontWeight: '600',
+        marginTop: 1,
     },
 });

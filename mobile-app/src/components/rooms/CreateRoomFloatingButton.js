@@ -9,7 +9,7 @@ export default function CreateRoomFloatingButton({ onPress }) {
     
     return (
         <TouchableOpacity
-            style={[styles.fabWrapper, { bottom: Math.max(insets.bottom + 12, 24) }]}
+            style={[styles.fabWrapper, { bottom: Math.max(insets.bottom + 115, 125) }]}
             activeOpacity={0.88}
             onPress={onPress}
         >

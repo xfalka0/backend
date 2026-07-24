@@ -8,7 +8,7 @@ import * as ImagePicker from 'expo-image-picker';
 import axios from 'axios';
 import { API_URL } from '../config';
 
-import { canCreateRoom } from '../utils/permissions';
+import { canCreateRoom, isAgencyOwnerOrStaff } from '../utils/permissions';
 import { useAlert } from '../contexts/AlertContext';
 
 // Components
@@ -29,6 +29,7 @@ export default function CreateRoomScreen({ navigation }) {
     const [user, setUser] = useState(null);
     const [checkingAuth, setCheckingAuth] = useState(true);
     const [hasPermission, setHasPermission] = useState(false);
+    const [isAgency, setIsAgency] = useState(false);
 
     // Form states
     const [roomTitle, setRoomTitle] = useState('');
@@ -49,6 +50,7 @@ export default function CreateRoomScreen({ navigation }) {
                 setUser(parsedUser);
                 const allowed = canCreateRoom(parsedUser);
                 setHasPermission(allowed);
+                setIsAgency(isAgencyOwnerOrStaff(parsedUser));
             } else {
                 setHasPermission(false);
             }
@@ -83,7 +85,7 @@ export default function CreateRoomScreen({ navigation }) {
         }
     };
 
-    const handleCreateRoom = async () => {
+    const handleCreateRoomPress = () => {
         if (!roomTitle.trim()) {
             showAlert({
                 title: 'Eksik Bilgi',
@@ -93,6 +95,24 @@ export default function CreateRoomScreen({ navigation }) {
             return;
         }
 
+        if (isAgency) {
+            // Agency owner -> free room creation
+            executeCreateRoom();
+        } else {
+            // Non-agency -> confirm 5000 coins fee
+            showAlert({
+                title: '5.000 Jeton Ödensin mi? 💎',
+                message: `"${roomTitle.trim()}" odasını açmak için bakiyenizden 5.000 Jeton düşülecektir. İşlemi onaylıyor musunuz? (Her kullanıcı maksimum 1 oda açabilir)`,
+                type: 'warning',
+                showCancel: true,
+                confirmText: 'Evet, Öde ve Başlat',
+                cancelText: 'Vazgeç',
+                onConfirm: () => executeCreateRoom()
+            });
+        }
+    };
+
+    const executeCreateRoom = async () => {
         setLoading(true);
         try {
             const token = await AsyncStorage.getItem('token');
@@ -126,20 +146,26 @@ export default function CreateRoomScreen({ navigation }) {
                 headers: { Authorization: `Bearer ${token}` }
             });
 
+            const roomData = res.data;
+            const feeMessage = roomData.fee_deducted > 0
+                ? `Bakiyenizden 5.000 Jeton düşülerek "${roomTitle.trim()}" başlıklı canlı odanız başarıyla açıldı!`
+                : `"${roomTitle.trim()}" başlıklı canlı odanız başarıyla açıldı.`;
+
             showAlert({
                 title: 'Oda Başlatıldı! 🎙️',
-                message: `"${roomTitle.trim()}" başlıklı canlı oda başarıyla oluşturuldu.`,
+                message: feeMessage,
                 type: 'success',
                 onConfirm: () => {
                     navigation.goBack();
-                    navigation.navigate('PartyRoom', { room: res.data });
+                    navigation.navigate('PartyRoom', { room: roomData });
                 }
             });
         } catch (err) {
             console.error('[CreateRoomScreen] Create room error:', err.message);
+            const errorMsg = err.response?.data?.error || 'Oda oluşturulurken bir hata meydana geldi.';
             showAlert({
-                title: 'Hata',
-                message: 'Oda oluşturulurken bir hata meydana geldi.',
+                title: 'Oda Açılamadı',
+                message: errorMsg,
                 type: 'error'
             });
         } finally {
@@ -147,11 +173,19 @@ export default function CreateRoomScreen({ navigation }) {
         }
     };
 
+    const handleLockedSeatPress = (option) => {
+        showAlert({
+            title: `${option.label} Kilitli 🔒`,
+            message: `Bu koltuk kapasitesi ileride Oda Seviyesi yükseldiğinde (${option.level}) otomatik açılacaktır. Şu an 8 Koltuk varsayılan oda seviyeniz için aktiftir.`,
+            type: 'info'
+        });
+    };
+
     if (checkingAuth) {
         return (
             <View style={styles.loadingContainer}>
-                <LinearGradient colors={['#0B1028', '#101632']} style={StyleSheet.absoluteFill} />
-                <ActivityIndicator size="large" color="#FF3F86" />
+                <LinearGradient colors={['#070415', '#120a2a', '#070415']} style={StyleSheet.absoluteFill} />
+                <ActivityIndicator size="large" color="#ec4899" />
             </View>
         );
     }
@@ -160,13 +194,12 @@ export default function CreateRoomScreen({ navigation }) {
         return (
             <NoPermissionCreateRoomView
                 onApplyPress={() => {
-                    // Navigate to Agency Application or show alert
                     navigation.navigate('AgencyApplication');
                 }}
                 onInfoPress={() => {
                     showAlert({
                         title: 'Ajanslar Hakkında',
-                        message: 'Ajansa katılarak yayın açabilir, özel etkinlikler düzenleyebilir ve gelir elde edebilirsiniz.',
+                        message: 'Ajansa katılarak ücretsiz yayın açabilir, özel canlı oda etkinlikleri düzenleyebilir ve gelir elde edebilirsiniz.',
                         type: 'info'
                     });
                 }}
@@ -177,14 +210,24 @@ export default function CreateRoomScreen({ navigation }) {
 
     return (
         <View style={styles.container}>
-            <LinearGradient colors={['#0B1028', '#101632', '#0B1028']} style={StyleSheet.absoluteFill} />
+            <LinearGradient colors={['#070415', '#160b36', '#070415']} style={StyleSheet.absoluteFill} />
             
+            {/* Top Ambient Glow */}
+            <View style={styles.ambientGlowTop} pointerEvents="none">
+                <LinearGradient
+                    colors={['rgba(168, 85, 247, 0.25)', 'transparent']}
+                    style={StyleSheet.absoluteFill}
+                    start={{ x: 0.5, y: 0 }}
+                    end={{ x: 0.5, y: 1 }}
+                />
+            </View>
+
             {/* Header */}
             <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
-                <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
-                    <Ionicons name="chevron-back" size={24} color="#FFFFFF" />
+                <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()} activeOpacity={0.8}>
+                    <Ionicons name="chevron-back" size={22} color="#FFFFFF" />
                 </TouchableOpacity>
-                <Text style={styles.headerTitle}>Oda Kur 🎙️</Text>
+                <Text style={styles.headerTitle}>Oda Kur</Text>
                 <View style={styles.headerSpacer} />
             </View>
 
@@ -196,7 +239,22 @@ export default function CreateRoomScreen({ navigation }) {
                     contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 30 }]}
                     showsVerticalScrollIndicator={false}
                 >
-                    <GlassCard style={styles.formCard} intensity={25} tint="dark">
+                    <GlassCard style={styles.formCard} intensity={35} tint="dark">
+                        {/* Notice Banner */}
+                        <View style={[styles.noticeBanner, isAgency ? styles.agencyNotice : styles.coinNotice]}>
+                            <Ionicons 
+                                name={isAgency ? "ribbon-sharp" : "diamond-sharp"} 
+                                size={14} 
+                                color={isAgency ? "#c084fc" : "#f472b6"} 
+                            />
+                            <Text style={[styles.noticeText, { color: isAgency ? "#c084fc" : "#f472b6" }]}>
+                                {isAgency 
+                                    ? 'Ajans Sahibi Yetkisi: Ücretsiz Oda Kurma Hakkınız Mevcut' 
+                                    : 'Oda Açılış Ücreti: 5.000 Jeton (1 Kişi En Fazla 1 Oda Açabilir)'
+                                }
+                            </Text>
+                        </View>
+
                         {/* Cover Image */}
                         <RoomCoverUploader 
                             imageUri={roomImage}
@@ -220,11 +278,12 @@ export default function CreateRoomScreen({ navigation }) {
                         <SeatCountSelector 
                             selectedSeats={seatCount}
                             onSelectSeats={setSeatCount}
+                            onLockedPress={handleLockedSeatPress}
                         />
 
                         {/* Create Button */}
                         <CreateRoomButton 
-                            onPress={handleCreateRoom}
+                            onPress={handleCreateRoomPress}
                             loading={loading}
                         />
                     </GlassCard>
@@ -237,12 +296,19 @@ export default function CreateRoomScreen({ navigation }) {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#0B1028',
+        backgroundColor: '#070415',
     },
     loadingContainer: {
         flex: 1,
         justifyContent: 'center',
         alignItems: 'center',
+    },
+    ambientGlowTop: {
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        height: 250,
     },
     header: {
         flexDirection: 'row',
@@ -250,25 +316,27 @@ const styles = StyleSheet.create({
         justifyContent: 'space-between',
         paddingHorizontal: 16,
         paddingBottom: 16,
-        borderBottomWidth: 1.2,
-        borderColor: 'rgba(255, 255, 255, 0.05)',
+        borderBottomWidth: 1,
+        borderColor: 'rgba(255, 255, 255, 0.06)',
     },
     backBtn: {
-        width: 40,
-        height: 40,
-        borderRadius: 20,
-        backgroundColor: 'rgba(255, 255, 255, 0.04)',
+        width: 38,
+        height: 38,
+        borderRadius: 19,
+        backgroundColor: 'rgba(255, 255, 255, 0.05)',
         justifyContent: 'center',
         alignItems: 'center',
+        borderWidth: 1,
+        borderColor: 'rgba(255, 255, 255, 0.08)',
     },
     headerTitle: {
         color: '#FFFFFF',
         fontSize: 18,
         fontWeight: '900',
-        letterSpacing: 0.5,
+        letterSpacing: -0.3,
     },
     headerSpacer: {
-        width: 40,
+        width: 38,
     },
     keyboardView: {
         flex: 1,
@@ -279,7 +347,30 @@ const styles = StyleSheet.create({
     formCard: {
         borderRadius: 28,
         padding: 20,
-        borderWidth: 1.2,
+        borderWidth: 1,
         borderColor: 'rgba(255, 255, 255, 0.08)',
+    },
+    noticeBanner: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 12,
+        paddingVertical: 8,
+        borderRadius: 14,
+        marginBottom: 18,
+        gap: 6,
+        borderWidth: 1,
+    },
+    agencyNotice: {
+        backgroundColor: 'rgba(192, 132, 252, 0.1)',
+        borderColor: 'rgba(192, 132, 252, 0.25)',
+    },
+    coinNotice: {
+        backgroundColor: 'rgba(244, 114, 182, 0.1)',
+        borderColor: 'rgba(244, 114, 182, 0.25)',
+    },
+    noticeText: {
+        fontSize: 11,
+        fontWeight: '800',
+        flex: 1,
     },
 });

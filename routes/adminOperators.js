@@ -195,9 +195,11 @@ router.post('/:id/payout', authenticateToken, authorizeRole('admin', 'super_admi
 router.get('/payouts/summary', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
     try {
         const stats = await db.query(`
-            SELECT SUM(pending_balance) as total_pending, SUM(lifetime_earnings) as total_lifetime,
-                (SELECT SUM(amount) FROM payouts WHERE status = 'processed') as total_paid
-            FROM operators
+            SELECT 
+                (SELECT COALESCE(SUM(amount), 0) FROM payouts WHERE status = 'pending') as total_pending_payouts,
+                (SELECT COALESCE(SUM(pending_balance), 0) FROM operators) as total_operator_balances,
+                (SELECT COALESCE(SUM(amount), 0) FROM payouts WHERE status = 'processed') as total_paid,
+                (SELECT COALESCE(SUM(lifetime_earnings), 0) FROM operators) as total_lifetime
         `);
         res.json(stats.rows[0]);
     } catch (err) {
@@ -285,9 +287,9 @@ router.post('/my/withdraw', authenticateToken, async (req, res) => {
             return res.status(400).json({ error: `Yetersiz bakiye. Mevcut bakiyeniz: ${pending.toLocaleString()} elmas.` });
         }
 
-        // 2000 Diamonds = 1 USD (46 TL exchange rate)
+        // 2000 Diamonds = 1 USD (47.35 TL exchange rate)
         const usdValue = withdrawAmount / 2000;
-        const exchangeRate = 46.00;
+        const exchangeRate = 47.35;
         const cashAmount = usdValue * exchangeRate;
 
         // Insert pending payout request and deduct the amount immediately

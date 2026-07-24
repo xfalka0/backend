@@ -65,9 +65,9 @@ const WalletScreen = () => {
     const [accountHolder, setAccountHolder] = useState('');
     const [submitting, setSubmitting] = useState(false);
 
-    // Business Math Constants
+    // Business Math Constants (Fixed Model: 2000 Diamonds = 1 USD)
     const DIAMONDS_PER_USD = 2000;
-    const USD_TO_TRY = 46.00;
+    const USD_TO_TRY = 47.35;
 
     // Withdrawal Packages (Minimum 5 USD / 10,000 Diamonds)
     const WITHDRAW_PACKAGES = [

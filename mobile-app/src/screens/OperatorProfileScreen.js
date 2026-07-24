@@ -313,7 +313,7 @@ export default function OperatorProfileScreen({ route, navigation }) {
                                         )}
                                         <VipBadge level={operator.vip_level} style={{ marginLeft: 2 }} />
                                         {(operator.agency_name || operator.agencyName) && (
-                                            <AgencyBadge agencyName={operator.agency_name || operator.agencyName} size={22} style={{ marginLeft: 4 }} />
+                                            <AgencyBadge agencyName={operator.agency_name || operator.agencyName} size={16} style={{ marginLeft: 4 }} />
                                         )}
                                     </View>
 
@@ -401,101 +401,131 @@ export default function OperatorProfileScreen({ route, navigation }) {
                                 <Text style={styles.bioText}>{maskContactInfo(operator.bio) || 'Merhaba! Seninle tanışmak için sabırsızlanıyorum.'}</Text>
                             </View>
 
-                            {/* 3. İlgi Alanları (Her Zaman Gösterilecek) */}
-                            {(() => {
-                                 let displayInterests = [];
-                                 if (operator.interests) {
-                                     try {
-                                         displayInterests = Array.isArray(operator.interests) 
-                                             ? operator.interests 
-                                             : (JSON.parse(operator.interests || '[]').length > 0 
-                                                 ? JSON.parse(operator.interests) 
-                                                 : operator.interests.split(','));
-                                     } catch (e) {
-                                         displayInterests = operator.interests.split(',');
-                                     }
-                                 }
-                                 
-                                 // Deterministic random interests (0 to 3) based on profile ID
-                                 if (!displayInterests || displayInterests.length === 0 || (displayInterests.length === 1 && !displayInterests[0])) {
-                                     const allInterests = ["Müzik", "Spor", "Seyahat", "Kitap", "Sinema", "Dans", "Oyun", "Sanat", "Doğa", "Fotoğraf", "Yazılım", "Yoga", "Kamp"];
-                                     const idVal = operator.id || operator.user_id || 'default';
-                                     let hash = 0;
-                                     const str = String(idVal);
-                                     for (let i = 0; i < str.length; i++) {
-                                         hash = str.charCodeAt(i) + ((hash << 5) - hash);
-                                     }
-                                     const count = Math.abs(hash) % 4; // 0 to 3 interests
-                                     displayInterests = [];
-                                     const tempPool = [...allInterests];
-                                     for (let j = 0; j < count; j++) {
-                                         const index = Math.abs(hash + j) % tempPool.length;
-                                         displayInterests.push(tempPool[index]);
-                                         tempPool.splice(index, 1);
-                                     }
-                                 }
-                                 
-                                 if (!displayInterests || displayInterests.length === 0) return null;
-                                 
-                                 return (
-                                      <View style={styles.section}>
-                                          <Text style={styles.sectionTitle}>İlgi Alanları</Text>
-                                          <View style={styles.interestsContainer}>
-                                              {displayInterests.map((interest, idx) => {
-                                                  const clean = String(interest || '').trim();
-                                                  const emojiMap = {
-                                                      "müzik": "🎵 Müzik",
-                                                      "spor": "⚽ Spor",
-                                                      "seyahat": "✈️ Seyahat",
-                                                      "kitap": "📚 Kitap",
-                                                      "sinema": "🎬 Sinema",
-                                                      "dans": "💃 Dans",
-                                                      "oyun": "🎮 Oyun",
-                                                      "sanat": "🎨 Sanat",
-                                                      "doğa": "🌿 Doğa",
-                                                      "fotoğraf": "📷 Fotoğraf",
-                                                      "yazılım": "💻 Yazılım",
-                                                      "yoga": "🧘 Yoga",
-                                                      "kamp": "⛺ Kamp"
-                                                  };
-                                                  const withEmoji = emojiMap[clean.toLowerCase()] || clean;
-                                                  return (
-                                                      <View key={idx} style={styles.interestTag}>
-                                                          <Text style={styles.interestText}>{withEmoji}</Text>
-                                                      </View>
-                                                  );
-                                              })}
-                                          </View>
-                                      </View>
-                                  );
-                             })()}
+                            {/* 3. Temel Bilgiler */}
+                            <View style={styles.section}>
+                                <Text style={styles.sectionTitle}>Temel Bilgiler</Text>
+                                <View style={styles.infoTagsContainer}>
+                                    {operator.city && (
+                                        <View style={[styles.infoTag, { backgroundColor: 'rgba(6, 182, 212, 0.15)', borderColor: 'rgba(6, 182, 212, 0.3)' }]}>
+                                            <Ionicons name="location" size={14} color="#06b6d4" />
+                                            <Text style={[styles.infoTagText, { color: '#cffaff' }]}>{operator.city}</Text>
+                                        </View>
+                                    )}
+                                    {operator.age && (
+                                        <View style={[styles.infoTag, { backgroundColor: 'rgba(249, 115, 22, 0.15)', borderColor: 'rgba(249, 115, 22, 0.3)' }]}>
+                                            <Ionicons name="calendar" size={14} color="#f97316" />
+                                            <Text style={[styles.infoTagText, { color: '#ffedd5' }]}>{operator.age} Yaş</Text>
+                                        </View>
+                                    )}
+                                    {operator.job && (
+                                        <View style={[styles.infoTag, { backgroundColor: 'rgba(59, 130, 246, 0.15)', borderColor: 'rgba(59, 130, 246, 0.3)' }]}>
+                                            <Ionicons name="briefcase" size={14} color="#60a5fa" />
+                                            <Text style={[styles.infoTagText, { color: '#dbeafe' }]}>{operator.job}</Text>
+                                        </View>
+                                    )}
+                                    {operator.edu && (
+                                        <View style={[styles.infoTag, { backgroundColor: 'rgba(16, 185, 129, 0.15)', borderColor: 'rgba(16, 185, 129, 0.3)' }]}>
+                                            <Ionicons name="school" size={14} color="#34d399" />
+                                            <Text style={[styles.infoTagText, { color: '#d1fae5' }]}>{operator.edu}</Text>
+                                        </View>
+                                    )}
+                                    {operator.boy && (
+                                        <View style={[styles.infoTag, { backgroundColor: 'rgba(139, 92, 246, 0.15)', borderColor: 'rgba(139, 92, 246, 0.3)' }]}>
+                                            <Ionicons name="man" size={14} color="#a78bfa" />
+                                            <Text style={[styles.infoTagText, { color: '#ddd6fe' }]}>{operator.boy} cm</Text>
+                                        </View>
+                                    )}
+                                    {operator.kilo && (
+                                        <View style={[styles.infoTag, { backgroundColor: 'rgba(239, 68, 68, 0.15)', borderColor: 'rgba(239, 68, 68, 0.3)' }]}>
+                                            <Ionicons name="barbell" size={14} color="#f87171" />
+                                            <Text style={[styles.infoTagText, { color: '#fee2e2' }]}>{operator.kilo} kg</Text>
+                                        </View>
+                                    )}
+                                    {operator.zodiac && (
+                                        <View style={[styles.infoTag, { backgroundColor: 'rgba(168, 85, 247, 0.15)', borderColor: 'rgba(168, 85, 247, 0.3)' }]}>
+                                            <Ionicons name="star" size={14} color="#c084fc" />
+                                            <Text style={[styles.infoTagText, { color: '#f3e8ff' }]}>{operator.zodiac}</Text>
+                                        </View>
+                                    )}
+                                    {operator.relationship && (
+                                        <View style={[styles.infoTag, { backgroundColor: 'rgba(236, 72, 153, 0.15)', borderColor: 'rgba(236, 72, 153, 0.3)' }]}>
+                                            <Ionicons name="heart" size={14} color="#ec4899" />
+                                            <Text style={[styles.infoTagText, { color: '#fbcfe8' }]}>{operator.relationship}</Text>
+                                        </View>
+                                    )}
+                                </View>
+                            </View>
 
-                             {/* 4. Kişisel Bilgiler */}
-                             {(operator.relationship || operator.zodiac || operator.job) && (
-                                 <View style={styles.section}>
-                                     <Text style={styles.sectionTitle}>Kişisel Bilgiler</Text>
-                                     <View style={styles.infoTagsContainer}>
-                                         {operator.relationship && (
-                                             <View style={[styles.infoTag, { backgroundColor: 'rgba(236, 72, 153, 0.15)', borderColor: 'rgba(236, 72, 153, 0.3)' }]}>
-                                                 <Ionicons name="heart" size={14} color="#ec4899" />
-                                                 <Text style={[styles.infoTagText, { color: '#fbcfe8' }]}>{operator.relationship}</Text>
-                                             </View>
-                                         )}
-                                         {operator.zodiac && (
-                                             <View style={[styles.infoTag, { backgroundColor: 'rgba(139, 92, 246, 0.15)', borderColor: 'rgba(139, 92, 246, 0.3)' }]}>
-                                                 <Ionicons name="sparkles" size={14} color="#a78bfa" />
-                                                 <Text style={[styles.infoTagText, { color: '#ddd6fe' }]}>{operator.zodiac}</Text>
-                                             </View>
-                                         )}
-                                         {operator.job && (
-                                             <View style={[styles.infoTag, { backgroundColor: 'rgba(59, 130, 246, 0.15)', borderColor: 'rgba(59, 130, 246, 0.3)' }]}>
-                                                 <Ionicons name="briefcase" size={14} color="#60a5fa" />
-                                                 <Text style={[styles.infoTagText, { color: '#dbeafe' }]}>{operator.job}</Text>
-                                             </View>
-                                         )}
-                                     </View>
-                                 </View>
-                             )}
+                            {/* 4. İlgi Alanları */}
+                            {(() => {
+                                let displayInterests = [];
+                                if (operator.interests) {
+                                    try {
+                                        let parsed = typeof operator.interests === 'string' ? JSON.parse(operator.interests) : operator.interests;
+                                        if (Array.isArray(parsed)) {
+                                            displayInterests = parsed.filter(i => i && typeof i === 'string' && i.trim() !== '[]' && i.trim() !== '');
+                                        } else if (typeof operator.interests === 'string') {
+                                            displayInterests = operator.interests.split(',').map(i => i.trim()).filter(i => i && i !== '[]' && i !== '');
+                                        }
+                                    } catch (e) {
+                                        if (typeof operator.interests === 'string') {
+                                            displayInterests = operator.interests.split(',').map(i => i.trim()).filter(i => i && i !== '[]' && i !== '');
+                                        }
+                                    }
+                                }
+                                
+                                // Fallback deterministic random interests if empty
+                                if (!displayInterests || displayInterests.length === 0) {
+                                    const allInterests = ["Müzik", "Spor", "Seyahat", "Kitap", "Sinema", "Dans", "Oyun", "Sanat", "Doğa", "Fotoğraf", "Yazılım", "Yoga", "Kamp"];
+                                    const idVal = operator.id || operator.user_id || 'default';
+                                    let hash = 0;
+                                    const str = String(idVal);
+                                    for (let i = 0; i < str.length; i++) {
+                                        hash = str.charCodeAt(i) + ((hash << 5) - hash);
+                                    }
+                                    const count = Math.max(2, Math.abs(hash) % 4);
+                                    displayInterests = [];
+                                    const tempPool = [...allInterests];
+                                    for (let j = 0; j < count; j++) {
+                                        const index = Math.abs(hash + j) % tempPool.length;
+                                        displayInterests.push(tempPool[index]);
+                                        tempPool.splice(index, 1);
+                                    }
+                                }
+                                
+                                return (
+                                    <View style={styles.section}>
+                                        <Text style={styles.sectionTitle}>İlgi Alanları</Text>
+                                        <View style={styles.interestsContainer}>
+                                            {displayInterests.map((interest, idx) => {
+                                                const clean = String(interest || '').trim();
+                                                if (!clean || clean === '[]') return null;
+                                                const emojiMap = {
+                                                    "müzik": "🎵 Müzik",
+                                                    "spor": "⚽ Spor",
+                                                    "seyahat": "✈️ Seyahat",
+                                                    "kitap": "📚 Kitap",
+                                                    "sinema": "🎬 Sinema",
+                                                    "dans": "💃 Dans",
+                                                    "oyun": "🎮 Oyun",
+                                                    "sanat": "🎨 Sanat",
+                                                    "doğa": "🌿 Doğa",
+                                                    "fotoğraf": "📷 Fotoğraf",
+                                                    "yazılım": "💻 Yazılım",
+                                                    "yoga": "🧘 Yoga",
+                                                    "kamp": "⛺ Kamp"
+                                                };
+                                                const withEmoji = emojiMap[clean.toLowerCase()] || clean;
+                                                return (
+                                                    <View key={idx} style={styles.interestTag}>
+                                                        <Text style={styles.interestText}>{withEmoji}</Text>
+                                                    </View>
+                                                );
+                                            })}
+                                        </View>
+                                    </View>
+                                );
+                            })()}
                         </View>
                         <View style={{ height: 100 }} />
                     </GlassCard>

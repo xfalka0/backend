@@ -32,7 +32,7 @@ export default function WithdrawalsPage() {
     const [rejectionReason, setRejectionReason] = useState('');
 
     const DIAMONDS_PER_USD = 2000;
-    const USD_TO_TRY = 46.00;
+    const USD_TO_TRY = 47.35;
 
     useEffect(() => {
         fetchWithdrawals();
@@ -186,17 +186,17 @@ export default function WithdrawalsPage() {
 
             {/* Financial Metrics Cards */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                {/* Metric 1 */}
+                {/* Metric 1: Pending Payout Requests (Submitted by operators) */}
                 <div className="relative group">
                     <div className="absolute -inset-0.5 bg-gradient-to-r from-amber-500/10 to-orange-500/10 rounded-[24px] blur opacity-50"></div>
                     <div className="relative bg-slate-900/50 backdrop-blur-2xl border border-white/5 p-6 rounded-[22px] flex items-center justify-between">
                         <div>
-                            <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Bekleyen Çekimler (Diamonds)</span>
+                            <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Bekleyen Çekim Talepleri</span>
                             <h4 className="text-2xl font-black text-amber-500 tracking-tight mt-1">
-                                {parseFloat(summary.total_pending || 0).toLocaleString()} Elmas
+                                {parseFloat(summary.total_pending_payouts || 0).toLocaleString()} Elmas
                             </h4>
                             <p className="text-[10px] text-slate-500 mt-1">
-                                ~ {((summary.total_pending || 0) / DIAMONDS_PER_USD * USD_TO_TRY).toLocaleString('tr-TR', { minimumFractionDigits: 0 })} TL
+                                ~ {((summary.total_pending_payouts || 0) / DIAMONDS_PER_USD * USD_TO_TRY).toLocaleString('tr-TR', { minimumFractionDigits: 0 })} TL
                             </p>
                         </div>
                         <div className="w-12 h-12 bg-amber-500/10 rounded-2xl flex items-center justify-center border border-amber-500/20 text-amber-500">
@@ -205,7 +205,7 @@ export default function WithdrawalsPage() {
                     </div>
                 </div>
 
-                {/* Metric 2 */}
+                {/* Metric 2: Processed Paid Out Amount */}
                 <div className="relative group">
                     <div className="absolute -inset-0.5 bg-gradient-to-r from-emerald-500/10 to-teal-500/10 rounded-[24px] blur opacity-50"></div>
                     <div className="relative bg-slate-900/50 backdrop-blur-2xl border border-white/5 p-6 rounded-[22px] flex items-center justify-between">
@@ -224,21 +224,21 @@ export default function WithdrawalsPage() {
                     </div>
                 </div>
 
-                {/* Metric 3 */}
+                {/* Metric 3: Total Accumulated Operator Balances in Wallets */}
                 <div className="relative group">
                     <div className="absolute -inset-0.5 bg-gradient-to-r from-blue-500/10 to-indigo-500/10 rounded-[24px] blur opacity-50"></div>
                     <div className="relative bg-slate-900/50 backdrop-blur-2xl border border-white/5 p-6 rounded-[22px] flex items-center justify-between">
                         <div>
-                            <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Sistem Toplam Kazancı</span>
+                            <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Operatör Cüzdan Bakiyeleri</span>
                             <h4 className="text-2xl font-black text-blue-500 tracking-tight mt-1">
-                                {parseFloat(summary.total_lifetime || 0).toLocaleString()} Elmas
+                                {parseFloat(summary.total_operator_balances || 0).toLocaleString()} Elmas
                             </h4>
                             <p className="text-[10px] text-slate-500 mt-1">
-                                Çekilen + Bekleyen toplam elmas
+                                Kadın cüzdanlarındaki toplam biriken elmas
                             </p>
                         </div>
                         <div className="w-12 h-12 bg-blue-500/10 rounded-2xl flex items-center justify-center border border-blue-500/20 text-blue-500">
-                            <TrendingUp size={20} />
+                            <Wallet size={20} />
                         </div>
                     </div>
                 </div>

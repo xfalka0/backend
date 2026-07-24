@@ -69,7 +69,7 @@ const OperatorItem = React.memo(({ item, navigation, user, theme, onHiPress }) =
                             <Text style={[styles.name, { color: theme.colors.text }]} numberOfLines={1}>{item.name}</Text>
                             <VipBadge level={item.vip_level} style={{ marginLeft: 2 }} />
                             {(item.agency_name || item.agencyName) && (
-                                <AgencyBadge agencyName={item.agency_name || item.agencyName} size={20} style={{ marginLeft: 4 }} />
+                                <AgencyBadge agencyName={item.agency_name || item.agencyName} size={16} style={{ marginLeft: 4 }} />
                             )}
                             <Ionicons name="checkmark-circle" size={16} color="#3b82f6" />
                         </View>

@@ -111,9 +111,9 @@ async function recordOperatorCommission(client, chatId, senderId, cost, type, ca
     const userCheck = await client.query('SELECT total_spent FROM users WHERE id = $1', [customerId]);
     const userLifetimeSpent = userCheck.rows.length > 0 ? parseFloat(userCheck.rows[0].total_spent || 0) : 0;
     
-    // Unified Economic Model: 2000 Diamonds = 1 USD (46 TL).
-    // 1 spent Coin = 4.35 Diamonds earned.
-    let baseRate = 4.35;
+    // Economic Model: 2000 Diamonds = 1 USD (47.35 TL).
+    // 50% Revenue Share: 1 spent Coin = 10.5 Diamonds earned.
+    let baseRate = 10.5;
     
     // If customer has never spent money, use bonus rate (1/5th) to prevent spam/abuse
     if (userLifetimeSpent <= 0 && customerId) {
@@ -122,7 +122,7 @@ async function recordOperatorCommission(client, chatId, senderId, cost, type, ca
             [customerId]
         );
         if (adminAddCheck.rows.length === 0) {
-            baseRate = 0.87; // Lower rate for non-paying organic users
+            baseRate = 2.1; // Lower rate for non-paying organic users
         }
     }
     

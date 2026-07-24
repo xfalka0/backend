@@ -160,9 +160,42 @@ router.post('/', authenticateToken, async (req, res) => {
     try {
         await client.query('BEGIN');
 
+        // 1. Check if user already has an active room (Max 1 room per user)
+        const existingRoomRes = await client.query('SELECT id, title FROM party_rooms WHERE host_id = $1::text LIMIT 1', [hostId]);
+        if (existingRoomRes.rows.length > 0) {
+            await client.query('ROLLBACK');
+            return res.status(400).json({ 
+                error: `Zaten "${existingRoomRes.rows[0].title}" adında aktif bir odanız bulunmaktadır. Her kullanıcı yalnızca 1 oda oluşturabilir.` 
+            });
+        }
+
+        // 2. Fetch host user details to check agency ownership & balance
+        const userRes = await client.query('SELECT id, role, agency_id, balance FROM users WHERE id = $1::text', [hostId]);
+        if (userRes.rows.length === 0) {
+            await client.query('ROLLBACK');
+            return res.status(404).json({ error: 'Kullanıcı bulunamadı.' });
+        }
+
+        const user = userRes.rows[0];
+        const isAgencyOwner = user.role === 'agency_owner' || user.role === 'admin' || user.role === 'super_admin' || Boolean(user.agency_id);
+        const ROOM_FEE = 5000;
+
+        if (!isAgencyOwner) {
+            const currentBalance = parseInt(user.balance || 0, 10);
+            if (currentBalance < ROOM_FEE) {
+                await client.query('ROLLBACK');
+                return res.status(400).json({ 
+                    error: `Oda açmak için 5.000 Jetona ihtiyacınız var. Mevcut bakiyeniz: ${currentBalance.toLocaleString('tr-TR')} Jeton.` 
+                });
+            }
+
+            // Deduct 5,000 coins from user balance
+            await client.query('UPDATE users SET balance = balance - $1 WHERE id = $2::text', [ROOM_FEE, hostId]);
+        }
+
         const maxSpeakers = parseInt(max_speakers) || 8;
 
-        // 1. Insert room
+        // 3. Insert room
         const roomRes = await client.query(`
             INSERT INTO party_rooms (title, host_id, background_url, is_private, password, description, category, max_speakers)
             VALUES ($1, $2::text, $3, $4, $5, $6, $7, $8)
@@ -180,7 +213,7 @@ router.post('/', authenticateToken, async (req, res) => {
 
         const room = roomRes.rows[0];
 
-        // 2. Pre-populate seats based on chosen max_speakers
+        // 4. Pre-populate seats
         for (let seatNum = 1; seatNum <= maxSpeakers; seatNum++) {
             await client.query(`
                 INSERT INTO party_room_seats (room_id, seat_number, user_id)
@@ -189,7 +222,11 @@ router.post('/', authenticateToken, async (req, res) => {
         }
 
         await client.query('COMMIT');
-        res.json(room);
+        res.json({
+            ...room,
+            is_agency_owner: isAgencyOwner,
+            fee_deducted: isAgencyOwner ? 0 : ROOM_FEE
+        });
     } catch (err) {
         await client.query('ROLLBACK');
         console.error('[API] Create party room error:', err.message);

@@ -63,7 +63,7 @@ function UserMiniProfileHeader({ user }) {
                         </LinearGradient>
                     )}
                     {(user.agency_name || user.agencyName) && (
-                        <AgencyBadge agencyName={user.agency_name || user.agencyName} size={20} style={{ marginLeft: 4 }} />
+                        <AgencyBadge agencyName={user.agency_name || user.agencyName} size={16} style={{ marginLeft: 4 }} />
                     )}
                 </View>
                 

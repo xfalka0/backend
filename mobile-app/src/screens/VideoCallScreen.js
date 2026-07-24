@@ -32,14 +32,16 @@ let RtcSurfaceView = null;
 let RtcTextureView = null;
 let ChannelProfileType = {};
 let ClientRoleType = {};
+let VideoSourceType = {};
 try {
     AgoraRTC = require('react-native-agora');
     RtcSurfaceView = AgoraRTC.RtcSurfaceView;
     RtcTextureView = AgoraRTC.RtcTextureView;
     ChannelProfileType = AgoraRTC.ChannelProfileType;
     ClientRoleType = AgoraRTC.ClientRoleType;
+    console.log('[Agora Video] Native module loaded successfully.');
 } catch (e) {
-    console.warn('[Agora Video] Native module not loaded. Mock mode active.');
+    console.warn('[Agora Video] Native module not loaded:', e.message);
 }
 
 export default function VideoCallScreen({ route, navigation }) {
@@ -68,6 +70,7 @@ export default function VideoCallScreen({ route, navigation }) {
     const [statusText, setStatusText] = useState(initialIsIncoming ? 'Gelen Görüntülü Arama...' : 'Aranıyor...');
     const [remoteUid, setRemoteUid] = useState(null);
     const [isRemoteVideoOn, setIsRemoteVideoOn] = useState(true);
+    const [videoViewKey, setVideoViewKey] = useState(0);
 
     // Refs
     const agoraEngineRef = useRef(null);
@@ -300,6 +303,16 @@ export default function VideoCallScreen({ route, navigation }) {
             // Enable Audio & Video
             await engine.enableAudio();
             await engine.enableVideo();
+            try {
+                await engine.setVideoEncoderConfiguration({
+                    dimensions: { width: 640, height: 360 },
+                    frameRate: 15,
+                    bitrate: 0,
+                    orientationMode: 0,
+                });
+            } catch (encoderErr) {
+                console.warn('[Agora Video] Encoder config warning:', encoderErr.message);
+            }
             await engine.enableLocalVideo(true);
             await engine.startPreview();
             await engine.setEnableSpeakerphone(isSpeaker);
@@ -319,6 +332,26 @@ export default function VideoCallScreen({ route, navigation }) {
                     setRemoteUid(remoteUid);
                     setIsRemoteVideoOn(true);
                 },
+                onFirstRemoteVideoFrame: (connection, remoteUid, width, height, elapsed) => {
+                    console.log("FIRST_REMOTE_VIDEO_FRAME", { remoteUid, width, height, elapsed });
+                    setRemoteUid(remoteUid);
+                    setIsRemoteVideoOn(true);
+                    setVideoViewKey(prev => prev + 1);
+                },
+                onFirstRemoteVideoDecoded: (connection, remoteUid, width, height, elapsed) => {
+                    console.log("FIRST_REMOTE_VIDEO_DECODED", { remoteUid, width, height, elapsed });
+                    setRemoteUid(remoteUid);
+                    setIsRemoteVideoOn(true);
+                    setVideoViewKey(prev => prev + 1);
+                },
+                onVideoSizeChanged: (connection, sourceType, uid, width, height, rotation) => {
+                    console.log("VIDEO_SIZE_CHANGED", { uid, width, height, rotation });
+                    if (uid && uid !== 0) {
+                        setRemoteUid(uid);
+                        setIsRemoteVideoOn(width > 0 && height > 0);
+                        setVideoViewKey(prev => prev + 1);
+                    }
+                },
                 onUserOffline: (connection, remoteUid, reason) => {
                     console.log('[Agora Video] Remote user went offline:', remoteUid, 'reason:', reason);
                     if (reason === 0) {
@@ -327,10 +360,10 @@ export default function VideoCallScreen({ route, navigation }) {
                 },
                 onRemoteVideoStateChanged: (connection, uid, state, reason, elapsed) => {
                     console.log("REMOTE_VIDEO_STATE_CHANGED", { uid, state, reason });
+                    if (uid) setRemoteUid(uid);
                     if (state === 0 && (reason === 5 || reason === 6)) {
                         setIsRemoteVideoOn(false);
                     } else {
-                        if (uid) setRemoteUid(uid);
                         setIsRemoteVideoOn(true);
                     }
                 },
@@ -340,7 +373,7 @@ export default function VideoCallScreen({ route, navigation }) {
             });
 
             // Join Channel
-            const currentUserId = useAppStore.getState().user?.id || routeUser?.id;
+            const currentUserId = useAppStore.getState().user?.id || currentUser?.id;
             const myUid = (Number(currentUserId) && !isNaN(Number(currentUserId)))
                 ? Number(currentUserId)
                 : (Math.floor(Math.random() * 899999) + 100000);
@@ -544,16 +577,35 @@ export default function VideoCallScreen({ route, navigation }) {
     }));
 
     const myAvatarImage = resolveImageUrl(currentUser?.avatar_url || currentUser?.avatar || currentUser?.photo);
+    const VideoView = RtcSurfaceView || RtcTextureView;
+    const renderRtcVideo = (canvas, style, options = {}) => {
+        if (!VideoView) return null;
+
+        const props = {
+            key: options.key,
+            canvas: {
+                renderMode: 1,
+                ...canvas,
+            },
+            style,
+        };
+
+        if (VideoView === RtcSurfaceView && options.overlay) {
+            props.zOrderMediaOverlay = true;
+        }
+
+        return <VideoView {...props} />;
+    };
 
     return (
         <View style={styles.container}>
             {/* Background Stream View */}
-            {callState === 'active' && remoteUid !== null && remoteUid !== undefined && isRemoteVideoOn !== false && RtcSurfaceView ? (
-                <RtcSurfaceView 
-                    canvas={{ uid: Number(remoteUid), renderMode: 1 }}
-                    zOrderMediaOverlay={true}
-                    style={StyleSheet.absoluteFill}
-                />
+            {callState === 'active' && remoteUid !== null && remoteUid !== undefined && isRemoteVideoOn !== false && VideoView ? (
+                renderRtcVideo(
+                    { uid: Number(remoteUid), sourceType: VideoSourceType.VideoSourceRemote ?? 9 },
+                    StyleSheet.absoluteFill,
+                    { key: `remote-${remoteUid}-${videoViewKey}` }
+                )
             ) : (
                 // Falling back to avatar representation if not connected or remote video is off
                 <View style={styles.fallbackRemoteContainer}>
@@ -579,12 +631,12 @@ export default function VideoCallScreen({ route, navigation }) {
                         style={StyleSheet.absoluteFill} 
                         resizeMode="cover"
                     />
-                    {isCameraOn && RtcSurfaceView && (
-                        <RtcSurfaceView 
-                            canvas={{ uid: 0 }}
-                            zOrderMediaOverlay={true}
-                            style={StyleSheet.absoluteFill}
-                        />
+                    {isCameraOn && VideoView && (
+                        renderRtcVideo(
+                            { uid: 0, sourceType: VideoSourceType.VideoSourceCamera ?? 0 },
+                            StyleSheet.absoluteFill,
+                            { key: `local-${videoViewKey}`, overlay: true }
+                        )
                     )}
                     {!isCameraOn && (
                         <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(15, 23, 42, 0.85)', justifyContent: 'center', alignItems: 'center' }]}>

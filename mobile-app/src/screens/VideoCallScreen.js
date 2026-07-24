@@ -543,6 +543,8 @@ export default function VideoCallScreen({ route, navigation }) {
         transform: [{ scale: scale.value }],
     }));
 
+    const myAvatarImage = resolveImageUrl(currentUser?.avatar_url || currentUser?.avatar || currentUser?.photo);
+
     return (
         <View style={styles.container}>
             {/* Background Stream View */}
@@ -570,20 +572,24 @@ export default function VideoCallScreen({ route, navigation }) {
             )}
 
             {/* Local Preview Sub-Window */}
-            {callState === 'active' && isCameraOn && (
+            {callState === 'active' && (
                 <View style={[styles.localVideoContainer, { zIndex: 999 }]}>
                     <Image 
-                        source={{ uri: resolveImageUrl(currentUser?.avatar_url || currentUser?.avatar) }} 
+                        source={{ uri: myAvatarImage }} 
                         style={StyleSheet.absoluteFill} 
                         resizeMode="cover"
                     />
-                    {RtcSurfaceView && (
+                    {isCameraOn && RtcSurfaceView && (
                         <RtcSurfaceView 
                             canvas={{ uid: 0 }}
-                            zOrderOnTop={true}
                             zOrderMediaOverlay={true}
                             style={StyleSheet.absoluteFill}
                         />
+                    )}
+                    {!isCameraOn && (
+                        <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(15, 23, 42, 0.85)', justifyContent: 'center', alignItems: 'center' }]}>
+                            <Ionicons name="videocam-off" size={24} color="#EF4444" />
+                        </View>
                     )}
                 </View>
             )}

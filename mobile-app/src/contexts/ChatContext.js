@@ -131,21 +131,26 @@ export const ChatProvider = ({ children }) => {
         });
 
         // Listen for 1-to-1 incoming voice calls
-        newSocket.on('incoming_call', (data) => {
-            console.log('[ChatContext] Incoming call received:', data);
+        const handleIncomingCall = (data) => {
+            console.log('[CALL LOG 📱] ChatContext: incoming_call payload received:', JSON.stringify(data));
+            const currentUser = useAppStore.getState().user;
+            if (data.receiverId && currentUser && data.receiverId.toString() !== currentUser.id?.toString()) {
+                console.log(`[CALL LOG ⏭️] Call is for user ${data.receiverId}, but current user is ${currentUser.id}. Bypassing.`);
+                return;
+            }
+
             const activeCallChatId = useAppStore.getState().activeCallChatId;
             if (activeCallChatId) {
-                console.log('[ChatContext] Already in call, sending call_busy.');
+                console.log('[CALL LOG ⚠️] User already in call activeCallChatId=' + activeCallChatId + ', sending call_busy.');
                 newSocket.emit('call_busy', { chatId: data.chatId, callerId: data.callerId });
                 return;
             }
 
-            // Set call in progress in store
             useAppStore.getState().setActiveCallChatId(data.chatId);
 
             const targetScreen = data.callType === 'video' ? 'VideoCall' : 'VoiceCall';
+            console.log(`[CALL LOG 🚀] Navigating to ${targetScreen} with caller ${data.callerName} (${data.callerId})`);
 
-            // Navigate to appropriate Call Screen
             RootNavigation.navigate(targetScreen, {
                 receiver: {
                     id: data.callerId,
@@ -158,7 +163,10 @@ export const ChatProvider = ({ children }) => {
                 chatId: data.chatId,
                 callId: data.callId
             });
-        });
+        };
+
+        newSocket.on('incoming_call', handleIncomingCall);
+        newSocket.on('incoming_call_global', handleIncomingCall);
     };
 
     useEffect(() => {

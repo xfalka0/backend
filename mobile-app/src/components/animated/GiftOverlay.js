@@ -183,20 +183,20 @@ export default function GiftOverlay({ gift, receiver, onFinish }) {
                 <View style={styles.content}>
                     <Animated.View style={[styles.logoContainer, logoStyle]}>
                         <Image
-                            source={gift.image || require('../../assets/gift_icon.webp')}
+                            source={gift?.image || require('../../assets/gift_icon.webp')}
                             style={styles.mainLogo}
                             resizeMode="contain"
                         />
                     </Animated.View>
 
                     <Animated.View style={[styles.receiverBadge, textStyle]}>
-                        <Text style={styles.receiverText}>{(receiver.display_name || receiver.username).toUpperCase()}</Text>
+                        <Text style={styles.receiverText}>{(receiver?.display_name || receiver?.username || 'KULLANICI').toUpperCase()}</Text>
                     </Animated.View>
 
                     <Animated.View style={[styles.textWrapper, textStyle]}>
                         <Text style={styles.headerText}>HEDİYE GÖNDERİLDİ!</Text>
                         <View style={styles.giftBadge}>
-                            <Text style={styles.giftName}>{gift.name.toUpperCase()}</Text>
+                            <Text style={styles.giftName}>{(gift?.name || 'HEDİYE').toUpperCase()}</Text>
                         </View>
                     </Animated.View>
                 </View>
@@ -301,31 +301,23 @@ export default function GiftOverlay({ gift, receiver, onFinish }) {
                 {/* Breathtaking overlay info styled compactly right below the bottom video banner */}
                 <Animated.View style={[styles.videoOverlay, textStyle]}>
                     <View style={styles.receiverBadge}>
-                        <Text style={styles.receiverText}>{(receiver.display_name || receiver.username).toUpperCase()}</Text>
+                        <Text style={styles.receiverText}>{(receiver?.display_name || receiver?.username || 'KULLANICI').toUpperCase()}</Text>
                     </View>
                     <Text style={styles.videoHeaderText}>HEDİYE GÖNDERİLDİ!</Text>
                     <View style={styles.videoGiftBadge}>
-                        <Text style={styles.videoGiftName}>{gift.name.toUpperCase()}</Text>
+                        <Text style={styles.videoGiftName}>{(gift?.name || 'HEDİYE').toUpperCase()}</Text>
                     </View>
                 </Animated.View>
             </Animated.View>
         );
     }
 
-    // --- RENDER FOR STANDARD GIFTS (Lottie & particles) ---
+    // --- RENDER FOR STANDARD GIFTS (Particles & Glow Animations - Crash-Proof) ---
     return (
         <Animated.View style={[styles.container, backdropStyle]} pointerEvents="box-none">
             <View style={styles.backdropSolid} />
 
             <View style={styles.content}>
-                <LottieView
-                    source={CONFETTI_LOTTIE}
-                    autoPlay
-                    loop
-                    style={styles.fullLottie}
-                    resizeMode="cover"
-                />
-
                 <View style={styles.centerStage}>
                     {particles}
                     <Animated.View style={[styles.glowRing, glowStyle]} />
@@ -333,21 +325,21 @@ export default function GiftOverlay({ gift, receiver, onFinish }) {
                     <Animated.View style={[styles.logoContainer, logoStyle]}>
                         <View style={styles.glow} />
                         <Image
-                            source={gift.image || require('../../assets/gift_icon.webp')}
+                            source={gift?.image || require('../../assets/gift_icon.webp')}
                             style={styles.mainLogo}
                             resizeMode="contain"
                         />
                     </Animated.View>
 
                     <Animated.View style={[styles.receiverBadge, textStyle]}>
-                        <Text style={styles.receiverText}>{(receiver.display_name || receiver.username).toUpperCase()}</Text>
+                        <Text style={styles.receiverText}>{(receiver?.display_name || receiver?.username || 'KULLANICI').toUpperCase()}</Text>
                     </Animated.View>
                 </View>
 
                 <Animated.View style={[styles.textWrapper, textStyle]}>
                     <Text style={styles.headerText}>HEDİYE GÖNDERİLDİ!</Text>
                     <View style={styles.giftBadge}>
-                        <Text style={styles.giftName}>{gift.name.toUpperCase()}</Text>
+                        <Text style={styles.giftName}>{(gift?.name || 'HEDİYE').toUpperCase()}</Text>
                     </View>
                 </Animated.View>
             </View>

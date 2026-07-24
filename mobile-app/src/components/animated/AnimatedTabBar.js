@@ -113,21 +113,15 @@ import { useChat } from '../../contexts/ChatContext';
 const TabItem = ({ isFocused, onPress, icon, isCenter = false }) => {
     const scale = useSharedValue(1);
     const translateY = useSharedValue(0);
-    const activeProgress = useSharedValue(isFocused ? 1 : 0);
     const { unreadCount } = useChat();
 
     useEffect(() => {
         if (isFocused) {
-            scale.value = withSpring(1.2, { damping: 10 });
-            translateY.value = withSequence(
-                withTiming(-8, { duration: 150, easing: Easing.out(Easing.ease) }),
-                withSpring(-4, { damping: 8, stiffness: 200 })
-            );
-            activeProgress.value = withTiming(1, { duration: 250 });
+            scale.value = withSpring(1.15, { damping: 14, stiffness: 160 });
+            translateY.value = withTiming(-4, { duration: 160, easing: Easing.out(Easing.ease) });
         } else {
-            scale.value = withSpring(1, { damping: 10 });
-            translateY.value = withSpring(0, { damping: 10 });
-            activeProgress.value = withTiming(0, { duration: 250 });
+            scale.value = withSpring(1, { damping: 14, stiffness: 160 });
+            translateY.value = withTiming(0, { duration: 160, easing: Easing.out(Easing.ease) });
         }
     }, [isFocused]);
 
@@ -136,15 +130,6 @@ const TabItem = ({ isFocused, onPress, icon, isCenter = false }) => {
             { scale: scale.value },
             { translateY: translateY.value + (isCenter ? -9 : 0) }
         ],
-    }));
-
-    const activeIconStyle = useAnimatedStyle(() => ({
-        opacity: activeProgress.value,
-    }));
-
-    const inactiveIconStyle = useAnimatedStyle(() => ({
-        opacity: 1 - activeProgress.value,
-        position: 'absolute',
     }));
 
     return (
@@ -167,18 +152,15 @@ const TabItem = ({ isFocused, onPress, icon, isCenter = false }) => {
                     </LinearGradient>
                 ) : (
                     <View style={{ position: 'relative', width: 28, height: 28, justifyContent: 'center', alignItems: 'center' }}>
-                        {/* Active state (Gradient Pink-White) */}
-                        <Animated.View style={activeIconStyle}>
+                        {isFocused ? (
                             <GradientIcon name={icon} size={26} />
-                        </Animated.View>
-                        {/* Inactive state (Outline, Gray) */}
-                        <Animated.View style={inactiveIconStyle}>
+                        ) : (
                             <Ionicons
                                 name={`${icon}-outline`}
                                 size={26}
-                                color="rgba(255, 255, 255, 0.4)"
+                                color="rgba(255, 255, 255, 0.45)"
                             />
-                        </Animated.View>
+                        )}
                         {icon === 'chatbubbles' && unreadCount > 0 && (
                             <View style={styles.badge}>
                                 <Text style={styles.badgeText}>{unreadCount > 9 ? '9+' : unreadCount}</Text>

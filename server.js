@@ -13,6 +13,21 @@ if (process.env.SENTRY_DSN) {
     logger.warn("⚠️ [SENTRY] SENTRY_DSN is missing in environment variables. Error tracking is disabled.");
 }
 
+// Global Process Crash Protection (Prevents Exit Code 1 restarts on cloud servers)
+process.on('unhandledRejection', (reason, promise) => {
+    logger.error(`⚠️ [UNHANDLED REJECTION] reason: ${reason?.stack || reason}`);
+    if (process.env.SENTRY_DSN) {
+        Sentry.captureException(reason);
+    }
+});
+
+process.on('uncaughtException', (err) => {
+    logger.error(`💥 [UNCAUGHT EXCEPTION] ${err?.stack || err}`);
+    if (process.env.SENTRY_DSN) {
+        Sentry.captureException(err);
+    }
+});
+
 const express = require('express');
 const axios = require('axios');
 const http = require('http');
@@ -4606,7 +4621,8 @@ const initializeGifts = async () => {
 // but initializeDatabase is top-level. I'll just run it.
 initializeGifts();
 
-// --- SOCKET AUTHENTICATION MIDDLEWARE ---
+const { initializeSockets } = require('./socket/socketHandler');
+
 io.use(async (socket, next) => {
     if (!global.payoutLogs) global.payoutLogs = [];
     try {
@@ -4641,6 +4657,9 @@ io.use(async (socket, next) => {
         next(new Error('Authentication failed'));
     }
 });
+
+// Register modular 1-to-1 call and chat socket listeners
+initializeSockets(io);
 
 io.on('connection', (socket) => {
     const connLog = {

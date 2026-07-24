@@ -183,6 +183,8 @@ const ProfileScreen = ({ route }) => {
     const [editingSection, setEditingSection] = useState(null); // 'basic', 'interests'
     const [tempBio, setTempBio] = useState('');
     const [isEditingBio, setIsEditingBio] = useState(false);
+    const [tempName, setTempName] = useState('');
+    const [isEditingName, setIsEditingName] = useState(false);
     const scrollY = new Animated.Value(0);
     const [operatorStats, setOperatorStats] = useState(null);
     const [pendingInvitations, setPendingInvitations] = useState([]);
@@ -845,15 +847,53 @@ const ProfileScreen = ({ route }) => {
 
                     <View style={styles.profileInfo}>
                         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                            <Text style={[
-                                styles.userName,
-                                parseInt(user?.vip_level) >= 6 && { color: '#F59E0B', textShadowColor: 'rgba(245, 158, 11, 0.4)', textShadowRadius: 6 },
-                                parseInt(user?.vip_level) === 5 && { color: '#ec4899', fontWeight: 'bold' },
-                                parseInt(user?.vip_level) === 4 && { color: '#8b5cf6' },
-                                parseInt(user?.vip_level) === 3 && { color: '#3b82f6' }
-                            ]}>
-                                {user?.name || 'Kullanıcı'}, {user?.age || '24'}
-                            </Text>
+                            {isEditingName ? (
+                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                                    <TextInput
+                                        style={[styles.userName, { backgroundColor: 'rgba(255, 255, 255, 0.1)', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 2, minWidth: 100 }]}
+                                        value={tempName}
+                                        onChangeText={setTempName}
+                                        autoFocus
+                                        maxLength={30}
+                                        onBlur={() => {
+                                            setIsEditingName(false);
+                                            if (tempName.trim() && tempName.trim() !== (user?.name || user?.display_name)) {
+                                                handleUpdateProfile('name', tempName.trim());
+                                            }
+                                        }}
+                                    />
+                                    <TouchableOpacity onPress={() => {
+                                        setIsEditingName(false);
+                                        if (tempName.trim() && tempName.trim() !== (user?.name || user?.display_name)) {
+                                            handleUpdateProfile('name', tempName.trim());
+                                        }
+                                    }}>
+                                        <Ionicons name="checkmark-circle" size={24} color="#10b981" />
+                                    </TouchableOpacity>
+                                </View>
+                            ) : (
+                                <TouchableOpacity 
+                                    style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}
+                                    onPress={() => {
+                                        setTempName(user?.name || user?.display_name || '');
+                                        setIsEditingName(true);
+                                    }}
+                                    activeOpacity={0.7}
+                                >
+                                    <Text style={[
+                                        styles.userName,
+                                        parseInt(user?.vip_level) >= 6 && { color: '#F59E0B', textShadowColor: 'rgba(245, 158, 11, 0.4)', textShadowRadius: 6 },
+                                        parseInt(user?.vip_level) === 5 && { color: '#ec4899', fontWeight: 'bold' },
+                                        parseInt(user?.vip_level) === 4 && { color: '#8b5cf6' },
+                                        parseInt(user?.vip_level) === 3 && { color: '#3b82f6' }
+                                    ]}>
+                                        {user?.name || user?.display_name || 'Kullanıcı'}, {user?.age || '24'}
+                                    </Text>
+                                    <View style={styles.bioPencilCircle}>
+                                        <Ionicons name="pencil" size={10} color="#fff" />
+                                    </View>
+                                </TouchableOpacity>
+                            )}
                             {parseInt(user?.vip_level) > 0 && (
                                 <VipBadge level={parseInt(user?.vip_level)} size={38} />
                             )}

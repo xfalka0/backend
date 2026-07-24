@@ -16,13 +16,16 @@ const { width } = Dimensions.get('window');
 
 // Bonus & label config per coin amount
 const PACKAGE_CONFIG = {
-    '100':  { bonus: 10,   label: null, labelColor: null },
-    '200':  { bonus: 25,   label: null, labelColor: null },
-    '400':  { bonus: 60,   label: null, labelColor: null },
-    '700':  { bonus: 120,  label: null, labelColor: null },
-    '1200': { bonus: 250,  label: null, labelColor: null },
-    '2500': { bonus: 600,  label: null, labelColor: null },
-    '5000': { bonus: 1500, label: null, labelColor: null },
+    '100':   { bonus: 10,    label: null, labelColor: null },
+    '200':   { bonus: 25,    label: null, labelColor: null },
+    '400':   { bonus: 60,    label: null, labelColor: null },
+    '700':   { bonus: 120,   label: null, labelColor: null },
+    '1200':  { bonus: 250,   label: null, labelColor: null },
+    '2500':  { bonus: 600,   label: null, labelColor: null },
+    '5000':  { bonus: 1500,  label: null, labelColor: null },
+    '10000': { bonus: 4000,  label: null, labelColor: null },
+    '20000': { bonus: 9000,  label: null, labelColor: null },
+    '40000': { bonus: 20000, label: null, labelColor: null },
 };
 
 const CoinPackageCard = ({ pack, index, handlePurchase, theme, themeMode, baselineRate }) => {
@@ -210,50 +213,75 @@ export default function ShopScreen({ navigation, route }) {
         const fetchOfferings = async () => {
             setLoading(true);
             try {
-                // Fetch offerings
-                const availablePackages = await PurchaseService.getOfferings();
-                if (availablePackages && availablePackages.length > 0) {
-                    // Sort packages by coin amount (ascending)
-                    const sortedPackages = [...availablePackages].sort((a, b) => {
-                        const amountA = parseInt(a.product.title.split(' ')[0], 10) || 0;
-                        const amountB = parseInt(b.product.title.split(' ')[0], 10) || 0;
-                        return amountA - amountB;
-                    });
-                    
-                    // Filter out Starter Packs from regular store
-                    const filteredPackages = sortedPackages.filter(p => 
-                        !p.product.identifier.toLowerCase().includes('starter') &&
-                        !p.product.title.toLowerCase().includes('başlangıç')
-                    );
+                const token = await AsyncStorage.getItem('token');
+                const authHeader = token ? { Authorization: `Bearer ${token}` } : {};
 
-                    setOfferings(filteredPackages);
-                } else {
-                    const token = await AsyncStorage.getItem('token');
-                    const res = await axios.get(`${API_URL}/offerings`, {
-                        headers: { Authorization: `Bearer ${token}` }
-                    });
-                    const transformed = res.data.map(pkg => ({
-                        isLocal: true,
-                        product: {
-                            identifier: pkg.revenuecat_id || pkg.id.toString(),
-                            title: `${pkg.coins} Coin`,
-                            description: pkg.name || 'Altın Paketi',
-                            priceString: `${pkg.price} ₺`,
-                            price: pkg.price,
-                            coins: pkg.coins
-                        }
-                    }));
-                    setOfferings(transformed);
+                // 1. Fetch live backend packages
+                let backendPackages = [];
+                try {
+                    const res = await axios.get(`${API_URL}/offerings`, { headers: authHeader });
+                    if (Array.isArray(res.data)) {
+                        backendPackages = res.data;
+                    }
+                } catch (e) {
+                    console.log('[Shop] Backend offerings fetch error:', e.message);
                 }
 
-                // Fetch Dealer Profile (gender: coin_bayisi)
-                const token = await AsyncStorage.getItem('token');
-                const opRes = await axios.get(`${API_URL}/operators?limit=50`, {
-                    headers: { Authorization: `Bearer ${token}` }
+                // 2. Fetch RevenueCat offerings
+                let availablePackages = [];
+                try {
+                    availablePackages = await PurchaseService.getOfferings() || [];
+                } catch (e) {
+                    console.log('[Shop] RevenueCat offerings fetch error:', e.message);
+                }
+
+                // Filter out Starter Packs
+                const filteredRC = availablePackages.filter(p => 
+                    !p.product.identifier.toLowerCase().includes('starter') &&
+                    !p.product.title.toLowerCase().includes('başlangıç')
+                );
+
+                // Map of existing RevenueCat package coin amounts
+                const rcCoinAmounts = new Set(
+                    filteredRC.map(p => parseInt(p.product.title.split(' ')[0], 10) || 0)
+                );
+
+                // Transform backend packages that are missing from RevenueCat active offerings
+                const mergedList = [...filteredRC];
+                
+                backendPackages.forEach(pkg => {
+                    const coinCount = parseInt(pkg.coins, 10);
+                    if (coinCount > 0 && !rcCoinAmounts.has(coinCount)) {
+                        mergedList.push({
+                            isLocal: true,
+                            product: {
+                                identifier: pkg.revenuecat_id || `local_${pkg.coins}`,
+                                title: `${pkg.coins} Coin`,
+                                description: pkg.name || 'Altın Paketi',
+                                priceString: `₺${parseFloat(pkg.price).toLocaleString('tr-TR', { minimumFractionDigits: 2 })}`,
+                                price: parseFloat(pkg.price),
+                                coins: pkg.coins
+                            }
+                        });
+                    }
                 });
-                const coinDealer = opRes.data.find(op => op.gender === 'coin_bayisi');
-                if (coinDealer) {
-                    setDealer(coinDealer);
+
+                // Sort all packages by coin count (ascending)
+                mergedList.sort((a, b) => {
+                    const amountA = parseInt(a.product.title ? a.product.title.split(' ')[0] : a.product.coins, 10) || 0;
+                    const amountB = parseInt(b.product.title ? b.product.title.split(' ')[0] : b.product.coins, 10) || 0;
+                    return amountA - amountB;
+                });
+
+                setOfferings(mergedList);
+
+                // Fetch Dealer Profile (gender: coin_bayisi)
+                const opRes = await axios.get(`${API_URL}/operators?limit=50`, { headers: authHeader });
+                if (Array.isArray(opRes.data)) {
+                    const coinDealer = opRes.data.find(op => op.gender === 'coin_bayisi');
+                    if (coinDealer) {
+                        setDealer(coinDealer);
+                    }
                 }
             } catch (err) {
                 console.error('[Shop] Fetch error:', err);
@@ -279,48 +307,52 @@ export default function ShopScreen({ navigation, route }) {
             let success = false;
 
             if (pack.isLocal) {
-                setAlertConfig({
-                    visible: true,
-                    title: 'Mağaza Hazırlanıyor',
-                    message: 'Coin paketleri şu an yükleniyor. Lütfen birkaç dakika sonra tekrar deneyin.',
-                    type: 'info'
-                });
-                return;
-            }
-
-            const result = await PurchaseService.purchasePackage(pack);
-            if (result.success) {
-                success = true;
-                // Try to get real transaction ID if available
-                transactionId = result.customerInfo?.originalAppUserId || transactionId;
-            } else if (result.pending) {
-                setAlertConfig({
-                    visible: true,
-                    title: 'Ödeme İşleniyor',
-                    message: 'Ödemeniz şu an beklemede. Onaylandığında bakiyeniz otomatik olarak güncellenecektir. Lütfen bekleyiniz.',
-                    type: 'info'
-                });
-                return;
-            } else if (!result.cancelled) {
-                // Map technical errors to user-friendly Turkish
-                let errorMessage = 'Satın alma işlemi şu an gerçekleştirilemiyor. Lütfen daha sonra tekrar deneyiniz.';
-
-                if (result.error?.includes('not allowed')) {
-                    errorMessage = 'Cihazınız veya hesabınız satın alma işlemine izin vermiyor. Lütfen kısıtlamaları kontrol edin.';
-                } else if (result.error?.includes('network')) {
-                    errorMessage = 'Bağlantı hatası oluştu. Lütfen internetinizi kontrol edip tekrar deneyin.';
+                // Try purchasing directly via product identifier on RevenueCat / Google Play
+                const directRes = await PurchaseService.purchaseProductByIdentifier(pack.product.identifier);
+                if (directRes.success) {
+                    success = true;
+                    transactionId = directRes.customerInfo?.originalAppUserId || transactionId;
+                } else if (directRes.cancelled) {
+                    return;
+                } else {
+                    setAlertConfig({
+                        visible: true,
+                        title: 'Ödeme Bağlantısı',
+                        message: `"${pack.product.title}" paketi Google Play Console ve RevenueCat sisteminde yayına alındığında ödeme ekranı açılacaktır.`,
+                        type: 'info'
+                    });
+                    return;
                 }
-
-                setAlertConfig({
-                    visible: true,
-                    title: 'İşlem Başarısız',
-                    message: errorMessage,
-                    type: 'error'
-                });
-                return;
             } else {
-                // User cancelled the purchase
-                return;
+                const result = await PurchaseService.purchasePackage(pack);
+                if (result.success) {
+                    success = true;
+                    transactionId = result.customerInfo?.originalAppUserId || transactionId;
+                } else if (result.pending) {
+                    setAlertConfig({
+                        visible: true,
+                        title: 'Ödeme İşleniyor',
+                        message: 'Ödemeniz şu an beklemede. Onaylandığında bakiyeniz otomatik olarak güncellenecektir. Lütfen bekleyiniz.',
+                        type: 'info'
+                    });
+                    return;
+                } else if (!result.cancelled) {
+                    let errorMessage = 'Satın alma işlemi şu an gerçekleştirilemiyor. Lütfen daha sonra tekrar deneyiniz.';
+                    if (result.error?.includes('not allowed')) {
+                        errorMessage = 'Cihazınız veya hesabınız satın alma işlemine izin vermiyor. Lütfen kısıtlamaları kontrol edin.';
+                    } else if (result.error?.includes('network')) {
+                        errorMessage = 'Bağlantı hatası oluştu. Lütfen internetinizi kontrol edip tekrar deneyin.';
+                    }
+                    setAlertConfig({
+                        visible: true,
+                        title: 'İşlem Başarısız',
+                        message: errorMessage,
+                        type: 'error'
+                    });
+                    return;
+                } else {
+                    return;
+                }
             }
 
             if (success) {
@@ -506,7 +538,10 @@ export default function ShopScreen({ navigation, route }) {
                                 { coins: 500, price: '219,99 ₺', numPrice: 219.99, name: 'Altın Paket' },
                                 { coins: 1000, price: '395,99 ₺', numPrice: 395.99, name: 'VIP Paket' },
                                 { coins: 2500, price: '1299,99 ₺', numPrice: 1299.99, name: 'Platin Paket' },
-                                { coins: 5000, price: '2399,99 ₺', numPrice: 2399.99, name: 'Efsane Paket' }
+                                { coins: 5000, price: '2399,99 ₺', numPrice: 2399.99, name: 'Efsane Paket' },
+                                { coins: 10000, price: '4599,99 ₺', numPrice: 4599.99, name: 'VIP Safir Paket' },
+                                { coins: 20000, price: '8799,99 ₺', numPrice: 8799.99, name: 'VIP Zümrüt Paket' },
+                                { coins: 40000, price: '17399,99 ₺', numPrice: 17399.99, name: 'VIP Titan Paket' }
                             ].map((p, i) => (
                                 <CoinPackageCard
                                     key={`fallback_${i}`}

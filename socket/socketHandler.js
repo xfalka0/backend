@@ -431,10 +431,11 @@ function initializeSockets(io) {
         console.log(`[SOCKET] User connected: ${socket.id} (Authenticated: ${socket.user ? socket.user.username : 'NO'})`);
 
         // Join their own room for global notifications
-        if (socket.user && socket.user.id) {
-            const userRoom = socket.user.id.toString();
+        const effectiveUserId = socket.user?.id || socket.handshake?.query?.userId || socket.handshake?.auth?.userId;
+        if (effectiveUserId) {
+            const userRoom = effectiveUserId.toString();
             socket.join(userRoom);
-            console.log(`[SOCKET] User ${socket.user.username} joined personal room: ${userRoom}`);
+            console.log(`[SOCKET] User ${socket.user?.username || effectiveUserId} joined personal room: ${userRoom}`);
         }
 
         socket.on('join_room', (chatId) => {
@@ -813,20 +814,44 @@ function initializeSockets(io) {
 
         // ─── 1-to-1 Voice Call Socket Handlers ────────────────────────────────
         socket.on('call_request', async (data) => {
-            const { chatId, receiverId, callerName, callerAvatar, rtcToken, channelName, callId, callType } = data;
-            const callerId = socket.user.id;
+            const { chatId: rawChatId, receiverId, callerName, callerAvatar, rtcToken, channelName, callId, callType } = data;
+            const callerId = socket.user ? socket.user.id : (socket.handshake?.query?.userId || socket.handshake?.auth?.userId);
             const type = callType === 'video' ? 'video' : 'audio';
             const cost = type === 'video' ? 120 : 50;
 
-            console.log(`[SOCKET] call_request from ${callerId} to ${receiverId} in chat ${chatId} (Type: ${type})`);
+            console.log(`[CALL LOG 📞] call_request received: callerId=${callerId}, receiverId=${receiverId}, rawChatId=${rawChatId}, type=${type}`);
 
             try {
+                if (!callerId || !receiverId) {
+                    console.log(`[CALL LOG ❌] call_request rejected: Missing user info. callerId=${callerId}, receiverId=${receiverId}`);
+                    socket.emit('call_error', { message: 'Arama başlatılamadı: Kullanıcı bilgisi eksik.' });
+                    return;
+                }
+
+                let chatId = rawChatId;
+                if (!chatId) {
+                    const existingChat = await db.query(
+                        'SELECT id FROM chats WHERE (user_id = $1 AND operator_id = $2) OR (user_id = $2 AND operator_id = $1)',
+                        [callerId, receiverId]
+                    );
+                    if (existingChat.rows.length > 0) {
+                        chatId = existingChat.rows[0].id;
+                    } else {
+                        const newChat = await db.query(
+                            'INSERT INTO chats (user_id, operator_id, created_at, last_message_at, last_message) VALUES ($1, $2, NOW(), NOW(), $3) RETURNING id',
+                            [callerId, receiverId, '📞 Arama Başlatıldı']
+                        );
+                        chatId = newChat.rows[0].id;
+                    }
+                }
+
                 // Security Check: verify caller and receiver belong to this chat
                 const chatRes = await db.query(
                     'SELECT user_id, operator_id FROM chats WHERE id = $1',
                     [chatId]
                 );
                 if (chatRes.rows.length === 0) {
+                    console.log(`[CALL LOG ❌] Chat not found for chatId=${chatId}`);
                     socket.emit('call_error', { message: 'Sohbet bulunamadı.' });
                     return;
                 }
@@ -835,27 +860,31 @@ function initializeSockets(io) {
                 const isReceiverMember = chat.user_id.toString() === receiverId.toString() || chat.operator_id.toString() === receiverId.toString();
 
                 if (!isCallerMember || !isReceiverMember) {
+                    console.log(`[CALL LOG ❌] Chat membership verification failed for callerId=${callerId}, receiverId=${receiverId}`);
                     socket.emit('call_error', { message: 'Sohbet üyeliği doğrulanamadı.' });
                     return;
                 }
 
                 // Busy Check: check if caller or receiver is currently in another call
                 if (isUserInAnyActiveCall(callerId)) {
+                    console.log(`[CALL LOG ⚠️] Caller ${callerId} is already in an active call.`);
                     socket.emit('call_error', { message: 'Zaten aktif bir aramadasınız.' });
                     return;
                 }
                 if (isUserInAnyActiveCall(receiverId)) {
+                    console.log(`[CALL LOG ⚠️] Receiver ${receiverId} is currently busy.`);
                     socket.emit('call_error', { message: 'Aradığınız kişi meşgul.' });
                     socket.emit('call_busy', { chatId });
                     return;
                 }
 
                 // Balance check
-                const userRes = await db.query('SELECT balance, role FROM users WHERE id = $1', [callerId]);
+                const userRes = await db.query('SELECT balance, role, display_name FROM users WHERE id = $1', [callerId]);
                 if (userRes.rows.length === 0) throw new Error('Caller not found');
 
                 const balance = parseFloat(userRes.rows[0].balance || 0);
                 const userRole = userRes.rows[0].role;
+                const dbCallerName = userRes.rows[0].display_name || callerName || 'Bir kullanıcı';
                 const isManagement = ['admin', 'super_admin', 'moderator', 'staff', 'operator'].includes(userRole);
 
                 const callerGenderRes = await db.query('SELECT gender FROM users WHERE id = $1', [callerId]);
@@ -863,14 +892,21 @@ function initializeSockets(io) {
                 const isFreeCaller = isManagement || callerGender === 'kadin';
 
                 if (!isFreeCaller && balance < cost) {
+                    console.log(`[CALL LOG 💰] Insufficient balance for caller ${callerId}. Balance: ${balance}, Cost: ${cost}`);
                     socket.emit('call_error', { message: `Yetersiz bakiye. Arama başlatmak için en az ${cost} coin gereklidir.` });
                     return;
                 }
 
                 const finalCallId = callId || `call_${Date.now()}_${Math.random().toString(36).substring(7)}`;
 
+                // Create 30-second ringing timeout
+                const ringTimeoutId = setTimeout(async () => {
+                    console.log(`[CALL LOG ⏰] 30s Ringing timeout expired for chatId=${chatId}. Marking as missed call.`);
+                    await logMissedCall(io, chatId.toString(), callerId, receiverId, 'missed');
+                }, 30000);
+
                 // Create the call session in map
-                activeCallSessions.set(chatId, {
+                activeCallSessions.set(chatId.toString(), {
                     callId: finalCallId,
                     callerId,
                     receiverId,
@@ -879,24 +915,54 @@ function initializeSockets(io) {
                     startedAt: new Date(),
                     acceptedAt: null,
                     endedAt: null,
+                    connectionTimeoutId: ringTimeoutId,
                     billingIntervalId: null
                 });
 
-                io.to(receiverId.toString()).emit('incoming_call', {
-                    chatId,
-                    callerId,
-                    callerName,
+                const callPayload = {
+                    chatId: chatId.toString(),
+                    callerId: callerId.toString(),
+                    receiverId: receiverId.toString(),
+                    callerName: dbCallerName,
                     callerAvatar,
                     rtcToken,
                     channelName,
                     callId: finalCallId,
                     callType: type
-                });
+                };
+
+                console.log(`[CALL LOG 🔔] Emitting incoming_call payload to receiver ${receiverId} (room: ${receiverId.toString()}) & chat room ${chatId}:`, callPayload);
+
+                // Emit incoming_call event to receiver's personal room & chat room & global broadcast
+                io.to(receiverId.toString()).emit('incoming_call', callPayload);
+                io.to(chatId.toString()).emit('incoming_call', callPayload);
+                io.emit('incoming_call_global', callPayload);
 
                 socket.emit('call_ringing', { chatId, receiverId });
 
+                // Trigger Push Notification for incoming call (Non-blocking)
+                (async () => {
+                    try {
+                        const { sendPushNotification } = require('../utils/pushNotifications');
+                        await sendPushNotification(receiverId, {
+                            title: `📞 Gelen ${type === 'video' ? 'Görüntülü' : 'Sesli'} Arama`,
+                            body: `${dbCallerName} seni arıyor...`,
+                            data: {
+                                type: 'incoming_call',
+                                chatId: chatId.toString(),
+                                callerId: callerId.toString(),
+                                callType: type,
+                                callId: finalCallId
+                            }
+                        });
+                        console.log(`[CALL LOG 📲] Push notification sent successfully to receiver ${receiverId}`);
+                    } catch (pushErr) {
+                        console.error('[CALL LOG ⚠️] Call push notification error:', pushErr.message);
+                    }
+                })();
+
             } catch (err) {
-                console.error('[SOCKET] call_request error:', err.message);
+                console.error('[CALL LOG 💥] call_request critical error:', err.message);
                 socket.emit('call_error', { message: 'Arama başlatılamadı.' });
             }
         });

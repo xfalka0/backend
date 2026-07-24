@@ -123,13 +123,13 @@ function MainTabs({ route }) {
     );
 }
 
-import { navigationRef } from './src/services/navigationRef';
+import { navigationRef, flushPendingNavigation } from './src/services/navigationRef';
 
 function AppContent() {
     const { theme } = useTheme();
 
     return (
-        <NavigationContainer ref={navigationRef}>
+        <NavigationContainer ref={navigationRef} onReady={flushPendingNavigation}>
             <StarterPackProvider>
                 <StatusBar style="light" translucent backgroundColor="transparent" />
                 <Stack.Navigator

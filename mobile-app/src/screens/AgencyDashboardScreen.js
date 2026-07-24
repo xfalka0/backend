@@ -585,22 +585,27 @@ export default function AgencyDashboardScreen() {
                             style={styles.summaryCard}
                             colors={['rgba(255, 255, 255, 0.07)', 'rgba(255, 255, 255, 0.02)']}
                         >
-                            <Text style={styles.summaryTitle}>Toplam Bekleyen Hakediş</Text>
+                            <Text style={styles.summaryTitle}>
+                                {selectedWeek === 0 ? 'Mevcut Hafta Hakedişi' : `${WEEKS.find(w => w.offset === selectedWeek)?.label} Hakedişi`}
+                            </Text>
                             
                             <View style={styles.balanceContainer}>
                                 <Text style={styles.balanceText}>
-                                    ${((dashboardData.agency?.pending_balance || 0) / 2000).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USDT
+                                    ${((dashboardData.stats?.weekly_diamonds || 0) / 2000).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USDT
                                 </Text>
                             </View>
 
-                            {/* Mevcut/Seçili Hafta Kazancı */}
+                            {/* Hafta Ödeme Durumu */}
                             <View style={{ marginTop: 12, paddingTop: 10, borderTopWidth: 1, borderTopColor: 'rgba(255, 255, 255, 0.08)', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
                                 <Text style={{ fontSize: 11, color: 'rgba(255, 255, 255, 0.5)', fontWeight: '700' }}>
-                                    {selectedWeek === 0 ? 'Mevcut Hafta Kazancı:' : `${WEEKS.find(w => w.offset === selectedWeek)?.label} Kazancı:`}
+                                    Hafta Ödeme Durumu:
                                 </Text>
-                                <Text style={{ fontSize: 13, color: '#38bdf8', fontWeight: '800' }}>
-                                    ${((dashboardData.stats?.weekly_diamonds || 0) / 2000).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USDT
-                                </Text>
+                                <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: selectedWeek === 0 ? 'rgba(234, 179, 8, 0.15)' : 'rgba(16, 185, 129, 0.15)', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 10, borderWidth: 1, borderColor: selectedWeek === 0 ? 'rgba(234, 179, 8, 0.3)' : 'rgba(16, 185, 129, 0.3)' }}>
+                                    <Ionicons name={selectedWeek === 0 ? "time-outline" : "checkmark-circle"} size={14} color={selectedWeek === 0 ? "#eab308" : "#10b981"} style={{ marginRight: 4 }} />
+                                    <Text style={{ fontSize: 12, color: selectedWeek === 0 ? "#eab308" : "#10b981", fontWeight: '800' }}>
+                                        {selectedWeek === 0 ? 'Devam Ediyor' : 'Ödendi'}
+                                    </Text>
+                                </View>
                             </View>
                         </GlassCard>
 

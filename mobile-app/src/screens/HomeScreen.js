@@ -168,14 +168,13 @@ export default function HomeScreen({ navigation, route }) {
 
     useEffect(() => {
         fetchOperators(1);
-    }, [activeTab]);
+    }, [activeTab, currentFilters]);
 
     const fetchOperators = async (pageNum = 1, isRefreshing = false) => {
         if (isRefreshing) {
             setRefreshing(true);
         } else if (pageNum === 1) {
             setLoading(true);
-            setOperators([]); // Clear list immediately on tab change to show loading skeleton
         } else {
             setLoadingMore(true);
         }
@@ -184,9 +183,8 @@ export default function HomeScreen({ navigation, route }) {
 
         try {
             const token = await AsyncStorage.getItem('token');
-            // Fetch 20 profiles per page to fill the screen and support smooth scrolling
-            const res = await axios.get(`${API_URL}/discovery?tab=${requestedTab}&page=${pageNum}&limit=20`, {
-                headers: { Authorization: `Bearer ${token}` }
+            const res = await axios.get(`${API_URL}/discovery?tab=${requestedTab}&page=${pageNum}&limit=50&gender=${currentFilters.gender}`, {
+                headers: token ? { Authorization: `Bearer ${token}` } : {}
             });
             
             // If the user has switched tabs while this request was loading, discard the stale result
@@ -195,15 +193,14 @@ export default function HomeScreen({ navigation, route }) {
             }
 
             const data = res.data?.data || res.data || [];
-            console.log('[DEBUG FETCH OPERATORS] Loaded length:', data.length, 'data names:', data.map(op => op.name));
+            console.log('[DEBUG FETCH OPERATORS] Loaded length:', data.length);
             
             if (pageNum === 1) {
                 setOperators(data);
-                // Extract boosted/featured operators for the horizontal list
                 const featured = data.filter(op => op.is_boosted || op.vip_level > 0).slice(0, 15);
                 setFeaturedOperators(featured);
                 setPage(1);
-                setHasMore(data.length >= 20);
+                setHasMore(data.length >= 50);
             } else {
                 if (data.length > 0) {
                     setOperators(prev => {
@@ -212,7 +209,7 @@ export default function HomeScreen({ navigation, route }) {
                         return [...prev, ...uniqueNewData];
                     });
                     setPage(pageNum);
-                    setHasMore(data.length >= 20);
+                    setHasMore(data.length >= 50);
                 } else {
                     setHasMore(false);
                 }
@@ -220,7 +217,6 @@ export default function HomeScreen({ navigation, route }) {
         } catch (e) {
             console.error('Fetch operators error:', e);
         } finally {
-            // Only toggle loading states if we are still on the active tab
             if (activeTab === requestedTab) {
                 setLoading(false);
                 setRefreshing(false);

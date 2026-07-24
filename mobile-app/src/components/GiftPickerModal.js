@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, Modal, TouchableOpacity, FlatList, Dimensions, Image, ScrollView, Animated } from 'react-native';
+import { View, Text, StyleSheet, Modal, TouchableOpacity, FlatList, Dimensions, Image, ScrollView, Animated, Alert } from 'react-native';
 import { Ionicons, FontAwesome5 } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '../contexts/ThemeContext';
@@ -7,15 +7,35 @@ import { GIFTS } from '../constants/gifts';
 
 const { width } = Dimensions.get('window');
 
-export default function GiftPickerModal({ visible, onClose, onSelectGift, userBalance }) {
+export default function GiftPickerModal({ visible, onClose, onSelectGift, userBalance, roomUsers, targetSeat }) {
     const { theme, themeMode } = useTheme();
     const [activeTab, setActiveTab] = useState('Popüler');
     const [selectedGift, setSelectedGift] = useState(null);
     const [quantity, setQuantity] = useState(1);
     const [showQuantityPicker, setShowQuantityPicker] = useState(false);
+    const [selectedRecipient, setSelectedRecipient] = useState(null);
     const tabs = ['Popüler', 'Etkinlik', 'Özel', 'Bağ'];
 
     const [pulseAnim] = useState(new Animated.Value(1));
+
+    useEffect(() => {
+        if (visible) {
+            if (targetSeat && (targetSeat.user_id || targetSeat.id)) {
+                const targetId = (targetSeat.user_id || targetSeat.id)?.toString();
+                const found = roomUsers?.find(u => u.id?.toString() === targetId);
+                setSelectedRecipient(found || {
+                    id: targetId,
+                    display_name: targetSeat.display_name || targetSeat.username || 'Kullanıcı',
+                    avatar_url: targetSeat.avatar_url,
+                    seat_number: targetSeat.seat_number
+                });
+            } else if (roomUsers && roomUsers.length === 1) {
+                setSelectedRecipient(roomUsers[0]);
+            } else {
+                setSelectedRecipient(null);
+            }
+        }
+    }, [visible, targetSeat, roomUsers]);
 
     useEffect(() => {
         if (selectedGift) {
@@ -46,11 +66,17 @@ export default function GiftPickerModal({ visible, onClose, onSelectGift, userBa
     const totalCost = selectedGift ? (selectedGift.price || 0) * quantity : 0;
 
     const handleSend = () => {
-        if (selectedGift) {
-            onSelectGift(selectedGift, quantity);
-            setSelectedGift(null);
-            setQuantity(1);
+        if (!selectedGift) return;
+
+        if (roomUsers && roomUsers.length > 0 && !selectedRecipient) {
+            Alert.alert('Alıcı Seçin', 'Lütfen hediyeyi göndereceğiniz kişiyi alttaki listeden seçin.');
+            return;
         }
+
+        onSelectGift(selectedGift, quantity, selectedRecipient);
+        setSelectedGift(null);
+        setQuantity(1);
+        setSelectedRecipient(null);
     };
 
     const renderItem = ({ item, index }) => {
@@ -113,6 +139,8 @@ export default function GiftPickerModal({ visible, onClose, onSelectGift, userBa
         );
     };
 
+    const isSendDisabled = !selectedGift || userBalance < totalCost || (roomUsers && roomUsers.length > 0 && !selectedRecipient);
+
     return (
         <Modal
             visible={visible}
@@ -159,6 +187,73 @@ export default function GiftPickerModal({ visible, onClose, onSelectGift, userBa
                         showsVerticalScrollIndicator={false}
                     />
 
+                    {/* Recipient Selection Bar (Mandatory for Voice Rooms) */}
+                    {roomUsers && roomUsers.length > 0 && (
+                        <View style={styles.recipientContainer}>
+                            <View style={styles.recipientHeader}>
+                                <Ionicons name="person" size={13} color="#ec4899" />
+                                <Text style={styles.recipientHeaderTitle}>HEDİYENİN GÖNDERİLECEĞİ KİŞİ (ZORUNLU)</Text>
+                                {!selectedRecipient && (
+                                    <Text style={styles.requiredBadge}>* Kişi Seçilmedi</Text>
+                                )}
+                            </View>
+
+                            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.recipientScroll}>
+                                {roomUsers.map(user => {
+                                    const isSelected = selectedRecipient?.id?.toString() === user.id?.toString();
+                                    const displayName = user.display_name || user.username || 'Kullanıcı';
+                                    const initial = displayName.charAt(0).toUpperCase();
+
+                                    return (
+                                        <TouchableOpacity
+                                            key={user.id?.toString()}
+                                            style={[
+                                                styles.recipientItem,
+                                                isSelected && styles.recipientItemSelected
+                                            ]}
+                                            onPress={() => setSelectedRecipient(user)}
+                                            activeOpacity={0.8}
+                                        >
+                                            {user.avatar_url ? (
+                                                <Image source={{ uri: user.avatar_url }} style={styles.recipientAvatar} />
+                                            ) : (
+                                                <View style={styles.recipientAvatarPlaceholder}>
+                                                    <Text style={styles.recipientInitial}>{initial}</Text>
+                                                </View>
+                                            )}
+
+                                            <Text
+                                                style={[
+                                                    styles.recipientName,
+                                                    isSelected && styles.recipientNameSelected
+                                                ]}
+                                                numberOfLines={1}
+                                            >
+                                                {displayName}
+                                            </Text>
+
+                                            {user.seat_number ? (
+                                                <View style={styles.seatPill}>
+                                                    <Text style={styles.seatPillText}>#{user.seat_number}</Text>
+                                                </View>
+                                            ) : (
+                                                <View style={[styles.seatPill, { backgroundColor: 'rgba(255,255,255,0.06)' }]}>
+                                                    <Text style={[styles.seatPillText, { color: 'rgba(255,255,255,0.4)' }]}>Dinleyici</Text>
+                                                </View>
+                                            )}
+
+                                            {isSelected && (
+                                                <View style={styles.selectedCheckCircle}>
+                                                    <Ionicons name="checkmark" size={10} color="#fff" />
+                                                </View>
+                                            )}
+                                        </TouchableOpacity>
+                                    );
+                                })}
+                            </ScrollView>
+                        </View>
+                    )}
+
                     {/* Bottom Action Bar */}
                     <View style={[styles.bottomBar, { borderTopColor: theme.colors.border }]}>
                         <TouchableOpacity style={styles.balanceContainer}>
@@ -195,9 +290,8 @@ export default function GiftPickerModal({ visible, onClose, onSelectGift, userBa
                             </TouchableOpacity>
 
                             <TouchableOpacity 
-                                style={[styles.sendButtonWrap, (!selectedGift || userBalance < totalCost) && { opacity: 0.5 }]}
+                                style={[styles.sendButtonWrap, isSendDisabled && { opacity: 0.5 }]}
                                 onPress={handleSend}
-                                disabled={!selectedGift || userBalance < totalCost}
                             >
                                 <LinearGradient
                                     colors={theme.gradients.primary}
@@ -423,5 +517,104 @@ const styles = StyleSheet.create({
         color: '#fff',
         fontWeight: 'bold',
         fontSize: 13,
+    },
+    recipientContainer: {
+        paddingHorizontal: 15,
+        paddingVertical: 8,
+        borderTopWidth: 1,
+        borderTopColor: 'rgba(255,255,255,0.08)',
+        backgroundColor: 'rgba(15, 23, 42, 0.4)',
+    },
+    recipientHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: 8,
+    },
+    recipientHeaderTitle: {
+        fontSize: 10.5,
+        fontWeight: 'bold',
+        color: '#ec4899',
+        marginLeft: 5,
+        letterSpacing: 0.5,
+    },
+    requiredBadge: {
+        fontSize: 10,
+        color: '#ef4444',
+        marginLeft: 'auto',
+        fontWeight: 'bold',
+    },
+    recipientScroll: {
+        flexDirection: 'row',
+    },
+    recipientItem: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: 'rgba(255,255,255,0.05)',
+        borderWidth: 1.5,
+        borderColor: 'rgba(255,255,255,0.1)',
+        borderRadius: 20,
+        paddingHorizontal: 10,
+        paddingVertical: 6,
+        marginRight: 10,
+        position: 'relative',
+    },
+    recipientItemSelected: {
+        borderColor: '#ec4899',
+        backgroundColor: 'rgba(236, 72, 153, 0.18)',
+    },
+    recipientAvatar: {
+        width: 26,
+        height: 26,
+        borderRadius: 13,
+        marginRight: 7,
+    },
+    recipientAvatarPlaceholder: {
+        width: 26,
+        height: 26,
+        borderRadius: 13,
+        backgroundColor: '#7b2cff',
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginRight: 7,
+    },
+    recipientInitial: {
+        color: '#fff',
+        fontSize: 12,
+        fontWeight: 'bold',
+    },
+    recipientName: {
+        color: 'rgba(255,255,255,0.7)',
+        fontSize: 12,
+        fontWeight: '600',
+        maxWidth: 90,
+        marginRight: 6,
+    },
+    recipientNameSelected: {
+        color: '#fff',
+        fontWeight: 'bold',
+    },
+    seatPill: {
+        backgroundColor: 'rgba(236, 72, 153, 0.3)',
+        borderRadius: 8,
+        paddingHorizontal: 5,
+        paddingVertical: 1.5,
+    },
+    seatPillText: {
+        color: '#ec4899',
+        fontSize: 9,
+        fontWeight: 'bold',
+    },
+    selectedCheckCircle: {
+        position: 'absolute',
+        top: -4,
+        right: -4,
+        width: 16,
+        height: 16,
+        borderRadius: 8,
+        backgroundColor: '#ec4899',
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderWidth: 1.5,
+        borderColor: '#0f172a',
     }
 });

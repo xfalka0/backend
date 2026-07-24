@@ -78,6 +78,19 @@ export const PurchaseService = {
         }
     },
 
+    purchaseProductByIdentifier: async (productIdentifier) => {
+        try {
+            const { customerInfo } = await Purchases.purchaseProduct(productIdentifier);
+            return { success: true, customerInfo };
+        } catch (e) {
+            if (!e.userCancelled) {
+                console.log('[Purchases] Direct Product Purchase Error:', e);
+                return { success: false, error: e.message };
+            }
+            return { success: false, cancelled: true };
+        }
+    },
+
     getCustomerInfo: async () => {
         try {
             return await Purchases.getCustomerInfo();

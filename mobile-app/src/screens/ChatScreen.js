@@ -1390,6 +1390,71 @@ export default function ChatScreen({ route, navigation }) {
                     <Text style={styles.voiceDurationText}>{duration}</Text>
                 </View>
             );
+        } else if (item.content_type === 'call_stub' || item.type === 'call_stub') {
+            let stubInfo = {};
+            try {
+                stubInfo = typeof item.content === 'string' ? JSON.parse(item.content) : (item.content || {});
+            } catch (e) {
+                stubInfo = { reason: 'ended', duration: item.content || '0:00' };
+            }
+
+            const isVideo = stubInfo.callType === 'video';
+            const status = stubInfo.status || stubInfo.reason || 'ended';
+            const isMissed = ['missed', 'rejected', 'cancelled', 'busy'].includes(status);
+            const durationText = stubInfo.duration && stubInfo.duration !== '0:00' ? stubInfo.duration : null;
+
+            let callTitle = isVideo ? 'Görüntülü Arama' : 'Sesli Arama';
+            let iconName = isVideo ? 'videocam' : 'call';
+            let iconColor = '#22c55e'; // Green
+
+            if (status === 'missed') {
+                callTitle = isVideo ? 'Cevapsız Görüntülü Arama' : 'Cevapsız Sesli Arama';
+                iconName = isVideo ? 'videocam-off' : 'call';
+                iconColor = '#ef4444';
+            } else if (status === 'rejected') {
+                callTitle = isVideo ? 'Reddedilen Görüntülü Arama' : 'Reddedilen Sesli Arama';
+                iconName = 'close-circle';
+                iconColor = '#ef4444';
+            } else if (status === 'cancelled') {
+                callTitle = isVideo ? 'İptal Edilen Görüntülü Arama' : 'İptal Edilen Sesli Arama';
+                iconName = 'ban';
+                iconColor = '#94a3b8';
+            } else if (status === 'busy') {
+                callTitle = 'Arama Meşgul';
+                iconName = 'call';
+                iconColor = '#f59e0b';
+            }
+
+            content = (
+                <TouchableOpacity
+                    style={styles.callStubContainer}
+                    onPress={() => {
+                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                        if (isVideo) {
+                            navigation.navigate('VideoCall', { receiver: { id: operatorId, name, avatar_url }, chatId });
+                        } else {
+                            navigation.navigate('VoiceCall', { receiver: { id: operatorId, name, avatar_url }, chatId });
+                        }
+                    }}
+                    activeOpacity={0.85}
+                >
+                    <View style={[styles.callStubIconCircle, { backgroundColor: iconColor + '20' }]}>
+                        <Ionicons name={iconName} size={18} color={iconColor} />
+                    </View>
+
+                    <View style={{ flex: 1, marginLeft: 10 }}>
+                        <Text style={styles.callStubTitle}>{callTitle}</Text>
+                        <Text style={styles.callStubSub}>
+                            {durationText ? `Süre: ${durationText}` : (isMissed ? 'Geri aramak için dokunun' : 'Tamamlandı')}
+                        </Text>
+                    </View>
+
+                    <View style={styles.callBackBtn}>
+                        <Ionicons name={isVideo ? "videocam" : "call"} size={13} color="#fff" />
+                        <Text style={styles.callBackBtnText}>Geri Ara</Text>
+                    </View>
+                </TouchableOpacity>
+            );
         }
 
         return (
@@ -2157,4 +2222,47 @@ const styles = StyleSheet.create({
         fontSize: 13,
         fontWeight: '900'
     },
+    callStubContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 12,
+        paddingVertical: 10,
+        borderRadius: 14,
+        backgroundColor: 'rgba(15, 23, 42, 0.6)',
+        borderWidth: 1,
+        borderColor: 'rgba(255, 255, 255, 0.1)',
+        minWidth: 220,
+    },
+    callStubIconCircle: {
+        width: 36,
+        height: 36,
+        borderRadius: 18,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    callStubTitle: {
+        color: '#fff',
+        fontSize: 13,
+        fontWeight: 'bold',
+    },
+    callStubSub: {
+        color: 'rgba(255, 255, 255, 0.5)',
+        fontSize: 11,
+        marginTop: 2,
+    },
+    callBackBtn: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#ec4899',
+        paddingHorizontal: 10,
+        paddingVertical: 6,
+        borderRadius: 12,
+        marginLeft: 8,
+    },
+    callBackBtnText: {
+        color: '#fff',
+        fontSize: 11,
+        fontWeight: 'bold',
+        marginLeft: 4,
+    }
 });

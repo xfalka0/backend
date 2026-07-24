@@ -177,6 +177,7 @@ export default function PartyRoomScreen({ route, navigation }) {
 
     const chatRef = useRef(null);
     const agoraRef = useRef(null);
+    const lastSpeakingRef = useRef('');
 
     // ── Derived ───────────────────────────────────────────────────────────────
     const currentRoom = room || routeRoom;
@@ -197,6 +198,39 @@ export default function PartyRoomScreen({ route, navigation }) {
         );
         return members.filter(m => m.is_online && !seatedUserIds.has(m.user_id?.toString()));
     }, [members, seats]);
+
+    const roomUsers = useMemo(() => {
+        const list = [];
+        if (seats && Array.isArray(seats)) {
+            seats.forEach(s => {
+                if (s.user_id && s.user_id?.toString() !== currentUser?.id?.toString()) {
+                    list.push({
+                        id: s.user_id,
+                        display_name: s.display_name || s.username || 'Kullanıcı',
+                        username: s.username,
+                        avatar_url: s.avatar_url,
+                        seat_number: s.seat_number,
+                        is_seated: true,
+                    });
+                }
+            });
+        }
+        if (listeners && Array.isArray(listeners)) {
+            listeners.forEach(m => {
+                const uid = m.user_id || m.id;
+                if (uid && uid?.toString() !== currentUser?.id?.toString() && !list.some(u => u.id?.toString() === uid?.toString())) {
+                    list.push({
+                        id: uid,
+                        display_name: m.display_name || m.username || 'Dinleyici',
+                        username: m.username,
+                        avatar_url: m.avatar_url,
+                        is_seated: false,
+                    });
+                }
+            });
+        }
+        return list;
+    }, [seats, listeners, currentUser?.id]);
 
     // Star animation dots layout
     const stars = useMemo(() => {
@@ -459,13 +493,17 @@ export default function PartyRoomScreen({ route, navigation }) {
                 const speakingMap = {};
                 if (speakers && Array.isArray(speakers)) {
                     speakers.forEach(sp => {
-                        if (sp.volume > 5) {
+                        if (sp.volume > 8) {
                             const speakerUid = sp.uid === 0 ? Number(currentUser?.id) : Number(sp.uid);
                             speakingMap[speakerUid] = true;
                         }
                     });
                 }
-                setSpeakingUsers(speakingMap);
+                const currentKey = Object.keys(speakingMap).sort().join(',');
+                if (currentKey !== lastSpeakingRef.current) {
+                    lastSpeakingRef.current = currentKey;
+                    setSpeakingUsers(speakingMap);
+                }
             };
 
             const logConnection = (connection, state, reason) => {
@@ -561,8 +599,8 @@ export default function PartyRoomScreen({ route, navigation }) {
             );
             console.log('[Agora] Joined channel successfully.');
 
-            // Enable volume indicator: check every 200ms (Must be done after join on some devices)
-            await engine.enableAudioVolumeIndication(200, 3, true);
+            // Enable volume indicator: check every 400ms (Must be done after join on some devices)
+            await engine.enableAudioVolumeIndication(400, 3, true);
             console.log('[Agora] Volume indication enabled after join.');
             setIsAgoraInitialized(true);
         } catch (e) {
@@ -792,13 +830,15 @@ export default function PartyRoomScreen({ route, navigation }) {
             <GiftPickerModal
                 visible={isGiftVisible}
                 onClose={closeGiftPicker}
-                onSelectGift={async (gift, quantity) => {
+                onSelectGift={async (gift, quantity, recipient) => {
                     const sendGift = useGiftStore.getState().sendGift;
                     const SocketService = require('../services/SocketService').default;
                     const adaptedGift = { ...gift, cost: gift.price };
-                    await sendGift(adaptedGift, balance, setBalance, SocketService, currentRoom);
+                    await sendGift(adaptedGift, balance, setBalance, SocketService, currentRoom, recipient);
                 }}
                 userBalance={balance}
+                roomUsers={roomUsers}
+                targetSeat={useGiftStore.getState().targetSeat}
             />
 
             <UserProfileBottomSheet

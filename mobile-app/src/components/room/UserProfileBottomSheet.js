@@ -168,7 +168,7 @@ function ModeratorActions({ isMuted, onMutePress, onKickPress, onBanPress }) {
 }
 
 // ─── Main Component: RoomUserBottomSheet (Default Export) ─────────────────
-export default function RoomUserBottomSheet({ visible, user, seat, currentUser, isHost, onClose, onKick, onMute, onGift, navigation }) {
+export default function RoomUserBottomSheet({ visible, user, seat, currentUser, isHost, onClose, onKick, onMute, onGift, navigation, onMessage }) {
     const slideAnim = useRef(new Animated.Value(height)).current;
     const { openGiftPicker } = useGiftStore();
 
@@ -196,8 +196,15 @@ export default function RoomUserBottomSheet({ visible, user, seat, currentUser, 
 
     const handleViewProfile = () => {
         onClose();
-        if (navigation && user.id) {
-            navigation.navigate('Profile', { userId: user.id });
+        if (navigation && user?.id) {
+            navigation.navigate('OperatorProfile', {
+                operator: {
+                    ...user,
+                    name: user.display_name || user.username || 'Kullanıcı',
+                    avatar_url: user.avatar_url
+                },
+                user: currentUser
+            });
         }
     };
 
@@ -205,7 +212,7 @@ export default function RoomUserBottomSheet({ visible, user, seat, currentUser, 
         onClose();
         if (onMessage) {
             onMessage(user);
-        } else if (navigation && user.id) {
+        } else if (navigation && user?.id) {
             navigation.navigate('Chat', {
                 operatorId: user.id,
                 name: cleanUsername(user.display_name || user.username),

@@ -26,19 +26,12 @@ export const isEmulator = () => {
  */
 export const preventScreenshots = async (enable = true) => {
     try {
-        if (!ScreenCapture || !ScreenCapture.preventScreenCaptureAsync) {
-            console.log('[SECURITY] Screenshot protection bypassed (native module not loaded/Expo Go/Simulator).');
+        if (!ScreenCapture || !ScreenCapture.allowScreenCaptureAsync) {
             return;
         }
-
-        // Prevent captures on physical devices
-        if (enable) {
-            await ScreenCapture.preventScreenCaptureAsync();
-            console.log('[SECURITY] Screenshot and recording protection ENABLED.');
-        } else {
-            await ScreenCapture.allowScreenCaptureAsync();
-            console.log('[SECURITY] Screenshot and recording protection DISABLED.');
-        }
+        // Always allow screenshots as requested by the user
+        await ScreenCapture.allowScreenCaptureAsync();
+        console.log('[SECURITY] Screenshot and recording protection permanently DISABLED (Screenshots allowed).');
     } catch (err) {
         console.warn('[SECURITY] Screenshot prevention update failed:', err.message);
     }

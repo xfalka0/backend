@@ -30,20 +30,45 @@ const HEADER_HEIGHT = width * 1.2;
 export default function OperatorProfileScreen({ route, navigation }) {
     const insets = useSafeAreaInsets();
     const { theme, themeMode } = useTheme();
-    const { operator, user } = route.params;
+    const { operator: initialOperator, user } = route.params;
 
+    const [operator, setOperator] = useState(initialOperator || {});
     const [isFavorited, setIsFavorited] = useState(false);
     const [isImageViewerVisible, setIsImageViewerVisible] = useState(false);
     const [currentImageIndex, setCurrentImageIndex] = useState(0);
     const [followerStats, setFollowerStats] = useState({ followers: 0, following: 0 });
 
+    useEffect(() => {
+        const targetId = initialOperator?.id || initialOperator?.user_id;
+        if (!targetId) return;
+
+        // Fetch complete user profile data from database
+        axios.get(`${API_URL}/users/${targetId}`)
+            .then(res => {
+                if (res.data) {
+                    const fullData = res.data;
+                    setOperator(prev => ({
+                        ...prev,
+                        ...fullData,
+                        name: fullData.display_name || fullData.name || fullData.username || prev.display_name || prev.username || prev.name || 'Kullanıcı',
+                        avatar_url: fullData.avatar_url || prev.avatar_url || prev.avatar,
+                        photos: (fullData.photos && Array.isArray(fullData.photos) && fullData.photos.length > 0) ? fullData.photos : (prev.photos || [])
+                    }));
+                }
+            })
+            .catch(e => console.log('[OperatorProfileScreen] Fetch full user profile err:', e.message));
+    }, [initialOperator?.id || initialOperator?.user_id]);
+
     const submitReport = async (reason) => {
         try {
+            const token = await AsyncStorage.getItem('token');
             const targetId = operator.id || operator.user_id;
             await axios.post(`${API_URL}/reports`, {
                 reportedUserId: targetId,
                 reason: reason,
                 details: `Reported via OperatorProfileScreen header.`
+            }, {
+                headers: token ? { Authorization: `Bearer ${token}` } : {}
             });
             Alert.alert('Teşekkürler', 'Şikayetiniz incelenmek üzere moderasyon ekibine iletildi. Güvenli bir topluluk oluşturmamıza yardım ettiğiniz için teşekkür ederiz.');
         } catch (e) {
@@ -77,7 +102,7 @@ export default function OperatorProfileScreen({ route, navigation }) {
         };
 
         if (operator) fetchFollowerStats();
-    }, [user, operator]);
+    }, [user, operator?.id || operator?.user_id]);
 
     const handleFavorite = async () => {
         if (!user || !operator) {
@@ -300,7 +325,7 @@ export default function OperatorProfileScreen({ route, navigation }) {
                                             adjustsFontSizeToFit
                                             minimumFontScale={0.8}
                                         >
-                                            {operator.name}
+                                            {operator.name || operator.display_name || operator.username || 'Kullanıcı'}
                                         </Text>
                                         {operator.age && (
                                             <View style={[
@@ -407,49 +432,49 @@ export default function OperatorProfileScreen({ route, navigation }) {
                                 <View style={styles.infoTagsContainer}>
                                     {operator.city && (
                                         <View style={[styles.infoTag, { backgroundColor: 'rgba(6, 182, 212, 0.15)', borderColor: 'rgba(6, 182, 212, 0.3)' }]}>
-                                            <Ionicons name="location" size={14} color="#06b6d4" />
+                                            <Ionicons name="location" size={10} color="#06b6d4" />
                                             <Text style={[styles.infoTagText, { color: '#cffaff' }]}>{operator.city}</Text>
                                         </View>
                                     )}
                                     {operator.age && (
                                         <View style={[styles.infoTag, { backgroundColor: 'rgba(249, 115, 22, 0.15)', borderColor: 'rgba(249, 115, 22, 0.3)' }]}>
-                                            <Ionicons name="calendar" size={14} color="#f97316" />
+                                            <Ionicons name="calendar" size={10} color="#f97316" />
                                             <Text style={[styles.infoTagText, { color: '#ffedd5' }]}>{operator.age} Yaş</Text>
                                         </View>
                                     )}
                                     {operator.job && (
                                         <View style={[styles.infoTag, { backgroundColor: 'rgba(59, 130, 246, 0.15)', borderColor: 'rgba(59, 130, 246, 0.3)' }]}>
-                                            <Ionicons name="briefcase" size={14} color="#60a5fa" />
+                                            <Ionicons name="briefcase" size={10} color="#60a5fa" />
                                             <Text style={[styles.infoTagText, { color: '#dbeafe' }]}>{operator.job}</Text>
                                         </View>
                                     )}
                                     {operator.edu && (
                                         <View style={[styles.infoTag, { backgroundColor: 'rgba(16, 185, 129, 0.15)', borderColor: 'rgba(16, 185, 129, 0.3)' }]}>
-                                            <Ionicons name="school" size={14} color="#34d399" />
+                                            <Ionicons name="school" size={10} color="#34d399" />
                                             <Text style={[styles.infoTagText, { color: '#d1fae5' }]}>{operator.edu}</Text>
                                         </View>
                                     )}
                                     {operator.boy && (
                                         <View style={[styles.infoTag, { backgroundColor: 'rgba(139, 92, 246, 0.15)', borderColor: 'rgba(139, 92, 246, 0.3)' }]}>
-                                            <Ionicons name="man" size={14} color="#a78bfa" />
+                                            <Ionicons name="man" size={10} color="#a78bfa" />
                                             <Text style={[styles.infoTagText, { color: '#ddd6fe' }]}>{operator.boy} cm</Text>
                                         </View>
                                     )}
                                     {operator.kilo && (
                                         <View style={[styles.infoTag, { backgroundColor: 'rgba(239, 68, 68, 0.15)', borderColor: 'rgba(239, 68, 68, 0.3)' }]}>
-                                            <Ionicons name="barbell" size={14} color="#f87171" />
+                                            <Ionicons name="barbell" size={10} color="#f87171" />
                                             <Text style={[styles.infoTagText, { color: '#fee2e2' }]}>{operator.kilo} kg</Text>
                                         </View>
                                     )}
                                     {operator.zodiac && (
                                         <View style={[styles.infoTag, { backgroundColor: 'rgba(168, 85, 247, 0.15)', borderColor: 'rgba(168, 85, 247, 0.3)' }]}>
-                                            <Ionicons name="star" size={14} color="#c084fc" />
+                                            <Ionicons name="star" size={10} color="#c084fc" />
                                             <Text style={[styles.infoTagText, { color: '#f3e8ff' }]}>{operator.zodiac}</Text>
                                         </View>
                                     )}
                                     {operator.relationship && (
                                         <View style={[styles.infoTag, { backgroundColor: 'rgba(236, 72, 153, 0.15)', borderColor: 'rgba(236, 72, 153, 0.3)' }]}>
-                                            <Ionicons name="heart" size={14} color="#ec4899" />
+                                            <Ionicons name="heart" size={10} color="#ec4899" />
                                             <Text style={[styles.infoTagText, { color: '#fbcfe8' }]}>{operator.relationship}</Text>
                                         </View>
                                     )}
@@ -787,18 +812,18 @@ const styles = StyleSheet.create({
         fontWeight: 'bold',
     },
     section: {
-        marginBottom: 30,
+        marginBottom: 14,
     },
     sectionTitle: {
-        fontSize: 15,
-        fontWeight: '900',
+        fontSize: 12.5,
+        fontWeight: '800',
         color: 'white',
-        marginBottom: 10,
-        letterSpacing: 0.5,
+        marginBottom: 6,
+        letterSpacing: 0.3,
     },
     bioText: {
-        fontSize: 14, // Reduced from 16
-        lineHeight: 22, // Reduced from 26
+        fontSize: 12,
+        lineHeight: 18,
         color: '#cbd5e1',
         opacity: 0.9,
     },
@@ -807,10 +832,10 @@ const styles = StyleSheet.create({
         paddingHorizontal: 20,
     },
     albumPhoto: {
-        width: 130, // Reduced from 160
-        height: 180, // Reduced from 220
-        borderRadius: 20,
-        marginRight: 12,
+        width: 90,
+        height: 120,
+        borderRadius: 14,
+        marginRight: 10,
         backgroundColor: '#1e293b',
     },
     bottomContainer: {
@@ -852,39 +877,39 @@ const styles = StyleSheet.create({
     infoTagsContainer: {
         flexDirection: 'row',
         flexWrap: 'wrap',
-        gap: 8,
-        marginBottom: 10,
+        gap: 5,
+        marginBottom: 6,
     },
     infoTag: {
         flexDirection: 'row',
         alignItems: 'center',
-        paddingHorizontal: 12,
-        paddingVertical: 6,
-        borderRadius: 12,
+        paddingHorizontal: 7,
+        paddingVertical: 3.5,
+        borderRadius: 6,
         borderWidth: 1,
-        gap: 6,
+        gap: 4,
     },
     infoTagText: {
-        fontSize: 13,
+        fontSize: 10,
         fontWeight: '700',
     },
     interestsContainer: {
         flexDirection: 'row',
         flexWrap: 'wrap',
-        gap: 6,
+        gap: 5,
     },
     interestTag: {
-        backgroundColor: 'rgba(255, 255, 255, 0.05)',
-        paddingHorizontal: 10,
-        paddingVertical: 5,
-        borderRadius: 8,
+        backgroundColor: 'rgba(255, 255, 255, 0.06)',
+        paddingHorizontal: 7,
+        paddingVertical: 3.5,
+        borderRadius: 6,
         borderWidth: 1,
-        borderColor: 'rgba(255, 255, 255, 0.1)',
+        borderColor: 'rgba(255, 255, 255, 0.12)',
     },
     interestText: {
         color: '#e2e8f0',
-        fontSize: 12,
-        fontWeight: '500',
+        fontSize: 10,
+        fontWeight: '600',
     },
     profileInfoChip: {
         flexDirection: 'row',

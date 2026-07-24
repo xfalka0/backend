@@ -1,19 +1,12 @@
 const db = require('../db');
 
-async function inspect() {
-    try {
-        const chatsCols = await db.query("SELECT column_name, data_type FROM information_schema.columns WHERE table_name = 'chats'");
-        console.log('CHATS COLUMNS:');
-        console.log(chatsCols.rows);
-
-        const msgsCols = await db.query("SELECT column_name, data_type FROM information_schema.columns WHERE table_name = 'messages'");
-        console.log('\nMESSAGES COLUMNS:');
-        console.log(msgsCols.rows);
-    } catch (e) {
-        console.error(e);
-    } finally {
-        process.exit(0);
-    }
+async function main() {
+    const res = await db.query("SELECT column_name, data_type FROM information_schema.columns WHERE table_name = 'chats'");
+    console.log("Chats table columns:", res.rows);
+    process.exit(0);
 }
 
-inspect();
+main().catch(err => {
+    console.error(err);
+    process.exit(1);
+});

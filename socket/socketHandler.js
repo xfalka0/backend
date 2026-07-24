@@ -331,8 +331,13 @@ async function endCallSession(io, chatId, reason) {
         await client.query('UPDATE chats SET last_message_at = NOW(), last_message = $2 WHERE id = $1', [chatId, lastMsgPreview]);
         await client.query('COMMIT');
 
+        console.log(`[CALL LOG 🟢] Saved call stub msgId=${savedMsg.id}, duration=${durationStr}`);
+
+        // Broadcast to chat room in real-time so ChatScreen updates instantly
+        io.to(chatId.toString()).emit('receive_message', savedMsg);
+        io.to(chatId.toString()).emit('new_message', savedMsg);
         io.to(chatId.toString()).emit('call_ended', {
-            chatId,
+            chatId: chatId.toString(),
             reason,
             duration: durationStr,
             message: savedMsg
@@ -969,82 +974,95 @@ function initializeSockets(io) {
 
         socket.on('call_accept', async (data) => {
             const { chatId, callerId } = data;
-            const receiverId = socket.user.id;
-            console.log(`[SOCKET] call_accept by ${receiverId} for caller ${callerId}`);
+            const receiverId = socket.user?.id || (socket.handshake?.query?.userId || socket.handshake?.auth?.userId);
+            const roomKey = chatId ? chatId.toString() : '';
 
-            const session = activeCallSessions.get(chatId);
+            console.log(`[CALL LOG 🟢] call_accept received from receiverId=${receiverId} for caller ${callerId} in chat ${roomKey}`);
+
+            const session = activeCallSessions.get(roomKey);
             if (!session || session.status !== 'ringing') {
-                console.log('[SOCKET] call_accept ignored: no active ringing call session found.');
+                console.log(`[CALL LOG ⚠️] call_accept ignored: no active ringing session found for key '${roomKey}'.`);
                 return;
+            }
+
+            // Clear the 30s ringing timeout
+            if (session.connectionTimeoutId) {
+                clearTimeout(session.connectionTimeoutId);
+                session.connectionTimeoutId = null;
+                console.log(`[CALL LOG 🟢] Cleared 30s ringing timeout for chat ${roomKey}`);
             }
 
             // Charge the first minute upfront inside transaction
             console.log(`[CALL ACCEPT] Charging first minute upfront for caller ${callerId}...`);
-            const firstMinuteCharged = await chargeCallMinute(io, chatId, callerId, receiverId);
+            const firstMinuteCharged = await chargeCallMinute(io, roomKey, callerId, receiverId);
             if (!firstMinuteCharged.success) {
                 console.log(`[CALL ACCEPT] First minute charge failed for caller ${callerId}. Rejecting call.`);
                 session.status = 'ended';
-                activeCallSessions.delete(chatId);
+                activeCallSessions.delete(roomKey);
 
                 socket.emit('call_error', { message: 'Arama başlatılamadı. Arayanın bakiyesi yetersiz.' });
                 io.to(callerId.toString()).emit('call_error', { message: 'Yetersiz bakiye. Arama sonlandırıldı.' });
-                io.to(callerId.toString()).emit('call_ended', { chatId, reason: 'insufficient_funds' });
-                socket.emit('call_ended', { chatId, reason: 'insufficient_funds' });
+                io.to(callerId.toString()).emit('call_ended', { chatId: roomKey, reason: 'insufficient_funds' });
+                socket.emit('call_ended', { chatId: roomKey, reason: 'insufficient_funds' });
                 return;
             }
 
             session.status = 'active';
             session.acceptedAt = new Date();
 
-            await startCallBilling(io, chatId, callerId, receiverId);
+            await startCallBilling(io, roomKey, callerId, receiverId);
 
-            io.to(chatId.toString()).emit('call_started', { chatId });
+            io.to(roomKey).emit('call_started', { chatId: roomKey });
         });
 
         socket.on('call_reject', async (data) => {
             const { chatId, callerId } = data;
-            const receiverId = socket.user.id;
-            console.log(`[SOCKET] call_reject by ${receiverId} for caller ${callerId}`);
+            const receiverId = socket.user?.id || (socket.handshake?.query?.userId || socket.handshake?.auth?.userId);
+            const roomKey = chatId ? chatId.toString() : '';
+            console.log(`[CALL LOG ❌] call_reject by ${receiverId} for caller ${callerId} in chat ${roomKey}`);
 
-            const session = activeCallSessions.get(chatId);
+            const session = activeCallSessions.get(roomKey);
             if (!session || session.status !== 'ringing') return;
 
-            await logMissedCall(io, chatId, callerId, receiverId, 'rejected');
+            await logMissedCall(io, roomKey, callerId, receiverId, 'rejected');
         });
 
         socket.on('call_cancel', async (data) => {
             const { chatId, receiverId } = data;
-            const callerId = socket.user.id;
-            console.log(`[SOCKET] call_cancel by ${callerId} for receiver ${receiverId}`);
+            const callerId = socket.user?.id || (socket.handshake?.query?.userId || socket.handshake?.auth?.userId);
+            const roomKey = chatId ? chatId.toString() : '';
+            console.log(`[CALL LOG ⏹️] call_cancel by ${callerId} for receiver ${receiverId} in chat ${roomKey}`);
 
-            const session = activeCallSessions.get(chatId);
+            const session = activeCallSessions.get(roomKey);
             if (!session || session.status !== 'ringing') return;
 
-            await logMissedCall(io, chatId, callerId, receiverId, 'cancelled');
+            await logMissedCall(io, roomKey, callerId, receiverId, 'cancelled');
         });
 
         socket.on('call_busy', async (data) => {
             const { chatId, callerId } = data;
-            const receiverId = socket.user.id;
-            console.log(`[SOCKET] call_busy by ${receiverId} for caller ${callerId}`);
+            const receiverId = socket.user?.id || (socket.handshake?.query?.userId || socket.handshake?.auth?.userId);
+            const roomKey = chatId ? chatId.toString() : '';
+            console.log(`[CALL LOG 🚫] call_busy by ${receiverId} for caller ${callerId} in chat ${roomKey}`);
 
-            const session = activeCallSessions.get(chatId);
+            const session = activeCallSessions.get(roomKey);
             if (!session || session.status !== 'ringing') return;
 
-            await logMissedCall(io, chatId, callerId, receiverId, 'busy');
+            await logMissedCall(io, roomKey, callerId, receiverId, 'busy');
         });
 
         socket.on('call_end', async (data) => {
             const { chatId } = data;
-            console.log(`[SOCKET] call_end received for chat ${chatId}`);
+            const roomKey = chatId ? chatId.toString() : '';
+            console.log(`[CALL LOG 🔴] call_end received for chat ${roomKey}`);
 
-            const session = activeCallSessions.get(chatId);
+            const session = activeCallSessions.get(roomKey);
             if (!session) return;
 
             if (session.status === 'ringing') {
-                await logMissedCall(io, chatId, session.callerId, session.receiverId, 'cancelled');
+                await logMissedCall(io, roomKey, session.callerId, session.receiverId, 'cancelled');
             } else if (session.status === 'active') {
-                await endCallSession(io, chatId, 'ended');
+                await endCallSession(io, roomKey, 'ended');
             }
         });
 

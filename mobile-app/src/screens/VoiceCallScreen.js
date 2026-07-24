@@ -290,8 +290,11 @@ export default function VoiceCallScreen({ route, navigation }) {
                     }
                 },
                 onUserOffline: (connection, remoteUid, reason) => {
-                    console.log('[Agora] Remote user went offline:', remoteUid);
-                    handleHangup();
+                    console.log('[Agora] Remote user went offline:', remoteUid, 'reason:', reason);
+                    // Only hangup if remote user explicitly quit (reason === 0)
+                    if (reason === 0) {
+                        handleHangup();
+                    }
                 },
                 onError: (err, msg) => {
                     console.warn('[Agora] Engine error:', err, msg);
@@ -302,8 +305,12 @@ export default function VoiceCallScreen({ route, navigation }) {
             await engine.setEnableSpeakerphone(isSpeaker);
 
             // Join Channel
-            const myUid = Number(useAppStore.getState().user?.id) || 0;
-            console.log(`[Agora] Joining channel ${channelName} with UID ${myUid}`);
+            const currentUserId = useAppStore.getState().user?.id || routeUser?.id;
+            const myUid = (Number(currentUserId) && !isNaN(Number(currentUserId)))
+                ? Number(currentUserId)
+                : (Math.floor(Math.random() * 899999) + 100000);
+
+            console.log(`[Agora] Joining channel ${channelName} with UID ${myUid} (UserId: ${currentUserId})`);
             await engine.joinChannel(token, channelName, myUid, {
                 channelProfile: AgoraRTC.ChannelProfileType.ChannelProfileCommunication,
                 clientRoleType: AgoraRTC.ClientRoleType.ClientRoleBroadcaster,
@@ -397,24 +404,27 @@ export default function VoiceCallScreen({ route, navigation }) {
         }
     };
 
-    // Socket Event: Call Request Ringing
+    // Socket Event: Call Request Ringing / Started
     const handleSocketCallStarted = async () => {
         console.log('[SOCKET] Call Started Event Received');
         await cleanupAudio();
         setCallState('active');
-        setStatusText('Bağlanıyor...');
+        setStatusText('Bağlandı');
+        startTimer();
 
-        // Fetch token and join channel
-        try {
-            const token = await AsyncStorage.getItem('token');
-            const callId = callIdRef.current;
-            const res = await axios.post(`${API_URL}/chats/${chatId}/rtc-token`, { callId }, {
-                headers: { Authorization: `Bearer ${token}` }
-            });
-            const { token: rtcToken, channelName } = res.data;
-            await initAgora(rtcToken, channelName);
-        } catch (err) {
-            console.error('[Agora Start Call] Error:', err.message);
+        // Only init Agora if not already initialized by accept button
+        if (!isJoinedRef.current && !agoraEngineRef.current) {
+            try {
+                const token = await AsyncStorage.getItem('token');
+                const callId = callIdRef.current;
+                const res = await axios.post(`${API_URL}/chats/${chatId}/rtc-token`, { callId }, {
+                    headers: { Authorization: `Bearer ${token}` }
+                });
+                const { token: rtcToken, channelName } = res.data;
+                await initAgora(rtcToken, channelName);
+            } catch (err) {
+                console.error('[Agora Start Call] Error:', err.message);
+            }
         }
     };
 

@@ -1065,6 +1065,8 @@ function initializeSockets(io) {
             await startCallBilling(io, roomKey, callerId, receiverId);
 
             io.to(roomKey).emit('call_started', { chatId: roomKey });
+            io.to(callerId.toString()).emit('call_started', { chatId: roomKey });
+            io.to(receiverId.toString()).emit('call_started', { chatId: roomKey });
         });
 
         socket.on('call_connected', (data) => {

@@ -224,7 +224,8 @@ export default function VoiceCallScreen({ route, navigation }) {
 
         handleCallInit();
 
-        if (socket) {
+        if (socket && chatId) {
+            socket.emit('join_room', chatId.toString());
             socket.on('disconnect', handleSocketDisconnect);
             socket.on('call_connected', handleSocketCallConnected);
             socket.on('call_started', handleSocketCallStarted);

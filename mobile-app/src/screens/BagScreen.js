@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, SafeAreaView, Dimensions, StatusBar, Platform, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, FlatList, TouchableOpacity, Image, SafeAreaView, Dimensions, StatusBar, Platform, ActivityIndicator } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import axios from 'axios';
@@ -33,7 +33,7 @@ export default function BagScreen({ navigation }) {
         fetchInventory();
     }, []);
 
-    const renderItemCard = (item, index) => {
+    const renderItemCard = React.useCallback(({ item, index }) => {
         // Render item depending on category
         return (
             <Motion.SlideUp key={item.id} delay={index * 50} style={styles.cardWrapper}>
@@ -81,7 +81,7 @@ export default function BagScreen({ navigation }) {
                 </LinearGradient>
             </Motion.SlideUp>
         );
-    };
+    }, [theme, themeMode]);
 
     const getRarityColor = (rarity) => {
         switch (rarity) {
@@ -118,12 +118,20 @@ export default function BagScreen({ navigation }) {
                         <ActivityIndicator size="large" color="#FF4FA3" />
                     </View>
                 ) : items.length > 0 ? (
-                    <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
-                        <Text style={styles.sectionTitle}>Sahip Olduğun Ürünler</Text>
-                        <View style={styles.grid}>
-                            {items.map((item, idx) => renderItemCard(item, idx))}
-                        </View>
-                    </ScrollView>
+                    <FlatList
+                        data={items}
+                        renderItem={renderItemCard}
+                        keyExtractor={item => item.id?.toString() || Math.random().toString()}
+                        numColumns={2}
+                        columnWrapperStyle={styles.columnWrapper}
+                        contentContainerStyle={styles.scroll}
+                        showsVerticalScrollIndicator={false}
+                        initialNumToRender={6}
+                        maxToRenderPerBatch={10}
+                        windowSize={5}
+                        removeClippedSubviews={true}
+                        ListHeaderComponent={<Text style={styles.sectionTitle}>Sahip Olduğun Ürünler</Text>}
+                    />
                 ) : (
                     <View style={styles.emptyContainer}>
                         <View style={styles.emptyIconCircle}>
@@ -210,11 +218,9 @@ const styles = StyleSheet.create({
         marginBottom: 16,
         opacity: 0.6,
     },
-    grid: {
-        flexDirection: 'row',
-        flexWrap: 'wrap',
+    columnWrapper: {
         justifyContent: 'space-between',
-        rowGap: 12,
+        marginBottom: 12,
     },
     cardWrapper: {
         width: (width - 52) / 2,

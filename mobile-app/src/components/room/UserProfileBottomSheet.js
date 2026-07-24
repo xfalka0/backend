@@ -6,6 +6,7 @@ import {
 import { Ionicons, FontAwesome5 } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import VipFrame from '../ui/VipFrame';
+import AgencyBadge from '../ui/AgencyBadge';
 import { useGiftStore } from '../../store/useGiftStore';
 
 const { width, height } = Dimensions.get('window');
@@ -61,11 +62,14 @@ function UserMiniProfileHeader({ user }) {
                             <Text style={styles.vipBadgeText}>VIP {user.vip_level}</Text>
                         </LinearGradient>
                     )}
+                    {(user.agency_name || user.agencyName) && (
+                        <AgencyBadge agencyName={user.agency_name || user.agencyName} size={20} style={{ marginLeft: 4 }} />
+                    )}
                 </View>
                 
                 <Text style={styles.profileId}>ID: {user.id?.slice?.(0, 8)?.toUpperCase?.() ?? user.id}</Text>
 
-                {/* Level and Agency Badges */}
+                {/* Level Badge */}
                 <View style={styles.badgesRow}>
                     <LinearGradient
                         colors={['#FF4D8D', '#7B2CFF']}
@@ -75,13 +79,6 @@ function UserMiniProfileHeader({ user }) {
                     >
                         <Text style={styles.levelText}>Lv. {user.level || 1}</Text>
                     </LinearGradient>
-
-                    {user.agency_name && (
-                        <View style={styles.agencyBadge}>
-                            <Ionicons name="shield-checkmark" size={10} color="#00D5FF" />
-                            <Text style={styles.agencyText} numberOfLines={1}>{user.agency_name}</Text>
-                        </View>
-                    )}
                 </View>
             </View>
         </View>

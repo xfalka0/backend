@@ -10,6 +10,7 @@ import { API_URL, SOCKET_URL } from '../config';
 import { useTheme } from '../contexts/ThemeContext';
 import VipFrame from '../components/ui/VipFrame';
 import VipBadge from '../components/ui/VipBadge';
+import AgencyBadge from '../components/ui/AgencyBadge';
 import HiButton from '../components/ui/HiButton';
 import StoryRing from '../components/animated/StoryRing';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -67,6 +68,9 @@ const OperatorItem = React.memo(({ item, navigation, user, theme, onHiPress }) =
                         <View style={styles.nameRow}>
                             <Text style={[styles.name, { color: theme.colors.text }]} numberOfLines={1}>{item.name}</Text>
                             <VipBadge level={item.vip_level} style={{ marginLeft: 2 }} />
+                            {(item.agency_name || item.agencyName) && (
+                                <AgencyBadge agencyName={item.agency_name || item.agencyName} size={20} style={{ marginLeft: 4 }} />
+                            )}
                             <Ionicons name="checkmark-circle" size={16} color="#3b82f6" />
                         </View>
                         <View style={styles.chipsRow}>

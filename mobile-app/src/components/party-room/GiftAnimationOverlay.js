@@ -3,6 +3,7 @@ import { StyleSheet, Animated, Text, Dimensions, View, Image } from 'react-nativ
 import { Video, ResizeMode } from 'expo-av';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRoomStore } from '../../store/useRoomStore';
+import { useAppStore } from '../../store/useAppStore';
 
 const { width, height } = Dimensions.get('window');
 
@@ -23,6 +24,7 @@ const PREMIUM_ANIMATIONS = {
 };
 
 export default function GiftAnimationOverlay({ giftEvent }) {
+    const performanceMode = useAppStore(state => state.performanceMode || 'balanced');
     const scaleAnim = useRef(new Animated.Value(0)).current;
     const rotateAnim = useRef(new Animated.Value(0)).current;
     const opacityAnim = useRef(new Animated.Value(0)).current;
@@ -114,25 +116,27 @@ export default function GiftAnimationOverlay({ giftEvent }) {
                 </LinearGradient>
 
                 {/* Animation Overlay (Video or Transparent Image) */}
-                <View style={styles.videoWrapper}>
-                    {premiumAnim.type === 'image' ? (
-                        <Image
-                            source={premiumAnim.source}
-                            style={styles.videoPlayer}
-                            resizeMode="contain"
-                        />
-                    ) : (
-                        <Video
-                            source={premiumAnim.source}
-                            rate={1.0}
-                            volume={1.0}
-                            isMuted={false}
-                            resizeMode={ResizeMode.CONTAIN}
-                            shouldPlay
-                            style={styles.videoPlayer}
-                        />
-                    )}
-                </View>
+                {performanceMode !== 'low' && (
+                    <View style={styles.videoWrapper}>
+                        {premiumAnim.type === 'image' ? (
+                            <Image
+                                source={premiumAnim.source}
+                                style={styles.videoPlayer}
+                                resizeMode="contain"
+                            />
+                        ) : (
+                            <Video
+                                source={premiumAnim.source}
+                                rate={1.0}
+                                volume={1.0}
+                                isMuted={false}
+                                resizeMode={ResizeMode.CONTAIN}
+                                shouldPlay
+                                style={styles.videoPlayer}
+                            />
+                        )}
+                    </View>
+                )}
             </Animated.View>
         );
     }

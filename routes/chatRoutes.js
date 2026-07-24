@@ -3,6 +3,7 @@ const router = express.Router();
 const db = require('../db');
 const { authenticateToken, authorizeRole } = require('../middleware/auth');
 const { sanitizeUser } = require('../utils/helpers');
+const { getRtcProvider } = require('../utils/rtcProvider');
 
 // GET ALL CHATS (Admin)
 router.get('/admin', authenticateToken, authorizeRole('admin', 'super_admin', 'operator', 'moderator', 'staff'), async (req, res) => {
@@ -72,4 +73,46 @@ router.put('/:chatId/read', async (req, res) => {
     }
 });
 
+// POST /api/chats/:chatId/rtc-token - Generate Agora RTC token for 1-to-1 voice calling
+router.post('/:chatId/rtc-token', authenticateToken, async (req, res) => {
+    const { chatId } = req.params;
+    const userId = req.user.id;
+    const { callId } = req.body;
+
+    try {
+        // Verify user belongs to this chat
+        const chatRes = await db.query('SELECT user_id, operator_id FROM chats WHERE id = $1', [chatId]);
+        if (chatRes.rows.length === 0) {
+            return res.status(404).json({ error: 'Sohbet bulunamadı.' });
+        }
+
+        const chat = chatRes.rows[0];
+        if (chat.user_id.toString() !== userId.toString() && chat.operator_id.toString() !== userId.toString()) {
+            return res.status(403).json({ error: 'Bu sohbete erişim izniniz yok.' });
+        }
+
+        // Generate Token using factory provider
+        // Channel name: call_callId or call_chatId
+        const roomId = callId ? `call_${callId}` : `call_${chatId}`;
+        const provider = getRtcProvider();
+        const token = await provider.createJoinToken(userId, roomId, 'publisher');
+
+        let providerName = process.env.RTC_PROVIDER;
+        if (!providerName) {
+            providerName = process.env.NODE_ENV === 'production' ? 'agora' : 'mock';
+        }
+
+        res.json({
+            provider: providerName,
+            token,
+            channelName: `room_${roomId}`,
+            appId: process.env.AGORA_APP_ID || 'f80faf42fd0845a9816658ea7e16a755'
+        });
+    } catch (err) {
+        console.error('[Call RTC Token API] Error:', err.message);
+        res.status(500).json({ error: 'Arama RTC token üretilemedi.' });
+    }
+});
+
 module.exports = router;
+

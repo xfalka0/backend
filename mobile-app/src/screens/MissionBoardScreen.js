@@ -51,6 +51,20 @@ const MISSION_TARGETS = {
         { value: 40000, reward: 55000 },
         { value: 60000, reward: 85000 },
         { value: 100000, reward: 150000 }
+    ],
+    audio_calls: [
+        { value: 5000, reward: 1000 },
+        { value: 10000, reward: 2000 },
+        { value: 20000, reward: 5000 },
+        { value: 40000, reward: 12000 },
+        { value: 70000, reward: 25000 }
+    ],
+    video_calls: [
+        { value: 10000, reward: 2000 },
+        { value: 25000, reward: 6000 },
+        { value: 50000, reward: 14000 },
+        { value: 100000, reward: 32000 },
+        { value: 180000, reward: 65000 }
     ]
 };
 
@@ -80,7 +94,9 @@ export default function MissionBoardScreen() {
     const [todayClaims, setTodayClaims] = useState({
         chat_earnings: 0,
         photo_unlocks: 0,
-        gift_received: 0
+        gift_received: 0,
+        audio_calls: 0,
+        video_calls: 0
     });
     const [timeLeft, setTimeLeft] = useState('00:00:00');
     const [commissionRate, setCommissionRate] = useState(0.25);
@@ -89,6 +105,8 @@ export default function MissionBoardScreen() {
         photoUnlocks: 0,
         todayEarnings: 0,
         giftCoinsReceived: 0,
+        audioEarned: 0,
+        videoEarned: 0,
     });
 
     // Countdown Timer to Midnight
@@ -132,6 +150,8 @@ export default function MissionBoardScreen() {
                     photoUnlocks: parseInt(res.data.image_count || res.data.image_count_today || 0),
                     todayEarnings: parseFloat(res.data.coins_earned || res.data.earned_today || 0),
                     giftCoinsReceived: parseFloat(res.data.gift_coins_received_today || 0),
+                    audioEarned: parseFloat(res.data.audio_earned_today || 0),
+                    videoEarned: parseFloat(res.data.video_earned_today || 0),
                 });
                 
                 if (res.data.commission_rate !== undefined) {
@@ -308,6 +328,34 @@ export default function MissionBoardScreen() {
                     Bugün <Text style={styles.descHighlightTarget}>{target.toLocaleString()} Coin</Text> değerinde hediye aldığınızda <Text style={styles.descHighlightRewardBlue}>{reward.toLocaleString()} 💎</Text> ödül alınacak.
                 </Text>
             )
+        },
+        {
+            id: 'audio_calls',
+            title: 'Sesli Arama Kazancı Ödülü',
+            icon: 'call-outline',
+            current: stats.audioEarned,
+            milestones: [0, 5000, 10000, 20000, 40000, 70000],
+            targets: MISSION_TARGETS.audio_calls,
+            type: 'chat',
+            getDesc: (target, reward) => (
+                <Text style={styles.descText}>
+                    Bugün sesli aramalardan <Text style={styles.descHighlightTarget}>{target.toLocaleString()} 💎</Text> kazandığınızda, <Text style={styles.descHighlightRewardBlue}>{reward.toLocaleString()} 💎</Text> ödül alınacak.
+                </Text>
+            )
+        },
+        {
+            id: 'video_calls',
+            title: 'Görüntülü Arama Kazancı Ödülü',
+            icon: 'videocam-outline',
+            current: stats.videoEarned,
+            milestones: [0, 10000, 25000, 50000, 100000, 180000],
+            targets: MISSION_TARGETS.video_calls,
+            type: 'video',
+            getDesc: (target, reward) => (
+                <Text style={styles.descText}>
+                    Bugün görüntülü aramalardan <Text style={styles.descHighlightTarget}>{target.toLocaleString()} 💎</Text> kazandığınızda, <Text style={styles.descHighlightRewardBlue}>{reward.toLocaleString()} 💎</Text> ödül alınacak.
+                </Text>
+            )
         }
     ];
 
@@ -362,7 +410,7 @@ export default function MissionBoardScreen() {
                         {/* Notice Subtext */}
                         <View style={styles.infoWrapper}>
                             <Text style={styles.noticeSubtext}>
-                                Resmi görevleri tamamladığınızda en fazla <Text style={styles.highlightText}>427.800 elmas!</Text> ödül alacaksınız!
+                                Resmi görevleri tamamladığınızda en fazla <Text style={styles.highlightText}>591.800 elmas!</Text> ödül alacaksınız!
                             </Text>
                         </View>
 

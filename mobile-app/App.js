@@ -12,6 +12,13 @@ import * as SplashScreenNative from 'expo-splash-screen';
 import axios from 'axios';
 import { API_URL } from './src/config';
 
+// Disable console logging in production release builds to optimize performance
+if (!__DEV__) {
+    console.log = () => {};
+    console.warn = () => {};
+    console.error = () => {};
+}
+
 // Keep the splash screen visible while we fetch resources
 SplashScreenNative.preventAutoHideAsync().catch(() => {
     /* reloading the app might cause some errors here, safe to ignore */
@@ -232,6 +239,14 @@ export default function App() {
                     if (token) {
                         await NotificationService.updateServerToken(appUserID, token);
                     }
+                }
+
+                // 3. Initialize Performance Mode
+                try {
+                    const { useAppStore } = require('./src/store/useAppStore');
+                    await useAppStore.getState().initializePerformanceMode();
+                } catch (perfErr) {
+                    console.warn('[App] Performance initialization failed:', perfErr.message);
                 }
             } catch (err) {
                 console.warn('[App] Services setup failed:', err);

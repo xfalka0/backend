@@ -14,7 +14,11 @@
     ],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.fivachat.app"
+      "bundleIdentifier": "com.fivachat.app",
+      "infoPlist": {
+        "NSCameraUsageDescription": "Görüntülü arama yapabilmek için kameranıza erişim gerekiyor.",
+        "NSMicrophoneUsageDescription": "Sesli ve görüntülü konuşma yapabilmek için mikrofonunuza erişim gerekiyor."
+      }
     },
     "android": {
       "adaptiveIcon": {

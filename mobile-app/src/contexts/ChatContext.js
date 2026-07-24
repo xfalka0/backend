@@ -129,6 +129,36 @@ export const ChatProvider = ({ children }) => {
                 useAppStore.getState().setBalance(data.balance);
             }
         });
+
+        // Listen for 1-to-1 incoming voice calls
+        newSocket.on('incoming_call', (data) => {
+            console.log('[ChatContext] Incoming call received:', data);
+            const activeCallChatId = useAppStore.getState().activeCallChatId;
+            if (activeCallChatId) {
+                console.log('[ChatContext] Already in call, sending call_busy.');
+                newSocket.emit('call_busy', { chatId: data.chatId, callerId: data.callerId });
+                return;
+            }
+
+            // Set call in progress in store
+            useAppStore.getState().setActiveCallChatId(data.chatId);
+
+            const targetScreen = data.callType === 'video' ? 'VideoCall' : 'VoiceCall';
+
+            // Navigate to appropriate Call Screen
+            RootNavigation.navigate(targetScreen, {
+                receiver: {
+                    id: data.callerId,
+                    name: data.callerName,
+                    avatar_url: data.callerAvatar
+                },
+                rtcToken: data.rtcToken,
+                channelName: data.channelName,
+                isIncoming: true,
+                chatId: data.chatId,
+                callId: data.callId
+            });
+        });
     };
 
     useEffect(() => {

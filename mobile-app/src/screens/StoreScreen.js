@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, SafeAreaView, Dimensions, StatusBar, Platform, ActivityIndicator, Modal, Animated } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, FlatList, TouchableOpacity, Image, SafeAreaView, Dimensions, StatusBar, Platform, ActivityIndicator, Modal, Animated } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons, FontAwesome5 } from '@expo/vector-icons';
 import axios from 'axios';
@@ -24,7 +24,10 @@ const CATEGORIES = [
     { id: 'gift_effect', label: 'Hediye', icon: 'gift-outline', desc: 'Gönderildiğinde tam ekranda parlayacak özel hediye efektleri.' }
 ];
 
+const IS_MAINTENANCE_MODE = true;
+
 export default function StoreScreen({ navigation, route }) {
+    console.log("RENDER StoreScreen");
     const { theme, themeMode } = useTheme();
     const { user } = route.params || {};
 
@@ -52,6 +55,116 @@ export default function StoreScreen({ navigation, route }) {
             ])
         ).start();
     }, [floatAnim]);
+
+    if (IS_MAINTENANCE_MODE) {
+        return (
+            <View style={styles.container}>
+                <StatusBar barStyle="light-content" />
+                <LinearGradient
+                    colors={['#1a0533', '#09021a']}
+                    style={StyleSheet.absoluteFill}
+                />
+
+                <SafeAreaView style={styles.safeArea}>
+                    {/* Header */}
+                    <View style={styles.header}>
+                        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.circleBtn}>
+                            <Ionicons name="chevron-back" size={24} color="#ffffff" />
+                        </TouchableOpacity>
+                        <Text style={styles.headerTitle}>Premium Mağaza</Text>
+                        <TouchableOpacity onPress={() => navigation.navigate('Bag')} style={styles.circleBtn}>
+                            <Ionicons name="briefcase-outline" size={22} color="#FF4FA3" />
+                        </TouchableOpacity>
+                    </View>
+
+                    {/* Maintenance Body */}
+                    <View style={styles.maintContainer}>
+                        <Motion.SlideUp delay={100} style={styles.maintCardWrapper}>
+                            <LinearGradient
+                                colors={['rgba(255, 79, 163, 0.12)', 'rgba(139, 92, 255, 0.05)', 'rgba(255, 255, 255, 0.02)']}
+                                style={styles.maintCard}
+                                start={{ x: 0, y: 0 }}
+                                end={{ x: 1, y: 1 }}
+                            >
+                                {/* Glowing Animated Icon */}
+                                <Animated.View style={{ transform: [{ translateY: floatAnim }], alignItems: 'center' }}>
+                                    <View style={styles.maintIconOuter}>
+                                        <LinearGradient
+                                            colors={['#FF4FA3', '#8B5CFF']}
+                                            style={styles.maintIconGradient}
+                                            start={{ x: 0, y: 0 }}
+                                            end={{ x: 1, y: 1 }}
+                                        >
+                                            <Ionicons name="sparkles" size={40} color="#ffffff" />
+                                        </LinearGradient>
+                                    </View>
+                                </Animated.View>
+
+                                {/* Tag */}
+                                <View style={styles.maintTag}>
+                                    <Ionicons name="construct-outline" size={13} color="#FF4FA3" style={{ marginRight: 5 }} />
+                                    <Text style={styles.maintTagText}>SİSTEM BAKIMDA</Text>
+                                </View>
+
+                                {/* Title */}
+                                <GradientText
+                                    colors={['#FFFFFF', '#F6C453']}
+                                    style={styles.maintTitle}
+                                >
+                                    Mağaza Yenileniyor!
+                                </GradientText>
+
+                                {/* Description */}
+                                <Text style={styles.maintDesc}>
+                                    Sizlere daha muhteşem ve ayrıcalıklı bir deneyim sunabilmek için mağazamızı kısa bir süreliğine bakıma aldık.
+                                </Text>
+
+                                {/* Feature Preview Box */}
+                                <View style={styles.maintFeatureBox}>
+                                    <LinearGradient
+                                        colors={['rgba(246, 196, 83, 0.12)', 'rgba(255, 79, 163, 0.08)']}
+                                        style={styles.maintFeatureGradient}
+                                    >
+                                        <Ionicons name="gift-outline" size={22} color="#F6C453" style={{ marginBottom: 6 }} />
+                                        <Text style={styles.maintFeatureTitle}>✨ Çok Yakında Neler Geliyor?</Text>
+                                        <Text style={styles.maintFeatureText}>
+                                            Özel profil çerçeveleri, unvanlar, animasyonlu oda giriş efektleri ve sürpriz mağaza ürünleri pek yakında sizlerin hizmetinde olacak!
+                                        </Text>
+                                    </LinearGradient>
+                                </View>
+
+                                {/* Action Buttons */}
+                                <View style={styles.maintActions}>
+                                    <TouchableOpacity
+                                        style={styles.maintPrimaryBtn}
+                                        onPress={() => navigation.navigate('Bag')}
+                                        activeOpacity={0.8}
+                                    >
+                                        <LinearGradient
+                                            colors={['#FF4FA3', '#8B5CFF']}
+                                            style={styles.maintBtnGradient}
+                                            start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+                                        >
+                                            <Ionicons name="briefcase-outline" size={16} color="#ffffff" style={{ marginRight: 6 }} />
+                                            <Text style={styles.maintBtnText}>Çantama Git</Text>
+                                        </LinearGradient>
+                                    </TouchableOpacity>
+
+                                    <TouchableOpacity
+                                        style={styles.maintSecondaryBtn}
+                                        onPress={() => navigation.goBack()}
+                                        activeOpacity={0.8}
+                                    >
+                                        <Text style={styles.maintSecondaryText}>Ana Sayfaya Dön</Text>
+                                    </TouchableOpacity>
+                                </View>
+                            </LinearGradient>
+                        </Motion.SlideUp>
+                    </View>
+                </SafeAreaView>
+            </View>
+        );
+    }
 
     // Fetch live user balance
     const fetchBalance = async () => {
@@ -173,6 +286,90 @@ export default function StoreScreen({ navigation, route }) {
 
     const featuredItem = catalogItems.find(i => i.rarity === 'legendary' || i.rarity === 'epic') || catalogItems[0];
 
+    const renderCatalogItem = React.useCallback(({ item, index }) => {
+        const isOwned = ownedItemsKeys.has(item.key);
+        return (
+            <View key={item.id} style={styles.gridCardWrapper}>
+                <LinearGradient
+                    colors={['rgba(255, 255, 255, 0.05)', 'rgba(255, 255, 255, 0.01)']}
+                    style={styles.gridCard}
+                >
+                    <View style={styles.gridCardTop}>
+                        <View style={[styles.gridRarity, { backgroundColor: getRarityColor(item.rarity) }]}>
+                            <Text style={styles.gridRarityText}>{item.rarity?.toUpperCase()}</Text>
+                        </View>
+                        <Text style={styles.gridDuration}>
+                            {item.duration_days ? `${item.duration_days} Gün` : 'Kalıcı'}
+                        </Text>
+                    </View>
+
+                    <TouchableOpacity 
+                        style={styles.gridPreviewArea}
+                        onPress={() => setPreviewItem(item)}
+                        activeOpacity={0.8}
+                    >
+                        {item.category === 'avatar_frame' ? (
+                            <VipFrame 
+                                level={item.key.includes('dealer') ? 'dealer' : parseInt(item.key.replace(/\D/g, '')) || 1} 
+                                avatar="https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=150" 
+                                size={60}
+                                isStatic={true}
+                            />
+                        ) : (
+                            <Image 
+                                source={require('../assets/gift_icon.webp')} 
+                                style={styles.gridPreviewImg}
+                                resizeMode="contain"
+                            />
+                        )}
+                    </TouchableOpacity>
+
+                    <Text style={styles.gridItemName} numberOfLines={1}>{item.name}</Text>
+                    
+                    <View style={styles.gridPrice}>
+                        <FontAwesome5 name="coins" size={10} color="#F6C453" style={{ marginRight: 4 }} />
+                        <Text style={styles.gridPriceText}>{item.price.toLocaleString('tr-TR')}</Text>
+                    </View>
+
+                    <View style={styles.gridActions}>
+                        {isOwned ? (
+                            <TouchableOpacity 
+                                style={styles.ownedBtn}
+                                onPress={() => navigation.navigate('Bag')}
+                                activeOpacity={0.8}
+                            >
+                                <Text style={styles.ownedBtnText}>Çantada</Text>
+                            </TouchableOpacity>
+                        ) : (
+                            <>
+                                <TouchableOpacity 
+                                    style={styles.gridPreviewBtn}
+                                    onPress={() => setPreviewItem(item)}
+                                    activeOpacity={0.8}
+                                >
+                                    <Text style={styles.gridPreviewBtnText}>Önizle</Text>
+                                </TouchableOpacity>
+                                <TouchableOpacity 
+                                    style={styles.gridBuyBtn}
+                                    onPress={() => setPurchaseItem(item)}
+                                    activeOpacity={0.8}
+                                >
+                                    <LinearGradient
+                                        colors={['#FF4FA3', '#8B5CFF']}
+                                        style={styles.gridBuyGradient}
+                                        start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+                                    >
+                                        <Text style={styles.gridBuyText}>Al</Text>
+                                    </LinearGradient>
+                                </TouchableOpacity>
+                            </>
+                        )}
+                    </View>
+                </LinearGradient>
+            </View>
+        );
+    }, [ownedItemsKeys, navigation]);
+
     return (
         <View style={styles.container}>
             <StatusBar barStyle="light-content" />
@@ -279,174 +476,103 @@ export default function StoreScreen({ navigation, route }) {
                 </View>
 
                 {/* Main Scroll Content */}
-                <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.mainScroll}>
-                    {/* Featured Item Banner */}
-                    {featuredItem && (
-                        <Motion.SlideUp delay={100} style={styles.featuredWrapper}>
-                            <LinearGradient
-                                colors={['rgba(139, 92, 255, 0.18)', 'rgba(255, 79, 163, 0.04)']}
-                                style={styles.featuredBanner}
-                                start={{ x: 0, y: 0 }}
-                                end={{ x: 1, y: 1 }}
-                            >
-                                <View style={styles.featuredLeft}>
-                                    <View style={[styles.featRarity, { backgroundColor: getRarityColor(featuredItem.rarity) }]}>
-                                        <Text style={styles.featRarityText}>{featuredItem.rarity?.toUpperCase()}</Text>
-                                    </View>
-                                    <Text style={styles.featSubtitle}>ÖNE ÇIKAN SEÇKİN ÜRÜN</Text>
-                                    <Text style={styles.featTitle}>{featuredItem.name}</Text>
-                                    <View style={styles.featPriceRow}>
-                                        <FontAwesome5 name="coins" size={12} color="#F6C453" style={{ marginRight: 5 }} />
-                                        <Text style={styles.featPriceVal}>{featuredItem.price.toLocaleString('tr-TR')} Altın</Text>
-                                    </View>
-
-                                    <View style={styles.featActions}>
-                                        <TouchableOpacity 
-                                            style={styles.featPreviewBtn}
-                                            onPress={() => setPreviewItem(featuredItem)}
-                                            activeOpacity={0.8}
-                                        >
-                                            <Text style={styles.featPrevBtnText}>Önizle</Text>
-                                        </TouchableOpacity>
-                                        <TouchableOpacity 
-                                            style={styles.featBuyBtn}
-                                            onPress={() => setPurchaseItem(featuredItem)}
-                                            activeOpacity={0.8}
-                                        >
-                                            <LinearGradient
-                                                colors={['#FF4FA3', '#8B5CFF']}
-                                                style={styles.featBuyGradient}
-                                                start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
-                                            >
-                                                <Text style={styles.featBuyBtnText}>Satın Al</Text>
-                                            </LinearGradient>
-                                        </TouchableOpacity>
-                                    </View>
-                                </View>
-                                <View style={styles.featuredRight}>
-                                    <View style={styles.featuredShowcaseOuter}>
-                                        {featuredItem.category === 'avatar_frame' ? (
-                                            <VipFrame 
-                                                level={featuredItem.key.includes('dealer') ? 'dealer' : parseInt(featuredItem.key.replace(/\D/g, '')) || 1} 
-                                                avatar="https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=150" 
-                                                size={80}
-                                                isStatic={true}
-                                            />
-                                        ) : (
-                                            <Image 
-                                                source={require('../assets/gift_icon.webp')} 
-                                                style={styles.featuredGlowImg}
-                                                resizeMode="contain"
-                                            />
-                                        )}
-                                    </View>
-                                </View>
-                            </LinearGradient>
-                        </Motion.SlideUp>
-                    )}
-
-                    {/* Catalog Grid Section */}
-                    <Text style={styles.gridSectionTitle}>Market Kataloğu</Text>
-                    {loading ? (
-                        <View style={styles.gridLoader}>
-                            <ActivityIndicator size="large" color="#FF4FA3" />
-                        </View>
-                    ) : catalogItems.length > 0 ? (
-                        <View style={styles.grid}>
-                            {catalogItems.map((item, index) => {
-                                const isOwned = ownedItemsKeys.has(item.key);
-                                return (
-                                    <View key={item.id} style={styles.gridCardWrapper}>
+                {loading ? (
+                    <View style={styles.gridLoader}>
+                        <ActivityIndicator size="large" color="#FF4FA3" />
+                    </View>
+                ) : (
+                    <FlatList
+                        data={catalogItems}
+                        renderItem={renderCatalogItem}
+                        keyExtractor={item => item.id?.toString() || Math.random().toString()}
+                        numColumns={2}
+                        columnWrapperStyle={styles.columnWrapper}
+                        contentContainerStyle={styles.mainScroll}
+                        showsVerticalScrollIndicator={false}
+                        initialNumToRender={6}
+                        maxToRenderPerBatch={10}
+                        windowSize={5}
+                        removeClippedSubviews={true}
+                        ListHeaderComponent={
+                            <>
+                                {/* Featured Item Banner */}
+                                {featuredItem && (
+                                    <Motion.SlideUp delay={100} style={styles.featuredWrapper}>
                                         <LinearGradient
-                                            colors={['rgba(255, 255, 255, 0.05)', 'rgba(255, 255, 255, 0.01)']}
-                                            style={styles.gridCard}
+                                            colors={['rgba(139, 92, 255, 0.18)', 'rgba(255, 79, 163, 0.04)']}
+                                            style={styles.featuredBanner}
+                                            start={{ x: 0, y: 0 }}
+                                            end={{ x: 1, y: 1 }}
                                         >
-                                            <View style={styles.gridCardTop}>
-                                                <View style={[styles.gridRarity, { backgroundColor: getRarityColor(item.rarity) }]}>
-                                                    <Text style={styles.gridRarityText}>{item.rarity?.toUpperCase()}</Text>
+                                            <View style={styles.featuredLeft}>
+                                                <View style={[styles.featRarity, { backgroundColor: getRarityColor(featuredItem.rarity) }]}>
+                                                    <Text style={styles.featRarityText}>{featuredItem.rarity?.toUpperCase()}</Text>
                                                 </View>
-                                                <Text style={styles.gridDuration}>
-                                                    {item.duration_days ? `${item.duration_days} Gün` : 'Kalıcı'}
-                                                </Text>
-                                            </View>
+                                                <Text style={styles.featSubtitle}>ÖNE ÇIKAN SEÇKİN ÜRÜN</Text>
+                                                <Text style={styles.featTitle}>{featuredItem.name}</Text>
+                                                <View style={styles.featPriceRow}>
+                                                    <FontAwesome5 name="coins" size={12} color="#F6C453" style={{ marginRight: 5 }} />
+                                                    <Text style={styles.featPriceVal}>{featuredItem.price.toLocaleString('tr-TR')} Altın</Text>
+                                                </View>
 
-                                            <TouchableOpacity 
-                                                style={styles.gridPreviewArea}
-                                                onPress={() => setPreviewItem(item)}
-                                                activeOpacity={0.8}
-                                            >
-                                                {item.category === 'avatar_frame' ? (
-                                                    <VipFrame 
-                                                        level={item.key.includes('dealer') ? 'dealer' : parseInt(item.key.replace(/\D/g, '')) || 1} 
-                                                        avatar="https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=150" 
-                                                        size={60}
-                                                        isStatic={true}
-                                                    />
-                                                ) : (
-                                                    <Image 
-                                                        source={require('../assets/gift_icon.webp')} 
-                                                        style={styles.gridPreviewImg}
-                                                        resizeMode="contain"
-                                                    />
-                                                )}
-                                            </TouchableOpacity>
-
-                                            <Text style={styles.gridItemName} numberOfLines={1}>{item.name}</Text>
-                                            
-                                            <View style={styles.gridPrice}>
-                                                <FontAwesome5 name="coins" size={10} color="#F6C453" style={{ marginRight: 4 }} />
-                                                <Text style={styles.gridPriceText}>{item.price.toLocaleString('tr-TR')}</Text>
-                                            </View>
-
-                                            <View style={styles.gridActions}>
-                                                {isOwned ? (
+                                                <View style={styles.featActions}>
                                                     <TouchableOpacity 
-                                                        style={styles.ownedBtn}
-                                                        onPress={() => navigation.navigate('Bag')}
+                                                        style={styles.featPreviewBtn}
+                                                        onPress={() => setPreviewItem(featuredItem)}
                                                         activeOpacity={0.8}
                                                     >
-                                                        <Text style={styles.ownedBtnText}>Çantada</Text>
+                                                        <Text style={styles.featPrevBtnText}>Önizle</Text>
                                                     </TouchableOpacity>
-                                                ) : (
-                                                    <>
-                                                        <TouchableOpacity 
-                                                            style={styles.gridPreviewBtn}
-                                                            onPress={() => setPreviewItem(item)}
-                                                            activeOpacity={0.8}
+                                                    <TouchableOpacity 
+                                                        style={styles.featBuyBtn}
+                                                        onPress={() => setPurchaseItem(featuredItem)}
+                                                        activeOpacity={0.8}
+                                                    >
+                                                        <LinearGradient
+                                                            colors={['#FF4FA3', '#8B5CFF']}
+                                                            style={styles.featBuyGradient}
+                                                            start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
                                                         >
-                                                            <Text style={styles.gridPreviewBtnText}>Önizle</Text>
-                                                        </TouchableOpacity>
-                                                        <TouchableOpacity 
-                                                            style={styles.gridBuyBtn}
-                                                            onPress={() => setPurchaseItem(item)}
-                                                            activeOpacity={0.8}
-                                                        >
-                                                            <LinearGradient
-                                                                colors={['#FF4FA3', '#8B5CFF']}
-                                                                style={styles.gridBuyGradient}
-                                                                start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
-                                                            >
-                                                                <Text style={styles.gridBuyText}>Al</Text>
-                                                            </LinearGradient>
-                                                        </TouchableOpacity>
-                                                    </>
-                                                )}
+                                                            <Text style={styles.featBuyBtnText}>Satın Al</Text>
+                                                        </LinearGradient>
+                                                    </TouchableOpacity>
+                                                </View>
+                                            </View>
+                                            <View style={styles.featuredRight}>
+                                                <View style={styles.featuredShowcaseOuter}>
+                                                    {featuredItem.category === 'avatar_frame' ? (
+                                                        <VipFrame 
+                                                            level={featuredItem.key.includes('dealer') ? 'dealer' : parseInt(featuredItem.key.replace(/\D/g, '')) || 1} 
+                                                            avatar="https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=150" 
+                                                            size={80}
+                                                            isStatic={true}
+                                                        />
+                                                    ) : (
+                                                        <Image 
+                                                            source={require('../assets/gift_icon.webp')} 
+                                                            style={styles.featuredGlowImg}
+                                                            resizeMode="contain"
+                                                        />
+                                                    )}
+                                                </View>
                                             </View>
                                         </LinearGradient>
-                                    </View>
-                                );
-                            })}
-                        </View>
-                    ) : (
-                        <View style={styles.emptyContainer}>
-                            <View style={styles.emptyIconCircle}>
-                                <Ionicons name="cart-outline" size={40} color="rgba(255, 255, 255, 0.15)" />
+                                    </Motion.SlideUp>
+                                )}
+                                <Text style={styles.gridSectionTitle}>Market Kataloğu</Text>
+                            </>
+                        }
+                        ListEmptyComponent={
+                            <View style={styles.emptyContainer}>
+                                <View style={styles.emptyIconCircle}>
+                                    <Ionicons name="cart-outline" size={40} color="rgba(255, 255, 255, 0.15)" />
+                                </View>
+                                <Text style={styles.emptyTitle}>Kategori Boş</Text>
+                                <Text style={styles.emptyDesc}>Bu kategoride henüz satılık ürün bulunmuyor. Yakında yeni premium ürünler eklenecektir!</Text>
                             </View>
-                            <Text style={styles.emptyTitle}>Kategori Boş</Text>
-                            <Text style={styles.emptyDesc}>Bu kategoride henüz satılık ürün bulunmuyor. Yakında yeni premium ürünler eklenecektir!</Text>
-                        </View>
-                    )}
-                </ScrollView>
+                        }
+                    />
+                )}
 
                 {/* MODAL 1: ProductPreviewModal */}
                 <Modal
@@ -720,6 +846,10 @@ const styles = StyleSheet.create({
     mainScroll: {
         paddingHorizontal: 20,
         paddingBottom: 40,
+    },
+    columnWrapper: {
+        justifyContent: 'space-between',
+        marginBottom: 12,
     },
     featuredWrapper: {
         marginBottom: 20,
@@ -1220,5 +1350,136 @@ const styles = StyleSheet.create({
         color: '#ffffff',
         fontSize: 13,
         fontWeight: 'bold',
+    },
+
+    // Maintenance Mode Styles
+    maintContainer: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        paddingHorizontal: 20,
+        paddingBottom: 40,
+    },
+    maintCardWrapper: {
+        width: '100%',
+        alignItems: 'center',
+    },
+    maintCard: {
+        width: '100%',
+        borderRadius: 28,
+        padding: 24,
+        alignItems: 'center',
+        borderWidth: 1,
+        borderColor: 'rgba(255, 79, 163, 0.25)',
+        backgroundColor: 'rgba(20, 14, 48, 0.6)',
+    },
+    maintIconOuter: {
+        width: 84,
+        height: 84,
+        borderRadius: 42,
+        padding: 3,
+        backgroundColor: 'rgba(255, 79, 163, 0.2)',
+        marginBottom: 16,
+    },
+    maintIconGradient: {
+        width: '100%',
+        height: '100%',
+        borderRadius: 40,
+        justifyContent: 'center',
+        alignItems: 'center',
+        shadowColor: '#FF4FA3',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.5,
+        shadowRadius: 10,
+        elevation: 6,
+    },
+    maintTag: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: 'rgba(255, 79, 163, 0.12)',
+        paddingHorizontal: 12,
+        paddingVertical: 5,
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: 'rgba(255, 79, 163, 0.25)',
+        marginBottom: 14,
+    },
+    maintTagText: {
+        color: '#FF4FA3',
+        fontSize: 10,
+        fontWeight: '900',
+        letterSpacing: 1,
+    },
+    maintTitle: {
+        fontSize: 24,
+        fontWeight: '900',
+        textAlign: 'center',
+        marginBottom: 10,
+    },
+    maintDesc: {
+        color: 'rgba(255, 255, 255, 0.65)',
+        fontSize: 13,
+        textAlign: 'center',
+        lineHeight: 19,
+        marginBottom: 20,
+        paddingHorizontal: 8,
+    },
+    maintFeatureBox: {
+        width: '100%',
+        borderRadius: 18,
+        overflow: 'hidden',
+        marginBottom: 24,
+    },
+    maintFeatureGradient: {
+        padding: 16,
+        alignItems: 'center',
+        borderRadius: 18,
+        borderWidth: 1,
+        borderColor: 'rgba(246, 196, 83, 0.25)',
+    },
+    maintFeatureTitle: {
+        color: '#F6C453',
+        fontSize: 14,
+        fontWeight: '900',
+        marginBottom: 4,
+    },
+    maintFeatureText: {
+        color: 'rgba(255, 255, 255, 0.75)',
+        fontSize: 11.5,
+        textAlign: 'center',
+        lineHeight: 17,
+        fontWeight: '600',
+    },
+    maintActions: {
+        width: '100%',
+        alignItems: 'center',
+        gap: 10,
+    },
+    maintPrimaryBtn: {
+        width: '100%',
+        height: 48,
+        borderRadius: 24,
+        overflow: 'hidden',
+    },
+    maintBtnGradient: {
+        width: '100%',
+        height: '100%',
+        flexDirection: 'row',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    maintBtnText: {
+        color: '#ffffff',
+        fontSize: 14,
+        fontWeight: '900',
+    },
+    maintSecondaryBtn: {
+        paddingVertical: 10,
+        paddingHorizontal: 20,
+    },
+    maintSecondaryText: {
+        color: 'rgba(255, 255, 255, 0.45)',
+        fontSize: 12.5,
+        fontWeight: '700',
     },
 });

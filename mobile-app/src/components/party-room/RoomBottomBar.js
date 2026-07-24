@@ -106,15 +106,15 @@ export default function RoomBottomBar({
                             />
                         </TouchableOpacity>
 
-                        {/* 4. Speaker Toggle */}
+                        {/* 4. Speaker Toggle (Deafen) */}
                         <TouchableOpacity
-                            style={[styles.barIconBtn, !speakerMuted && styles.barIconBtnActive]}
+                            style={[styles.barIconBtn, speakerMuted && styles.barIconBtnActive]}
                             onPress={onToggleSpeaker}
                         >
                             <Ionicons
-                                name={!speakerMuted ? 'volume-medium-sharp' : 'volume-mute-sharp'}
+                                name={speakerMuted ? 'volume-mute-sharp' : 'volume-medium-sharp'}
                                 size={16}
-                                color={!speakerMuted ? '#00f3ff' : 'rgba(255, 255, 255, 0.85)'}
+                                color={speakerMuted ? '#ff007f' : 'rgba(255, 255, 255, 0.85)'}
                             />
                         </TouchableOpacity>
 

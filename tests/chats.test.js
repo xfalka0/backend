@@ -172,4 +172,73 @@ describe('Chats API Tests', () => {
             expect(res.body).toHaveProperty('count', 5);
         });
     });
+
+    describe('POST /api/chats/:chatId/rtc-token', () => {
+        it('should return 200 and generate rtc token successfully for a chat member', async () => {
+            db.query.mockImplementation((sql, params) => {
+                if (sql && sql.includes('FROM users WHERE id')) {
+                    return Promise.resolve({
+                        rows: [{
+                            id: 'user-uuid',
+                            username: 'testuser',
+                            role: 'user',
+                            account_status: 'active'
+                        }]
+                    });
+                }
+                if (sql && sql.includes('FROM chats WHERE id')) {
+                    return Promise.resolve({
+                        rows: [{
+                            id: 'chat-uuid',
+                            user_id: 'user-uuid',
+                            operator_id: 'operator-uuid'
+                        }]
+                    });
+                }
+                return Promise.resolve({ rows: [] });
+            });
+
+            const res = await request(app)
+                .post('/api/chats/chat-uuid/rtc-token')
+                .set('Authorization', `Bearer ${mockToken}`);
+
+            expect(res.status).toBe(200);
+            expect(res.body).toHaveProperty('provider');
+            expect(res.body).toHaveProperty('token');
+            expect(res.body).toHaveProperty('channelName', 'room_call_chat-uuid');
+            expect(res.body).toHaveProperty('appId');
+        });
+
+        it('should return 403 if user is not a member of the chat', async () => {
+            db.query.mockImplementation((sql, params) => {
+                if (sql && sql.includes('FROM users WHERE id')) {
+                    return Promise.resolve({
+                        rows: [{
+                            id: 'user-uuid',
+                            username: 'testuser',
+                            role: 'user',
+                            account_status: 'active'
+                        }]
+                    });
+                }
+                if (sql && sql.includes('FROM chats WHERE id')) {
+                    return Promise.resolve({
+                        rows: [{
+                            id: 'chat-uuid',
+                            user_id: 'other-user-uuid',
+                            operator_id: 'operator-uuid'
+                        }]
+                    });
+                }
+                return Promise.resolve({ rows: [] });
+            });
+
+            const res = await request(app)
+                .post('/api/chats/chat-uuid/rtc-token')
+                .set('Authorization', `Bearer ${mockToken}`);
+
+            expect(res.status).toBe(403);
+            expect(res.body).toHaveProperty('error', 'Bu sohbete erişim izniniz yok.');
+        });
+    });
 });

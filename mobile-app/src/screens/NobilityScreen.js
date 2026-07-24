@@ -857,6 +857,7 @@ function PurchaseConfirmationModal({ visible, title, theme, isOwned, loading, on
 }
 
 export default function NobilityScreen({ navigation }) {
+    console.log("RENDER NobilityScreen");
     const { showAlert } = useAlert();
     const insets = useSafeAreaInsets();
     const [loading, setLoading] = useState(true);

@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, Dimensions, Image, Vibration, ActivityIndicator } from 'react-native';
+import { useAppStore } from '../../store/useAppStore';
 import Animated, {
     useSharedValue,
     useAnimatedStyle,
@@ -89,6 +90,7 @@ const Particle = ({ delay, index }) => {
 };
 
 export default function GiftOverlay({ gift, receiver, onFinish }) {
+    const performanceMode = useAppStore(state => state.performanceMode || 'balanced');
     // Shared values for animations
     const scale = useSharedValue(0);
     const opacity = useSharedValue(0);
@@ -152,6 +154,9 @@ export default function GiftOverlay({ gift, receiver, onFinish }) {
                 else if (giftId === 7) duration = 5000;
                 else if (isPremium) duration = 12000;
             }
+            if (performanceMode === 'low') {
+                duration = 3000;
+            }
             const timer = setTimeout(() => {
                 opacity.value = withTiming(0, { duration: 500 }, () => {
                     runOnJS(onFinish)();
@@ -169,6 +174,35 @@ export default function GiftOverlay({ gift, receiver, onFinish }) {
     []);
 
     if (!gift) return null;
+
+    // --- RENDER FOR LOW PERFORMANCE MODE (Super lightweight, static) ---
+    if (performanceMode === 'low') {
+        return (
+            <Animated.View style={[styles.container, backdropStyle]} pointerEvents="box-none">
+                <View style={styles.backdropSolid} />
+                <View style={styles.content}>
+                    <Animated.View style={[styles.logoContainer, logoStyle]}>
+                        <Image
+                            source={gift.image || require('../../assets/gift_icon.webp')}
+                            style={styles.mainLogo}
+                            resizeMode="contain"
+                        />
+                    </Animated.View>
+
+                    <Animated.View style={[styles.receiverBadge, textStyle]}>
+                        <Text style={styles.receiverText}>{(receiver.display_name || receiver.username).toUpperCase()}</Text>
+                    </Animated.View>
+
+                    <Animated.View style={[styles.textWrapper, textStyle]}>
+                        <Text style={styles.headerText}>HEDİYE GÖNDERİLDİ!</Text>
+                        <View style={styles.giftBadge}>
+                            <Text style={styles.giftName}>{gift.name.toUpperCase()}</Text>
+                        </View>
+                    </Animated.View>
+                </View>
+            </Animated.View>
+        );
+    }
 
     // --- RENDER FOR PREMIUM VIRTUAL BOTTOM-OVERLAY VIDEOS ---
     if (isPremium) {

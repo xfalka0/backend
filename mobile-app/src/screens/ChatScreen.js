@@ -40,6 +40,7 @@ import { useChat } from '../contexts/ChatContext';
 import QuickActionsModal from '../components/QuickActionsModal';
 
 export default function ChatScreen({ route, navigation }) {
+    console.log("RENDER ChatScreen");
     const insets = useSafeAreaInsets();
     const { fetchUnreadCount, setActiveChatId, socket } = useChat();
     const { showAlert } = useAlert();
@@ -1223,6 +1224,63 @@ export default function ChatScreen({ route, navigation }) {
             );
         }
 
+        if (item.type === 'call_stub' || item.content_type === 'call_stub') {
+            let info = { duration: '0:00', status: 'ended', reason: 'ended' };
+            try {
+                info = JSON.parse(item.content);
+            } catch (e) {}
+
+            const isMine = item.sender_id === user.id;
+            let iconName = "call-outline";
+            let callText = "Sesli Arama";
+            let textColor = "rgba(255,255,255,0.9)";
+
+            if (info.status === 'rejected' || info.reason === 'rejected') {
+                iconName = "call-sharp";
+                callText = "Arama Reddedildi";
+                textColor = "#ef4444";
+            } else if (info.status === 'cancelled' || info.reason === 'cancelled') {
+                iconName = "close-circle-outline";
+                callText = "İptal Edilen Arama";
+                textColor = "rgba(255,255,255,0.5)";
+            } else if (info.status === 'busy' || info.reason === 'busy') {
+                iconName = "volume-mute-outline";
+                callText = "Meşgul";
+                textColor = "#f59e0b";
+            } else if (info.status === 'no_answer' || info.reason === 'no_answer') {
+                iconName = "call-outline";
+                callText = "Cevapsız Arama";
+                textColor = "#ef4444";
+            } else {
+                iconName = "call-outline";
+                callText = `Arama Bitti (${info.duration || '0:00'})`;
+                textColor = "#10b981";
+            }
+
+            return (
+                <MessageBubble 
+                    isMine={isMine} 
+                    index={index} 
+                    isRead={item.is_read}
+                    avatar={resolveImageUrl(isMine ? user.avatar : avatar_url)}
+                    vipLevel={isMine ? user.vip_level : vip_level}
+                    timestamp={item.created_at}
+                    reaction={item.reaction}
+                    onReaction={(type) => {
+                        socketRef.current?.emit('message_reaction', { messageId: item.id, reaction: type, chatId });
+                        setMessages(prev => prev.map(m => m.id === item.id ? { ...m, reaction: type } : m));
+                    }}
+                >
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 6, paddingHorizontal: 12 }}>
+                        <Ionicons name={iconName} size={20} color={textColor} />
+                        <Text style={{ color: textColor, fontSize: 13, fontWeight: '700' }}>
+                            {callText}
+                        </Text>
+                    </View>
+                </MessageBubble>
+            );
+        }
+
         if (item.type === 'gift' || item.content_type === 'gift') {
             const giftId = parseInt(item.gift_id || item.giftId);
             const gift = GIFTS.find(g => g.id === giftId) || { name: item.content || 'Hediye', price: '?' };
@@ -1543,7 +1601,14 @@ export default function ChatScreen({ route, navigation }) {
                         <View style={styles.actionBar}>
                             <TouchableOpacity style={styles.modernActionBtn} onPress={() => {
                                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                                navigation.navigate('VideoCall', { receiver: { id: operatorId, name, avatar_url } });
+                                if (!isOperator && currentBalance < 120 && (user.vip_level || 0) < 1) {
+                                    handleInsufficientCoins();
+                                    return;
+                                }
+                                navigation.navigate('VideoCall', { 
+                                    receiver: { id: operatorId, name, avatar_url },
+                                    chatId: chatId
+                                });
                             }}>
                                 <View style={styles.btnBlur}>
                                     <Ionicons name="videocam" size={22} color="rgba(255,255,255,0.8)" />
@@ -1552,7 +1617,14 @@ export default function ChatScreen({ route, navigation }) {
 
                             <TouchableOpacity style={styles.modernActionBtn} onPress={() => {
                                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                                navigation.navigate('VoiceCall', { receiver: { id: operatorId, name, avatar_url } });
+                                if (!isOperator && currentBalance < 50 && (user.vip_level || 0) < 1) {
+                                    handleInsufficientCoins();
+                                    return;
+                                }
+                                navigation.navigate('VoiceCall', { 
+                                    receiver: { id: operatorId, name, avatar_url },
+                                    chatId: chatId
+                                });
                             }}>
                                 <View style={styles.btnBlur}>
                                     <Ionicons name="call" size={22} color="rgba(255,255,255,0.8)" />

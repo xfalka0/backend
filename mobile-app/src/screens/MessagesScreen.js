@@ -20,6 +20,7 @@ import { useTheme } from '../contexts/ThemeContext';
 import { API_URL } from '../config';
 import VipFrame from '../components/ui/VipFrame';
 import VipBadge from '../components/ui/VipBadge';
+import AgencyBadge from '../components/ui/AgencyBadge';
 import GlassCard from '../components/ui/GlassCard';
 import SkeletonCard from '../components/ui/SkeletonCard';
 import AnimatedEmptyState from '../components/ui/AnimatedEmptyState';
@@ -346,7 +347,12 @@ export default function MessagesScreen({ navigation, route }) {
                                                 <Text style={styles.vipText}>AJANS DAVETİ</Text>
                                             </LinearGradient>
                                         ) : (
-                                            <VipBadge level={item.vip_level} style={{ marginLeft: 2 }} />
+                                            <>
+                                                <VipBadge level={item.vip_level} style={{ marginLeft: 2 }} />
+                                                {(item.agency_name || item.agencyName) && (
+                                                    <AgencyBadge agencyName={item.agency_name || item.agencyName} size={18} style={{ marginLeft: 4 }} />
+                                                )}
+                                            </>
                                         )}
                                         <Ionicons name="checkmark-circle" size={14} color="#3b82f6" />
                                     </View>

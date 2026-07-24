@@ -6,7 +6,8 @@ import { resolveImageUrl } from '../../utils/imageUtils';
 
 const { width } = Dimensions.get('window');
 
-export default function RoomSeatLayout({ seats, currentUserId, onSeatPress, isHost, listeners = [] }) {
+const RoomSeatLayout = ({ seats, currentUserId, onSeatPress, isHost, listeners = [] }) => {
+    console.log("RENDER RoomSeatLayout");
     // Pad seats up to 16 seats with real data
     const finalSeats = [];
     for (let i = 1; i <= 16; i++) {
@@ -115,7 +116,9 @@ export default function RoomSeatLayout({ seats, currentUserId, onSeatPress, isHo
             )}
         </View>
     );
-}
+};
+
+export default React.memo(RoomSeatLayout);
 
 const styles = StyleSheet.create({
     layoutContainer: {

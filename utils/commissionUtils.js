@@ -9,7 +9,7 @@ const db = require('../db');
  * @param {number} cost - Total coins spent by user
  * @param {string} type - Action type ('text', 'image', 'gift', etc.)
  */
-async function recordOperatorCommission(client, chatId, senderId, cost, type) {
+async function recordOperatorCommission(client, chatId, senderId, cost, type, callId = null) {
     if (cost <= 0) return;
 
     // 1. Find the users in this chat
@@ -186,16 +186,15 @@ async function recordOperatorCommission(client, chatId, senderId, cost, type) {
         if (chatId && actualPayeeId) {
             const isLowQuality = baseRate < 4.0;
             await client.query(
-                'INSERT INTO commission_logs (operator_id, chat_id, amount, type, agency_id, is_low_quality) VALUES ($1, $2, $3, $4, $5, $6)',
-                [actualPayeeId, chatId, earned, type, agencyId, isLowQuality]
+                'INSERT INTO commission_logs (operator_id, chat_id, amount, type, agency_id, is_low_quality, call_id) VALUES ($1, $2, $3, $4, $5, $6, $7)',
+                [actualPayeeId, chatId, earned, type, agencyId, isLowQuality, callId]
             );
         }
     } catch (logErr) {
-        // If column doesn't exist yet, try without is_low_quality
         try {
             await client.query(
-                'INSERT INTO commission_logs (operator_id, chat_id, amount, type, agency_id) VALUES ($1, $2, $3, $4, $5)',
-                [actualPayeeId, chatId, earned, type, agencyId]
+                'INSERT INTO commission_logs (operator_id, chat_id, amount, type, agency_id, call_id) VALUES ($1, $2, $3, $4, $5, $6)',
+                [actualPayeeId, chatId, earned, type, agencyId, callId]
             );
         } catch (inner) {
             console.error('[COMMISSION-LOG-ERROR] Failed to write detailed log:', inner.message);
@@ -214,11 +213,11 @@ async function recordOperatorCommission(client, chatId, senderId, cost, type) {
         INSERT INTO operator_stats (
             operator_id, date, 
             messages_sent, coins_earned, total_user_spend,
-            text_count, image_count, audio_count, gift_count,
-            text_earned, image_earned, audio_earned, gift_earned,
+            text_count, image_count, audio_count, video_count, gift_count,
+            text_earned, image_earned, audio_earned, video_earned, gift_earned,
             gift_coins_received
         )
-        VALUES ($1::text::${statsIdType}, CURRENT_DATE, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+        VALUES ($1::text::${statsIdType}, CURRENT_DATE, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
         ON CONFLICT (operator_id, date) DO UPDATE SET
             messages_sent = COALESCE(operator_stats.messages_sent, 0) + EXCLUDED.messages_sent,
             coins_earned = COALESCE(operator_stats.coins_earned, 0) + EXCLUDED.coins_earned,
@@ -226,10 +225,12 @@ async function recordOperatorCommission(client, chatId, senderId, cost, type) {
             text_count = COALESCE(operator_stats.text_count, 0) + EXCLUDED.text_count,
             image_count = COALESCE(operator_stats.image_count, 0) + EXCLUDED.image_count,
             audio_count = COALESCE(operator_stats.audio_count, 0) + EXCLUDED.audio_count,
+            video_count = COALESCE(operator_stats.video_count, 0) + EXCLUDED.video_count,
             gift_count = COALESCE(operator_stats.gift_count, 0) + EXCLUDED.gift_count,
             text_earned = COALESCE(operator_stats.text_earned, 0) + EXCLUDED.text_earned,
             image_earned = COALESCE(operator_stats.image_earned, 0) + EXCLUDED.image_earned,
             audio_earned = COALESCE(operator_stats.audio_earned, 0) + EXCLUDED.audio_earned,
+            video_earned = COALESCE(operator_stats.video_earned, 0) + EXCLUDED.video_earned,
             gift_earned = COALESCE(operator_stats.gift_earned, 0) + EXCLUDED.gift_earned,
             gift_coins_received = COALESCE(operator_stats.gift_coins_received, 0) + EXCLUDED.gift_coins_received
     `, [
@@ -239,14 +240,17 @@ async function recordOperatorCommission(client, chatId, senderId, cost, type) {
         cost,
         type === 'text' ? 1 : 0,
         (type === 'image' || type === 'locked_image') ? 1 : 0,
-        type === 'audio' ? 1 : 0,
+        (type === 'audio' || type === 'call') ? 1 : 0,
+        type === 'video' ? 1 : 0,
         type === 'gift' ? 1 : 0,
         type === 'text' ? earned : 0,
         (type === 'image' || type === 'locked_image') ? earned : 0,
-        type === 'audio' ? earned : 0,
+        (type === 'audio' || type === 'call') ? earned : 0,
+        type === 'video' ? earned : 0,
         type === 'gift' ? earned : 0,
         type === 'gift' ? cost : 0
     ]);
+    return updatedMessageInfo;
     return updatedMessageInfo;
 }
 

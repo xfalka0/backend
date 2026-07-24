@@ -118,11 +118,13 @@ class SocketService {
     // ─── Event Subscription ───────────────────────────────────────────────────
 
     on(event, handler) {
-        if (!this._socket) return;
-        this._socket.on(event, handler);
-        // Track for cleanup
         const existing = this._eventHandlers.get(event) || [];
+        if (existing.includes(handler)) return;
+
         this._eventHandlers.set(event, [...existing, handler]);
+        if (this._socket) {
+            this._socket.on(event, handler);
+        }
     }
 
     off(event, handler) {

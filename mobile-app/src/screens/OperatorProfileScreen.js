@@ -18,6 +18,7 @@ import { useTheme } from '../contexts/ThemeContext';
 // import { Motion } from '../components/motion/MotionSystem';
 import VipFrame from '../components/ui/VipFrame';
 import VipBadge from '../components/ui/VipBadge';
+import AgencyBadge from '../components/ui/AgencyBadge';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import ImageViewing from 'react-native-image-viewing';
 import { resolveImageUrl } from '../utils/imageUtils';
@@ -311,6 +312,9 @@ export default function OperatorProfileScreen({ route, navigation }) {
                                             </View>
                                         )}
                                         <VipBadge level={operator.vip_level} style={{ marginLeft: 2 }} />
+                                        {(operator.agency_name || operator.agencyName) && (
+                                            <AgencyBadge agencyName={operator.agency_name || operator.agencyName} size={22} style={{ marginLeft: 4 }} />
+                                        )}
                                     </View>
 
                                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>

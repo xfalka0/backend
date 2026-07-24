@@ -39,6 +39,8 @@ const starterPackRoutes = require('./routes/starterPackRoutes');
 const familyRoutes = require('./routes/family');
 const nobilityRoutes = require('./routes/nobilityRoutes');
 const storeRoutes = require('./routes/store');
+const chatRoutes = require('./routes/chatRoutes');
+const messageRoutes = require('./routes/messageRoutes');
 const { sanitizeUser, logActivity } = require('./utils/helpers');
 const { sendPushNotification } = require('./utils/notificationUtils');
 const { checkProfileText, checkPhotoSecurity } = require('./utils/moderationFilter');
@@ -1367,11 +1369,13 @@ app.get('/api/operators', async (req, res) => {
                 nt.name as nobility_name, 
                 nt.level as nobility_level, 
                 nt.badge_url as nobility_badge_url, 
-                nt.name_color as nobility_name_color
+                nt.name_color as nobility_name_color,
+                a.name as agency_name
             FROM users u
             JOIN operators o ON u.id = o.user_id
             LEFT JOIN user_nobility un ON u.id = un.user_id AND un.is_active = TRUE AND un.expires_at > NOW()
             LEFT JOIN nobility_titles nt ON un.title_id = nt.id
+            LEFT JOIN agencies a ON u.agency_id::text = a.id::text
             WHERE u.account_status = 'active'
               AND u.role NOT IN ('admin', 'super_admin', 'moderator', 'staff')
         `;
@@ -1493,11 +1497,13 @@ app.get('/api/discovery', authenticateToken, async (req, res) => {
                 nt.name as nobility_name, 
                 nt.level as nobility_level, 
                 nt.badge_url as nobility_badge_url, 
-                nt.name_color as nobility_name_color
+                nt.name_color as nobility_name_color,
+                a.name as agency_name
             FROM users u
             LEFT JOIN operators o ON u.id = o.user_id
             LEFT JOIN user_nobility un ON u.id = un.user_id AND un.is_active = TRUE AND un.expires_at > NOW()
             LEFT JOIN nobility_titles nt ON un.title_id = nt.id
+            LEFT JOIN agencies a ON u.agency_id::text = a.id::text
             LEFT JOIN LATERAL (
                 SELECT TRUE as val FROM boosts b WHERE b.user_id = u.id AND b.end_time > NOW() LIMIT 1
             ) active_boosts ON TRUE
@@ -1569,6 +1575,8 @@ app.use('/api', socialRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/rooms', roomsRoutes);
+app.use('/api/chats', chatRoutes);
+app.use('/api/messages', messageRoutes);
 
 app.use('/api', authRoutes); // Proxy for /api/me /api/login etc
 app.use('/api', webhooksRoutes); // Public Webhooks
@@ -4072,6 +4080,8 @@ async function autoClaimPendingMissions(userId) {
             `SELECT date::text, 
                     COALESCE(coins_earned, 0) as coins_earned, 
                     COALESCE(image_count, 0) as image_count, 
+                    COALESCE(audio_earned, 0) as audio_earned, 
+                    COALESCE(video_earned, 0) as video_earned, 
                     COALESCE(gift_coins_received, 0) as gift_coins_received
              FROM operator_stats 
              WHERE operator_id::text = $1::text 
@@ -4106,6 +4116,20 @@ async function autoClaimPendingMissions(userId) {
                 { value: 40000, reward: 55000 },
                 { value: 60000, reward: 85000 },
                 { value: 100000, reward: 150000 }
+            ],
+            audio_calls: [
+                { value: 5000, reward: 1000 },
+                { value: 10000, reward: 2000 },
+                { value: 20000, reward: 5000 },
+                { value: 40000, reward: 12000 },
+                { value: 70000, reward: 25000 }
+            ],
+            video_calls: [
+                { value: 10000, reward: 2000 },
+                { value: 25000, reward: 6000 },
+                { value: 50000, reward: 14000 },
+                { value: 100000, reward: 32000 },
+                { value: 180000, reward: 65000 }
             ]
         };
 
@@ -4115,7 +4139,9 @@ async function autoClaimPendingMissions(userId) {
             const checks = [
                 { id: 'chat_earnings', val: parseFloat(row.coins_earned) },
                 { id: 'photo_unlocks', val: parseInt(row.image_count) },
-                { id: 'gift_received', val: parseFloat(row.gift_coins_received) }
+                { id: 'gift_received', val: parseFloat(row.gift_coins_received) },
+                { id: 'audio_calls', val: parseFloat(row.audio_earned) },
+                { id: 'video_calls', val: parseFloat(row.video_earned) }
             ];
 
             for (const check of checks) {
@@ -4217,6 +4243,7 @@ const getDetailedOperatorStats = async (req, res) => {
                 (SELECT COALESCE(SUM(text_earned), 0) FROM operator_stats WHERE operator_id::text = $1::text AND date = CURRENT_DATE) as text_earned_today,
                 (SELECT COALESCE(SUM(image_earned), 0) FROM operator_stats WHERE operator_id::text = $1::text AND date = CURRENT_DATE) as image_earned_today,
                 (SELECT COALESCE(SUM(audio_earned), 0) FROM operator_stats WHERE operator_id::text = $1::text AND date = CURRENT_DATE) as audio_earned_today,
+                (SELECT COALESCE(SUM(video_earned), 0) FROM operator_stats WHERE operator_id::text = $1::text AND date = CURRENT_DATE) as video_earned_today,
                 (SELECT COALESCE(SUM(gift_earned), 0) FROM operator_stats WHERE operator_id::text = $1::text AND date = CURRENT_DATE) as gift_earned_today,
                 (SELECT COALESCE(SUM(gift_coins_received), 0) FROM operator_stats WHERE operator_id::text = $1::text AND date = CURRENT_DATE) as gift_coins_received_today,
                 
@@ -4252,7 +4279,9 @@ const getDetailedOperatorStats = async (req, res) => {
         const todayClaims = {
             chat_earnings: 0,
             photo_unlocks: 0,
-            gift_received: 0
+            gift_received: 0,
+            audio_calls: 0,
+            video_calls: 0
         };
 
         for (const row of claimsRes.rows) {
@@ -4263,6 +4292,10 @@ const getDetailedOperatorStats = async (req, res) => {
                 todayClaims.photo_unlocks += amount;
             } else if (row.type.startsWith('mission_reward_gift_received_')) {
                 todayClaims.gift_received += amount;
+            } else if (row.type.startsWith('mission_reward_audio_calls_')) {
+                todayClaims.audio_calls += amount;
+            } else if (row.type.startsWith('mission_reward_video_calls_')) {
+                todayClaims.video_calls += amount;
             }
         }
 

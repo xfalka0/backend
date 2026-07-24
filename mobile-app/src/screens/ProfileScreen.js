@@ -34,6 +34,7 @@ import { preventScreenshots } from '../utils/security';
 import GlassCard from '../components/ui/GlassCard';
 import VipFrame from '../components/ui/VipFrame';
 import VipBadge from '../components/ui/VipBadge';
+import AgencyBadge from '../components/ui/AgencyBadge';
 
 const { width } = Dimensions.get('window');
 
@@ -174,6 +175,7 @@ const VipBoostClaimWidget = ({ userId, vipLevel, balance, setBalance, showAlert 
 };
 
 const ProfileScreen = ({ route }) => {
+    console.log("RENDER ProfileScreen");
     const navigation = useNavigation();
     const { theme, themeMode } = useTheme();
     const { showAlert } = useAlert();
@@ -861,6 +863,9 @@ const ProfileScreen = ({ route }) => {
                             </Text>
                             {parseInt(user?.vip_level) > 0 && (
                                 <VipBadge level={parseInt(user?.vip_level)} size={38} />
+                            )}
+                            {(user?.agency_name || user?.agencyName) && (
+                                <AgencyBadge agencyName={user.agency_name || user.agencyName} size={22} style={{ marginLeft: 4 }} />
                             )}
                             {user?.nobilityKey && (
                                 <View style={[styles.nobilityBadge, { backgroundColor: `${user.nobilityNameColor || '#FFD166'}20`, borderColor: user.nobilityNameColor || '#FFD166', borderWidth: 1 }]}>

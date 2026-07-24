@@ -28,7 +28,8 @@ const cleanUsername = (name) => {
     return cleaned;
 };
 
-export default function RoomSeat({ seat, currentUserId, onPress, isHost }) {
+const RoomSeat = ({ seat, currentUserId, onPress, isHost }) => {
+    console.log("RENDER RoomSeat", seat.seat_number);
     const isOccupied = !!seat.user_id;
     const isMe = isOccupied && seat.user_id?.toString() === currentUserId?.toString();
     const isSpeaking = seat.is_speaking; 
@@ -307,7 +308,25 @@ export default function RoomSeat({ seat, currentUserId, onPress, isHost }) {
             </View>
         </TouchableOpacity>
     );
-}
+};
+
+export default React.memo(RoomSeat, (prevProps, nextProps) => {
+    return (
+        prevProps.currentUserId === nextProps.currentUserId &&
+        prevProps.isHost === nextProps.isHost &&
+        prevProps.onPress === nextProps.onPress &&
+        prevProps.seat.user_id === nextProps.seat.user_id &&
+        prevProps.seat.is_muted === nextProps.seat.is_muted &&
+        prevProps.seat.is_locked === nextProps.seat.is_locked &&
+        prevProps.seat.room_gift_points === nextProps.seat.room_gift_points &&
+        prevProps.seat.is_speaking === nextProps.seat.is_speaking &&
+        prevProps.seat.activeReaction === nextProps.seat.activeReaction &&
+        prevProps.seat.vip_level === nextProps.seat.vip_level &&
+        prevProps.seat.avatar_url === nextProps.seat.avatar_url &&
+        prevProps.seat.username === nextProps.seat.username &&
+        prevProps.seat.display_name === nextProps.seat.display_name
+    );
+});
 
 const styles = StyleSheet.create({
     seatCell: {

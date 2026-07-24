@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
+import * as Device from 'expo-device';
 import { API_URL } from '../config';
 
 export const useAppStore = create((set, get) => ({
@@ -8,6 +9,39 @@ export const useAppStore = create((set, get) => ({
     role: null, // 'customer' | 'operator'
     balance: 0,
     unreadCount: 0,
+    activeCallChatId: null,
+    performanceMode: 'balanced', // 'low' | 'balanced' | 'high'
+
+    setActiveCallChatId: (chatId) => set({ activeCallChatId: chatId }),
+    
+    setPerformanceMode: (mode) => {
+        set({ performanceMode: mode });
+        AsyncStorage.setItem('performance_mode', mode).catch(err => {
+            console.error('[useAppStore] Error writing performance mode:', err);
+        });
+    },
+
+    initializePerformanceMode: async () => {
+        try {
+            const stored = await AsyncStorage.getItem('performance_mode');
+            if (stored) {
+                set({ performanceMode: stored });
+                return;
+            }
+            // Auto detect based on RAM total memory
+            const ramBytes = Device.totalMemory;
+            let mode = 'balanced';
+            if (ramBytes && ramBytes < 4.5 * 1024 * 1024 * 1024) {
+                mode = 'low';
+            } else if (ramBytes && ramBytes > 6.5 * 1024 * 1024 * 1024) {
+                mode = 'high';
+            }
+            set({ performanceMode: mode });
+            await AsyncStorage.setItem('performance_mode', mode);
+        } catch (e) {
+            console.warn('[useAppStore] Performance detection error:', e);
+        }
+    },
 
     setUser: (user) => {
         if (!user) {

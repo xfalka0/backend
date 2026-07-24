@@ -95,6 +95,7 @@ const BENEFITS_DATA = {
 };
 
 const VipScreen = ({ route, navigation }) => {
+    console.log("RENDER VipScreen");
     const [user, setUser] = useState(route.params?.user || {});
     const [userVip, setUserVip] = useState(route.params?.userVip !== undefined ? route.params.userVip : (user.vip_level || 0));
     const [selectedLevel, setSelectedLevel] = useState(userVip || 1);

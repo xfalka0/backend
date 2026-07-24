@@ -128,6 +128,7 @@ const EXPLORE_TABS = [
 ];
 
 export default function ExploreScreen({ navigation, route }) {
+    console.log("RENDER DiscoverScreen");
     const { showAlert } = useAlert();
     const { theme, themeMode } = useTheme();
     const [user, setUser] = useState(route?.params?.user || null);
@@ -334,20 +335,12 @@ export default function ExploreScreen({ navigation, route }) {
                     next.add(opId);
                     return next;
                 });
-
-                showAlert({
-                    title: "Selam Gönderildi 👋",
-                    message: `Merhaba mesajı başarıyla gönderildi!`,
-                    type: "success"
-                });
             }
         } catch (error) {
             console.error('Error sending quick Hi:', error);
-            showAlert({
-                title: "Hata",
-                message: "Mesaj gönderilirken bir hata oluştu.",
-                type: "error"
-            });
+            if (error.response?.data?.insufficientFunds) {
+                navigation.navigate('PurchaseInfo', { user });
+            }
         } finally {
             setIsSendingHi(false);
             setHiSheetVisible(false);
@@ -367,8 +360,7 @@ export default function ExploreScreen({ navigation, route }) {
                 user
             });
         } else {
-            setSelectedPostForHi(item);
-            setHiSheetVisible(true);
+            sendQuickHi(item);
         }
     };
 

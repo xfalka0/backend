@@ -129,10 +129,11 @@ const ChatMessageRow = React.memo(({ item, currentUserId }) => {
 });
 
 export default function PartyRoomScreen({ route, navigation }) {
+    console.log("RENDER PartyRoomScreen");
     const { room: routeRoom } = route.params;
     const insets = useSafeAreaInsets();
     const { showAlert } = useAlert();
-    const { user: currentUser, balance, setBalance, syncBalanceWithServer, unreadCount } = useAppStore();
+    const { user: currentUser, balance, setBalance, syncBalanceWithServer, unreadCount, performanceMode } = useAppStore();
 
     // ── Store selectors (Zustand) ─────────────────────────────────────────────
     const room          = useRoomStore(s => s.room);
@@ -310,6 +311,15 @@ export default function PartyRoomScreen({ route, navigation }) {
                         }
                         await agoraRef.current.muteLocalAudioStream(!isMicEnabled);
                         console.log('[Agora] Local audio stream state set to:', isMicEnabled ? 'OPEN (Transmitting Audio)' : 'MUTED (Silent)');
+                        
+                        console.log("AUDIO_STATE", {
+                            isSeated: !!mySeat,
+                            isMicEnabled: isMicEnabled,
+                            role: 'Broadcaster',
+                            publishMicrophoneTrack: isMicEnabled,
+                            localMuted: !isMicEnabled,
+                            speakerphoneEnabled: true
+                        });
                     }
                 } else {
                     // Request a fresh listener token from the server
@@ -333,6 +343,15 @@ export default function PartyRoomScreen({ route, navigation }) {
                         await agoraRef.current.enableLocalAudio(false);
                         await agoraRef.current.muteLocalAudioStream(true);
                         console.log('[Agora] Local audio stream muted for Audience');
+
+                        console.log("AUDIO_STATE", {
+                            isSeated: !!mySeat,
+                            isMicEnabled: isMicEnabled,
+                            role: 'Audience',
+                            publishMicrophoneTrack: false,
+                            localMuted: true,
+                            speakerphoneEnabled: true
+                        });
                     }
                 }
             } catch (err) {
@@ -342,6 +361,14 @@ export default function PartyRoomScreen({ route, navigation }) {
 
         syncAgora();
     }, [!!mySeat, isMicEnabled, isAgoraInitialized]);
+
+    // ── Handle speaker mute (Deafen) state ────────────────────────────────────
+    useEffect(() => {
+        if (agoraRef.current && isAgoraInitialized) {
+            console.log('[Agora] Setting mute all remote audio streams to:', !isSpeakerEnabled);
+            agoraRef.current.muteAllRemoteAudioStreams(!isSpeakerEnabled);
+        }
+    }, [isSpeakerEnabled, isAgoraInitialized]);
 
     // ── User friendly connection error handling ──────────────────────────────
     useEffect(() => {
@@ -420,6 +447,13 @@ export default function PartyRoomScreen({ route, navigation }) {
             const appId = res.data.appId || 'f80faf42fd0845a9816658ea7e16a755';
             console.log("AGORA_INIT", { appIdExists: !!appId });
             await engine.initialize({ appId });
+
+            // Configure audio profile and scenario (Optimize for speech chatroom with active echo cancellation/noise suppression)
+            console.log('[Agora] Configuring audio profile and scenario...');
+            await engine.setAudioProfile(
+                AgoraRTC.AudioProfileType.AudioProfileSpeechStandard,
+                AgoraRTC.AudioScenarioType.AudioScenarioChatroom
+            );
 
             const logVolume = (connection, speakers, speakerNumber, totalVolume) => {
                 const speakingMap = {};
@@ -624,6 +658,12 @@ export default function PartyRoomScreen({ route, navigation }) {
         }
     };
 
+    const renderChatMessage = React.useCallback(({ item }) => (
+        <ChatMessageRow item={item} currentUserId={currentUser?.id} />
+    ), [currentUser?.id]);
+
+    const chatKeyExtractor = React.useCallback((item) => item.id?.toString() || item.createdAt || Math.random().toString(), []);
+
     return (
         <View style={styles.root}>
             <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
@@ -638,20 +678,22 @@ export default function PartyRoomScreen({ route, navigation }) {
             <View style={styles.darkOverlay} pointerEvents="none" />
 
             {/* Sparkle Points */}
-            <View style={styles.starsOverlay} pointerEvents="none">
-                {stars.map((star) => (
-                    <View
-                        key={star.id}
-                        style={[styles.star, {
-                            top: star.top,
-                            left: star.left,
-                            width: star.width,
-                            height: star.height,
-                            opacity: star.opacity,
-                        }]}
-                    />
-                ))}
-            </View>
+            {performanceMode !== 'low' && (
+                <View style={styles.starsOverlay} pointerEvents="none">
+                    {stars.map((star) => (
+                        <View
+                            key={star.id}
+                            style={[styles.star, {
+                                top: star.top,
+                                left: star.left,
+                                width: star.width,
+                                height: star.height,
+                                opacity: star.opacity,
+                            }]}
+                        />
+                    ))}
+                </View>
+            )}
 
             {/* Main Flex layout container to fill screen and push elements properly */}
             <View style={styles.mainContainer} pointerEvents="box-none">
@@ -707,10 +749,8 @@ export default function PartyRoomScreen({ route, navigation }) {
                         <FlatList
                             ref={chatRef}
                             data={messages}
-                            keyExtractor={item => item.id?.toString() ?? Math.random().toString()}
-                            renderItem={({ item }) => (
-                                <ChatMessageRow item={item} currentUserId={currentUser?.id} />
-                            )}
+                            keyExtractor={chatKeyExtractor}
+                            renderItem={renderChatMessage}
                             showsVerticalScrollIndicator={false}
                             contentContainerStyle={styles.chatList}
                             onContentSizeChange={() => chatRef.current?.scrollToEnd({ animated: false })}

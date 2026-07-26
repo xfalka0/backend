@@ -387,14 +387,22 @@ export default function HomeScreen({ navigation, route }) {
     ), [theme, balance, showSearch, searchText, activeTab, user, featuredOperators, currentFilters]);
 
 
+    const userGender = getProfileGender(user);
+
     const filteredData = React.useMemo(() => {
         const resList = operators.filter(op => {
+            const opGender = getProfileGender(op);
+
+            // STRICT GENDER GUARD: If user is male, hide male profiles. If female, hide female profiles.
+            if (userGender !== 'coin_bayisi' && opGender === userGender) {
+                return false;
+            }
+
             const matchesSearch = normalizeText(op.name).includes(normalizeText(searchText)) ||
                                   normalizeText(op.job || '').includes(normalizeText(searchText));
             
             let matchesGender = true;
             if (currentFilters.gender !== 'all') {
-                const opGender = getProfileGender(op);
                 matchesGender = opGender === currentFilters.gender;
             }
 
@@ -409,9 +417,9 @@ export default function HomeScreen({ navigation, route }) {
 
             return matchesSearch && matchesGender && matchesAge;
         });
-        console.log('[DEBUG FILTERED DATA] Length:', resList.length, 'names:', resList.map(op => op.name));
+        console.log('[DEBUG FILTERED DATA] User Gender:', userGender, 'Filtered Length:', resList.length);
         return resList;
-    }, [operators, searchText, currentFilters]);
+    }, [operators, searchText, currentFilters, userGender]);
 
     const renderItem = React.useCallback(({ item }) => (
         <OperatorItem 

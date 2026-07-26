@@ -3,6 +3,7 @@ const router = express.Router();
 const db = require('../db');
 const { authenticateToken, authorizeRole } = require('../middleware/auth');
 const { sanitizeUser, logActivity } = require('../utils/helpers');
+const { validateProfileText, validateImageUrl } = require('../utils/moderationFilter');
 
 const normalizeGenderValue = (gender) => {
     const raw = (gender || '').toString().trim().toLowerCase();
@@ -99,8 +100,6 @@ router.get('/:id/album', async (req, res) => {
         res.status(500).json({ error: err.message });
     }
 });
-
-const { validateProfileText } = require('../utils/moderationFilter');
 
 // UPDATE USER PROFILE (Simple)
 router.put('/:id', async (req, res) => {
@@ -413,8 +412,6 @@ router.post('/report', authenticateToken, async (req, res) => {
         res.status(500).json({ error: err.message });
     }
 });
-
-const { validateProfileText, validateImageUrl } = require('../utils/moderationFilter');
 
 // PATCH /me - Update current user profile
 router.patch('/me', authenticateToken, async (req, res) => {

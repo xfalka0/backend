@@ -60,7 +60,7 @@ const { sanitizeUser, logActivity } = require('./utils/helpers');
 const { sendPushNotification } = require('./utils/notificationUtils');
 const { checkProfileText, checkPhotoSecurity } = require('./utils/moderationFilter');
 const { handleRoomsSockets } = require('./socket/roomsSocket');
-const { handlePartyRoomSockets } = require('./socket/partyRoomSocket');
+const { handlePartyRoomSockets, startStaleSeatSweeper } = require('./socket/partyRoomSocket');
 
 const app = express();
 const multer = require('multer');
@@ -983,6 +983,61 @@ const initializeDatabase = async () => {
             created_at TIMESTAMP DEFAULT NOW()
         )`);
 
+        await runMigration('ReportsTableCols', `
+            ALTER TABLE reports ADD COLUMN IF NOT EXISTS reporter_id ${userIdType};
+            ALTER TABLE reports ADD COLUMN IF NOT EXISTS reported_id ${userIdType};
+            ALTER TABLE reports ADD COLUMN IF NOT EXISTS reporter_user_id ${userIdType};
+            ALTER TABLE reports ADD COLUMN IF NOT EXISTS target_user_id ${userIdType};
+            ALTER TABLE reports ADD COLUMN IF NOT EXISTS room_id VARCHAR(100);
+            ALTER TABLE reports ADD COLUMN IF NOT EXISTS details TEXT;
+            ALTER TABLE reports ADD COLUMN IF NOT EXISTS description TEXT;
+        `);
+
+        await runMigration('PayoutsTable', `CREATE TABLE IF NOT EXISTS payouts (
+            id SERIAL PRIMARY KEY,
+            operator_id ${userIdType} REFERENCES users(id) ON DELETE CASCADE,
+            user_id ${userIdType} REFERENCES users(id) ON DELETE CASCADE,
+            diamond_amount NUMERIC(12,2) NOT NULL DEFAULT 0,
+            try_amount NUMERIC(12,2) NOT NULL DEFAULT 0,
+            iban VARCHAR(50) NOT NULL DEFAULT '',
+            full_name VARCHAR(150) NOT NULL DEFAULT '',
+            bank_name VARCHAR(100) DEFAULT '',
+            status VARCHAR(50) DEFAULT 'pending',
+            admin_note TEXT,
+            payment_method VARCHAR(50) DEFAULT 'Bank Transfer',
+            created_at TIMESTAMP DEFAULT NOW(),
+            processed_at TIMESTAMP
+        )`);
+
+        await runMigration('PayoutsTableCols', `
+            ALTER TABLE payouts ADD COLUMN IF NOT EXISTS user_id ${userIdType};
+            ALTER TABLE payouts ADD COLUMN IF NOT EXISTS diamond_amount NUMERIC(12,2) DEFAULT 0;
+            ALTER TABLE payouts ADD COLUMN IF NOT EXISTS try_amount NUMERIC(12,2) DEFAULT 0;
+            ALTER TABLE payouts ADD COLUMN IF NOT EXISTS iban VARCHAR(50) DEFAULT '';
+            ALTER TABLE payouts ADD COLUMN IF NOT EXISTS full_name VARCHAR(150) DEFAULT '';
+            ALTER TABLE payouts ADD COLUMN IF NOT EXISTS bank_name VARCHAR(100) DEFAULT '';
+            ALTER TABLE payouts ADD COLUMN IF NOT EXISTS admin_note TEXT;
+        `);
+
+        await runMigration('UserInventoryTable', `CREATE TABLE IF NOT EXISTS user_inventory (
+            id SERIAL PRIMARY KEY,
+            user_id ${userIdType} REFERENCES users(id) ON DELETE CASCADE,
+            item_type VARCHAR(50) NOT NULL,
+            item_key VARCHAR(100) NOT NULL,
+            title_name VARCHAR(100),
+            is_equipped BOOLEAN DEFAULT FALSE,
+            expires_at TIMESTAMP,
+            created_at TIMESTAMP DEFAULT NOW()
+        )`);
+
+        await runMigration('BannedDevicesTable', `CREATE TABLE IF NOT EXISTS banned_devices (
+            id SERIAL PRIMARY KEY,
+            device_id VARCHAR(255) UNIQUE NOT NULL,
+            reason TEXT DEFAULT 'Güvenlik ihlali nedeniyle cihaz engellendi.',
+            banned_by ${userIdType},
+            created_at TIMESTAMP DEFAULT NOW()
+        )`);
+
         // --- Nobility Titles System Migrations ---
         await runMigration('NobilityTitlesTable', `CREATE TABLE IF NOT EXISTS nobility_titles (
             id SERIAL PRIMARY KEY,
@@ -1429,7 +1484,7 @@ app.get('/api/operators', async (req, res) => {
         } else if (tab === 'Popüler') {
             orderByClause = 'ORDER BY u.vip_level DESC, o.rating DESC NULLS LAST, u.created_at DESC, u.id DESC';
         } else {
-            orderByClause = 'ORDER BY o.is_online DESC NULLS LAST, (coalesce(cardinality(o.photos), 0) > 0) DESC, u.created_at DESC, u.id DESC';
+            orderByClause = 'ORDER BY o.is_online DESC NULLS LAST, (u.created_at >= NOW() - INTERVAL \'3 days\') DESC, (coalesce(cardinality(o.photos), 0) > 0) DESC, u.created_at DESC, u.id DESC';
         }
 
         query += ` ${orderByClause} LIMIT $${paramCount} OFFSET $${paramCount + 1}`;
@@ -1470,8 +1525,10 @@ app.get('/api/operators/:id', async (req, res) => {
 // UNIFIED DISCOVERY (Operators + Users of opposite gender)
 app.get('/api/discovery', authenticateToken, async (req, res) => {
     try {
-        const userGenderRaw = (req.user.gender || 'erkek').toLowerCase();
+        const userGenderRaw = (req.user.gender || 'erkek').toLowerCase().trim();
         const userGender = (userGenderRaw === 'male' || userGenderRaw === 'erkek') ? 'erkek' : 'kadin';
+        
+        // Default target gender MUST be opposite gender
         let targetGender = userGender === 'kadin' ? 'erkek' : 'kadin';
         
         const { page = 1, limit = 10, tab = 'Önerilen', gender: filterGender } = req.query;
@@ -1480,18 +1537,15 @@ app.get('/api/discovery', authenticateToken, async (req, res) => {
         const offset = (pageNum - 1) * limitNum;
         const userId = req.user.id;
 
-        if (filterGender && ['erkek', 'kadin', 'all'].includes(filterGender)) {
+        // Only override targetGender if an explicit gender ('erkek' or 'kadin') is filtered.
+        // If filterGender is 'all' or missing, default strictly to opposite gender for dating discovery.
+        if (filterGender === 'erkek' || filterGender === 'kadin') {
             targetGender = filterGender;
         }
 
-        console.log(`[DISCOVERY] User ${userId} (${userGender}) -> ${targetGender}. Tab: ${tab}, Page: ${pageNum}`);
+        console.log(`[DISCOVERY] User ${userId} (Gender: ${userGender}) -> Filter Target: ${targetGender}. Tab: ${tab}, Page: ${pageNum}`);
 
-        let whereClause = '';
-        if (targetGender === 'all') {
-            whereClause = `WHERE u.role NOT IN ('admin', 'super_admin', 'moderator', 'staff')`;
-        } else {
-            whereClause = `WHERE (u.gender = $1 OR u.gender = 'coin_bayisi') AND u.role NOT IN ('admin', 'super_admin', 'moderator', 'staff')`;
-        }
+        let whereClause = `WHERE (LOWER(u.gender) = LOWER($1) OR u.gender = 'coin_bayisi' OR (LOWER($1) = 'kadin' AND LOWER(u.gender) IN ('kadin', 'kadın', 'female')) OR (LOWER($1) = 'erkek' AND LOWER(u.gender) IN ('erkek', 'male'))) AND u.role NOT IN ('admin', 'super_admin', 'moderator', 'staff')`;
 
         let orderByClause = '';
         if (tab === 'Yeni') {
@@ -1499,8 +1553,8 @@ app.get('/api/discovery', authenticateToken, async (req, res) => {
         } else if (tab === 'Popüler') {
             orderByClause = 'ORDER BY u.vip_level DESC, o.rating DESC NULLS LAST, u.created_at DESC, u.id DESC';
         } else {
-            // "Önerilen" or Default: Boosted -> Online -> VIP levels
-            orderByClause = 'ORDER BY o.is_online DESC NULLS LAST, COALESCE(active_boosts.val, FALSE) DESC, u.vip_level DESC, (coalesce(cardinality(o.photos), 0) > 0) DESC, u.created_at DESC, u.id DESC';
+            // "Önerilen" or Default: Online -> New User (3 Days) -> Boosted -> VIP levels
+            orderByClause = 'ORDER BY o.is_online DESC NULLS LAST, (u.created_at >= NOW() - INTERVAL \'3 days\') DESC, COALESCE(active_boosts.val, FALSE) DESC, u.vip_level DESC, (coalesce(cardinality(o.photos), 0) > 0) DESC, u.created_at DESC, u.id DESC';
         }
 
         const query = `
@@ -3082,18 +3136,29 @@ app.delete('/api/admin/users/:id', authenticateToken, authorizeRole('admin', 'su
 
 // REPORT USER
 app.post('/api/report', authenticateToken, async (req, res) => {
-    const { reportedId, reason, details } = req.body;
+    const { reportedId, reportedUserId, targetUserId, reason, details, description } = req.body;
     const reporterId = req.user.id;
+    const targetId = targetUserId || reportedUserId || reportedId;
+    const desc = details || description || '';
+
+    if (!targetId || !reason) {
+        return res.status(400).json({ error: 'Eksik bilgi (reportedId veya reason).' });
+    }
+
     try {
-        await db.query('INSERT INTO reports (reporter_id, reported_id, reason, details) VALUES ($1, $2, $3, $4)',
-            [reporterId, reportedId, reason, details]);
+        await db.query(
+            `INSERT INTO reports (reporter_id, reported_id, reporter_user_id, target_user_id, reason, details, description, status) 
+             VALUES ($1, $2, $1, $2, $3, $4, $4, 'pending')`,
+            [reporterId, targetId, reason, desc]
+        );
 
         // Auto-flag reported users for review
-        await db.query("UPDATE users SET account_status = 'under_review' WHERE id = $1", [reportedId]);
+        await db.query("UPDATE users SET account_status = 'under_review' WHERE id = $1", [targetId]).catch(() => {});
 
-        res.json({ success: true, message: 'Kullanıcı raporlandı.' });
+        res.json({ success: true, message: 'Şikayetiniz alındı ve incelemeye gönderildi.' });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        console.error('Report Error:', err);
+        res.status(500).json({ error: 'Şikayet iletilirken bir hata oluştu.' });
     }
 });
 
@@ -4441,6 +4506,457 @@ app.get('/api/admin/operators/earnings', authenticateToken, authorizeRole('admin
     }
 });
 
+// --- PUBLISHER SELF-SERVICE PAYOUT REQUEST API ---
+app.post('/api/operators/payout-request', authenticateToken, async (req, res) => {
+    const userId = req.user.id;
+    const { diamondAmount, iban, fullName, bankName } = req.body;
+
+    const numDiamonds = parseFloat(diamondAmount);
+    if (isNaN(numDiamonds) || numDiamonds < 2000) {
+        return res.status(400).json({ error: 'Minimum çekim tutarı 2.000 Elmas (1 USD / 46 TL) olmalıdır.' });
+    }
+
+    if (!iban || !fullName) {
+        return res.status(400).json({ error: 'Lütfen geçerli bir IBAN ve Alıcı Ad Soyad bilgisi giriniz.' });
+    }
+
+    const tryAmount = ((numDiamonds / 2000) * 46.00).toFixed(2);
+
+    try {
+        await db.query('BEGIN');
+
+        const opRes = await db.query(
+            'SELECT pending_balance FROM operators WHERE user_id::text = $1::text FOR UPDATE',
+            [userId]
+        );
+
+        if (opRes.rows.length === 0) {
+            await db.query('ROLLBACK');
+            return res.status(404).json({ error: 'Yayıncı profili bulunamadı.' });
+        }
+
+        const currentPending = parseFloat(opRes.rows[0].pending_balance || 0);
+        if (currentPending < numDiamonds) {
+            await db.query('ROLLBACK');
+            return res.status(400).json({ error: `Yetersiz bakiye. Mevcut bakiyeniz: ${currentPending} Elmas` });
+        }
+
+        // Deduct from operator's pending balance and hold
+        await db.query(
+            'UPDATE operators SET pending_balance = pending_balance - $1 WHERE user_id::text = $2::text',
+            [numDiamonds, userId]
+        );
+
+        // Record payout request
+        const insertRes = await db.query(
+            `INSERT INTO payouts (operator_id, user_id, diamond_amount, try_amount, iban, full_name, bank_name, status, created_at)
+             VALUES ($1, $1, $2, $3, $4, $5, $6, 'pending', NOW()) RETURNING *`,
+            [userId, numDiamonds, tryAmount, iban, fullName, bankName || 'Banka']
+        );
+
+        await db.query('COMMIT');
+
+        res.json({
+            success: true,
+            message: 'Çekim talebiniz başarıyla oluşturuldu ve incelemeye alındı.',
+            payout: insertRes.rows[0]
+        });
+    } catch (err) {
+        await db.query('ROLLBACK');
+        console.error('[PAYOUT_REQUEST_ERROR]', err);
+        res.status(500).json({ error: err.message || 'Çekim talebi oluşturulamadı.' });
+    }
+});
+
+// GET OPERATOR PAYOUT HISTORY
+app.get('/api/operators/payout-history', authenticateToken, async (req, res) => {
+    try {
+        const result = await db.query(
+            'SELECT * FROM payouts WHERE operator_id::text = $1::text OR user_id::text = $1::text ORDER BY created_at DESC',
+            [req.user.id]
+        );
+        res.json(result.rows);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// GET ADMIN PAYOUT REQUESTS LIST
+app.get('/api/admin/payout-requests', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
+    try {
+        const statusFilter = req.query.status;
+        let query = `
+            SELECT p.*, u.username, u.display_name, u.avatar_url, o.pending_balance as current_balance
+            FROM payouts p
+            LEFT JOIN users u ON p.operator_id::text = u.id::text OR p.user_id::text = u.id::text
+            LEFT JOIN operators o ON p.operator_id::text = o.user_id::text
+        `;
+
+        if (statusFilter) {
+            query += ` WHERE p.status = $1`;
+        }
+
+        query += ` ORDER BY p.created_at DESC`;
+
+        const result = statusFilter 
+            ? await db.query(query, [statusFilter])
+            : await db.query(query);
+
+        res.json(result.rows);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// COMPATIBILITY ENDPOINT FOR WEB ADMIN WITHDRAWALS.JSX LIST
+app.get('/api/operators/admin/withdrawals/list', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
+    try {
+        const statusFilter = req.query.status;
+        let query = `
+            SELECT p.id, p.operator_id, p.diamond_amount as amount, p.try_amount as cash_amount, 
+                   p.iban, p.full_name as account_holder, p.status, p.admin_note as rejection_reason, p.created_at,
+                   u.username, u.display_name
+            FROM payouts p
+            LEFT JOIN users u ON p.operator_id::text = u.id::text OR p.user_id::text = u.id::text
+        `;
+
+        if (statusFilter && statusFilter !== 'all') {
+            const mappedStatus = statusFilter === 'processed' ? 'paid' : statusFilter;
+            query += ` WHERE p.status = '${mappedStatus}' OR p.status = '${statusFilter}'`;
+        }
+
+        query += ` ORDER BY p.created_at DESC`;
+        const result = await db.query(query);
+        res.json(result.rows);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// COMPATIBILITY ENDPOINT FOR WEB ADMIN WITHDRAWALS.JSX SUMMARY
+app.get('/api/operators/payouts/summary', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
+    try {
+        const pendingRes = await db.query("SELECT COALESCE(SUM(diamond_amount), 0) as total FROM payouts WHERE status = 'pending'");
+        const paidRes = await db.query("SELECT COALESCE(SUM(diamond_amount), 0) as total FROM payouts WHERE status = 'paid' OR status = 'processed' OR status = 'approved'");
+        const balanceRes = await db.query("SELECT COALESCE(SUM(pending_balance), 0) as total FROM operators");
+
+        res.json({
+            total_pending_payouts: parseFloat(pendingRes.rows[0].total || 0),
+            total_paid: parseFloat(paidRes.rows[0].total || 0),
+            total_operator_balances: parseFloat(balanceRes.rows[0].total || 0)
+        });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// COMPATIBILITY ENDPOINT FOR WEB ADMIN WITHDRAWALS.JSX APPROVE
+app.post('/api/operators/admin/payouts/:id/approve', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
+    const { id } = req.params;
+    try {
+        await db.query("UPDATE payouts SET status = 'paid', processed_at = NOW() WHERE id = $1", [id]);
+        res.json({ success: true, message: 'Para çekme talebi onaylandı.' });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// COMPATIBILITY ENDPOINT FOR WEB ADMIN WITHDRAWALS.JSX REJECT
+app.post('/api/operators/admin/payouts/:id/reject', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
+    const { id } = req.params;
+    const { reason } = req.body;
+
+    try {
+        await db.query('BEGIN');
+        const payoutRes = await db.query('SELECT * FROM payouts WHERE id = $1 FOR UPDATE', [id]);
+        if (payoutRes.rows.length === 0) {
+            await db.query('ROLLBACK');
+            return res.status(404).json({ error: 'Çekim talebi bulunamadı.' });
+        }
+
+        const payout = payoutRes.rows[0];
+        if (payout.status !== 'rejected') {
+            await db.query(
+                'UPDATE operators SET pending_balance = pending_balance + $1 WHERE user_id::text = $2::text',
+                [payout.diamond_amount || payout.amount, payout.operator_id || payout.user_id]
+            );
+            await db.query(
+                "UPDATE payouts SET status = 'rejected', admin_note = $1, processed_at = NOW() WHERE id = $2",
+                [reason || 'Reddedildi.', id]
+            );
+        }
+
+        await db.query('COMMIT');
+        res.json({ success: true, message: 'Para çekme talebi reddedildi ve bakiye iade edildi.' });
+    } catch (err) {
+        await db.query('ROLLBACK');
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// --- INVENTORY & STORE ITEM SYSTEM (ÇANTA & MAĞAZA UNVAN SİSTEMİ) ---
+
+// GET USER INVENTORY
+app.get('/api/inventory/me', authenticateToken, async (req, res) => {
+    const userId = req.user.id;
+    try {
+        const result = await db.query(
+            `SELECT * FROM user_inventory 
+             WHERE user_id::text = $1::text 
+             AND (expires_at IS NULL OR expires_at > NOW())
+             ORDER BY is_equipped DESC, created_at DESC`,
+            [userId]
+        );
+        res.json(result.rows);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// EQUIP / UNEQUIP INVENTORY ITEM
+app.post('/api/inventory/equip', authenticateToken, async (req, res) => {
+    const userId = req.user.id;
+    const { itemId, itemType, action } = req.body; // action: 'equip' or 'unequip'
+
+    if (!itemId) {
+        return res.status(400).json({ error: 'itemId parametresi gereklidir.' });
+    }
+
+    try {
+        await db.query('BEGIN');
+
+        const itemRes = await db.query(
+            'SELECT * FROM user_inventory WHERE id = $1 AND user_id::text = $2::text',
+            [itemId, userId]
+        );
+
+        if (itemRes.rows.length === 0) {
+            await db.query('ROLLBACK');
+            return res.status(404).json({ error: 'Öğe çantanızda bulunamadı.' });
+        }
+
+        const item = itemRes.rows[0];
+        const targetType = itemType || item.item_type;
+
+        if (action === 'unequip') {
+            await db.query('UPDATE user_inventory SET is_equipped = FALSE WHERE id = $1', [itemId]);
+        } else {
+            // Unequip any active item of same type first
+            await db.query(
+                'UPDATE user_inventory SET is_equipped = FALSE WHERE user_id::text = $1::text AND item_type = $2',
+                [userId, targetType]
+            );
+            // Equip selected item
+            await db.query('UPDATE user_inventory SET is_equipped = TRUE WHERE id = $1', [itemId]);
+        }
+
+        await db.query('COMMIT');
+        res.json({ success: true, message: action === 'unequip' ? 'Öğe çıkarıldı.' : 'Öğe kuşanıldı.' });
+
+    } catch (err) {
+        await db.query('ROLLBACK');
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// PURCHASE STORE ITEM TO INVENTORY
+app.post('/api/inventory/purchase', authenticateToken, async (req, res) => {
+    const userId = req.user.id;
+    const { itemType, itemKey, titleName, priceCoins, durationDays } = req.body;
+
+    const price = parseInt(priceCoins, 10) || 0;
+    const days = parseInt(durationDays, 10) || 30;
+
+    if (!itemType || !itemKey || price <= 0) {
+        return res.status(400).json({ error: 'Geçersiz ürün veya fiyat bilgisi.' });
+    }
+
+    try {
+        await db.query('BEGIN');
+
+        // Check user coin balance
+        const userRes = await db.query('SELECT balance FROM users WHERE id::text = $1::text FOR UPDATE', [userId]);
+        if (userRes.rows.length === 0) {
+            await db.query('ROLLBACK');
+            return res.status(404).json({ error: 'Kullanıcı bulunamadı.' });
+        }
+
+        const currentBalance = userRes.rows[0].balance || 0;
+        if (currentBalance < price) {
+            await db.query('ROLLBACK');
+            return res.status(400).json({ error: 'Yetersiz bakiye. Lütfen coin yükleyiniz.' });
+        }
+
+        // Deduct coins
+        await db.query('UPDATE users SET balance = balance - $1 WHERE id::text = $2::text', [price, userId]);
+
+        // Insert into inventory
+        const expiresAt = new Date();
+        expiresAt.setDate(expiresAt.getDate() + days);
+
+        const invRes = await db.query(
+            `INSERT INTO user_inventory (user_id, item_type, item_key, title_name, is_equipped, expires_at)
+             VALUES ($1, $2, $3, $4, TRUE, $5) RETURNING *`,
+            [userId, itemType, itemKey, titleName || itemKey, expiresAt]
+        );
+
+        // Unequip other items of same type if equipped
+        await db.query(
+            'UPDATE user_inventory SET is_equipped = FALSE WHERE user_id::text = $1::text AND item_type = $2 AND id != $3',
+            [userId, itemType, invRes.rows[0].id]
+        );
+
+        await db.query('COMMIT');
+
+        res.json({
+            success: true,
+            message: 'Ürün başarıyla satın alındı ve çantanıza eklendi.',
+            item: invRes.rows[0],
+            newBalance: currentBalance - price
+        });
+
+    } catch (err) {
+        await db.query('ROLLBACK');
+        console.error('[INVENTORY_PURCHASE_ERROR]', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// --- PUBLISHER PERFORMANCE ANALYTICS API ---
+app.get('/api/operators/my-stats', authenticateToken, async (req, res) => {
+    const userId = req.user.id;
+    try {
+        const opRes = await db.query(
+            'SELECT pending_balance, lifetime_earnings, rating FROM operators WHERE user_id::text = $1::text',
+            [userId]
+        );
+        const operator = opRes.rows[0] || { pending_balance: 0, lifetime_earnings: 0, rating: 5.0 };
+
+        const todayEarningsRes = await db.query(
+            `SELECT COALESCE(SUM(amount), 0) as today_diamonds 
+             FROM commission_logs 
+             WHERE operator_id::text = $1::text AND created_at >= CURRENT_DATE`,
+            [userId]
+        );
+
+        const callStatsRes = await db.query(
+            `SELECT COUNT(*) as total_calls, COALESCE(SUM(amount), 0) as call_diamonds 
+             FROM commission_logs 
+             WHERE operator_id::text = $1::text AND type = 'call'`,
+            [userId]
+        );
+
+        const giftStatsRes = await db.query(
+            `SELECT COUNT(*) as total_gifts, COALESCE(SUM(amount), 0) as gift_diamonds 
+             FROM commission_logs 
+             WHERE operator_id::text = $1::text AND type = 'gift'`,
+            [userId]
+        );
+
+        res.json({
+            pending_balance: parseFloat(operator.pending_balance || 0),
+            lifetime_earnings: parseFloat(operator.lifetime_earnings || 0),
+            today_diamonds: parseFloat(todayEarningsRes.rows[0].today_diamonds || 0),
+            rating: parseFloat(operator.rating || 5.0),
+            total_calls: parseInt(callStatsRes.rows[0].total_calls || 0),
+            call_diamonds: parseFloat(callStatsRes.rows[0].call_diamonds || 0),
+            total_gifts: parseInt(giftStatsRes.rows[0].total_gifts || 0),
+            gift_diamonds: parseFloat(giftStatsRes.rows[0].gift_diamonds || 0)
+        });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// --- ADMIN DEVICE FINGERPRINT BAN API ---
+app.get('/api/admin/devices/banned', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
+    try {
+        const result = await db.query('SELECT * FROM banned_devices ORDER BY created_at DESC');
+        res.json(result.rows);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.post('/api/admin/devices/ban', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
+    const { deviceId, reason } = req.body;
+    if (!deviceId) return res.status(400).json({ error: 'deviceId gereklidir.' });
+
+    try {
+        const result = await db.query(
+            `INSERT INTO banned_devices (device_id, reason, banned_by) 
+             VALUES ($1, $2, $3) 
+             ON CONFLICT (device_id) DO UPDATE SET reason = EXCLUDED.reason 
+             RETURNING *`,
+            [deviceId, reason || 'Güvenlik ihlali nedeniyle cihaz engellendi.', req.user.id]
+        );
+        res.json({ success: true, message: 'Cihaz engellendi.', device: result.rows[0] });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.delete('/api/admin/devices/ban/:deviceId', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
+    const { deviceId } = req.params;
+    try {
+        await db.query('DELETE FROM banned_devices WHERE device_id = $1', [deviceId]);
+        res.json({ success: true, message: 'Cihaz engeli kaldırıldı.' });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+app.post('/api/admin/payout-requests/:id/action', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
+    const { id } = req.params;
+    const { action, adminNote } = req.body; // action: 'paid', 'approved', 'rejected'
+
+    if (!['paid', 'approved', 'rejected'].includes(action)) {
+        return res.status(400).json({ error: 'Geçersiz işlem türü. (paid, approved, rejected)' });
+    }
+
+    try {
+        await db.query('BEGIN');
+
+        const payoutRes = await db.query('SELECT * FROM payouts WHERE id = $1 FOR UPDATE', [id]);
+        if (payoutRes.rows.length === 0) {
+            await db.query('ROLLBACK');
+            return res.status(404).json({ error: 'Çekim talebi bulunamadı.' });
+        }
+
+        const payout = payoutRes.rows[0];
+        if (payout.status === 'paid' || payout.status === 'rejected') {
+            await db.query('ROLLBACK');
+            return res.status(400).json({ error: 'Bu talep daha önce sonuçlandırılmış.' });
+        }
+
+        if (action === 'rejected') {
+            // Refund the held diamonds back to operator balance
+            await db.query(
+                'UPDATE operators SET pending_balance = pending_balance + $1 WHERE user_id::text = $2::text',
+                [payout.diamond_amount, payout.operator_id || payout.user_id]
+            );
+
+            await db.query(
+                `UPDATE payouts SET status = 'rejected', admin_note = $1, processed_at = NOW() WHERE id = $2`,
+                [adminNote || 'Yönetim tarafından reddedildi.', id]
+            );
+        } else {
+            // Action is paid or approved
+            await db.query(
+                `UPDATE payouts SET status = $1, admin_note = $2, processed_at = NOW() WHERE id = $3`,
+                [action, adminNote || 'Ödeme tamamlandı.', id]
+            );
+        }
+
+        await db.query('COMMIT');
+        res.json({ success: true, message: `Çekim talebi '${action}' olarak güncellendi.` });
+
+    } catch (err) {
+        await db.query('ROLLBACK');
+        console.error('[ADMIN_PAYOUT_ACTION_ERROR]', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // Process a payout for an operator
 app.post('/api/admin/operators/:id/payout', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
     const { id } = req.params;
@@ -5617,11 +6133,11 @@ app.get('/api/offerings', async (req, res) => {
 
 // --- REPORTING SYSTEM (Required for Google Play Compliance / Phase 8 Specs) ---
 app.post('/api/reports', authenticateToken, async (req, res) => {
-    const { reportedUserId, targetUserId, reason, details, description, roomId, room_id } = req.body;
+    const { reportedUserId, targetUserId, reportedId, reason, details, description, roomId, room_id } = req.body;
     const reporterUserId = req.user.id;
-    const targetId = targetUserId || reportedUserId;
+    const targetId = targetUserId || reportedUserId || reportedId;
     const rId = roomId || room_id || null;
-    const desc = description || details || null;
+    const desc = description || details || '';
 
     if (!targetId || !reason) {
         return res.status(400).json({ error: 'Eksik bilgi (targetUserId veya reason).' });
@@ -5629,13 +6145,16 @@ app.post('/api/reports', authenticateToken, async (req, res) => {
 
     try {
         await db.query(
-            `INSERT INTO reports (reporter_user_id, target_user_id, room_id, reason, description, status) 
-             VALUES ($1, $2, $3, $4, $5, 'pending')`,
+            `INSERT INTO reports (reporter_id, reported_id, reporter_user_id, target_user_id, room_id, reason, details, description, status) 
+             VALUES ($1, $2, $1, $2, $3, $4, $5, $5, 'pending')`,
             [reporterUserId, targetId, rId, reason, desc]
         );
         
+        // Auto-flag reported users for review
+        await db.query("UPDATE users SET account_status = 'under_review' WHERE id = $1", [targetId]).catch(() => {});
+
         // Log activity
-        await logActivity(app.get('io'), reporterUserId, 'report', `User reported ${targetId} for ${reason}`);
+        await logActivity(app.get('io'), reporterUserId, 'report', `User reported ${targetId} for ${reason}`).catch(() => {});
         
         res.json({ success: true, message: 'Şikayetiniz alındı ve moderasyon ekibine iletildi.' });
     } catch (err) {
@@ -5649,10 +6168,17 @@ app.post('/api/reports', authenticateToken, async (req, res) => {
 
 // SELF PINGER TO PREVENT RENDER SLEEP (Every 14 minutes)
 const startPinger = () => {
+    if (process.env.DISABLE_KEEP_ALIVE === 'true') {
+        console.log('[KEEP-ALIVE] Disabled via DISABLE_KEEP_ALIVE environment variable (Render Paid Tier).');
+        return;
+    }
+
     const PING_INTERVAL = 14 * 60 * 1000; // 14 mins
-    const URL = process.env.NODE_ENV === 'production' 
-        ? 'https://backend-kj17.onrender.com/api/keep-alive'
-        : `http://localhost:${process.env.PORT || 5000}/api/keep-alive`;
+    const URL = process.env.RENDER_EXTERNAL_URL 
+        ? `${process.env.RENDER_EXTERNAL_URL}/api/keep-alive`
+        : (process.env.NODE_ENV === 'production' 
+            ? 'https://backend-kj17.onrender.com/api/keep-alive'
+            : `http://localhost:${process.env.PORT || 5000}/api/keep-alive`);
 
     // Initial delay to let server settle
     setTimeout(() => {
@@ -5761,6 +6287,7 @@ if (require.main === module) {
         await initializeDatabase();
 
         startPinger();
+        startStaleSeatSweeper(io);
     });
 }
 

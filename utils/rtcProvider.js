@@ -23,30 +23,53 @@ class AgoraRtcProvider extends RtcProvider {
         const appId = process.env.AGORA_APP_ID || 'f80faf42fd0845a9816658ea7e16a755';
         const appCertificate = process.env.AGORA_APP_CERTIFICATE || 'e3361c06460541418754881b12bc3247';
         
-        const channelName = `room_${roomId}`;
+        const channelName = String(roomId).startsWith('room_') ? String(roomId) : `room_${roomId}`;
         
-        // Agora classical token parameters
-        const uid = Number(userId) || 0; // Use actual user ID instead of wildcard
         const expirationTimeInSeconds = 3600; // 1 hour
         const currentTimestamp = Math.floor(Date.now() / 1000);
         const privilegeExpiredTs = currentTimestamp + expirationTimeInSeconds;
 
-        // Always generate publisher token to allow role switching (listener -> speaker) without token renewal
-        const agoraRole = RtcRole.PUBLISHER;
+        // Map role parameter to Agora RtcRole
+        const isSubscriber = (role || '').toLowerCase() === 'subscriber' || (role || '').toLowerCase() === 'listener';
+        const agoraRole = isSubscriber ? RtcRole.SUBSCRIBER : RtcRole.PUBLISHER;
 
         try {
-            const token = RtcTokenBuilder.buildTokenWithUid(
-                appId,
-                appCertificate,
-                channelName,
-                uid,
-                agoraRole,
-                privilegeExpiredTs
-            );
-            return token;
+            const userStr = String(userId);
+            const numUid = Number(userId);
+
+            if (!isNaN(numUid) && numUid > 0) {
+                return RtcTokenBuilder.buildTokenWithUid(
+                    appId,
+                    appCertificate,
+                    channelName,
+                    numUid,
+                    agoraRole,
+                    privilegeExpiredTs
+                );
+            } else if (userStr && userStr.trim() !== '') {
+                // Support string user account/UUID
+                return RtcTokenBuilder.buildTokenWithAccount(
+                    appId,
+                    appCertificate,
+                    channelName,
+                    userStr,
+                    agoraRole,
+                    privilegeExpiredTs
+                );
+            } else {
+                // Fallback to wildcard 0
+                return RtcTokenBuilder.buildTokenWithUid(
+                    appId,
+                    appCertificate,
+                    channelName,
+                    0,
+                    agoraRole,
+                    privilegeExpiredTs
+                );
+            }
         } catch (err) {
             console.error('[AgoraTokenError]:', err.message);
-            throw new Error('Agora token oluşturulamadı.');
+            throw new Error('Agora token oluşturulamadı: ' + err.message);
         }
     }
 }
@@ -77,10 +100,18 @@ function getRtcProvider() {
     }
 }
 
+// Agora Audio Profile Optimization Config (32kbps Bandwidth Standard)
+const AGORA_AUDIO_CONFIG = {
+    audioProfile: 2, // AUDIO_PROFILE_MUSIC_STANDARD (32kbps, 44.1 kHz, mono)
+    audioScenario: 3, // AUDIO_SCENARIO_GAME_STREAMING (Low latency)
+    bitrate: 32000
+};
+
 module.exports = {
     RtcProvider,
     MockRtcProvider,
     AgoraRtcProvider,
     LiveKitRtcProvider,
-    getRtcProvider
+    getRtcProvider,
+    AGORA_AUDIO_CONFIG
 };

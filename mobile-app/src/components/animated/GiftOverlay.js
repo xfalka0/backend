@@ -159,7 +159,7 @@ export default function GiftOverlay({ gift, receiver, onFinish }) {
             }
             const timer = setTimeout(() => {
                 opacity.value = withTiming(0, { duration: 500 }, () => {
-                    runOnJS(onFinish)();
+                    if (onFinish) runOnJS(onFinish)();
                 });
             }, duration);
 

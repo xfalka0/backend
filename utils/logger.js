@@ -63,4 +63,44 @@ const logger = winston.createLogger({
     transports
 });
 
+/**
+ * Log financial transaction with Winston & Sentry Breadcrumbs
+ */
+logger.logFinancialEvent = function (type, data) {
+    const msg = `[FINANCE] ${type}: ${JSON.stringify(data)}`;
+    logger.info(msg);
+
+    if (process.env.SENTRY_DSN) {
+        try {
+            const Sentry = require('@sentry/node');
+            Sentry.addBreadcrumb({
+                category: 'finance',
+                message: msg,
+                level: 'info',
+                data
+            });
+        } catch (e) {}
+    }
+};
+
+/**
+ * Log RTC call event with Winston & Sentry Breadcrumbs
+ */
+logger.logCallEvent = function (type, data) {
+    const msg = `[CALL] ${type}: ${JSON.stringify(data)}`;
+    logger.info(msg);
+
+    if (process.env.SENTRY_DSN) {
+        try {
+            const Sentry = require('@sentry/node');
+            Sentry.addBreadcrumb({
+                category: 'call',
+                message: msg,
+                level: 'info',
+                data
+            });
+        } catch (e) {}
+    }
+};
+
 module.exports = logger;

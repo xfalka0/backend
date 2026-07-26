@@ -6,6 +6,9 @@ const { sanitizeUser, logActivity, assignFakeInteractions, triggerAutoEngagement
 
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || '46669084263-drv76chuoahgvfitcdmctvvqm3cbudl7.apps.googleusercontent.com';
 const googleClient = new OAuth2Client(GOOGLE_CLIENT_ID);
+if (!process.env.JWT_SECRET && process.env.NODE_ENV === 'production') {
+    console.error('⚠️ [CRITICAL] JWT_SECRET is missing in authController!');
+}
 const SECRET_KEY = process.env.JWT_SECRET || 'falka_super_secret_2024_key_change_me';
 
 // Google Auth
@@ -236,8 +239,12 @@ exports.loginEmail = async (req, res) => {
         const user = result.rows[0];
 
         // Check password if exists
-        if (password && (user.password_hash || user.password)) {
-            const valid = await bcrypt.compare(password, user.password_hash || user.password);
+        const userPasswordHash = user.password_hash || user.password;
+        if (userPasswordHash) {
+            if (!password) {
+                return res.status(400).json({ error: 'Şifre zorunludur.' });
+            }
+            const valid = await bcrypt.compare(password, userPasswordHash);
             if (!valid) {
                 return res.status(401).json({ error: 'Giriş bilgileri hatalı.' });
             }

@@ -80,9 +80,7 @@ const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
 
 function MainTabs({ route }) {
-    const TEST_USER_ID = 'c917f7d6-cc44-4b04-8917-1dbbed0b1e9b';
-    const paramsUser = route.params?.user;
-    const user = paramsUser ? paramsUser : { id: TEST_USER_ID, name: 'Test Kullanıcı', hearts: 100 };
+    const user = route.params?.user || null;
 
     return (
         <Tab.Navigator

@@ -57,10 +57,20 @@ router.delete('/:id', authenticateToken, authorizeRole('admin', 'super_admin'), 
 router.post('/purchase', authenticateToken, async (req, res) => {
     const { productId, transactionId } = req.body;
     const userId = req.user.id;
-    if (!userId || !productId) return res.status(400).json({ error: 'Eksik parametreler.' });
+    if (!userId || !productId || !transactionId) {
+        return res.status(400).json({ error: 'Eksik parametreler. transactionId ve productId zorunludur.' });
+    }
 
     try {
         await db.query('BEGIN');
+
+        // Check if transactionId was already processed
+        const existingTx = await db.query('SELECT id FROM payments WHERE transaction_id = $1', [transactionId]);
+        if (existingTx.rows.length > 0) {
+            await db.query('ROLLBACK');
+            return res.status(400).json({ error: 'Bu işlem zaten gerçekleştirilmiş.' });
+        }
+
         const pkgRes = await db.query(
             'SELECT * FROM coin_packages WHERE id = $1 OR revenuecat_id = $2',
             [isNaN(productId) ? -1 : parseInt(productId), productId]

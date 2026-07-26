@@ -78,9 +78,9 @@ export const PurchaseService = {
         }
     },
 
-    purchaseProductByIdentifier: async (productIdentifier) => {
+    purchaseProductByIdentifier: async (productIdentifier, type = Purchases.PURCHASE_TYPE.INAPP) => {
         try {
-            const { customerInfo } = await Purchases.purchaseProduct(productIdentifier);
+            const { customerInfo } = await Purchases.purchaseProduct(productIdentifier, null, type);
             return { success: true, customerInfo };
         } catch (e) {
             if (!e.userCancelled) {

@@ -1,6 +1,9 @@
 const jwt = require('jsonwebtoken');
 const db = require('../db');
 
+if (!process.env.JWT_SECRET && process.env.NODE_ENV === 'production') {
+    console.error('⚠️ [CRITICAL] JWT_SECRET is missing in environment variables!');
+}
 const SECRET_KEY = process.env.JWT_SECRET || 'your_super_secret_key_change_in_prod';
 
 const authenticateToken = async (req, res, next) => {
@@ -27,6 +30,16 @@ const authenticateToken = async (req, res, next) => {
         if (user.account_status !== 'active') {
             console.warn(`[AUTH] 403: User account not active for ID: ${user.id}, status: ${user.account_status}`);
             return res.status(403).json({ error: 'Hesap aktif değil.' });
+        }
+
+        // Check if device_id header is banned
+        const deviceIdHeader = req.headers['x-device-id'];
+        if (deviceIdHeader) {
+            const banRes = await db.query('SELECT reason FROM banned_devices WHERE device_id = $1', [deviceIdHeader]);
+            if (banRes.rows.length > 0) {
+                console.warn(`[AUTH] 403: Banned device attempt: ${deviceIdHeader}`);
+                return res.status(403).json({ error: 'Cihazınız güvenlik nedeniyle engellenmiştir: ' + (banRes.rows[0].reason || '') });
+            }
         }
 
         req.user = user;

@@ -45,6 +45,7 @@ router.get('/:userId/balance', async (req, res) => {
 // GET USER PROFILE
 router.get('/:id', async (req, res) => {
     try {
+        const targetUserId = req.params.id;
         const result = await db.query(`
             SELECT u.*, 
                    un.expires_at as nobility_expires_at, 
@@ -57,8 +58,28 @@ router.get('/:id', async (req, res) => {
             LEFT JOIN user_nobility un ON u.id = un.user_id AND un.is_active = TRUE AND un.expires_at > NOW()
             LEFT JOIN nobility_titles nt ON un.title_id = nt.id
             WHERE u.id::text = $1::text
-        `, [req.params.id]);
+        `, [targetUserId]);
         if (result.rows.length === 0) return res.status(404).json({ error: 'User not found' });
+
+        // Push notification on profile view (non-blocking)
+        const authHeader = req.headers['authorization'];
+        if (authHeader) {
+            try {
+                const jwt = require('jsonwebtoken');
+                const { SECRET_KEY } = require('../middleware/auth');
+                const token = authHeader.split(' ')[1];
+                const decoded = jwt.verify(token, SECRET_KEY);
+                if (decoded && decoded.id && decoded.id.toString() !== targetUserId.toString()) {
+                    const { sendPushNotification } = require('../utils/pushNotifications');
+                    sendPushNotification(targetUserId, {
+                        title: '👀 Profiline Bakan Biri Var!',
+                        body: 'Biri senin profilini inceledi. Hemen tıkla ve kim olduğuna bak!',
+                        data: { type: 'profile_view', viewerId: decoded.id }
+                    }).catch(() => {});
+                }
+            } catch (e) {}
+        }
+
         res.json(sanitizeUser(result.rows[0], req));
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -79,10 +100,23 @@ router.get('/:id/album', async (req, res) => {
     }
 });
 
+const { validateProfileText } = require('../utils/moderationFilter');
+
 // UPDATE USER PROFILE (Simple)
 router.put('/:id', async (req, res) => {
     const { id } = req.params;
     const { name, display_name, age, gender, bio, job, edu } = req.body;
+
+    // Security & Moderation Check (Phone / Link / Prohibited Content)
+    const bioCheck = validateProfileText(bio);
+    if (!bioCheck.isClean) {
+        return res.status(400).json({ error: bioCheck.reason });
+    }
+    const nameCheck = validateProfileText(display_name || name);
+    if (!nameCheck.isClean) {
+        return res.status(400).json({ error: nameCheck.reason });
+    }
+
     const normalizedGender = normalizeGenderValue(gender);
     const finalDisplayName = display_name || name;
     const finalName = name || display_name;
@@ -359,21 +393,47 @@ router.post('/block', authenticateToken, async (req, res) => {
 
 // REPORT USER
 router.post('/report', authenticateToken, async (req, res) => {
-    const { reportedId, reason, details } = req.body;
+    const { reportedId, reportedUserId, targetUserId, reason, details, description } = req.body;
+    const targetId = targetUserId || reportedUserId || reportedId;
+    const desc = details || description || '';
+
+    if (!targetId || !reason) {
+        return res.status(400).json({ error: 'Eksik bilgi (reportedId veya reason).' });
+    }
+
     try {
-        await db.query('INSERT INTO reports (reporter_id, reported_id, reason, details) VALUES ($1, $2, $3, $4)',
-            [req.user.id, reportedId, reason, details]);
-        await db.query("UPDATE users SET account_status = 'under_review' WHERE id = $1", [reportedId]);
+        await db.query(
+            `INSERT INTO reports (reporter_id, reported_id, reporter_user_id, target_user_id, reason, details, description, status) 
+             VALUES ($1, $2, $1, $2, $3, $4, $4, 'pending')`,
+            [req.user.id, targetId, reason, desc]
+        );
+        await db.query("UPDATE users SET account_status = 'under_review' WHERE id = $1", [targetId]).catch(() => {});
         res.json({ success: true, message: 'Kullanıcı raporlandı.' });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
 });
 
+const { validateProfileText, validateImageUrl } = require('../utils/moderationFilter');
+
 // PATCH /me - Update current user profile
 router.patch('/me', authenticateToken, async (req, res) => {
     const userId = req.user.id;
     const { displayName, bio, avatarUrl, gender, country } = req.body;
+
+    // Security & Moderation Check
+    const bioCheck = validateProfileText(bio);
+    if (!bioCheck.isClean) {
+        return res.status(400).json({ error: bioCheck.reason });
+    }
+    const nameCheck = validateProfileText(displayName);
+    if (!nameCheck.isClean) {
+        return res.status(400).json({ error: nameCheck.reason });
+    }
+    const imgCheck = validateImageUrl(avatarUrl);
+    if (!imgCheck.isClean) {
+        return res.status(400).json({ error: imgCheck.reason });
+    }
     
     try {
         const result = await db.query(

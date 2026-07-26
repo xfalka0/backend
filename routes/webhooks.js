@@ -26,8 +26,7 @@ router.post('/revenuecat', async (req, res) => {
             case 'INITIAL_PURCHASE':
             case 'RENEWAL':
             case 'NON_RENEWING_PURCHASE':
-                // Logic to update user's coins or VIP status based on the product
-                await handleSuccessfulPayment(userId, event.product_id);
+                await handleSuccessfulPayment(userId, event);
                 break;
             case 'CANCELLATION':
             case 'EXPIRATION':
@@ -45,7 +44,10 @@ router.post('/revenuecat', async (req, res) => {
     }
 });
 
-async function handleSuccessfulPayment(userId, productId) {
+async function handleSuccessfulPayment(userId, event) {
+    const productId = event.product_id || event.productId;
+    const transactionId = event.transaction_id || event.id || `rc_${Date.now()}`;
+
     // Mapping RevenueCat product IDs to coin amounts
     const productMapping = {
         'coins_100': 100,
@@ -69,8 +71,24 @@ async function handleSuccessfulPayment(userId, productId) {
     }
 
     if (coinAmount) {
-        console.log(`[WEBHOOK SUCCESS] Ignored coin addition for product ${productId}. Handled by /api/purchase endpoint.`);
-        // await db.query('UPDATE users SET balance = balance + $1 WHERE id = $2', [coinAmount, userId]);
+        try {
+            await db.query('BEGIN');
+            const existingTx = await db.query('SELECT id FROM payments WHERE transaction_id = $1', [transactionId]);
+            if (existingTx.rows.length === 0) {
+                await db.query('UPDATE users SET balance = COALESCE(balance, 0) + $1 WHERE id = $2', [coinAmount, userId]);
+                await db.query('INSERT INTO payments (user_id, transaction_id, amount, status) VALUES ($1, $2, $3, $4)',
+                    [userId, transactionId, coinAmount, 'completed']);
+                await db.query('INSERT INTO transactions (user_id, amount, type, description) VALUES ($1, $2, $3, $4)',
+                    [userId, coinAmount, 'webhook_purchase', `RevenueCat webhook: ${productId}`]);
+                console.log(`[WEBHOOK SUCCESS] Added ${coinAmount} coins to user ${userId} for transaction ${transactionId}`);
+            } else {
+                console.log(`[WEBHOOK DUPLICATE] Transaction ${transactionId} already processed.`);
+            }
+            await db.query('COMMIT');
+        } catch (err) {
+            await db.query('ROLLBACK');
+            console.error('[WEBHOOK PAYMENT ERROR]', err.message);
+        }
     } else if (productId.includes('vip_level_1')) {
         await db.query('UPDATE users SET vip_level = 1 WHERE id = $1', [userId]);
     } else {

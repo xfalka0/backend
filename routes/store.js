@@ -175,6 +175,14 @@ router.get('/purchase-history', authenticateToken, async (req, res) => {
 router.get('/my-inventory', authenticateToken, async (req, res) => {
     try {
         const userId = req.user.id.toString();
+        
+        // Auto un-equip expired items
+        await db.query(`
+            UPDATE user_inventory 
+            SET is_equipped = FALSE 
+            WHERE user_id = $1 AND expires_at IS NOT NULL AND expires_at <= NOW() AND is_equipped = TRUE
+        `, [userId]);
+
         const result = await db.query(`
             SELECT ui.*, si.name, si.key, si.description, si.thumbnail_url, si.rarity, si.animation_type 
             FROM user_inventory ui

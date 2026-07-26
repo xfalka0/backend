@@ -601,7 +601,7 @@ function handlePartyRoomSockets(io, socket) {
             }
             try {
                 // Set is_online to false across all party rooms for this user
-                await db.query('UPDATE party_room_members SET is_online = FALSE WHERE user_id = $1::text', [socket.user.id]);
+                await db.query('UPDATE party_room_members SET is_online = FALSE, last_active_at = NOW() WHERE user_id = $1::text', [socket.user.id]);
 
                 // Free any seats occupied by this user across any rooms
                 const checkSeats = await db.query(
@@ -629,4 +629,44 @@ function handlePartyRoomSockets(io, socket) {
     });
 }
 
-module.exports = { handlePartyRoomSockets };
+// Background Sweeper: Periodically frees seats occupied by offline users (60s inactive)
+function startStaleSeatSweeper(io) {
+    setInterval(async () => {
+        try {
+            const staleSeatsRes = await db.query(`
+                SELECT prs.room_id, prs.seat_number, prs.user_id 
+                FROM party_room_seats prs
+                JOIN party_room_members prm ON prs.room_id = prm.room_id AND prs.user_id = prm.user_id
+                WHERE prs.user_id IS NOT NULL 
+                  AND prm.is_online = FALSE 
+                  AND prm.last_active_at < NOW() - INTERVAL '60 seconds'
+            `);
+
+            if (staleSeatsRes.rows.length > 0) {
+                for (const seat of staleSeatsRes.rows) {
+                    await db.query(
+                        'UPDATE party_room_seats SET user_id = NULL WHERE room_id = $1 AND seat_number = $2',
+                        [seat.room_id, seat.seat_number]
+                    );
+
+                    const rName = `party_room_${seat.room_id}`;
+                    io.to(rName).emit('party_seat_updated', {
+                        seat_number: seat.seat_number,
+                        user_id: null,
+                        username: null,
+                        display_name: null,
+                        avatar_url: null,
+                        vip_level: 0,
+                        room_gift_points: 0,
+                        is_muted: false
+                    });
+                    console.log(`[STALE SEAT SWEEPER 🧹] Cleared stale seat ${seat.seat_number} in room ${seat.room_id} for user ${seat.user_id}`);
+                }
+            }
+        } catch (err) {
+            console.error('[STALE SEAT SWEEPER ERROR]', err.message);
+        }
+    }, 60000);
+}
+
+module.exports = { handlePartyRoomSockets, startStaleSeatSweeper };

@@ -2,6 +2,14 @@ const db = require('../db');
 const { recordOperatorCommission } = require('../utils/commissionUtils');
 const { sendPushNotification } = require('../utils/notificationUtils');
 
+function pushPayoutLog(entry) {
+    if (!global.payoutLogs) global.payoutLogs = [];
+    global.payoutLogs.push(entry);
+    if (global.payoutLogs.length > 500) {
+        global.payoutLogs.shift();
+    }
+}
+
 // ─── Call Sessions & Billing Management ──────────────────────────────────
 const activeCallSessions = new Map(); // Key: chatId, Value: { callId, callerId, receiverId, status, startedAt, acceptedAt, endedAt, billingIntervalId }
 
@@ -137,7 +145,29 @@ async function startCallBilling(io, chatId, callerId, receiverId) {
     const session = activeCallSessions.get(chatId);
     if (!session) return;
 
-    // First minute was already charged upfront, so setup interval for subsequent minutes
+    // Check caller balance right away and emit low balance warning if under 2 minutes
+    const checkLowBalance = async () => {
+        try {
+            const cost = session.callType === 'video' ? 120 : 50;
+            const res = await db.query('SELECT balance FROM users WHERE id::text = $1::text', [callerId]);
+            if (res.rows.length > 0) {
+                const bal = parseFloat(res.rows[0].balance || 0);
+                if (bal < cost * 2) {
+                    const remainingMins = Math.max(1, Math.floor(bal / cost));
+                    io.to(callerId.toString()).emit('low_balance_warning', {
+                        chatId,
+                        currentBalance: bal,
+                        costPerMinute: cost,
+                        remainingMinutes: remainingMins,
+                        message: `Bakiyeniz ${remainingMins} dakikadan az kaldı! Görüşmenin kesilmemesi için bakiye yükleyin.`
+                    });
+                }
+            }
+        } catch (e) {}
+    };
+
+    checkLowBalance();
+
     // Runs at t = 60s, 120s, 180s...
     const billingIntervalId = setInterval(async () => {
         console.log(`[CALL BILLING] Ticking charge for chat ${chatId}...`);
@@ -145,6 +175,8 @@ async function startCallBilling(io, chatId, callerId, receiverId) {
         if (!chargeRes.success) {
             console.log(`[CALL BILLING] Insufficient balance on tick for caller ${callerId}. Ending call.`);
             await endCallSession(io, chatId, 'insufficient_funds');
+        } else {
+            checkLowBalance();
         }
     }, 60000); // Charged every 60 seconds
 
@@ -475,8 +507,7 @@ function initializeSockets(io) {
             socketId: socket.id,
             user: socket.user ? { id: socket.user.id, username: socket.user.username } : 'ANONYMOUS'
         };
-        if (!global.payoutLogs) global.payoutLogs = [];
-        global.payoutLogs.push(connLog);
+        pushPayoutLog(connLog);
         
         console.log(`[SOCKET] User connected: ${socket.id} (Authenticated: ${socket.user ? socket.user.username : 'NO'})`);
 
@@ -1044,35 +1075,53 @@ function initializeSockets(io) {
                 console.log(`[CALL LOG 🟢] Cleared 30s ringing timeout for chat ${roomKey}`);
             }
 
-            // Charge the first minute upfront inside transaction
-            console.log(`[CALL ACCEPT] Charging first minute upfront for caller ${callerId}...`);
-            const firstMinuteCharged = await chargeCallMinute(io, roomKey, callerId, receiverId);
-            if (!firstMinuteCharged.success) {
-                console.log(`[CALL ACCEPT] First minute charge failed for caller ${callerId}. Rejecting call.`);
-                session.status = 'ended';
-                activeCallSessions.delete(roomKey);
-
-                socket.emit('call_error', { message: 'Arama başlatılamadı. Arayanın bakiyesi yetersiz.' });
-                io.to(callerId.toString()).emit('call_error', { message: 'Yetersiz bakiye. Arama sonlandırıldı.' });
-                io.to(callerId.toString()).emit('call_ended', { chatId: roomKey, reason: 'insufficient_funds' });
-                socket.emit('call_ended', { chatId: roomKey, reason: 'insufficient_funds' });
-                return;
-            }
-
-            session.status = 'active';
+            session.status = 'accepted_waiting_media';
             session.acceptedAt = new Date();
 
-            await startCallBilling(io, roomKey, callerId, receiverId);
+            // Set 15s Media Connection Guard Timeout (If RTC media fails to connect within 15s, cancel without charging)
+            session.connectionTimeoutId = setTimeout(async () => {
+                console.log(`[CALL BILLING GUARD ⚠️] 15s Media connection timeout for chat ${roomKey}. Cancelling call with zero charges.`);
+                await logMissedCall(io, roomKey, callerId, receiverId, 'connection_failed');
+            }, 15000);
 
             io.to(roomKey).emit('call_started', { chatId: roomKey });
             io.to(callerId.toString()).emit('call_started', { chatId: roomKey });
             io.to(receiverId.toString()).emit('call_started', { chatId: roomKey });
         });
 
-        socket.on('call_connected', (data) => {
+        socket.on('call_connected', async (data) => {
             const { chatId } = data;
             const roomKey = chatId ? chatId.toString() : '';
             console.log(`[CALL LOG 🟢] call_connected received for chat ${roomKey}. Broadcasting call_connected to room.`);
+
+            const session = activeCallSessions.get(roomKey);
+            if (session && (session.status === 'accepted_waiting_media' || session.status === 'ringing')) {
+                // Clear 15s media connection guard timeout
+                if (session.connectionTimeoutId) {
+                    clearTimeout(session.connectionTimeoutId);
+                    session.connectionTimeoutId = null;
+                    console.log(`[CALL BILLING GUARD 🟢] Media connected! Cleared 15s media timeout for chat ${roomKey}`);
+                }
+
+                // Charge first minute upfront now that media is verified
+                console.log(`[CALL BILLING GUARD 💰] Charging first minute upfront for caller ${session.callerId}...`);
+                const firstMinuteCharged = await chargeCallMinute(io, roomKey, session.callerId, session.receiverId);
+                if (!firstMinuteCharged.success) {
+                    console.log(`[CALL ACCEPT] First minute charge failed for caller ${session.callerId}. Rejecting call.`);
+                    session.status = 'ended';
+                    activeCallSessions.delete(roomKey);
+
+                    socket.emit('call_error', { message: 'Arama başlatılamadı. Arayanın bakiyesi yetersiz.' });
+                    io.to(session.callerId.toString()).emit('call_error', { message: 'Yetersiz bakiye. Arama sonlandırıldı.' });
+                    io.to(session.callerId.toString()).emit('call_ended', { chatId: roomKey, reason: 'insufficient_funds' });
+                    socket.emit('call_ended', { chatId: roomKey, reason: 'insufficient_funds' });
+                    return;
+                }
+
+                session.status = 'active';
+                await startCallBilling(io, roomKey, session.callerId, session.receiverId);
+            }
+
             io.to(roomKey).emit('call_connected', { chatId: roomKey });
         });
 

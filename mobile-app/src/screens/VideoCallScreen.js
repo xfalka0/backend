@@ -39,7 +39,13 @@ try {
     RtcTextureView = AgoraRTC.RtcTextureView;
     ChannelProfileType = AgoraRTC.ChannelProfileType;
     ClientRoleType = AgoraRTC.ClientRoleType;
-    if (AgoraRTC.VideoSourceType) VideoSourceType = AgoraRTC.VideoSourceType;
+    if (AgoraRTC.VideoSourceType) {
+        VideoSourceType = {
+            VideoSourceCamera: AgoraRTC.VideoSourceType.VideoSourceCameraPrimary ?? 0,
+            VideoSourceRemote: AgoraRTC.VideoSourceType.VideoSourceRemote ?? 9,
+            ...AgoraRTC.VideoSourceType
+        };
+    }
     console.log('[Agora Video] Native module loaded successfully.');
 } catch (e) {
     console.warn('[Agora Video] Native module not loaded:', e.message);
@@ -323,6 +329,12 @@ export default function VideoCallScreen({ route, navigation }) {
                 onJoinChannelSuccess: async (connection, elapsed) => {
                     console.log("VIDEO_AGORA_JOIN_SUCCESS", { channelName: connection.channelId, uid: connection.localUid });
                     isJoinedRef.current = true;
+                    setStatusText('Bağlandı');
+                    setCallState('active');
+                    startTimer();
+                    if (socket) {
+                        socket.emit('call_connected', { chatId });
+                    }
                     try {
                         await engine.enableLocalVideo(true);
                         await engine.startPreview();
@@ -332,6 +344,12 @@ export default function VideoCallScreen({ route, navigation }) {
                     console.log("REMOTE_USER_JOINED", remoteUid);
                     setRemoteUid(remoteUid);
                     setIsRemoteVideoOn(true);
+                    setStatusText('Bağlandı');
+                    setCallState('active');
+                    startTimer();
+                    if (socket) {
+                        socket.emit('call_connected', { chatId });
+                    }
                 },
                 onFirstRemoteVideoFrame: (connection, remoteUid, width, height, elapsed) => {
                     console.log("FIRST_REMOTE_VIDEO_FRAME", { remoteUid, width, height, elapsed });
@@ -349,7 +367,9 @@ export default function VideoCallScreen({ route, navigation }) {
                     console.log("VIDEO_SIZE_CHANGED", { uid, width, height, rotation });
                     if (uid && uid !== 0) {
                         setRemoteUid(uid);
-                        setIsRemoteVideoOn(width > 0 && height > 0);
+                        if (width > 0 && height > 0) {
+                            setIsRemoteVideoOn(true);
+                        }
                         setVideoViewKey(prev => prev + 1);
                     }
                 },
@@ -362,9 +382,9 @@ export default function VideoCallScreen({ route, navigation }) {
                 onRemoteVideoStateChanged: (connection, uid, state, reason, elapsed) => {
                     console.log("REMOTE_VIDEO_STATE_CHANGED", { uid, state, reason });
                     if (uid) setRemoteUid(uid);
-                    if (state === 0 && (reason === 5 || reason === 6)) {
+                    if (state === 0 && reason === 5) {
                         setIsRemoteVideoOn(false);
-                    } else {
+                    } else if (state === 2 || state === 1 || reason === 6) {
                         setIsRemoteVideoOn(true);
                     }
                 },
@@ -568,7 +588,7 @@ export default function VideoCallScreen({ route, navigation }) {
         setTimeout(async () => {
             await cleanupAgora();
             navigation.goBack();
-        }, 15000 / 10); // 1.5 seconds
+        }, 1500);
     };
 
     // ─── Render UI Helper styles ─────────────────────────────────────────────
@@ -601,7 +621,6 @@ export default function VideoCallScreen({ route, navigation }) {
                     
                     <View style={styles.avatarWrap}>
                         <Image source={{ uri: otherUserImage }} style={styles.fallbackAvatar} />
-                        <ActivityIndicator color="#10B981" size="large" style={styles.avatarLoader} />
                     </View>
                     
                     {!isRemoteVideoOn && callState === 'active' && (

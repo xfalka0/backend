@@ -329,26 +329,30 @@ export default function VideoCallScreen({ route, navigation }) {
                 onJoinChannelSuccess: async (connection, elapsed) => {
                     console.log("VIDEO_AGORA_JOIN_SUCCESS", { channelName: connection.channelId, uid: connection.localUid });
                     isJoinedRef.current = true;
+                    try {
+                        await engine.enableLocalVideo(true);
+                        await engine.startPreview();
+                    } catch (e) {}
+                },
+                onUserJoined: async (connection, remoteUid, elapsed) => {
+                    console.log("REMOTE_USER_JOINED", remoteUid);
+                    setRemoteUid(remoteUid);
+                    setIsRemoteVideoOn(true);
+                    setVideoViewKey(prev => prev + 1);
                     setStatusText('Bağlandı');
                     setCallState('active');
                     startTimer();
                     if (socket) {
                         socket.emit('call_connected', { chatId });
                     }
+                    // Explicitly tell Agora engine to render remote video
                     try {
-                        await engine.enableLocalVideo(true);
-                        await engine.startPreview();
-                    } catch (e) {}
-                },
-                onUserJoined: (connection, remoteUid, elapsed) => {
-                    console.log("REMOTE_USER_JOINED", remoteUid);
-                    setRemoteUid(remoteUid);
-                    setIsRemoteVideoOn(true);
-                    setStatusText('Bağlandı');
-                    setCallState('active');
-                    startTimer();
-                    if (socket) {
-                        socket.emit('call_connected', { chatId });
+                        await engine.setupRemoteVideo({
+                            uid: remoteUid,
+                            renderMode: 1,
+                        });
+                    } catch (e) {
+                        console.warn('[Agora] setupRemoteVideo error:', e.message);
                     }
                 },
                 onFirstRemoteVideoFrame: (connection, remoteUid, width, height, elapsed) => {
@@ -403,8 +407,8 @@ export default function VideoCallScreen({ route, navigation }) {
             await engine.joinChannel(token, channelName, myUid, {
                 channelProfile: ChannelProfileType.ChannelProfileCommunication,
                 clientRoleType: ClientRoleType.ClientRoleBroadcaster,
-                publishMicrophoneTrack: !isMuted,
-                publishCameraTrack: isCameraOn,
+                publishMicrophoneTrack: true,
+                publishCameraTrack: true,
                 autoSubscribeAudio: true,
                 autoSubscribeVideo: true,
             });
@@ -495,13 +499,19 @@ export default function VideoCallScreen({ route, navigation }) {
         } else {
             await playSound('dialtone');
             try {
-                const token = await AsyncStorage.getItem('token');
+                let rtcToken = initialRtcToken;
+                let channelName = initialChannelName;
                 const callId = callIdRef.current;
-                const res = await axios.post(`${API_URL}/chats/${chatId}/rtc-token`, { callId }, {
-                    headers: { Authorization: `Bearer ${token}` }
-                });
 
-                const { token: rtcToken, channelName } = res.data;
+                if (!rtcToken || !channelName) {
+                    const token = await AsyncStorage.getItem('token');
+                    const res = await axios.post(`${API_URL}/chats/${chatId}/rtc-token`, { callId }, {
+                        headers: { Authorization: `Bearer ${token}` }
+                    });
+
+                    rtcToken = res.data.token;
+                    channelName = res.data.channelName;
+                }
 
                 // Caller immediately initializes local camera preview & Agora channel
                 await initAgora(rtcToken, channelName);
@@ -551,13 +561,19 @@ export default function VideoCallScreen({ route, navigation }) {
         setStatusText('Bağlanıyor...');
         
         try {
-            const token = await AsyncStorage.getItem('token');
-            const callId = callIdRef.current;
-            const res = await axios.post(`${API_URL}/chats/${chatId}/rtc-token`, { callId }, {
-                headers: { Authorization: `Bearer ${token}` }
-            });
-            
-            const { token: rtcToken, channelName } = res.data;
+            let rtcToken = initialRtcToken;
+            let channelName = initialChannelName;
+
+            if (!rtcToken || !channelName) {
+                const token = await AsyncStorage.getItem('token');
+                const callId = callIdRef.current;
+                const res = await axios.post(`${API_URL}/chats/${chatId}/rtc-token`, { callId }, {
+                    headers: { Authorization: `Bearer ${token}` }
+                });
+                
+                rtcToken = res.data.token;
+                channelName = res.data.channelName;
+            }
             
             if (socket) {
                 socket.emit('call_accept', { chatId, callerId: otherUser.id });
@@ -606,14 +622,15 @@ export default function VideoCallScreen({ route, navigation }) {
     return (
         <View style={styles.container}>
             {/* Background Stream View - Remote user full screen */}
-            {callState === 'active' && remoteUid !== null && remoteUid !== undefined && isRemoteVideoOn !== false && RemoteVideoView ? (
+            {callState === 'active' && remoteUid !== null && RemoteVideoView && (
                 <RemoteVideoView
                     key={`remote-${remoteUid}-${videoViewKey}`}
-                    canvas={{ uid: Number(remoteUid), renderMode: 1, sourceType: VideoSourceType.VideoSourceRemote }}
+                    canvas={{ uid: Number(remoteUid), renderMode: 1 }}
                     style={StyleSheet.absoluteFill}
-                    zOrderMediaOverlay={false}
                 />
-            ) : (
+            )}
+            {/* Fallback avatar when not active or RemoteVideoView not ready yet */}
+            {(callState !== 'active' || remoteUid === null || !RemoteVideoView) && (
                 // Falling back to avatar representation if not connected or remote video is off
                 <View style={styles.fallbackRemoteContainer}>
                     <Image source={{ uri: otherUserImage }} style={StyleSheet.absoluteFill} blurRadius={10} />
@@ -641,7 +658,7 @@ export default function VideoCallScreen({ route, navigation }) {
                         // TextureView for local: never bleeds remote content, no z-order issues
                         <LocalVideoView
                             key={`local-${videoViewKey}`}
-                            canvas={{ uid: 0, renderMode: 1, sourceType: VideoSourceType.VideoSourceCamera }}
+                            canvas={{ uid: 0, renderMode: 1 }}
                             style={StyleSheet.absoluteFill}
                         />
                     )}

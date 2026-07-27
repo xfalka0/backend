@@ -446,13 +446,19 @@ export default function VoiceCallScreen({ route, navigation }) {
         } else {
             await playSound('dialtone');
             try {
-                const token = await AsyncStorage.getItem('token');
+                let rtcToken = initialRtcToken;
+                let channelName = initialChannelName;
                 const callId = callIdRef.current;
-                const res = await axios.post(`${API_URL}/chats/${chatId}/rtc-token`, { callId }, {
-                    headers: { Authorization: `Bearer ${token}` }
-                });
 
-                const { token: rtcToken, channelName } = res.data;
+                if (!rtcToken || !channelName) {
+                    const token = await AsyncStorage.getItem('token');
+                    const res = await axios.post(`${API_URL}/chats/${chatId}/rtc-token`, { callId }, {
+                        headers: { Authorization: `Bearer ${token}` }
+                    });
+
+                    rtcToken = res.data.token;
+                    channelName = res.data.channelName;
+                }
 
                 // Caller immediately initializes Agora channel
                 await initAgora(rtcToken, channelName);
@@ -492,12 +498,19 @@ export default function VoiceCallScreen({ route, navigation }) {
         setCallState('active');
         setStatusText('Bağlanıyor...');
         try {
-            const token = await AsyncStorage.getItem('token');
-            const callId = callIdRef.current;
-            const res = await axios.post(`${API_URL}/chats/${chatId}/rtc-token`, { callId }, {
-                headers: { Authorization: `Bearer ${token}` }
-            });
-            const { token: rtcToken, channelName } = res.data;
+            let rtcToken = initialRtcToken;
+            let channelName = initialChannelName;
+
+            if (!rtcToken || !channelName) {
+                const token = await AsyncStorage.getItem('token');
+                const callId = callIdRef.current;
+                const res = await axios.post(`${API_URL}/chats/${chatId}/rtc-token`, { callId }, {
+                    headers: { Authorization: `Bearer ${token}` }
+                });
+                rtcToken = res.data.token;
+                channelName = res.data.channelName;
+            }
+
             if (socket) socket.emit('call_accept', { chatId, callerId: otherUser.id });
             await initAgora(rtcToken, channelName);
         } catch (err) {

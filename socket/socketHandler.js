@@ -1084,9 +1084,8 @@ function initializeSockets(io) {
                 await logMissedCall(io, roomKey, callerId, receiverId, 'connection_failed');
             }, 15000);
 
-            io.to(roomKey).emit('call_started', { chatId: roomKey });
+            // Only notify the CALLER that receiver accepted - receiver already knows (they pressed accept)
             io.to(callerId.toString()).emit('call_started', { chatId: roomKey });
-            io.to(receiverId.toString()).emit('call_started', { chatId: roomKey });
         });
 
         socket.on('call_connected', async (data) => {

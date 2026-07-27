@@ -1110,14 +1110,10 @@ const initializeDatabase = async () => {
             );
         }
         
-        const FEMALE_NAMES = ['Ayşe', 'Fatma', 'Su', 'Esma', 'Emriye', 'Zeynep', 'Elif', 'Merve', 'Selin', 'Ece', 'Aslı', 'Deniz', 'Güneş', 'Buse', 'Hazal', 'Simge', 'İrem', 'Ceren', 'Ada', 'Dilan', 'Berfin', 'Seda', 'Ceyda'];
-        for (const name of FEMALE_NAMES) {
-            await db.query(
-                "UPDATE users SET gender = 'kadin' WHERE (display_name ILIKE $1 OR username ILIKE $1) AND gender != 'kadin' AND gender != 'coin_bayisi'",
-                [`%${name}%`]
-            );
-        }
-        console.log('[DB] Initial gender auto-fix completed');
+        // Clean Schema Enforcement: Ensure gender column default is not defaulting to 'kadin'
+        await db.query("ALTER TABLE users ALTER COLUMN gender DROP DEFAULT").catch(() => {});
+        await db.query("ALTER TABLE users ALTER COLUMN gender SET DEFAULT 'not_set'").catch(() => {});
+        console.log('[DB] Gender schema column default verified (DEFAULT \'not_set\')');
 
         console.log('[DB] SCHEMA VERIFICATION COMPLETE');
         if (!app.get('db_status')) app.set('db_status', 'ready');
@@ -1525,10 +1521,10 @@ app.get('/api/operators/:id', async (req, res) => {
 // UNIFIED DISCOVERY (Operators + Users of opposite gender)
 app.get('/api/discovery', authenticateToken, async (req, res) => {
     try {
-        const userGenderRaw = (req.user.gender || 'erkek').toLowerCase().trim();
-        const userGender = (userGenderRaw === 'male' || userGenderRaw === 'erkek') ? 'erkek' : 'kadin';
+        const userGenderRaw = (req.user.gender || '').toString().toLowerCase().trim();
+        const userGender = ['kadin', 'kadın', 'female', 'woman'].includes(userGenderRaw) ? 'kadin' : 'erkek';
         
-        // Default target gender MUST be opposite gender
+        // Default target gender MUST be strictly opposite gender
         let targetGender = userGender === 'kadin' ? 'erkek' : 'kadin';
         
         const { page = 1, limit = 10, tab = 'Önerilen', gender: filterGender } = req.query;
@@ -1964,6 +1960,14 @@ app.put('/api/users/:id', async (req, res) => {
 app.put('/api/users/:id/profile', async (req, res) => {
     const { id } = req.params;
     const { display_name, name, bio, avatar_url, gender, interests, onboarding_completed, relationship, zodiac, age } = req.body;
+
+    // STRICT MANDATORY GENDER ENFORCEMENT
+    const normalizedGender = (gender || '').toString().trim().toLowerCase();
+    if (onboarding_completed) {
+        if (!normalizedGender || (normalizedGender !== 'erkek' && normalizedGender !== 'kadin')) {
+            return res.status(400).json({ error: 'Cinsiyet seçimi zorunludur. Lütfen Erkek veya Kadın seçeneğini belirleyiniz.' });
+        }
+    }
 
     // Check text for phone numbers / forbidden words
     const nameToCheck = display_name || name;

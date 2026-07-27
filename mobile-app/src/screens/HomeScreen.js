@@ -305,7 +305,7 @@ export default function HomeScreen({ navigation, route }) {
             <TouchableOpacity 
                 activeOpacity={0.85} 
                 style={styles.partyBannerWrapper}
-                onPress={() => navigation.navigate('PartyRoomsList')}
+                onPress={() => navigation.navigate('Main', { screen: 'Odalar' })}
             >
                 <LinearGradient
                     colors={['#8b5cf6', '#ec4899']}

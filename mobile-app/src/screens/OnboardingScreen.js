@@ -520,8 +520,8 @@ export default function OnboardingScreen({ navigation, route }) {
             setAlert({ visible: true, title: 'Uyarı', message: 'Lütfen adınızı girin.', type: 'warning' });
             return;
         }
-        if (currentStep === 2 && !gender) {
-            setAlert({ visible: true, title: 'Uyarı', message: 'Lütfen cinsiyetinizi seçin.', type: 'warning' });
+        if (currentStep === 2 && (!gender || (gender !== 'erkek' && gender !== 'kadin'))) {
+            setAlert({ visible: true, title: 'Cinsiyet Seçimi Zorunludur ⚠️', message: 'Devam edebilmek için cinsiyetinizi (Erkek veya Kadın) seçmeniz gerekmektedir.', type: 'warning' });
             return;
         }
         if (currentStep === 4) { // details step
@@ -558,6 +558,10 @@ export default function OnboardingScreen({ navigation, route }) {
     };
 
     const handleComplete = async () => {
+        if (!gender || (gender !== 'erkek' && gender !== 'kadin')) {
+            setAlert({ visible: true, title: 'Cinsiyet Seçimi Zorunludur ⚠️', message: 'Uygulamaya devam edebilmek için Erkek veya Kadın seçeneğini belirlemeniz gerekmektedir.', type: 'warning' });
+            return;
+        }
         setLoading(true);
         try {
             // --- TOKEN FALLBACK SYSTEM ---

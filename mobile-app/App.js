@@ -123,6 +123,13 @@ function MainTabs({ route }) {
 
 import { navigationRef, flushPendingNavigation } from './src/services/navigationRef';
 
+function PartyRoomsListRedirect({ navigation }) {
+    useEffect(() => {
+        navigation.replace('Main', { screen: 'Odalar' });
+    }, [navigation]);
+    return null;
+}
+
 function AppContent() {
     const { theme } = useTheme();
 
@@ -171,7 +178,7 @@ function AppContent() {
                     <Stack.Screen name="AgencyApplication" component={AgencyApplicationScreen} />
                     <Stack.Screen name="AgencyJoin" component={AgencyJoinScreen} />
                     <Stack.Screen name="MissionBoard" component={MissionBoardScreen} />
-                    <Stack.Screen name="PartyRoomsList" component={PartyRoomsListScreen} />
+                    <Stack.Screen name="PartyRoomsList" component={PartyRoomsListRedirect} />
                     <Stack.Screen name="PartyRoom" component={PartyRoomScreen} />
                     <Stack.Screen name="CreateRoom" component={CreateRoomScreen} />
                     <Stack.Screen name="Family" component={FamilyScreen} />

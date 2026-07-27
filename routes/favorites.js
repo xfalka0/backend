@@ -32,8 +32,6 @@ router.post('/', async (req, res) => {
 // Remove a user from favorites
 router.delete('/:targetUserId', async (req, res) => {
     const { targetUserId } = req.params;
-    const { userId } = req.body; // or req.query if it's a GET, but DELETE usually has query or body. Let's assume passed in query or body.
-    // Actually, passing userId in body for DELETE is fine, but some clients drop it. Let's check headers or query.
     const uid = req.body.userId || req.query.userId;
 
     try {
@@ -42,7 +40,7 @@ router.delete('/:targetUserId', async (req, res) => {
         }
 
         await pool.query(
-            'DELETE FROM favorites WHERE user_id = $1 AND target_user_id = $2',
+            'DELETE FROM favorites WHERE user_id::text = $1::text AND target_user_id::text = $2::text',
             [uid, targetUserId]
         );
 
@@ -58,7 +56,7 @@ router.get('/check/:userId/:targetUserId', async (req, res) => {
     const { userId, targetUserId } = req.params;
     try {
         const check = await pool.query(
-            'SELECT id FROM favorites WHERE user_id = $1 AND target_user_id = $2',
+            'SELECT id FROM favorites WHERE user_id::text = $1::text AND target_user_id::text = $2::text',
             [userId, targetUserId]
         );
         res.json({ isFavorited: check.rows.length > 0 });
@@ -72,8 +70,8 @@ router.get('/check/:userId/:targetUserId', async (req, res) => {
 router.get('/stats/:userId', async (req, res) => {
     const { userId } = req.params;
     try {
-        const following = await pool.query('SELECT COUNT(*) FROM favorites WHERE user_id = $1', [userId]);
-        const followers = await pool.query('SELECT COUNT(*) FROM favorites WHERE target_user_id = $1', [userId]);
+        const following = await pool.query('SELECT COUNT(*) FROM favorites WHERE user_id::text = $1::text', [userId]);
+        const followers = await pool.query('SELECT COUNT(*) FROM favorites WHERE target_user_id::text = $1::text', [userId]);
         
         res.json({
             following: parseInt(following.rows[0].count),
@@ -93,9 +91,9 @@ router.get('/:userId', async (req, res) => {
             SELECT u.id, COALESCE(u.display_name, u.username) as name, u.username as raw_username, u.avatar_url, u.gender, u.job, u.is_vip,
                    o.is_online, o.category
             FROM favorites f
-            JOIN users u ON f.target_user_id = u.id
-            LEFT JOIN operators o ON u.id = o.user_id
-            WHERE f.user_id = $1
+            JOIN users u ON f.target_user_id::text = u.id::text
+            LEFT JOIN operators o ON u.id::text = o.user_id::text
+            WHERE f.user_id::text = $1::text
             ORDER BY f.created_at DESC
         `, [userId]);
 
@@ -112,7 +110,7 @@ router.get('/:userId/fans', async (req, res) => {
     try {
         // First, check if the requested user is VIP
         const userCheck = await pool.query(
-            'SELECT is_vip, vip_expire_date, gender, vip_level FROM users WHERE id = $1',
+            'SELECT is_vip, vip_expire_date, gender, vip_level FROM users WHERE id::text = $1::text',
             [userId]
         );
 
@@ -130,9 +128,9 @@ router.get('/:userId/fans', async (req, res) => {
             SELECT u.id, COALESCE(u.display_name, u.username) as name, u.username, u.avatar_url, u.gender, u.is_vip, f.created_at,
                    o.is_online
             FROM favorites f
-            JOIN users u ON f.user_id = u.id
-            LEFT JOIN operators o ON u.id = o.user_id
-            WHERE f.target_user_id = $1
+            JOIN users u ON f.user_id::text = u.id::text
+            LEFT JOIN operators o ON u.id::text = o.user_id::text
+            WHERE f.target_user_id::text = $1::text
             ORDER BY f.created_at DESC
         `, [userId]);
 

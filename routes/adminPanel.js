@@ -420,18 +420,8 @@ router.delete('/gifts/:id', authenticateToken, authorizeRole('admin', 'super_adm
 // FIX GENDERS
 router.get('/fix-genders', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
     try {
-        const MALE_NAMES = ['Mustafa', 'Furkan', 'Ahmet', 'Mehmet', 'Ali', 'Veli', 'Can', 'Murat', 'Hakan', 'Emre', 'Burak', 'Volkan', 'Gökhan', 'Serkan', 'Ömer', 'Osman', 'İbrahim', 'Halil', 'Ramadan', 'Ramazan', 'Fırat', 'Mert', 'Yiğit', 'Arda'];
-        const FEMALE_NAMES = ['Ayşe', 'Fatma', 'Su', 'Esma', 'Emriye', 'Zeynep', 'Elif', 'Merve', 'Selin', 'Ece', 'Aslı', 'Deniz', 'Güneş', 'Buse', 'Hazal', 'Simge', 'İrem', 'Ceren', 'Ada', 'Dilara', 'Bahar'];
-        let maleCount = 0, femaleCount = 0;
-        for (const name of MALE_NAMES) {
-            const r = await db.query("UPDATE users SET gender = 'erkek' WHERE (display_name ILIKE $1 OR username ILIKE $1) AND gender != 'erkek' AND gender != 'coin_bayisi'", [`%${name}%`]);
-            maleCount += r.rowCount;
-        }
-        for (const name of FEMALE_NAMES) {
-            const r = await db.query("UPDATE users SET gender = 'kadin' WHERE (display_name ILIKE $1 OR username ILIKE $1) AND gender != 'kadin' AND gender != 'coin_bayisi'", [`%${name}%`]);
-            femaleCount += r.rowCount;
-        }
-        res.json({ message: 'Genders fixed', updated_male: maleCount, updated_female: femaleCount });
+        const notSetUsers = await db.query("SELECT id, username, display_name, role FROM users WHERE gender IS NULL OR gender = 'not_set' OR gender = ''");
+        res.json({ message: 'Audit complete', pending_gender_count: notSetUsers.rowCount, users: notSetUsers.rows });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }

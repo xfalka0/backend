@@ -80,7 +80,7 @@ router.get('/:userId', async (req, res) => {
     const { userId } = req.params;
     try {
         const userCheck = await pool.query(
-            'SELECT is_vip, vip_expire_date, gender, vip_level FROM users WHERE id = $1',
+            'SELECT is_vip, vip_expire_date, gender, vip_level FROM users WHERE id::text = $1::text',
             [userId]
         );
 
@@ -106,11 +106,11 @@ router.get('/:userId', async (req, res) => {
         const views = await pool.query(`
             SELECT DISTINCT ON (v.viewer_id) 
                    v.id as view_id, u.id, u.username, u.avatar_url, u.gender, v.created_at,
-                   o.is_online, o.vip_level
+                   o.is_online, u.vip_level
             FROM profile_views v
-            JOIN users u ON v.viewer_id = u.id
-            LEFT JOIN operators o ON u.id = o.user_id
-            WHERE v.viewed_user_id = $1
+            JOIN users u ON v.viewer_id::text = u.id::text
+            LEFT JOIN operators o ON u.id::text = o.user_id::text
+            WHERE v.viewed_user_id::text = $1::text
             ORDER BY v.viewer_id, v.created_at DESC
         `, [userId]);
 
@@ -118,9 +118,9 @@ router.get('/:userId', async (req, res) => {
         
         // Dynamically fetch operators to simulate active visitor engagement
         let opsQuery = `
-            SELECT u.id, u.username, u.avatar_url, u.gender, o.is_online, o.vip_level
+            SELECT u.id, u.username, u.avatar_url, u.gender, o.is_online, u.vip_level
             FROM users u
-            JOIN operators o ON u.id = o.user_id
+            JOIN operators o ON u.id::text = o.user_id::text
         `;
         
         if (user.gender && user.gender.toLowerCase() === 'erkek') {
@@ -215,9 +215,9 @@ router.get('/history/:userId', async (req, res) => {
                    v.id as view_id, u.id, u.username, u.avatar_url, u.gender, v.created_at,
                    o.is_online
             FROM profile_views v
-            JOIN users u ON v.viewed_user_id = u.id
-            LEFT JOIN operators o ON u.id = o.user_id
-            WHERE v.viewer_id = $1
+            JOIN users u ON v.viewed_user_id::text = u.id::text
+            LEFT JOIN operators o ON u.id::text = o.user_id::text
+            WHERE v.viewer_id::text = $1::text
             ORDER BY v.viewed_user_id, v.created_at DESC
         `, [userId]);
 

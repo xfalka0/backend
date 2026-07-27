@@ -3,7 +3,7 @@ const router = express.Router();
 const bcrypt = require('bcrypt');
 const db = require('../db');
 const { authenticateToken, authorizeRole } = require('../middleware/auth');
-const { sanitizeUser, MALE_NAME_PATTERN } = require('../utils/helpers');
+const { sanitizeUser, MALE_NAME_PATTERN, MALE_NAMES_ARRAY } = require('../utils/helpers');
 const { initiatePayout } = require('../utils/payermax');
 
 // GET ALL OPERATORS (Public listing)
@@ -72,14 +72,21 @@ router.post('/', authenticateToken, authorizeRole('admin', 'super_admin'), async
         const email = `${username}@fiva.admin`;
         const dummyPassword = await bcrypt.hash('op_pass_123!', 10);
 
-        const randomBoy = (gender === 'kadin' || !gender) ? String(Math.floor(Math.random() * (170 - 155 + 1)) + 155) : '175';
+        let finalGender = gender;
+        if (!finalGender) {
+            const nameLower = (name || '').toLowerCase();
+            const isMale = MALE_NAMES_ARRAY.some(m => nameLower.includes(m));
+            finalGender = isMale ? 'erkek' : 'kadin';
+        }
+
+        const randomBoy = (finalGender === 'kadin') ? String(Math.floor(Math.random() * (170 - 155 + 1)) + 155) : '175';
         const CITIES = ['İstanbul', 'Ankara', 'İzmir', 'Bursa', 'Antalya', 'Adana', 'Kocaeli', 'Gaziantep', 'Eskişehir', 'Muğla', 'Trabzon', 'Samsun', 'Aydın', 'Denizli', 'Balkesir', 'Mersin', 'Kayseri', 'Sakarya'];
         const randomCity = CITIES[Math.floor(Math.random() * CITIES.length)];
 
         const userResult = await db.query(
             `INSERT INTO users (username, email, password, password_hash, role, display_name, name, gender, age, avatar_url, job, relationship, zodiac, interests, vip_level, boy, city, account_status)
              VALUES ($1, $2, $3, $3, $4, $5, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, 'active') RETURNING id`,
-            [username, email, dummyPassword, 'operator', name, gender || 'kadin', parseInt(age) || 18, avatar_url,
+            [username, email, dummyPassword, 'operator', name, finalGender, parseInt(age) || 18, avatar_url,
              job || null, relationship || null, zodiac || null, interests || '[]', parseInt(vip_level) || 0, randomBoy, randomCity]
         );
         const userId = userResult.rows[0].id;

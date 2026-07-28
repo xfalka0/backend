@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, ScrollView, Text, TouchableOpacity, ActivityIndicator, KeyboardAvoidingView, Platform, Dimensions } from 'react-native';
+import { View, StyleSheet, ScrollView, Text, TouchableOpacity, ActivityIndicator, KeyboardAvoidingView, Platform, Dimensions, Linking } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
@@ -194,7 +194,7 @@ export default function CreateRoomScreen({ navigation }) {
         return (
             <NoPermissionCreateRoomView
                 onApplyPress={() => {
-                    navigation.navigate('AgencyApplication');
+                    Linking.openURL('https://forms.gle/vsw1ay6J719NvmLD7');
                 }}
                 onInfoPress={() => {
                     showAlert({

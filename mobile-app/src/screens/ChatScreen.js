@@ -45,14 +45,7 @@ export default function ChatScreen({ route, navigation }) {
     const { fetchUnreadCount, setActiveChatId, socket } = useChat();
     const { showAlert } = useAlert();
 
-    useEffect(() => {
-        if (chatId) {
-            setActiveChatId(chatId);
-        }
-        return () => {
-            setActiveChatId(null);
-        };
-    }, [chatId]);
+
 
     // Cihaz Güvenliği: Kadın operatörlerin ekran görüntüsü almasını/kaydetmesini engelle
     useEffect(() => {
@@ -96,6 +89,16 @@ export default function ChatScreen({ route, navigation }) {
     const [showImageLockModal, setShowImageLockModal] = useState(false);
     const [unlockCostSelection, setUnlockCostSelection] = useState(200);
     const [chatId, setChatId] = useState(existingChatId || null);
+
+    useEffect(() => {
+        if (chatId) {
+            setActiveChatId(chatId);
+        }
+        return () => {
+            setActiveChatId(null);
+        };
+    }, [chatId]);
+
     const [isLoading, setIsLoading] = useState(true);
     const [selectedImage, setSelectedImage] = useState(null);
     const [pendingAgencyInvite, setPendingAgencyInvite] = useState(null);
@@ -816,7 +819,7 @@ export default function ChatScreen({ route, navigation }) {
             if (isOperator) {
                 // Operators choose pricing via locked image sheet before upload
                 setSelectedImageUri(uri);
-                setUnlockCostSelection(200); // Default pricing
+                setUnlockCostSelection(100); // Default pricing
                 setShowImageLockModal(true);
             } else {
                 uploadAndSendImage(uri, false, 0);
@@ -1138,6 +1141,7 @@ export default function ChatScreen({ route, navigation }) {
                     isRead={item.is_read}
                     avatar={resolveImageUrl(avatar_url)}
                     vipLevel={vip_level}
+                    onAvatarPress={() => navigation.navigate('OperatorProfile', { operator: { id: operatorId, name, avatar_url, is_online, vip_level }, user })}
                     timestamp={item.created_at}
                     reaction={item.reaction}
                     onReaction={(type) => {
@@ -1262,8 +1266,9 @@ export default function ChatScreen({ route, navigation }) {
                     isMine={isMine} 
                     index={index} 
                     isRead={item.is_read}
-                    avatar={resolveImageUrl(isMine ? user.avatar : avatar_url)}
+                    avatar={resolveImageUrl(isMine ? (user.avatar_url || user.avatar) : avatar_url)}
                     vipLevel={isMine ? user.vip_level : vip_level}
+                    onAvatarPress={!isMine ? () => navigation.navigate('OperatorProfile', { operator: { id: operatorId, name, avatar_url, is_online, vip_level }, user }) : undefined}
                     timestamp={item.created_at}
                     reaction={item.reaction}
                     onReaction={(type) => {
@@ -1290,8 +1295,9 @@ export default function ChatScreen({ route, navigation }) {
                     isMine={isUser} 
                     index={index} 
                     isRead={item.is_read}
-                    avatar={resolveImageUrl(isUser ? user.avatar : avatar_url)}
+                    avatar={resolveImageUrl(isUser ? (user.avatar_url || user.avatar) : avatar_url)}
                     vipLevel={isUser ? user.vip_level : vip_level}
+                    onAvatarPress={!isUser ? () => navigation.navigate('OperatorProfile', { operator: { id: operatorId, name, avatar_url, is_online, vip_level }, user }) : undefined}
                     timestamp={item.created_at}
                     reaction={item.reaction}
                     onReaction={(type) => {
@@ -1462,8 +1468,9 @@ export default function ChatScreen({ route, navigation }) {
                 isMine={isUser}
                 index={index}
                 isRead={item.is_read}
-                avatar={resolveImageUrl(isUser ? user.avatar : avatar_url)}
+                avatar={resolveImageUrl(isUser ? (user.avatar_url || user.avatar) : avatar_url)}
                 vipLevel={isUser ? user.vip_level : vip_level}
+                onAvatarPress={!isUser ? () => navigation.navigate('OperatorProfile', { operator: { id: operatorId, name, avatar_url, is_online, vip_level }, user }) : undefined}
                 timestamp={item.created_at}
                 reaction={item.reaction}
                 isReplied={item.is_replied}
@@ -1512,7 +1519,7 @@ export default function ChatScreen({ route, navigation }) {
                         )}
 
                         <View style={styles.pricingPillContainer}>
-                            {[0, 200].map((cost) => (
+                            {[100, 200, 500, 1000].map((cost) => (
                                 <TouchableOpacity
                                     key={cost}
                                     style={[

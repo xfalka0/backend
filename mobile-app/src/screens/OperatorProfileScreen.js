@@ -886,7 +886,7 @@ const styles = StyleSheet.create({
         paddingHorizontal: 7,
         paddingVertical: 3.5,
         borderRadius: 6,
-        borderWidth: 1,
+        borderWidth: 0,
         gap: 4,
     },
     infoTagText: {
@@ -903,8 +903,7 @@ const styles = StyleSheet.create({
         paddingHorizontal: 7,
         paddingVertical: 3.5,
         borderRadius: 6,
-        borderWidth: 1,
-        borderColor: 'rgba(255, 255, 255, 0.12)',
+        borderWidth: 0,
     },
     interestText: {
         color: '#e2e8f0',
@@ -918,8 +917,7 @@ const styles = StyleSheet.create({
         paddingHorizontal: 6,
         paddingVertical: 2.5,
         borderRadius: 8,
-        borderColor: 'rgba(255, 255, 255, 0.08)',
-        borderWidth: 1,
+        borderWidth: 0,
     },
     profileInfoChipText: {
         color: 'rgba(255, 255, 255, 0.8)',

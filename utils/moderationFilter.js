@@ -21,20 +21,20 @@ const URL_REGEX = /(?:https?:\/\/|www\.)[^\s/$.?#].[^\s]*/gi;
  * @param {string} text Input text (e.g., bio, display name, status)
  * @returns {{ isClean: boolean, reason: string | null }} Validation result
  */
-function validateProfileText(text) {
+function checkProfileText(text) {
     if (!text || typeof text !== 'string') {
-        return { isClean: true, reason: null };
+        return { safe: true, reason: null };
     }
 
     const cleanText = text.trim();
     if (!cleanText) {
-        return { isClean: true, reason: null };
+        return { safe: true, reason: null };
     }
 
     // Check direct phone numbers
     if (PHONE_REGEX.test(cleanText) || MASKED_PHONE_REGEX.test(cleanText)) {
         return {
-            isClean: false,
+            safe: false,
             reason: 'Profilinizde telefon numarası paylaşılması güvenlik kuralları gereği yasaktır.'
         };
     }
@@ -42,12 +42,12 @@ function validateProfileText(text) {
     // Check social media handles and links
     if (SOCIAL_LINK_REGEX.test(cleanText) || URL_REGEX.test(cleanText)) {
         return {
-            isClean: false,
+            safe: false,
             reason: 'Profilinizde harici platform linki veya iletişim bilgisi paylaşılması yasaktır.'
         };
     }
 
-    return { isClean: true, reason: null };
+    return { safe: true, reason: null };
 }
 
 /**
@@ -55,9 +55,9 @@ function validateProfileText(text) {
  * @param {string} imageUrl URL of the uploaded image
  * @returns {{ isClean: boolean, reason: string | null }} Validation result
  */
-function validateImageUrl(imageUrl) {
+function checkPhotoSecurity(imageUrl) {
     if (!imageUrl || typeof imageUrl !== 'string') {
-        return { isClean: true, reason: null };
+        return { safe: true, reason: null };
     }
 
     const trimmedUrl = imageUrl.trim().toLowerCase();
@@ -68,7 +68,7 @@ function validateImageUrl(imageUrl) {
 
     if (!hasValidExt) {
         return {
-            isClean: false,
+            safe: false,
             reason: 'Lütfen yalnızca geçerli bir görsel dosyası (JPG, PNG, WEBP) yükleyiniz.'
         };
     }
@@ -76,17 +76,17 @@ function validateImageUrl(imageUrl) {
     // Check for suspicious non-image script injection
     if (trimmedUrl.includes('<script>') || trimmedUrl.includes('javascript:')) {
         return {
-            isClean: false,
+            safe: false,
             reason: 'Geçersiz görsel formatı taptandı.'
         };
     }
 
-    return { isClean: true, reason: null };
+    return { safe: true, reason: null };
 }
 
 module.exports = {
-    validateProfileText,
-    validateImageUrl,
+    checkProfileText,
+    checkPhotoSecurity,
     PHONE_REGEX,
     SOCIAL_LINK_REGEX
 };

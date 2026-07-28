@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { View, Text, StyleSheet, Dimensions, TouchableOpacity, Image, FlatList, Pressable } from 'react-native';
+import { View, Text, StyleSheet, Dimensions, TouchableOpacity, Image, FlatList, Pressable, Linking } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
@@ -338,7 +338,7 @@ const PremiumCoinCard = ({ onCoinPress, onExplorePress, onResellerPress }) => {
             } else if (item.isReseller) {
                 onResellerPress?.();
             } else if (item.isAgency) {
-                navigation.navigate('AgencyApplication');
+                Linking.openURL('https://forms.gle/vsw1ay6J719NvmLD7');
             }
         };
 

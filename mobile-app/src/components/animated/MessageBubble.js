@@ -25,7 +25,7 @@ const REACTION_EMOJIS = [
     { type: 'like', icon: '👍' },
 ];
 
-const MessageBubble = React.memo(({ children, isMine, index, isRead, avatar, vipLevel = 0, timestamp, reaction, onReaction, isReplied, earnedDiamonds, isOperator }) => {
+const MessageBubble = React.memo(({ children, isMine, index, isRead, avatar, vipLevel = 0, timestamp, reaction, onReaction, isReplied, earnedDiamonds, isOperator, onAvatarPress }) => {
     const { theme, themeMode } = useTheme();
     const translateX = useSharedValue(isMine ? 50 : -50);
     const opacity = useSharedValue(0);
@@ -129,14 +129,19 @@ const MessageBubble = React.memo(({ children, isMine, index, isRead, avatar, vip
     return (
         <View style={[styles.container, isMine ? styles.containerMine : styles.containerTheirs]}>
             {!isMine && (
-                <View style={[styles.avatarWrapper, styles.avatarLeft]}>
+                <TouchableOpacity 
+                    style={[styles.avatarWrapper, styles.avatarLeft]}
+                    onPress={onAvatarPress}
+                    activeOpacity={onAvatarPress ? 0.7 : 1}
+                    disabled={!onAvatarPress}
+                >
                     <VipFrame
                         level={vipLevel}
                         avatar={avatar}
                         size={35}
                         isStatic={true}
                     />
-                </View>
+                </TouchableOpacity>
             )}
 
             <View style={[styles.bubbleAndActions, isMine && { flexDirection: 'row-reverse' }]}>
@@ -245,14 +250,19 @@ const MessageBubble = React.memo(({ children, isMine, index, isRead, avatar, vip
             </View>
 
             {isMine && (
-                <View style={[styles.avatarWrapper, styles.avatarRight]}>
+                <TouchableOpacity 
+                    style={[styles.avatarWrapper, styles.avatarRight]}
+                    onPress={onAvatarPress}
+                    activeOpacity={onAvatarPress ? 0.7 : 1}
+                    disabled={!onAvatarPress}
+                >
                     <VipFrame
                         level={vipLevel}
                         avatar={avatar}
                         size={35}
                         isStatic={true}
                     />
-                </View>
+                </TouchableOpacity>
             )}
         </View>
     );

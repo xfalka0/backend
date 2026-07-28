@@ -16,8 +16,10 @@ import { Ionicons } from '@expo/vector-icons';
 import GlassCard from '../ui/GlassCard';
 import * as Haptics from 'expo-haptics';
 import { resolveImageUrl } from '../../utils/imageUtils';
+import { useTheme } from '../../contexts/ThemeContext';
 
 const { width, height } = Dimensions.get('window');
+const SWIPE_THRESHOLD = width * 0.25;
 
 const FallbackImage = ({ url, style, name, theme }) => {
     const [hasError, setHasError] = useState(false);
@@ -42,6 +44,7 @@ const FallbackImage = ({ url, style, name, theme }) => {
 };
 
 export default function SwipeDeck({ data = [], onSwipeLeft, onSwipeRight, onCardPress }) {
+    const { theme } = useTheme();
     const [currentIndex, setCurrentIndex] = useState(0);
 
     const translateX = useSharedValue(0);

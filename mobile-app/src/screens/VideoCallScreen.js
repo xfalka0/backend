@@ -27,6 +27,15 @@ import { useKeepAwake } from 'expo-keep-awake';
 
 const { width, height } = Dimensions.get('window');
 
+/**
+ * 🚨 UYARI / WARNING (AI AGENTS) 🚨
+ * DO NOT change the Agora Video render components below without explicit permission!
+ * 1. Remote video MUST use `RtcTextureView` with explicit `width: '100%', height: '100%'`.
+ * 2. Local preview MUST use `RtcSurfaceView` with explicit `width: '100%', height: '100%'` and `zOrderMediaOverlay={true}`.
+ * 3. Never use `StyleSheet.absoluteFill` for these components. It causes a BLACK SCREEN on Android/Emulators.
+ * Bu kuralları asla bozma, aksi takdirde karşı tarafın kamerası siyah ekranda kalır!
+ */
+
 let AgoraRTC = null;
 let RtcSurfaceView = null;
 let RtcTextureView = null;
@@ -334,38 +343,30 @@ export default function VideoCallScreen({ route, navigation }) {
                         await engine.startPreview();
                     } catch (e) {}
                 },
-                onUserJoined: async (connection, remoteUid, elapsed) => {
+                onUserJoined: (connection, remoteUid, elapsed) => {
                     console.log("REMOTE_USER_JOINED", remoteUid);
                     setRemoteUid(remoteUid);
                     setIsRemoteVideoOn(true);
-                    setVideoViewKey(prev => prev + 1);
                     setStatusText('Bağlandı');
                     setCallState('active');
                     startTimer();
                     if (socket) {
                         socket.emit('call_connected', { chatId });
                     }
-                    // Explicitly tell Agora engine to render remote video
-                    try {
-                        await engine.setupRemoteVideo({
-                            uid: remoteUid,
-                            renderMode: 1,
-                        });
-                    } catch (e) {
-                        console.warn('[Agora] setupRemoteVideo error:', e.message);
-                    }
+                    // Do NOT call engine.setupRemoteVideo() here - it conflicts with the
+                    // declarative <RtcSurfaceView> component which handles binding automatically.
                 },
                 onFirstRemoteVideoFrame: (connection, remoteUid, width, height, elapsed) => {
                     console.log("FIRST_REMOTE_VIDEO_FRAME", { remoteUid, width, height, elapsed });
                     setRemoteUid(remoteUid);
                     setIsRemoteVideoOn(true);
+                    // Bump key once to ensure view is fresh when first frame arrives
                     setVideoViewKey(prev => prev + 1);
                 },
                 onFirstRemoteVideoDecoded: (connection, remoteUid, width, height, elapsed) => {
                     console.log("FIRST_REMOTE_VIDEO_DECODED", { remoteUid, width, height, elapsed });
                     setRemoteUid(remoteUid);
                     setIsRemoteVideoOn(true);
-                    setVideoViewKey(prev => prev + 1);
                 },
                 onVideoSizeChanged: (connection, sourceType, uid, width, height, rotation) => {
                     console.log("VIDEO_SIZE_CHANGED", { uid, width, height, rotation });
@@ -374,7 +375,6 @@ export default function VideoCallScreen({ route, navigation }) {
                         if (width > 0 && height > 0) {
                             setIsRemoteVideoOn(true);
                         }
-                        setVideoViewKey(prev => prev + 1);
                     }
                 },
                 onUserOffline: (connection, remoteUid, reason) => {
@@ -384,16 +384,36 @@ export default function VideoCallScreen({ route, navigation }) {
                     }
                 },
                 onRemoteVideoStateChanged: (connection, uid, state, reason, elapsed) => {
-                    console.log("REMOTE_VIDEO_STATE_CHANGED", { uid, state, reason });
+                    const stateStr = ['STOPPED', 'STARTING', 'DECODING', 'FROZEN', 'FAILED'][state] || state;
+                    const reasonStr = ['INTERNAL', 'NETWORK_CONGESTION', 'NETWORK_RECOVERY', 'LOCAL_MUTED', 'LOCAL_UNMUTED', 'REMOTE_MUTED', 'REMOTE_UNMUTED', 'OFFLINE', 'AUDIO_FALLBACK', 'AUDIO_FALLBACK_RECOVERY'][reason] || reason;
+                    console.log(`[AGORA BLACK SCREEN DIAGNOSTICS] Remote UID ${uid} video state changed to: ${stateStr} (Reason: ${reasonStr})`);
+                    
                     if (uid) setRemoteUid(uid);
                     if (state === 0 && reason === 5) {
+                        console.log(`[AGORA BLACK SCREEN DIAGNOSTICS] Remote user turned OFF their camera.`);
                         setIsRemoteVideoOn(false);
                     } else if (state === 2 || state === 1 || reason === 6) {
+                        console.log(`[AGORA BLACK SCREEN DIAGNOSTICS] Remote video is actively decoding/rendering.`);
                         setIsRemoteVideoOn(true);
+                    } else if (state === 3) {
+                        console.log(`[AGORA BLACK SCREEN DIAGNOSTICS] Remote video is FROZEN (usually network issue).`);
+                    } else if (state === 4) {
+                        console.log(`[AGORA BLACK SCREEN DIAGNOSTICS] Remote video FAILED.`);
+                    }
+                },
+                onRemoteVideoStats: (connection, stats) => {
+                    // Only log every few seconds to avoid spam, or log only if there's an issue
+                    if (stats.receivedBitrate === 0 && stats.decoderOutputFrameRate === 0) {
+                        console.log(`[AGORA BLACK SCREEN DIAGNOSTICS] WARNING: Receiving 0 bitrate and 0 frames for remote UID ${stats.uid}. The screen will be black because no data is arriving!`);
+                    }
+                },
+                onNetworkQuality: (connection, uid, txQuality, rxQuality) => {
+                    if (uid !== 0 && (rxQuality === 4 || rxQuality === 5 || rxQuality === 6)) {
+                         console.log(`[AGORA BLACK SCREEN DIAGNOSTICS] POOR Network Quality from Remote UID ${uid}. (RX Quality: ${rxQuality}). Video might freeze or go black.`);
                     }
                 },
                 onError: (err, msg) => {
-                    console.warn('[Agora] Engine error:', err, msg);
+                    console.error('[AGORA BLACK SCREEN DIAGNOSTICS] Engine error:', err, msg);
                 }
             });
 
@@ -514,6 +534,7 @@ export default function VideoCallScreen({ route, navigation }) {
                 }
 
                 // Caller immediately initializes local camera preview & Agora channel
+                console.log('[CALLER AGORA DEBUG]', { rtcToken: rtcToken?.substring(0,20), channelName, callId });
                 await initAgora(rtcToken, channelName);
 
                 if (socket) {
@@ -555,33 +576,40 @@ export default function VideoCallScreen({ route, navigation }) {
     };
 
     // Receiver accepts incoming call
+    // ⚠️ IMPORTANT: Receiver MUST always fetch their own Agora token from the server.
+    // The caller's token is generated for the caller's UID - using it with a different
+    // UID causes Agora auth failure (black screen / connection_failed after 15s).
     const handleAccept = async () => {
         await cleanupAudio();
         setCallState('active');
         setStatusText('Bağlanıyor...');
         
         try {
-            let rtcToken = initialRtcToken;
-            let channelName = initialChannelName;
-
-            if (!rtcToken || !channelName) {
-                const token = await AsyncStorage.getItem('token');
-                const callId = callIdRef.current;
-                const res = await axios.post(`${API_URL}/chats/${chatId}/rtc-token`, { callId }, {
-                    headers: { Authorization: `Bearer ${token}` }
-                });
-                
-                rtcToken = res.data.token;
-                channelName = res.data.channelName;
-            }
+            // Always use the callId that came from the caller (via route params)
+            // so that both parties join the EXACT SAME Agora channel.
+            const callId = initialCallId || callIdRef.current;
+            const jwtToken = await AsyncStorage.getItem('token');
+            const res = await axios.post(`${API_URL}/chats/${chatId}/rtc-token`, { callId }, {
+                headers: { Authorization: `Bearer ${jwtToken}` }
+            });
             
+            // Use channelName from server response; fall back to what caller sent
+            const rtcToken = res.data.token;
+            const channelName = res.data.channelName || initialChannelName;
+
             if (socket) {
                 socket.emit('call_accept', { chatId, callerId: otherUser.id });
             }
 
+            console.log('[RECEIVER AGORA DEBUG]', { 
+                callId,
+                rtcToken: rtcToken?.substring(0,20),
+                channelName,
+                initialChannelName
+            });
             await initAgora(rtcToken, channelName);
         } catch (err) {
-            console.error('[Accept Call API] Error:', err.message);
+            console.error('[RECEIVER ACCEPT ERROR]', err?.response?.status, err?.response?.data, err.message);
             handleDecline();
         }
     };
@@ -622,11 +650,11 @@ export default function VideoCallScreen({ route, navigation }) {
     return (
         <View style={styles.container}>
             {/* Background Stream View - Remote user full screen */}
-            {callState === 'active' && remoteUid !== null && RemoteVideoView && (
-                <RemoteVideoView
-                    key={`remote-${remoteUid}-${videoViewKey}`}
+            {callState === 'active' && remoteUid !== null && (
+                <RtcTextureView
+                    key={`remote-${remoteUid}`}
                     canvas={{ uid: Number(remoteUid), renderMode: 1 }}
-                    style={StyleSheet.absoluteFill}
+                    style={{ position: 'absolute', width: '100%', height: '100%', zIndex: 0 }}
                 />
             )}
             {/* Fallback avatar when not active or RemoteVideoView not ready yet */}
@@ -654,12 +682,12 @@ export default function VideoCallScreen({ route, navigation }) {
                         style={StyleSheet.absoluteFill} 
                         resizeMode="cover"
                     />
-                    {isCameraOn && LocalVideoView && (
-                        // TextureView for local: never bleeds remote content, no z-order issues
-                        <LocalVideoView
-                            key={`local-${videoViewKey}`}
+                    {isCameraOn && (
+                        <RtcSurfaceView
+                            key="local-preview"
                             canvas={{ uid: 0, renderMode: 1 }}
-                            style={StyleSheet.absoluteFill}
+                            style={{ position: 'absolute', width: '100%', height: '100%' }}
+                            zOrderMediaOverlay={true} // CRITICAL: Ensures local view stays on top
                         />
                     )}
                     {!isCameraOn && (

@@ -23,6 +23,28 @@ import { resolveImageUrl } from '../utils/imageUtils';
 
 const { width, height } = Dimensions.get('window');
 
+const FallbackImage = ({ url, name, style }) => {
+    const [hasError, setHasError] = useState(false);
+
+    useEffect(() => {
+        setHasError(false);
+    }, [url]);
+
+    if (hasError || !url) {
+        const fallbackUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent((name && name.charAt(0)) || '?')}&background=ec4899&color=fff&size=200`;
+        return <Image source={{ uri: fallbackUrl }} style={style} fadeDuration={0} />;
+    }
+
+    return (
+        <Image
+            source={{ uri: url }}
+            style={style}
+            fadeDuration={0}
+            onError={() => setHasError(true)}
+        />
+    );
+};
+
 const DestinyMatchModal = ({ visible, onClose, operators, navigation, user }) => {
     const { theme } = useTheme();
     const [matchState, setMatchState] = useState('idle'); // idle, searching, found
@@ -93,7 +115,7 @@ const DestinyMatchModal = ({ visible, onClose, operators, navigation, user }) =>
         // Rapid Shuffle
         let shuffleTime = 0;
         const totalShuffleTime = 3000; // 3 seconds
-        const interval = 120;
+        const interval = 250; // Increased from 120 to 250ms to allow images to actually render
 
         shuffleIntervalRef.current = setInterval(() => {
             const randomIndex = Math.floor(Math.random() * operators.length);
@@ -184,10 +206,19 @@ const DestinyMatchModal = ({ visible, onClose, operators, navigation, user }) =>
                     {/* Main Content (Avatar) */}
                     <Animated.View style={[styles.avatarContainer, contentStyle]}>
                         <View style={styles.avatarBorder}>
-                            <Image
-                                source={{ uri: resolveImageUrl(displayProfile?.avatar_url || displayProfile?.avatar) || 'https://via.placeholder.com/200' }}
-                                style={styles.avatar}
-                            />
+                            {matchState === 'searching' && !displayProfile ? (
+                                <Image
+                                    source={{ uri: 'https://ui-avatars.com/api/?name=?&background=ec4899&color=fff&size=200' }}
+                                    style={styles.avatar}
+                                    fadeDuration={0}
+                                />
+                            ) : (
+                                <FallbackImage
+                                    url={resolveImageUrl(displayProfile?.avatar_url || displayProfile?.avatar)}
+                                    name={displayProfile?.name}
+                                    style={styles.avatar}
+                                />
+                            )}
                         </View>
 
                         {matchState === 'searching' && (

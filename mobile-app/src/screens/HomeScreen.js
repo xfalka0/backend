@@ -22,6 +22,7 @@ import { maskContactInfo } from '../utils/textUtils';
 import GradientText from '../components/ui/GradientText';
 import ActionCards from '../components/ui/ActionCards';
 import FilterModal from '../components/ui/FilterModal';
+import DestinyMatchModal from '../components/DestinyMatchModal';
 
 const { width } = Dimensions.get('window');
 let lastProfileTap = 0;
@@ -148,7 +149,7 @@ export default function HomeScreen({ navigation, route }) {
     const insets = useSafeAreaInsets();
     const { theme } = useTheme();
     const { user: routeUser } = route.params || {};
-    const user = routeUser || { id: 'guest', name: 'Misafir', balance: 0 };
+    const [user, setUser] = useState(routeUser || { id: 'guest', name: 'Misafir', balance: 0 });
     
     const [operators, setOperators] = useState([]);
     const [featuredOperators, setFeaturedOperators] = useState([]);
@@ -160,11 +161,30 @@ export default function HomeScreen({ navigation, route }) {
     const [refreshing, setRefreshing] = useState(false);
     const [currentFilters, setCurrentFilters] = useState({ gender: 'all', ageGroup: 'all' });
     const [showFilterModal, setShowFilterModal] = useState(false);
+    const [showMatchModal, setShowMatchModal] = useState(false);
 
     // Pagination states
     const [page, setPage] = useState(1);
     const [hasMore, setHasMore] = useState(true);
     const [loadingMore, setLoadingMore] = useState(false);
+
+    useFocusEffect(
+        React.useCallback(() => {
+            const loadUser = async () => {
+                try {
+                    const storedUserStr = await AsyncStorage.getItem('user');
+                    if (storedUserStr) {
+                        const parsedUser = JSON.parse(storedUserStr);
+                        setUser(parsedUser);
+                        setBalance(parsedUser.balance || 0);
+                    }
+                } catch (e) {
+                    console.error('Error loading user in HomeScreen:', e);
+                }
+            };
+            loadUser();
+        }, [])
+    );
 
     useEffect(() => {
         fetchOperators(1);
@@ -299,7 +319,7 @@ export default function HomeScreen({ navigation, route }) {
             />
 
             <View style={{ paddingHorizontal: 16 }}>
-                <DestinyHero onPress={() => navigation.navigate('Keşfet')} />
+                <DestinyHero onPress={() => setShowMatchModal(true)} />
             </View>
 
             <TouchableOpacity 
@@ -474,6 +494,14 @@ export default function HomeScreen({ navigation, route }) {
                 onApply={(filters) => setCurrentFilters(filters)} 
                 currentFilters={currentFilters}
                 theme={theme}
+            />
+
+            <DestinyMatchModal
+                visible={showMatchModal}
+                onClose={() => setShowMatchModal(false)}
+                operators={filteredData.filter(op => getProfileGender(op) !== 'coin_bayisi')}
+                navigation={navigation}
+                user={user}
             />
         </LinearGradient>
     );

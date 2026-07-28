@@ -498,18 +498,15 @@ export default function VoiceCallScreen({ route, navigation }) {
         setCallState('active');
         setStatusText('Bağlanıyor...');
         try {
-            let rtcToken = initialRtcToken;
-            let channelName = initialChannelName;
-
-            if (!rtcToken || !channelName) {
-                const token = await AsyncStorage.getItem('token');
-                const callId = callIdRef.current;
-                const res = await axios.post(`${API_URL}/chats/${chatId}/rtc-token`, { callId }, {
-                    headers: { Authorization: `Bearer ${token}` }
-                });
-                rtcToken = res.data.token;
-                channelName = res.data.channelName;
-            }
+            // Receiver MUST always fetch their own token from server.
+            // Caller's token is bound to caller's UID and will be rejected for a different UID.
+            const callId = initialCallId || callIdRef.current;
+            const jwtToken = await AsyncStorage.getItem('token');
+            const res = await axios.post(`${API_URL}/chats/${chatId}/rtc-token`, { callId }, {
+                headers: { Authorization: `Bearer ${jwtToken}` }
+            });
+            const rtcToken = res.data.token;
+            const channelName = res.data.channelName || initialChannelName;
 
             if (socket) socket.emit('call_accept', { chatId, callerId: otherUser.id });
             await initAgora(rtcToken, channelName);

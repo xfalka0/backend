@@ -124,7 +124,7 @@ const VipBoostClaimWidget = ({ userId, vipLevel, balance, setBalance, showAlert 
     if (!status || status.dailyLimit === 0) return null;
 
     return (
-        <View style={styles.glassCardWrapper}>
+        <View style={styles.premiumSolidCard}>
             <LinearGradient
                 colors={['rgba(131, 56, 236, 0.15)', 'rgba(236, 72, 153, 0.15)']}
                 style={StyleSheet.absoluteFill}
@@ -1103,7 +1103,7 @@ const ProfileScreen = ({ route }) => {
 
                 {/* Boost Premium Card */}
                 <TouchableOpacity 
-                    style={[styles.glassCardWrapper, !user?.is_boosted && styles.promoBorderGlow]} 
+                    style={[styles.premiumSolidCard, !user?.is_boosted && styles.promoBorderGlow]} 
                     activeOpacity={0.8}
                     onPress={handleBoost}
                 >
@@ -1132,7 +1132,7 @@ const ProfileScreen = ({ route }) => {
 
                 {/* Invite & Earn Card */}
                 <TouchableOpacity 
-                    style={styles.glassCardWrapper} 
+                    style={styles.premiumSolidCard} 
                     activeOpacity={0.8}
                     onPress={() => navigation.navigate('Invite')}
                 >
@@ -2079,6 +2079,20 @@ const styles = StyleSheet.create({
         shadowOpacity: 0.35,
         shadowRadius: 8,
         elevation: 6,
+    },
+    premiumSolidCard: {
+        marginHorizontal: 16,
+        marginBottom: 12,
+        borderRadius: 22,
+        overflow: 'hidden',
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.04)',
+        backgroundColor: '#150d24',
+        elevation: 12,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 6 },
+        shadowOpacity: 0.4,
+        shadowRadius: 10,
     },
     depositBtnText: {
         color: '#451A03', // Deep amber text color

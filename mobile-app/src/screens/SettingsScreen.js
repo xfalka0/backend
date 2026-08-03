@@ -45,7 +45,7 @@ export default function SettingsScreen({ navigation, route }) {
     // Settings States
     const [isProfileHidden, setIsProfileHidden] = useState(user?.is_hidden || false);
     const [onlineStatus, setOnlineStatus] = useState(user?.show_online !== false);
-    
+
     // Detailed Notification Preferences
     const [notifications, setNotifications] = useState({
         all: true,
@@ -93,7 +93,7 @@ export default function SettingsScreen({ navigation, route }) {
 
     const handleToggleNotification = async (key, val) => {
         const updated = { ...notifications, [key]: val };
-        
+
         if (key === 'all') {
             updated.messages = val;
             updated.voiceCalls = val;
@@ -109,7 +109,7 @@ export default function SettingsScreen({ navigation, route }) {
                 }
             }
         }
-        
+
         setNotifications(updated);
         try {
             await AsyncStorage.setItem('notification_settings', JSON.stringify(updated));
@@ -200,8 +200,8 @@ export default function SettingsScreen({ navigation, route }) {
         <View style={styles.container}>
             {/* Background Image Layer identical to Profile Screen */}
             <View style={styles.bgWrapper}>
-                <Image 
-                    source={require('../../assets/fiva_profile_banner.png')} 
+                <Image
+                    source={require('../../assets/fiva_profile_banner.png')}
                     style={styles.backgroundImage}
                 />
                 <LinearGradient
@@ -304,7 +304,7 @@ export default function SettingsScreen({ navigation, route }) {
                     />
                 </View>
 
-                <SectionHeader title="AŞK DESTEK VE BİLGİ" />
+                <SectionHeader title="DESTEK VE BİLGİ" />
                 <View style={[styles.sectionCard, { backgroundColor: theme.colors.glass, borderColor: theme.colors.glassBorder }]}>
                     <SettingItem
                         icon="logo-whatsapp"
@@ -357,7 +357,7 @@ export default function SettingsScreen({ navigation, route }) {
                     <Text style={[styles.deleteText, { color: theme.colors.textSecondary }]}>Hesabı Sil</Text>
                 </TouchableOpacity>
 
-                <Text style={[styles.versionText, { color: theme.colors.textSecondary }]}>Versiyon 1.0.4 - Premium 💖</Text>
+                <Text style={[styles.versionText, { color: theme.colors.textSecondary }]}>Fiva</Text>
                 <View style={{ height: 50 }} />
             </ScrollView>
             <ModernAlert

@@ -4,6 +4,7 @@ import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
+import Animated, { FadeInDown, Layout } from 'react-native-reanimated';
 import io from 'socket.io-client';
 import { useFocusEffect } from '@react-navigation/native';
 import { API_URL, SOCKET_URL } from '../config';
@@ -255,12 +256,22 @@ export default function HomeScreen({ navigation, route }) {
     };
 
     const renderFooter = () => {
-        if (!loadingMore) return null;
-        return (
-            <View style={{ paddingVertical: 20, alignItems: 'center' }}>
-                <ActivityIndicator size="small" color="#ec4899" />
-            </View>
-        );
+        if (loadingMore) {
+            return (
+                <View style={{ paddingVertical: 20, alignItems: 'center' }}>
+                    <ActivityIndicator size="small" color="#ec4899" />
+                </View>
+            );
+        }
+        if (!hasMore && filteredData.length > 5) {
+            return (
+                <View style={{ paddingVertical: 30, alignItems: 'center', opacity: 0.5 }}>
+                    <Ionicons name="checkmark-done-circle-outline" size={24} color={theme.colors.textSecondary} />
+                    <Text style={{ color: theme.colors.textSecondary, fontSize: 12, marginTop: 4 }}>Tüm kişileri görüntülediniz</Text>
+                </View>
+            );
+        }
+        return <View style={{ height: 20 }} />;
     };
 
     const handleHiPress = React.useCallback(async (operator) => {
@@ -441,14 +452,19 @@ export default function HomeScreen({ navigation, route }) {
         return resList;
     }, [operators, searchText, currentFilters, userGender]);
 
-    const renderItem = React.useCallback(({ item }) => (
-        <OperatorItem 
-            item={item} 
-            navigation={navigation} 
-            user={user} 
-            theme={theme} 
-            onHiPress={handleHiPress}
-        />
+    const renderItem = React.useCallback(({ item, index }) => (
+        <Animated.View 
+            entering={FadeInDown.delay((index % 10) * 50).springify().damping(12)}
+            layout={Layout.springify()}
+        >
+            <OperatorItem 
+                item={item} 
+                navigation={navigation} 
+                user={user} 
+                theme={theme} 
+                onHiPress={handleHiPress}
+            />
+        </Animated.View>
     ), [navigation, user, theme, handleHiPress]);
 
     return (

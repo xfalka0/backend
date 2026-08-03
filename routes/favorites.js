@@ -141,7 +141,7 @@ router.get('/:userId/fans', async (req, res) => {
             const femaleOpsRes = await pool.query(`
                 SELECT u.id, COALESCE(u.display_name, u.username) as name, u.username, u.avatar_url, u.gender, u.is_vip, o.is_online
                 FROM users u
-                JOIN operators o ON u.id = o.user_id
+                JOIN operators o ON u.id::text = o.user_id::text
                 WHERE u.gender ILIKE 'kadin'
                 LIMIT 15
             `);

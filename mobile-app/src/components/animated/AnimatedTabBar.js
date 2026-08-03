@@ -146,19 +146,19 @@ const TabItem = ({ isFocused, onPress, icon, isCenter = false }) => {
                             {isFocused ? (
                                 <GradientIcon name="mic" size={26} colors={['#FFFFFF', '#EC4899']} />
                             ) : (
-                                <Ionicons name="mic-outline" size={26} color="rgba(255, 255, 255, 0.45)" />
+                                <Ionicons name="mic" size={26} color="#8e85a6" />
                             )}
                         </View>
                     </LinearGradient>
                 ) : (
                     <View style={{ position: 'relative', width: 28, height: 28, justifyContent: 'center', alignItems: 'center' }}>
                         {isFocused ? (
-                            <GradientIcon name={icon} size={26} />
+                            <GradientIcon name={icon} size={28} />
                         ) : (
                             <Ionicons
-                                name={`${icon}-outline`}
+                                name={icon}
                                 size={26}
-                                color="rgba(255, 255, 255, 0.45)"
+                                color="#8e85a6"
                             />
                         )}
                         {icon === 'chatbubbles' && unreadCount > 0 && (

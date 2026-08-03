@@ -421,10 +421,12 @@ export default function OperatorProfileScreen({ route, navigation }) {
                             )}
 
                             {/* 2. Hakkımda */}
-                            <View style={styles.section}>
-                                <Text style={styles.sectionTitle}>Hakkımda</Text>
-                                <Text style={styles.bioText}>{maskContactInfo(operator.bio) || 'Merhaba! Seninle tanışmak için sabırsızlanıyorum.'}</Text>
-                            </View>
+                            {operator.bio ? (
+                                <View style={styles.section}>
+                                    <Text style={styles.sectionTitle}>Hakkımda</Text>
+                                    <Text style={styles.bioText}>{maskContactInfo(operator.bio)}</Text>
+                                </View>
+                            ) : null}
 
                             {/* 3. Temel Bilgiler */}
                             <View style={styles.section}>

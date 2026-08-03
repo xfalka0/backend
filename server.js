@@ -1856,7 +1856,16 @@ app.get('/api/users/:id', async (req, res) => {
     try {
         const result = await db.query('SELECT * FROM users WHERE id = $1', [req.params.id]);
         if (result.rows.length === 0) return res.status(404).json({ error: 'User not found' });
-        res.json(sanitizeUser(result.rows[0], req));
+        
+        // Fetch follower counts
+        const following = await db.query('SELECT COUNT(*) FROM favorites WHERE user_id::text = $1::text', [req.params.id]);
+        const followers = await db.query('SELECT COUNT(*) FROM favorites WHERE target_user_id::text = $1::text', [req.params.id]);
+        
+        let userData = result.rows[0];
+        userData.followers_count = parseInt(followers.rows[0].count);
+        userData.following_count = parseInt(following.rows[0].count);
+
+        res.json(sanitizeUser(userData, req));
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
@@ -5419,6 +5428,19 @@ io.on('connection', (socket) => {
                 
                 // All management roles message AS the avatar to keep chat consistent
                 finalSenderId = avatarId;
+            }
+
+            // --- 2.5 DEDUPLICATE MESSAGES ---
+            const duplicateCheck = await client.query(`
+                SELECT id FROM messages 
+                WHERE chat_id = $1 AND sender_id = $2 AND content = $3 
+                AND created_at >= NOW() - INTERVAL '1.5 seconds'
+            `, [chatId, finalSenderId, content]);
+
+            if (duplicateCheck.rows.length > 0) {
+                console.warn(`[SOCKET] Blocked duplicate message from ${finalSenderId} in chat ${chatId}`);
+                await client.query('ROLLBACK');
+                return; // Stop processing to avoid double messages
             }
 
             // --- 3. SAVE MESSAGE ---

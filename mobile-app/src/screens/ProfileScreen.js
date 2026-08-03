@@ -735,24 +735,11 @@ const ProfileScreen = ({ route }) => {
     const todayCoins = operatorStats ? parseFloat(operatorStats.earned_today || operatorStats.coins_earned || 0) : 0;
 
     return (
-        <View style={[styles.mainContainer, { backgroundColor: theme.colors.background }]}>
+        <LinearGradient
+            colors={theme.mode === 'dark' ? theme.gradients.dark : [theme.colors.background, theme.colors.backgroundSecondary]}
+            style={styles.mainContainer}
+        >
             <StatusBar barStyle="light-content" />
-            
-            {/* Background Image Layer */}
-            <View style={styles.bgWrapper}>
-                <Image 
-                    source={require('../../assets/fiva_profile_banner.png')} 
-                    style={styles.backgroundImage}
-                />
-                <LinearGradient
-                    colors={
-                        themeMode === 'dark'
-                            ? ['rgba(9, 2, 26, 0.1)', 'rgba(9, 2, 26, 0.7)', theme.colors.background]
-                            : ['rgba(255, 255, 255, 0.1)', 'rgba(255, 255, 255, 0.7)', theme.colors.background]
-                    }
-                    style={StyleSheet.absoluteFill}
-                />
-            </View>
  
             <Animated.ScrollView
                 showsVerticalScrollIndicator={false}
@@ -763,6 +750,17 @@ const ProfileScreen = ({ route }) => {
                 )}
                 contentContainerStyle={styles.scrollContent}
             >
+                {/* Top Navigation Bar */}
+                <View style={styles.topNavBar}>
+                    <TouchableOpacity style={styles.navIconBtn} activeOpacity={0.7} onPress={() => {}}>
+                        <Ionicons name="notifications-outline" size={18} color="#fff" />
+                        <View style={styles.badgeDot} />
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.navIconBtn} activeOpacity={0.7} onPress={() => navigation.navigate('Settings')}>
+                        <Ionicons name="settings-outline" size={18} color="#fff" />
+                    </TouchableOpacity>
+                </View>
+
                 {/* Agency Invitation Banner */}
                 {pendingInvitations && pendingInvitations.length > 0 && (
                     <View style={styles.inviteBannerContainer}>
@@ -1735,11 +1733,36 @@ const ProfileScreen = ({ route }) => {
                     </BlurView>
                 </View>
             )}
-        </View>
+        </LinearGradient>
     );
 };
 
 const styles = StyleSheet.create({
+    topNavBar: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        paddingHorizontal: 24,
+        marginBottom: 5,
+    },
+    navIconBtn: {
+        width: 36,
+        height: 36,
+        borderRadius: 18,
+        backgroundColor: 'rgba(255,255,255,0.06)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.1)',
+    },
+    badgeDot: {
+        position: 'absolute',
+        top: 8,
+        right: 8,
+        width: 7,
+        height: 7,
+        borderRadius: 3.5,
+        backgroundColor: '#ef4444',
+    },
     loadingOverlay: {
         ...StyleSheet.absoluteFillObject,
         zIndex: 9999,
@@ -1773,16 +1796,16 @@ const styles = StyleSheet.create({
         resizeMode: 'cover',
     },
     scrollContent: {
-        paddingTop: Platform.OS === 'ios' ? 60 : 40,
+        paddingTop: Platform.OS === 'ios' ? 30 : 15,
     },
     modernHeader: {
         alignItems: 'center',
         paddingHorizontal: 20,
-        marginBottom: 24,
+        marginBottom: 12,
     },
     avatarContainer: {
         position: 'relative',
-        marginBottom: 16,
+        marginBottom: 8,
     },
     avatarGlow: {
         position: 'absolute',
@@ -1802,31 +1825,35 @@ const styles = StyleSheet.create({
     },
     cameraBadge: {
         position: 'absolute',
-        bottom: 5,
-        right: 5,
-        backgroundColor: '#FF4FA3', // Rosy/Pink accents
-        width: 30,
-        height: 30,
-        borderRadius: 15,
+        bottom: 0,
+        right: 0,
+        backgroundColor: '#FF4FA3',
+        width: 26,
+        height: 26,
+        borderRadius: 13,
         justifyContent: 'center',
         alignItems: 'center',
-        borderWidth: 2.5,
+        borderWidth: 2,
         borderColor: '#09021a',
-        elevation: 5,
     },
     onlineStatus: {
         position: 'absolute',
-        top: 6,
-        right: 6,
+        top: 2,
+        right: 2,
         backgroundColor: '#10b981',
-        width: 16,
-        height: 16,
-        borderRadius: 8,
+        width: 14,
+        height: 14,
+        borderRadius: 7,
         borderWidth: 3,
         borderColor: '#09021a',
     },
     profileInfo: {
         alignItems: 'center',
+    },
+    userNameContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
     },
     userName: {
         fontSize: 18,
@@ -1836,9 +1863,9 @@ const styles = StyleSheet.create({
     idBadge: {
         backgroundColor: 'rgba(255, 255, 255, 0.05)',
         paddingHorizontal: 10,
-        paddingVertical: 3,
-        borderRadius: 10,
-        marginTop: 4,
+        paddingVertical: 2,
+        borderRadius: 8,
+        marginTop: 2,
     },
     idText: {
         color: '#8e85a6',
@@ -1848,7 +1875,6 @@ const styles = StyleSheet.create({
     userBio: {
         color: '#d1cde0',
         textAlign: 'center',
-        marginTop: 8,
         paddingHorizontal: 20,
         lineHeight: 16,
         fontSize: 12,
@@ -1875,16 +1901,16 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'center',
         paddingHorizontal: 30,
-        marginTop: 4,
+        marginTop: 2,
     },
     bioPencilCircle: {
-        width: 18,
-        height: 18,
-        borderRadius: 9,
-        backgroundColor: 'rgba(255,255,255,0.1)',
+        width: 16,
+        height: 16,
+        borderRadius: 8,
+        backgroundColor: 'rgba(255,255,255,0.15)',
         justifyContent: 'center',
         alignItems: 'center',
-        marginLeft: 8,
+        marginLeft: 6,
     },
     bioInput: {
         backgroundColor: 'rgba(255,255,255,0.05)',

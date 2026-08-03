@@ -305,7 +305,7 @@ export default function MessagesScreen({ navigation, route }) {
 
         return (
             <Animated.View
-                entering={FadeInDown.delay(index * 100).springify().damping(12)}
+                entering={FadeInDown.delay((index % 10) * 50).springify().damping(12)}
                 layout={Layout.springify()}
             >
                 <TouchableOpacity
@@ -467,7 +467,12 @@ export default function MessagesScreen({ navigation, route }) {
                             <View style={{ paddingVertical: 20, alignItems: 'center' }}>
                                 <ActivityIndicator size="small" color={theme.colors.primary} />
                             </View>
-                        ) : null
+                        ) : (!hasMore && filteredChats.length > 5) ? (
+                            <View style={{ paddingVertical: 30, alignItems: 'center', opacity: 0.5 }}>
+                                <Ionicons name="checkmark-done-circle-outline" size={24} color={theme.colors.textSecondary} />
+                                <Text style={{ color: theme.colors.textSecondary, fontSize: 12, marginTop: 4 }}>Tüm mesajları görüntülediniz</Text>
+                            </View>
+                        ) : <View style={{ height: 20 }} />
                     }
                     ListHeaderComponent={(
                         <>

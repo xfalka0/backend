@@ -210,6 +210,7 @@ export default function ChatScreen({ route, navigation }) {
     const socketRef = useRef(null);
     const flatListRef = useRef(null);
     const typingTimeoutRef = useRef(null);
+    const lastSentMessageRef = useRef({ text: '', time: 0 });
     const giftAnim = useRef(new Animated.Value(0)).current;
     const offerPulseAnim = useRef(new Animated.Value(1)).current;
 
@@ -662,6 +663,13 @@ export default function ChatScreen({ route, navigation }) {
     const sendMessage = (textOrEvent) => {
         const textToSend = typeof textOrEvent === 'string' ? textOrEvent : input;
         if (!textToSend || typeof textToSend !== 'string' || textToSend.trim() === '' || !chatId) return;
+        
+        const now = Date.now();
+        if (lastSentMessageRef.current.text === textToSend && (now - lastSentMessageRef.current.time) < 1000) {
+            console.log('[ChatScreen] Prevented duplicate message send');
+            return;
+        }
+        lastSentMessageRef.current = { text: textToSend, time: now };
         
         // SOCKET CHECK
         if (!socketRef.current || !socketRef.current.connected) {

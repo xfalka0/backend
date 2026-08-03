@@ -5277,6 +5277,17 @@ io.on('connection', (socket) => {
             contentType: type
         });
 
+        // ATOMIC SYNC DEDUPLICATION
+        if (!global.processedTempIds) global.processedTempIds = new Set();
+        const dedupeKey = tempId || `${chatId}_${senderId}_${content}`;
+        
+        if (global.processedTempIds.has(dedupeKey)) {
+            console.warn(`[SOCKET] Blocked synchronous duplicate message for key: ${dedupeKey}`);
+            return; // Stop immediately without hitting DB
+        }
+        global.processedTempIds.add(dedupeKey);
+        setTimeout(() => global.processedTempIds.delete(dedupeKey), 5000); // Clear after 5s
+
         let client;
 
         try {

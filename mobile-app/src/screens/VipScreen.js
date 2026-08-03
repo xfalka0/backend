@@ -219,11 +219,7 @@ const VipScreen = ({ route, navigation }) => {
     };
 
     const handleUpgrade = () => {
-        if (selectedLevel > userVip) {
-            navigation.navigate('Shop', { user });
-        } else {
-            navigation.navigate('VipDetails', { user: { ...user, vip_level: userVip } });
-        }
+        navigation.navigate('Shop', { user });
     };
 
     // Animated Styles
@@ -472,7 +468,7 @@ const VipScreen = ({ route, navigation }) => {
                                 style={styles.buttonGradient}
                             >
                                 <Text style={styles.buttonText}>
-                                    {selectedLevel > userVip ? `VIP ${selectedLevel}'e YÜKSELT` : 'AVANTAJLARI YÖNET'}
+                                    {selectedLevel > userVip ? `VIP ${selectedLevel}'e YÜKSELT` : 'VIP SEVİYESİNİ YÜKSELT'}
                                 </Text>
                             </LinearGradient>
                         </TouchableOpacity>

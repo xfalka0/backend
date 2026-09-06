@@ -54,12 +54,13 @@ const OperatorItem = React.memo(({ item, navigation, user, theme, onHiPress }) =
     }, [onHiPress, item]);
 
     return (
-        <GlassCard style={styles.userCard} intensity={40}>
+        <TouchableOpacity 
+            style={styles.userCard}
+            activeOpacity={0.7}
+            onPress={() => navigation.navigate('OperatorProfile', { operator: item, user })}
+        >
             <View style={styles.cardHeader}>
-                <TouchableOpacity
-                    style={{ flexDirection: 'row', flex: 1, alignItems: 'center' }}
-                    onPress={() => navigation.navigate('OperatorProfile', { operator: item, user })}
-                >
+                <View style={{ flexDirection: 'row', flex: 1, alignItems: 'center' }}>
                     <View style={styles.avatarContainer}>
                         <StoryRing hasNewStory={!!item.has_active_story} size={69}>
                             <VipFrame level={profileGender === 'coin_bayisi' ? 'dealer' : (item.vip_level || 0)} avatar={item.avatar_url} size={65} isStatic={true} />
@@ -115,7 +116,7 @@ const OperatorItem = React.memo(({ item, navigation, user, theme, onHiPress }) =
                             ) : null}
                         </View>
                     </View>
-                </TouchableOpacity>
+                </View>
                 <View style={{ transform: [{ scale: 0.9 }] }}>
                     <HiButton
                         operatorId={item.id}
@@ -139,7 +140,7 @@ const OperatorItem = React.memo(({ item, navigation, user, theme, onHiPress }) =
                     ))}
                 </ScrollView>
             )}
-        </GlassCard>
+        </TouchableOpacity>
     );
 });
 
@@ -598,7 +599,12 @@ const styles = StyleSheet.create({
         borderRadius: 2,
         marginTop: 4,
     },
-    userCard: { marginHorizontal: 16, marginBottom: 10, padding: 12, borderRadius: 16 },
+    userCard: { 
+        padding: 16, 
+        paddingHorizontal: 20, 
+        borderRadius: 0,
+        backgroundColor: 'transparent',
+    },
     cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
     avatarContainer: { position: 'relative' },
     onlineBadge: { position: 'absolute', bottom: 0, right: 0, width: 13, height: 13, borderRadius: 6.5, backgroundColor: '#10b981', borderWidth: 2, borderColor: '#110C24' },

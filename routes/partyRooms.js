@@ -261,8 +261,11 @@ router.post('/:roomId/token', authenticateToken, async (req, res) => {
     const { roomId } = req.params;
     try {
         const { RtcTokenBuilder, RtcRole } = require('agora-access-token');
-        const appId = process.env.AGORA_APP_ID || 'f80faf42fd0845a9816658ea7e16a755';
-        const appCertificate = process.env.AGORA_APP_CERTIFICATE || 'e3361c06460541418754881b12bc3247';
+        const appId = process.env.AGORA_APP_ID;
+        const appCertificate = process.env.AGORA_APP_CERTIFICATE;
+        if (!appId || !appCertificate) {
+            return res.status(503).json({ error: 'Agora yapılandırması eksik.' });
+        }
         
         const channelName = `party_room_${roomId}`;
         

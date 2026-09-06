@@ -3,16 +3,21 @@ import Purchases from 'react-native-purchases';
 
 // REVENUECAT API KEYS (Replace with real keys from RevenueCat Dashboard)
 const RC_API_KEYS = {
-    apple: 'goog_placeholder_ios_key', // iOS için henüz anahtar gelmedi
+    apple: '',
     google: 'goog_EerPgzQtDpetwESLvIcHjFeiDXG', // Android Anahtarı Eklendi
 };
 
 export const PurchaseService = {
     init: async (userId) => {
         try {
-            Purchases.setLogLevel(Purchases.LOG_LEVEL.DEBUG);
+            if (__DEV__) {
+                Purchases.setLogLevel(Purchases.LOG_LEVEL.DEBUG);
+            }
 
             if (Platform.OS === 'ios') {
+                if (!RC_API_KEYS.apple) {
+                    throw new Error('RevenueCat iOS API anahtarı yapılandırılmamış.');
+                }
                 await Purchases.configure({ apiKey: RC_API_KEYS.apple, appUserID: userId });
             } else if (Platform.OS === 'android') {
                 await Purchases.configure({ apiKey: RC_API_KEYS.google, appUserID: userId });

@@ -44,6 +44,8 @@ export default function ChatScreen({ route, navigation }) {
     const insets = useSafeAreaInsets();
     const { fetchUnreadCount, setActiveChatId, socket } = useChat();
     const { showAlert } = useAlert();
+    const role = useAppStore(state => state.role);
+    const isOperator = role === 'operator';
 
 
 
@@ -71,8 +73,11 @@ export default function ChatScreen({ route, navigation }) {
         gender,
         nobility_key,
         nobility_name,
-        nobility_name_color
+        nobility_name_color,
+        chatType,
+        familyId
     } = route.params;
+    const isFamilyChat = chatType === 'family';
 
     // User Handling
     const TEST_USER_ID = 'c917f7d6-cc44-4b04-8917-1dbbed0b1e9b';
@@ -83,12 +88,10 @@ export default function ChatScreen({ route, navigation }) {
     const [input, setInput] = useState('');
 
     // Zustand Role & Locked Image Configuration States
-    const role = useAppStore(state => state.role);
-    const isOperator = role === 'operator';
     const [selectedImageUri, setSelectedImageUri] = useState(null);
     const [showImageLockModal, setShowImageLockModal] = useState(false);
     const [unlockCostSelection, setUnlockCostSelection] = useState(200);
-    const [chatId, setChatId] = useState(existingChatId || null);
+    const [chatId, setChatId] = useState(existingChatId || (isFamilyChat && familyId ? `family-${familyId}` : null));
 
     useEffect(() => {
         if (chatId) {
@@ -308,18 +311,22 @@ export default function ChatScreen({ route, navigation }) {
 
                         <Ionicons name="checkmark-circle" size={14} color="#3b82f6" />
                     </View>
-                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                    {isFamilyChat ? (
+                        <View style={{ backgroundColor: '#ec4899', borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2, marginTop: 2 }}>
+                            <Text style={{ color: '#fff', fontSize: 9, fontWeight: '900' }}>AİLE</Text>
+                        </View>
+                    ) : <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                         <View style={{
                             width: 6,
                             height: 6,
                             borderRadius: 3,
-                            backgroundColor: is_online ? '#10b981' : theme.colors.textSecondary,
+                            backgroundColor: isFamilyChat ? '#ec4899' : (is_online ? '#10b981' : theme.colors.textSecondary),
                             marginRight: 4
                         }} />
                         <Text style={{ color: is_online ? '#10b981' : theme.colors.textSecondary, fontSize: 11, fontWeight: '700' }}>
                             {is_online ? 'Çevrimiçi' : 'Çevrimdışı'}
                         </Text>
-                    </View>
+                    </View>}
                 </View>
             ),
             headerLeft: () => (
@@ -327,7 +334,7 @@ export default function ChatScreen({ route, navigation }) {
                     <Ionicons name="chevron-back" size={28} color={theme.colors.text} />
                 </TouchableOpacity>
             ),
-            headerRight: () => (
+            headerRight: () => isFamilyChat ? null : (
                 <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                     <TouchableOpacity
                         onPress={() => navigation.navigate('OperatorProfile', { operator: { id: operatorId, name, avatar_url, is_online, vip_level }, user })}
@@ -355,13 +362,56 @@ export default function ChatScreen({ route, navigation }) {
             headerTintColor: theme.colors.text,
             headerBackVisible: false,
         });
-    }, [navigation, showOptions, name, is_online, avatar_url, operatorId, user, vip_level, nobility_key, nobility_name, nobility_name_color]);
+    }, [navigation, showOptions, name, is_online, avatar_url, operatorId, user, vip_level, nobility_key, nobility_name, nobility_name_color, isFamilyChat]);
 
     // Initialize Chat
     useEffect(() => {
-        if (!socket) return;
+        if (!socket && !isFamilyChat) return;
 
         let active = true;
+
+        if (isFamilyChat && familyId) {
+            const loadFamilyChat = async () => {
+                try {
+                    const token = await AsyncStorage.getItem('token');
+                    const authHeader = { headers: { Authorization: `Bearer ${token}` } };
+                    const [balanceRes, historyRes] = await Promise.all([
+                        axios.get(`${API_URL}/users/${user.id}`, authHeader).catch(() => ({ data: {} })),
+                        axios.get(`${API_URL}/families/${familyId}/chat`, authHeader)
+                    ]);
+
+                    if (!active) return;
+
+                    if (balanceRes.data && balanceRes.data.balance !== undefined) {
+                        setCurrentBalance(balanceRes.data.balance);
+                    }
+
+                    const familyMessages = historyRes.data.map(msg => ({
+                        id: `family-${msg.id}`,
+                        family_message_id: msg.id,
+                        chat_id: `family-${familyId}`,
+                        sender_id: msg.sender_id,
+                        content: msg.message,
+                        type: 'text',
+                        content_type: 'text',
+                        created_at: msg.created_at,
+                        avatar_url: msg.avatar_url,
+                        sender_name: msg.display_name || msg.username
+                    })).reverse();
+
+                    setMessages(familyMessages);
+                    setIsLoading(false);
+                } catch (err) {
+                    console.error('[ChatScreen] loadFamilyChat Error:', err);
+                    if (active) setIsLoading(false);
+                }
+            };
+
+            loadFamilyChat();
+            return () => {
+                active = false;
+            };
+        }
 
         if (!chatId) {
             // Case 1: chatId is missing. Fetch/create it first.
@@ -593,10 +643,12 @@ export default function ChatScreen({ route, navigation }) {
             socket.off('display_typing');
             socket.off('hide_typing');
         };
-    }, [chatId, socket]);
+    }, [chatId, socket, isFamilyChat, familyId]);
 
     const handleTyping = (text) => {
         setInput(text);
+
+        if (isFamilyChat) return;
 
         if (!socketRef.current) {
             console.log('[ChatScreen] socketRef.current is null, cannot emit typing');
@@ -670,6 +722,51 @@ export default function ChatScreen({ route, navigation }) {
             return;
         }
         lastSentMessageRef.current = { text: textToSend, time: now };
+
+        if (isFamilyChat) {
+            const tempId = `family-temp-${Date.now()}`;
+            const optimisticMsg = {
+                id: tempId,
+                chat_id: `family-${familyId}`,
+                sender_id: user.id,
+                content: textToSend,
+                type: 'text',
+                content_type: 'text',
+                created_at: new Date().toISOString(),
+                is_optimistic: true
+            };
+
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            setMessages(prev => [optimisticMsg, ...prev]);
+            setInput('');
+
+            (async () => {
+                try {
+                    const token = await AsyncStorage.getItem('token');
+                    const res = await axios.post(`${API_URL}/families/${familyId}/chat`, { message: textToSend }, {
+                        headers: { Authorization: `Bearer ${token}` }
+                    });
+                    const savedMsg = {
+                        id: `family-${res.data.id}`,
+                        family_message_id: res.data.id,
+                        chat_id: `family-${familyId}`,
+                        sender_id: res.data.sender_id,
+                        content: res.data.message,
+                        type: 'text',
+                        content_type: 'text',
+                        created_at: res.data.created_at,
+                        avatar_url: res.data.avatar_url,
+                        sender_name: res.data.display_name || res.data.username
+                    };
+                    setMessages(prev => prev.map(m => m.id === tempId ? savedMsg : m));
+                } catch (err) {
+                    setMessages(prev => prev.filter(m => m.id !== tempId));
+                    showAlert({ title: 'Hata', message: err.response?.data?.error || 'Mesaj gönderilemedi.', type: 'error' });
+                }
+            })();
+
+            return;
+        }
         
         // SOCKET CHECK
         if (!socketRef.current || !socketRef.current.connected) {
@@ -1138,6 +1235,18 @@ export default function ChatScreen({ route, navigation }) {
         });
     };
 
+    const getDateKey = (value) => {
+        const date = new Date(value);
+        if (Number.isNaN(date.getTime())) return '';
+        return `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
+    };
+
+    const formatMessageDate = (value) => {
+        const date = new Date(value);
+        if (Number.isNaN(date.getTime())) return '';
+        return `${String(date.getDate()).padStart(2, '0')}.${String(date.getMonth() + 1).padStart(2, '0')}.${date.getFullYear()}`;
+    };
+
     const renderMessage = React.useCallback(({ item, index }) => {
         const isUser = item.sender_id === user.id;
 
@@ -1476,9 +1585,9 @@ export default function ChatScreen({ route, navigation }) {
                 isMine={isUser}
                 index={index}
                 isRead={item.is_read}
-                avatar={resolveImageUrl(isUser ? (user.avatar_url || user.avatar) : avatar_url)}
-                vipLevel={isUser ? user.vip_level : vip_level}
-                onAvatarPress={!isUser ? () => navigation.navigate('OperatorProfile', { operator: { id: operatorId, name, avatar_url, is_online, vip_level }, user }) : undefined}
+                avatar={resolveImageUrl(isUser ? (user.avatar_url || user.avatar) : (isFamilyChat ? item.avatar_url : avatar_url))}
+                vipLevel={isFamilyChat ? 0 : (isUser ? user.vip_level : vip_level)}
+                onAvatarPress={!isUser && !isFamilyChat ? () => navigation.navigate('OperatorProfile', { operator: { id: operatorId, name, avatar_url, is_online, vip_level }, user }) : undefined}
                 timestamp={item.created_at}
                 reaction={item.reaction}
                 isReplied={item.is_replied}
@@ -1492,7 +1601,25 @@ export default function ChatScreen({ route, navigation }) {
                 {content}
             </MessageBubble>
         );
-    }, [user.id, avatar_url, vip_level, pendingAgencyInvite, currentPlayingUri, playAudio, confirmUnlock, setSelectedImage, isOperator, socketRef, chatId, setMessages, theme]);
+    }, [user.id, user.avatar_url, user.avatar, avatar_url, vip_level, pendingAgencyInvite, currentPlayingUri, playAudio, confirmUnlock, setSelectedImage, isOperator, socketRef, chatId, setMessages, theme, isFamilyChat]);
+
+    const renderMessageWithDate = React.useCallback(({ item, index }) => {
+        const nextMessage = messages[index + 1];
+        const showDate = !nextMessage || getDateKey(item.created_at) !== getDateKey(nextMessage.created_at);
+
+        return (
+            <View>
+                {showDate && (
+                    <View style={styles.dateSeparator}>
+                        <View style={styles.dateSeparatorLine} />
+                        <Text style={styles.dateSeparatorText}>{formatMessageDate(item.created_at)}</Text>
+                        <View style={styles.dateSeparatorLine} />
+                    </View>
+                )}
+                {renderMessage({ item, index })}
+            </View>
+        );
+    }, [messages, renderMessage]);
 
     return (
         <View style={styles.container}>
@@ -1593,7 +1720,7 @@ export default function ChatScreen({ route, navigation }) {
                     data={messages}
                     inverted={true} // Start from bottom
                     keyExtractor={item => item.id.toString()}
-                    renderItem={renderMessage}
+                    renderItem={renderMessageWithDate}
                     contentContainerStyle={styles.messagesList}
                     scrollIndicatorInsets={{ right: 1 }} // Fix scrollbar on iOS
                     removeClippedSubviews={Platform.OS === 'android'}
@@ -1609,11 +1736,11 @@ export default function ChatScreen({ route, navigation }) {
                     <GlassCard intensity={40} tint="dark" style={styles.glassInputContainer}>
                         <View style={styles.inputRow}>
                               <Animated.View 
-                                  {...panResponder.panHandlers}
+                                  {...(!isFamilyChat ? panResponder.panHandlers : {})}
                                   style={[styles.quickMsgToggle, { transform: [{ translateX: slideAnim }] }]} 
                               >
                                   <Ionicons 
-                                      name={isCancelling ? "trash" : "mic"} 
+                                      name={isFamilyChat ? "people" : (isCancelling ? "trash" : "mic")} 
                                       size={18} 
                                       color={isRecording ? (isCancelling ? "#ef4444" : "#ec4899") : "rgba(255,255,255,0.4)"} 
                                   />
@@ -1678,7 +1805,7 @@ export default function ChatScreen({ route, navigation }) {
                         </View>
 
                         {/* Bottom Action Bar */}
-                        <View style={styles.actionBar}>
+                        {!isFamilyChat && <View style={styles.actionBar}>
                             <TouchableOpacity style={styles.modernActionBtn} onPress={() => {
                                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                                 if (!isOperator && currentBalance < 120 && (user.vip_level || 0) < 1) {
@@ -1749,7 +1876,7 @@ export default function ChatScreen({ route, navigation }) {
                                     <Ionicons name="image" size={22} color="rgba(255,255,255,0.8)" />
                                 </View>
                             </TouchableOpacity>
-                        </View>
+                        </View>}
                     </GlassCard>
                 </View>
             </KeyboardAvoidingView>
@@ -1820,6 +1947,25 @@ const styles = StyleSheet.create({
         paddingHorizontal: 8,
         paddingTop: 10,
         paddingBottom: 90,
+    },
+    dateSeparator: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingHorizontal: 34,
+        paddingVertical: 14,
+        gap: 10,
+    },
+    dateSeparatorLine: {
+        flex: 1,
+        height: 1,
+        backgroundColor: 'rgba(255,255,255,0.10)',
+    },
+    dateSeparatorText: {
+        color: 'rgba(255,255,255,0.55)',
+        fontSize: 11,
+        fontWeight: '700',
+        letterSpacing: 0.4,
     },
     messageBubble: {
         maxWidth: '75%',

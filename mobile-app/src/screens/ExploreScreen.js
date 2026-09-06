@@ -14,6 +14,7 @@ import VipFrame from '../components/ui/VipFrame';
 import { useTheme } from '../contexts/ThemeContext';
 import { resolveImageUrl } from '../utils/imageUtils';
 import { maskContactInfo } from '../utils/textUtils';
+import GradientText from '../components/ui/GradientText';
 
 import { API_URL } from '../config';
 import axios from 'axios';
@@ -833,14 +834,7 @@ export default function ExploreScreen({ navigation, route }) {
                     : ['rgba(139, 92, 246, 0.16)', 'rgba(217, 70, 239, 0.07)', 'rgba(248, 250, 252, 0)']}
                 locations={[0, 0.55, 1]}
                 style={styles.referenceHeaderBg}
-            >
-                <View style={[styles.confettiDot, { left: 28, top: 8, backgroundColor: '#F7A64A' }]} />
-                <View style={[styles.confettiDot, { left: 86, top: 18, backgroundColor: '#80D66E' }]} />
-                <View style={[styles.confettiDot, { left: 184, top: 9, backgroundColor: '#F58B76' }]} />
-                <View style={[styles.confettiDot, { right: 94, top: 21, backgroundColor: '#65C8EF' }]} />
-                <View style={[styles.confettiDot, { right: 42, top: 10, backgroundColor: '#F2B56B' }]} />
-                <View style={styles.stadiumArc} />
-            </LinearGradient>
+            />
             <View style={styles.feedTopBar}>
                 <View style={styles.feedTabs}>
                     {EXPLORE_TABS.map(tab => {
@@ -852,16 +846,16 @@ export default function ExploreScreen({ navigation, route }) {
                                 onPress={() => setActiveFeedTab(tab.key)}
                                 style={styles.feedTabButton}
                             >
-                                <Text style={[
-                                    styles.feedTabText,
-                                    { color: isActive ? theme.colors.primary : theme.colors.textSecondary },
-                                    isActive && styles.feedTabTextActive
-                                ]}>
-                                    {tab.label}
-                                </Text>
+                                {isActive ? (
+                                    <GradientText style={[styles.feedTabText, styles.feedTabTextActive]}>
+                                        {tab.label}
+                                    </GradientText>
+                                ) : (
+                                    <Text style={[styles.feedTabText, { color: theme.colors.textSecondary }]}>{tab.label}</Text>
+                                )}
                                 <View style={[
                                     styles.feedTabIndicator,
-                                    { backgroundColor: isActive ? theme.colors.primary : 'transparent' }
+                                    { backgroundColor: isActive ? '#ec4899' : 'transparent' }
                                 ]} />
                             </TouchableOpacity>
                         );
@@ -1076,7 +1070,21 @@ export default function ExploreScreen({ navigation, route }) {
                     <View style={styles.commentPreviewBlock}>
                         {/* If expanded, render allComments, otherwise render previewComments */}
                         {(expandedPosts[item.id] ? (postCommentsMap[item.id] || previewComments) : previewComments).map(comment => (
-                            <View key={comment.id} style={styles.commentPreviewRow}>
+                            <TouchableOpacity
+                                key={comment.id}
+                                style={styles.commentPreviewRow}
+                                activeOpacity={0.75}
+                                onPress={() => navigation.navigate('OperatorProfile', {
+                                    operator: {
+                                        id: comment.user_id || comment.operator_id,
+                                        name: comment.userName || comment.name,
+                                        avatar_url: comment.avatar,
+                                        gender: comment.gender,
+                                        vip_level: comment.vip_level || 0
+                                    },
+                                    user
+                                })}
+                            >
                                 <FallbackImage 
                                     url={resolveImageUrl(comment.avatar, 'avatar')} 
                                     style={styles.commentPreviewAvatar} 
@@ -1087,11 +1095,11 @@ export default function ExploreScreen({ navigation, route }) {
                                     <Text style={[styles.commentPreviewName, { color: theme.colors.text }]}>
                                         {cleanUsername(comment.userName || comment.name)}
                                     </Text>
-                                    <Text style={{ color: theme.colors.textSecondary }}>
-                                        {"  "}{maskContactInfo(comment.content || '')}
+                                    <Text style={[styles.commentPreviewText, { color: theme.colors.textSecondary }]}>
+                                        {": "}{maskContactInfo(comment.content || '')}
                                     </Text>
                                 </Text>
-                            </View>
+                            </TouchableOpacity>
                         ))}
                         
                         {/* Toggle button */}
@@ -1531,8 +1539,8 @@ const styles = StyleSheet.create({
         fontWeight: '900',
     },
     feedTabIndicator: {
-        width: 10,
-        height: 6,
+        width: 30,
+        height: 5,
         borderRadius: 3,
         marginTop: 6,
     },
@@ -2346,7 +2354,7 @@ const styles = StyleSheet.create({
         borderRadius: 16,
         overflow: 'hidden',
         marginTop: 10,
-        marginBottom: 10,
+        marginBottom: 0,
     },
     restructuredImage: {
         width: '100%',
@@ -2387,11 +2395,10 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'space-between',
-        marginTop: 4,
+        marginTop: 0,
         paddingHorizontal: 2,
-        borderTopWidth: 0.5,
-        borderTopColor: 'rgba(255,255,255,0.06)',
-        paddingTop: 10,
+        paddingTop: 0,
+        paddingBottom: 2,
     },
     footerLeftActions: {
         flexDirection: 'row',
@@ -2412,20 +2419,20 @@ const styles = StyleSheet.create({
         padding: 4,
     },
     commentPreviewBlock: {
-        marginTop: 10,
+        marginTop: 0,
         paddingHorizontal: 2,
-        gap: 4,
+        gap: 0,
     },
     commentPreviewRow: {
         flexDirection: 'row',
         alignItems: 'center',
-        marginVertical: 4,
+        marginVertical: 2,
         gap: 8,
     },
     commentPreviewAvatar: {
-        width: 20,
-        height: 20,
-        borderRadius: 10,
+        width: 28,
+        height: 28,
+        borderRadius: 14,
     },
     commentPreviewTextContainer: {
         flex: 1,
@@ -2437,6 +2444,7 @@ const styles = StyleSheet.create({
     },
     commentPreviewText: {
         fontWeight: '400',
+        fontSize: 11,
     },
     viewAllComments: {
         fontSize: 11,

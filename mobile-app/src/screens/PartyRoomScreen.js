@@ -478,7 +478,8 @@ export default function PartyRoomScreen({ route, navigation }) {
             agoraRef.current = engine;
 
             console.log('[Agora] Initializing Agora engine...');
-            const appId = res.data.appId || 'f80faf42fd0845a9816658ea7e16a755';
+            const appId = res.data.appId;
+            if (!appId) throw new Error('Agora App ID eksik.');
             console.log("AGORA_INIT", { appIdExists: !!appId });
             await engine.initialize({ appId });
 

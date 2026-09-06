@@ -12,7 +12,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons, Feather } from '@expo/vector-icons';
 import GlassCard from '../components/ui/GlassCard';
 import { useTheme } from '../contexts/ThemeContext';
 // import { Motion } from '../components/motion/MotionSystem';
@@ -52,7 +52,15 @@ export default function OperatorProfileScreen({ route, navigation }) {
                         ...fullData,
                         name: fullData.display_name || fullData.name || fullData.username || prev.display_name || prev.username || prev.name || 'Kullanıcı',
                         avatar_url: fullData.avatar_url || prev.avatar_url || prev.avatar,
-                        photos: (fullData.photos && Array.isArray(fullData.photos) && fullData.photos.length > 0) ? fullData.photos : (prev.photos || [])
+                        photos: (fullData.photos && Array.isArray(fullData.photos) && fullData.photos.length > 0) ? fullData.photos : (prev.photos || []),
+                        bio: fullData.bio || prev.bio,
+                        city: fullData.city || prev.city,
+                        age: fullData.age || prev.age,
+                        job: fullData.job || prev.job,
+                        edu: fullData.edu || prev.edu,
+                        boy: fullData.boy || prev.boy,
+                        kilo: fullData.kilo || prev.kilo,
+                        interests: fullData.interests || prev.interests
                     }));
                 }
             })
@@ -272,31 +280,8 @@ export default function OperatorProfileScreen({ route, navigation }) {
                 {/* Header için boşluk bırakıyoruz çünkü resim statik olarak arkada duruyor */}
                 <View style={{ height: HEADER_HEIGHT - 90 }} />
 
-                {/* Profil Aksiyon Butonları (Resmin üstüne binen) */}
-                <View>
-                    <View style={styles.heroActionsRow}>
-                        <TouchableOpacity
-                            style={[
-                                styles.followButton, 
-                                { backgroundColor: isFavorited ? 'rgba(239, 68, 68, 0.2)' : theme.colors.primary }
-                            ]}
-                            activeOpacity={0.8}
-                            onPress={handleFavorite}
-                        >
-                            <Ionicons 
-                                name={isFavorited ? "checkmark-circle" : "person-add"} 
-                                size={18} 
-                                color={isFavorited ? "#ef4444" : "white"} 
-                            />
-                            <Text style={[
-                                styles.followButtonText, 
-                                { color: isFavorited ? "#ef4444" : "white" }
-                            ]}>
-                                {isFavorited ? 'Takip' : 'Takip Et'}
-                            </Text>
-                        </TouchableOpacity>
-                    </View>
-                </View>
+                {/* Profil Aksiyon Butonları (Eski Yeri - Kaldırıldı) */}
+                <View />
 
                 {/* İçerik Alanı: Glassmorphism kullanarak arka planı hafif gösteriyoruz */}
                 <View>
@@ -559,40 +544,41 @@ export default function OperatorProfileScreen({ route, navigation }) {
                 </View>
             </Animated.ScrollView>
 
-            {/* Alttaki Mesaj Butonu */}
+            {/* Alttaki Mesaj ve Takip Butonları */}
             <View style={styles.bottomContainer}>
-                {Platform.OS === 'ios' ? (
-                    <BlurView intensity={60} tint="dark" style={styles.bottomBlur}>
+                <LinearGradient
+                    colors={['transparent', themeMode === 'dark' ? 'rgba(15, 23, 42, 0.9)' : 'rgba(255, 255, 255, 0.9)', theme.colors.background]}
+                    locations={[0, 0.3, 1]}
+                    style={styles.bottomBlur}
+                >
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                        {/* Takip Et Butonu */}
                         <TouchableOpacity
-                            style={styles.messageButton}
-                            onPress={() => {
-                                navigation.navigate('Chat', {
-                                    operatorId: operator.id,
-                                    name: operator.name,
-                                    job: operator.job || 'Öğrenci',
-                                    avatar_url: operator.avatar_url,
-                                    is_online: operator.is_online,
-                                    vip_level: operator.vip_level,
-                                    gender: operator.gender,
-                                    user
-                                });
-                            }}
+                            style={[
+                                styles.bottomFollowButton,
+                                { borderWidth: 0, elevation: 10, shadowColor: isFavorited ? '#10b981' : '#8b5cf6', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.4, shadowRadius: 12 }
+                            ]}
+                            activeOpacity={0.7}
+                            onPress={handleFavorite}
                         >
                             <LinearGradient
-                                colors={['#8b5cf6', '#d946ef']}
+                                colors={isFavorited ? ['#10b981', '#059669'] : ['#8b5cf6', '#d946ef']}
                                 start={{ x: 0, y: 0 }}
                                 end={{ x: 1, y: 0 }}
-                                style={styles.gradientButton}
+                                style={styles.gradientFollowButton}
                             >
-                                <Ionicons name="chatbubble-ellipses" size={20} color="white" />
-                                <Text style={styles.buttonText}>Mesaj Gönder</Text>
+                                <Feather 
+                                    name={isFavorited ? "user-check" : "user-plus"} 
+                                    size={24} 
+                                    color="white" 
+                                />
                             </LinearGradient>
                         </TouchableOpacity>
-                    </BlurView>
-                ) : (
-                    <View style={[styles.bottomBlur, { backgroundColor: theme.colors.background }]}>
+
+                        {/* Mesaj Gönder Butonu */}
                         <TouchableOpacity
                             style={styles.messageButton}
+                            activeOpacity={0.8}
                             onPress={() => {
                                 navigation.navigate('Chat', {
                                     operatorId: operator.id,
@@ -617,7 +603,7 @@ export default function OperatorProfileScreen({ route, navigation }) {
                             </LinearGradient>
                         </TouchableOpacity>
                     </View>
-                )}
+                </LinearGradient>
             </View>
 
             {/* Tam Ekran Fotoğraf Görüntüleyici */}
@@ -722,11 +708,12 @@ const styles = StyleSheet.create({
         fontWeight: '800',
     },
     contentCard: {
-        marginHorizontal: 15,
+        marginHorizontal: 0,
         padding: 20,
         borderRadius: 35,
         borderBottomLeftRadius: 0,
         borderBottomRightRadius: 0,
+        borderWidth: 0, // Ensure no glass card border on the edges
     },
     nameRow: {
         flexDirection: 'row',
@@ -849,10 +836,22 @@ const styles = StyleSheet.create({
     },
     bottomBlur: {
         padding: 20,
-        paddingBottom: 40,
+        paddingTop: 30,
+        paddingBottom: Platform.OS === 'ios' ? 40 : 25,
+    },
+    bottomFollowButton: {
+        width: 60,
+        height: 60,
+        borderRadius: 20,
+        overflow: 'hidden',
+    },
+    gradientFollowButton: {
+        flex: 1,
+        alignItems: 'center',
+        justifyContent: 'center',
     },
     messageButton: {
-        width: '100%',
+        flex: 1,
         height: 60,
         borderRadius: 20,
         overflow: 'hidden',

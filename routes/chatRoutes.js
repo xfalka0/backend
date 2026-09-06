@@ -106,7 +106,7 @@ router.post('/:chatId/rtc-token', authenticateToken, async (req, res) => {
             provider: providerName,
             token,
             channelName: `room_${roomId}`,
-            appId: process.env.AGORA_APP_ID || 'f80faf42fd0845a9816658ea7e16a755'
+            appId: process.env.AGORA_APP_ID || null
         });
     } catch (err) {
         console.error('[Call RTC Token API] Error:', err.message);
@@ -115,4 +115,3 @@ router.post('/:chatId/rtc-token', authenticateToken, async (req, res) => {
 });
 
 module.exports = router;
-

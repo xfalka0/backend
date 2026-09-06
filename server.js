@@ -1313,7 +1313,7 @@ const authLimiter = rateLimit({
 
 const sendOtpEmail = async (email, otp) => {
     if (!process.env.BREVO_API_KEY) {
-        console.error(`[BREVO ERROR] API Key (BREVO_API_KEY) missing from environment variables. OTP is: ${otp}`);
+        console.error('[BREVO ERROR] API Key (BREVO_API_KEY) missing from environment variables.');
         throw new Error('E-posta servisi yapılandırılmamış (BREVO_API_KEY eksik). Lütfen Render panelinden çevre değişkenini tanımlayın.');
     }
     try {
@@ -1365,7 +1365,9 @@ app.post('/api/auth/request-otp', authLimiter, async (req, res) => {
         const expires = new Date(Date.now() + 10 * 60 * 1000);
         await db.query('DELETE FROM otps WHERE identifier = $1', [identifier]);
         await db.query('INSERT INTO otps (identifier, otp_code, expires_at) VALUES ($1, $2, $3)', [identifier, otp, expires]);
-        console.log(`[AUTH] OTP for ${identifier}: ${otp}`);
+        if (process.env.NODE_ENV !== 'production') {
+            console.log(`[AUTH] OTP generated for ${identifier}`);
+        }
         
         if (email) {
             await sendOtpEmail(email, otp);
@@ -1641,13 +1643,13 @@ app.get('/api/health', async (req, res) => {
 });
 
 
-app.get('/api/diag-logs', (req, res) => {
+app.get('/api/diag-logs', authenticateToken, authorizeRole('admin', 'super_admin'), (req, res) => {
     res.json({
         env: {
             NODE_ENV: process.env.NODE_ENV,
             RTC_PROVIDER: process.env.RTC_PROVIDER,
-            AGORA_APP_ID: process.env.AGORA_APP_ID || 'f80faf42fd0845a9816658ea7e16a755',
-            AGORA_APP_CERTIFICATE: process.env.AGORA_APP_CERTIFICATE || 'e3361c06460541418754881b12bc3247'
+            AGORA_APP_ID_CONFIGURED: Boolean(process.env.AGORA_APP_ID),
+            AGORA_APP_CERTIFICATE_CONFIGURED: Boolean(process.env.AGORA_APP_CERTIFICATE)
         },
         logs: global.payoutLogs || []
     });
@@ -5131,7 +5133,8 @@ const initializeGifts = async () => {
 
         // 3. Populate if empty
         const countRes = await db.query('SELECT COUNT(*) FROM gifts');
-        if (parseInt(countRes.rows[0].count) === 0) {
+        const giftCount = parseInt(countRes?.rows?.[0]?.count || 0, 10);
+        if (giftCount === 0) {
             console.log('[GIFTS] Seeding default gifts...');
             const DEFAULT_GIFTS = [
                 { id: 1, name: 'Gül', cost: 50 },
@@ -6027,8 +6030,9 @@ async function runMessageScheduler() {
     }
 }
 
-// Start Scheduler (runs every 5 minutes)
-setInterval(runMessageScheduler, 5 * 60 * 1000);
+// Start Scheduler (runs every 5 minutes). Do not keep test processes alive.
+const messageScheduler = setInterval(runMessageScheduler, 5 * 60 * 1000);
+messageScheduler.unref?.();
 
 
 

@@ -57,13 +57,13 @@ const GradientIcon = ({ IconComponent, name, size = 26, colors = ['#FFFFFF', '#E
     </MaskedView>
 );
 const TURKISH_CITIES = [
-    'Adana', 'Adıyaman', 'Afyonkarahisar', 'Ağrı', 'Amasya', 'Ankara', 'Antalya', 'Artvin', 'Aydın', 'Balıkesir', 
-    'Bilecik', 'Bingöl', 'Bitlis', 'Bolu', 'Burdur', 'Bursa', 'Çanakkale', 'Çankırı', 'Çorum', 'Denizli', 
-    'Diyarbakır', 'Edirne', 'Elazığ', 'Erzincan', 'Erzurum', 'Eskişehir', 'Gaziantep', 'Giresun', 'Gümüşhane', 'Hakkari', 
-    'Hatay', 'Isparta', 'Mersin', 'İstanbul', 'İzmir', 'Kars', 'Kastamonu', 'Kayseri', 'Kırklareli', 'Kırşehir', 
-    'Kocaeli', 'Konya', 'Kütahya', 'Malatya', 'Manisa', 'Kahramanmaraş', 'Mardin', 'Muğla', 'Muş', 'Nevşehir', 
-    'Niğde', 'Ordu', 'Rize', 'Sakarya', 'Samsun', 'Siirt', 'Sinop', 'Sivas', 'Tekirdağ', 'Tokat', 
-    'Trabzon', 'Tunceli', 'Şanlıurfa', 'Uşak', 'Van', 'Yozgat', 'Zonguldak', 'Aksaray', 'Bayburt', 'Karaman', 
+    'Adana', 'Adıyaman', 'Afyonkarahisar', 'Ağrı', 'Amasya', 'Ankara', 'Antalya', 'Artvin', 'Aydın', 'Balıkesir',
+    'Bilecik', 'Bingöl', 'Bitlis', 'Bolu', 'Burdur', 'Bursa', 'Çanakkale', 'Çankırı', 'Çorum', 'Denizli',
+    'Diyarbakır', 'Edirne', 'Elazığ', 'Erzincan', 'Erzurum', 'Eskişehir', 'Gaziantep', 'Giresun', 'Gümüşhane', 'Hakkari',
+    'Hatay', 'Isparta', 'Mersin', 'İstanbul', 'İzmir', 'Kars', 'Kastamonu', 'Kayseri', 'Kırklareli', 'Kırşehir',
+    'Kocaeli', 'Konya', 'Kütahya', 'Malatya', 'Manisa', 'Kahramanmaraş', 'Mardin', 'Muğla', 'Muş', 'Nevşehir',
+    'Niğde', 'Ordu', 'Rize', 'Sakarya', 'Samsun', 'Siirt', 'Sinop', 'Sivas', 'Tekirdağ', 'Tokat',
+    'Trabzon', 'Tunceli', 'Şanlıurfa', 'Uşak', 'Van', 'Yozgat', 'Zonguldak', 'Aksaray', 'Bayburt', 'Karaman',
     'Kırıkkale', 'Batman', 'Şırnak', 'Bartın', 'Ardahan', 'Iğdır', 'Yalova', 'Karabük', 'Kilis', 'Osmaniye', 'Düzce'
 ];
 
@@ -143,24 +143,28 @@ const VipBoostClaimWidget = ({ userId, vipLevel, balance, setBalance, showAlert 
                         </Text>
                     </View>
                 </View>
-                <TouchableOpacity 
-                    style={[
-                        styles.depositBtn, 
-                        { backgroundColor: status.claimsRemaining > 0 ? '#FFE082' : 'rgba(255,255,255,0.1)' }
-                    ]}
+                <TouchableOpacity
                     onPress={handleClaim}
                     disabled={status.claimsRemaining === 0 || claiming}
+                    activeOpacity={0.8}
                 >
-                    {claiming ? (
-                        <ActivityIndicator size="small" color="#451A03" />
-                    ) : (
-                        <Text style={[
-                            styles.depositBtnText, 
-                            { color: status.claimsRemaining > 0 ? '#451A03' : 'rgba(255,255,255,0.4)' }
-                        ]}>
-                            {status.claimsRemaining > 0 ? 'Talep Et' : 'Tükendi'}
-                        </Text>
-                    )}
+                    <LinearGradient
+                        colors={status.claimsRemaining > 0 ? ['#FDE68A', '#F59E0B'] : ['rgba(255,255,255,0.1)', 'rgba(255,255,255,0.05)']}
+                        style={styles.depositBtn}
+                        start={{ x: 0, y: 0 }}
+                        end={{ x: 1, y: 1 }}
+                    >
+                        {claiming ? (
+                            <ActivityIndicator size="small" color="#451A03" />
+                        ) : (
+                            <Text style={[
+                                styles.depositBtnText,
+                                { color: status.claimsRemaining > 0 ? '#451A03' : 'rgba(255,255,255,0.4)' }
+                            ]}>
+                                {status.claimsRemaining > 0 ? 'Talep Et' : 'Tükendi'}
+                            </Text>
+                        )}
+                    </LinearGradient>
                 </TouchableOpacity>
             </View>
         </View>
@@ -310,7 +314,7 @@ const ProfileScreen = ({ route }) => {
                             setUserPhotos(profileData.photos);
                         }
                         await AsyncStorage.setItem('user', JSON.stringify(updatedUser));
-                        
+
                         const profileBalance = updatedUser.balance ?? updatedUser.coins ?? updatedUser.hearts;
                         if (profileBalance !== undefined) setBalance(profileBalance);
 
@@ -377,7 +381,7 @@ const ProfileScreen = ({ route }) => {
                     const updatedUser = { ...user, ...userRes.data };
                     setUser(updatedUser);
                     await AsyncStorage.setItem('user', JSON.stringify(updatedUser));
-                    
+
                     // Update Zustand store
                     const setUserState = useAppStore.getState().setUser;
                     if (setUserState) setUserState(updatedUser);
@@ -485,12 +489,12 @@ const ProfileScreen = ({ route }) => {
                     // Instantly update on screen & local storage
                     setUser(prev => {
                         const updated = { ...prev, avatar_url: newAvatarUrl, profile_image: newAvatarUrl };
-                        AsyncStorage.setItem('user', JSON.stringify(updated)).catch(() => {});
-                        
+                        AsyncStorage.setItem('user', JSON.stringify(updated)).catch(() => { });
+
                         // Update Zustand store if available
                         const setUserState = useAppStore.getState().setUser;
                         if (setUserState) setUserState(updated);
-                        
+
                         return updated;
                     });
 
@@ -559,7 +563,7 @@ const ProfileScreen = ({ route }) => {
                     setUserPhotos(prev => [...prev, photoUrl]);
                     setUser(prev => {
                         const updated = { ...prev, photos: [...(prev.photos || []), photoUrl] };
-                        AsyncStorage.setItem('user', JSON.stringify(updated)).catch(() => {});
+                        AsyncStorage.setItem('user', JSON.stringify(updated)).catch(() => { });
                         return updated;
                     });
 
@@ -590,7 +594,7 @@ const ProfileScreen = ({ route }) => {
             const res = await axios.put(`${API_URL}/users/${user.id}/profile`, { [field]: value }, {
                 headers: { Authorization: `Bearer ${token}` }
             });
-            
+
             if (res.data) {
                 const updatedUser = { ...user, ...res.data };
                 setUser(updatedUser);
@@ -627,10 +631,10 @@ const ProfileScreen = ({ route }) => {
             }
             newInterests = [...currentInterests, interest];
         }
-        
+
         // Optimistic update
         setUser({ ...user, interests: newInterests });
-        
+
         handleUpdateProfile('interests', JSON.stringify(newInterests));
     };
 
@@ -639,7 +643,7 @@ const ProfileScreen = ({ route }) => {
             const token = await AsyncStorage.getItem('token');
             const targetUrl = `${API_URL}/users/${user.id}/remove-photo`;
             console.log('Attempting to remove photo:', { targetUrl, photoUrl, isPending, photoId });
-            
+
             const res = await axios.post(targetUrl, {
                 url: photoUrl,
                 isPending,
@@ -659,7 +663,7 @@ const ProfileScreen = ({ route }) => {
             }
         } catch (e) {
             console.error('Remove photo error:', e);
-            
+
             // Gracefully handle 404 (already deleted or not found)
             if (e.response?.status === 404) {
                 if (isPending) {
@@ -685,9 +689,9 @@ const ProfileScreen = ({ route }) => {
 
         const cost = 500;
         if (balance < cost) {
-            showAlert({ 
-                title: 'Yetersiz Bakiye', 
-                message: `Profilini öne çıkarmak için ${cost} Coin gerekli. Mağazaya gitmek ister misin?`, 
+            showAlert({
+                title: 'Yetersiz Bakiye',
+                message: `Profilini öne çıkarmak için ${cost} Coin gerekli. Mağazaya gitmek ister misin?`,
                 type: 'warning',
                 onConfirm: () => navigation.navigate('Shop')
             });
@@ -705,7 +709,7 @@ const ProfileScreen = ({ route }) => {
                     const res = await axios.post(`${API_URL}/boosts/${user.id}`, { cost, durationMinutes: 10080 }, {
                         headers: { Authorization: `Bearer ${token}` }
                     });
-                    
+
                     if (res.data) {
                         showAlert({ title: 'Başarılı!', message: 'Profilin 1 hafta boyunca öne çıkarıldı! Artık daha fazla etkileşim alacaksın.', type: 'success' });
                         // Refresh data
@@ -740,7 +744,7 @@ const ProfileScreen = ({ route }) => {
             style={styles.mainContainer}
         >
             <StatusBar barStyle="light-content" />
- 
+
             <Animated.ScrollView
                 showsVerticalScrollIndicator={false}
                 scrollEventThrottle={16}
@@ -752,7 +756,7 @@ const ProfileScreen = ({ route }) => {
             >
                 {/* Top Navigation Bar */}
                 <View style={styles.topNavBar}>
-                    <TouchableOpacity style={styles.navIconBtn} activeOpacity={0.7} onPress={() => {}}>
+                    <TouchableOpacity style={styles.navIconBtn} activeOpacity={0.7} onPress={() => { }}>
                         <Ionicons name="notifications-outline" size={18} color="#fff" />
                         <View style={styles.badgeDot} />
                     </TouchableOpacity>
@@ -784,14 +788,14 @@ const ProfileScreen = ({ route }) => {
                                     </View>
                                 </View>
                                 <View style={styles.inviteActionsRow}>
-                                    <TouchableOpacity 
-                                        style={[styles.inviteActionBtn, styles.rejectBtn]} 
+                                    <TouchableOpacity
+                                        style={[styles.inviteActionBtn, styles.rejectBtn]}
                                         onPress={() => handleRejectInvitation(invite.id)}
                                         activeOpacity={0.8}
                                     >
                                         <Text style={styles.rejectBtnText}>Reddet</Text>
                                     </TouchableOpacity>
-                                    <TouchableOpacity 
+                                    <TouchableOpacity
                                         style={styles.inviteActionBtn}
                                         onPress={() => handleAcceptInvitation(invite.id)}
                                         activeOpacity={0.8}
@@ -815,16 +819,16 @@ const ProfileScreen = ({ route }) => {
                 <View style={[styles.modernHeader, getHeaderStyle(user?.vip_level)]}>
                     {parseInt(user?.vip_level) > 0 ? (
                         <TouchableOpacity style={[styles.avatarContainer, { padding: 5 }]} onPress={pickAvatar} activeOpacity={0.9}>
-                            <VipFrame 
-                                level={parseInt(user?.vip_level)} 
-                                avatar={user?.avatar_url || user?.profile_image} 
-                                size={110} 
-                                isStatic={false} 
+                            <VipFrame
+                                level={parseInt(user?.vip_level)}
+                                avatar={user?.avatar_url || user?.profile_image}
+                                size={110}
+                                isStatic={false}
                             />
-                            <View style={[styles.cameraBadge, { borderColor: theme.colors.background, bottom: 4, right: 4 }]}>
+                            <View style={[styles.cameraBadge, { borderColor: theme.colors.background, top: 4, right: 4 }]}>
                                 <Ionicons name="camera" size={16} color="#fff" />
                             </View>
-                            <View style={[styles.onlineStatus, { borderColor: theme.colors.background, bottom: 4, left: 4 }]} />
+                            <View style={[styles.onlineStatus, { borderColor: theme.colors.background, bottom: 4, right: 4 }]} />
                         </TouchableOpacity>
                     ) : (
                         <TouchableOpacity style={styles.avatarContainer} onPress={pickAvatar} activeOpacity={0.9}>
@@ -832,71 +836,32 @@ const ProfileScreen = ({ route }) => {
                                 colors={['#ec4899', '#8b5cf6']}
                                 style={styles.avatarGlow}
                             />
-                            <Image 
-                                source={{ uri: user?.avatar_url || user?.profile_image || 'https://via.placeholder.com/150' }} 
-                                style={[styles.avatarImage, { borderColor: theme.colors.background, backgroundColor: theme.colors.background }]} 
+                            <Image
+                                source={{ uri: user?.avatar_url || user?.profile_image || 'https://via.placeholder.com/150' }}
+                                style={[styles.avatarImage, { borderColor: theme.colors.background, backgroundColor: theme.colors.background }]}
                             />
-                            <View style={[styles.cameraBadge, { borderColor: theme.colors.background }]}>
+                            <View style={[styles.cameraBadge, { borderColor: theme.colors.background, top: 4, right: 4 }]}>
                                 <Ionicons name="camera" size={16} color="#fff" />
                             </View>
-                            <View style={[styles.onlineStatus, { borderColor: theme.colors.background }]} />
+                            <View style={[styles.onlineStatus, { borderColor: theme.colors.background, bottom: 4, right: 4 }]} />
                         </TouchableOpacity>
                     )}
 
-                    <View style={styles.profileInfo}>
-                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                            {isEditingName ? (
-                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                                    <TextInput
-                                        style={[styles.userName, { backgroundColor: 'rgba(255, 255, 255, 0.1)', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 2, minWidth: 100 }]}
-                                        value={tempName}
-                                        onChangeText={setTempName}
-                                        autoFocus
-                                        maxLength={30}
-                                        onBlur={() => {
-                                            setIsEditingName(false);
-                                            if (tempName.trim() && tempName.trim() !== (user?.name || user?.display_name)) {
-                                                handleUpdateProfile('name', tempName.trim());
-                                            }
-                                        }}
-                                    />
-                                    <TouchableOpacity onPress={() => {
-                                        setIsEditingName(false);
-                                        if (tempName.trim() && tempName.trim() !== (user?.name || user?.display_name)) {
-                                            handleUpdateProfile('name', tempName.trim());
-                                        }
-                                    }}>
-                                        <Ionicons name="checkmark-circle" size={24} color="#10b981" />
-                                    </TouchableOpacity>
-                                </View>
-                            ) : (
-                                <TouchableOpacity 
-                                    style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}
-                                    onPress={() => {
-                                        setTempName(user?.name || user?.display_name || '');
-                                        setIsEditingName(true);
-                                    }}
-                                    activeOpacity={0.7}
-                                >
-                                    <Text style={[
-                                        styles.userName,
-                                        parseInt(user?.vip_level) >= 6 && { color: '#F59E0B', textShadowColor: 'rgba(245, 158, 11, 0.4)', textShadowRadius: 6 },
-                                        parseInt(user?.vip_level) === 5 && { color: '#ec4899', fontWeight: 'bold' },
-                                        parseInt(user?.vip_level) === 4 && { color: '#8b5cf6' },
-                                        parseInt(user?.vip_level) === 3 && { color: '#3b82f6' }
-                                    ]}>
-                                        {user?.name || user?.display_name || 'Kullanıcı'}, {user?.age || '24'}
-                                    </Text>
-                                    <View style={styles.bioPencilCircle}>
-                                        <Ionicons name="pencil" size={10} color="#fff" />
-                                    </View>
-                                </TouchableOpacity>
-                            )}
+                    <View style={[styles.profileInfo, { marginTop: 12 }]}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 6, gap: 6 }}>
+                            <Text style={styles.userName}>
+                                {user?.name || user?.display_name || 'Kullanıcı'}
+                            </Text>
                             {parseInt(user?.vip_level) > 0 && (
                                 <VipBadge level={parseInt(user?.vip_level)} size={38} />
                             )}
+                        </View>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap', justifyContent: 'center' }}>
+                            <View style={styles.idBadge}>
+                                <Text style={styles.idText}>ID: {String(user?.id || '').slice(-6).toUpperCase()}</Text>
+                            </View>
                             {(user?.agency_name || user?.agencyName) && (
-                                <AgencyBadge agencyName={user.agency_name || user.agencyName} size={16} style={{ marginLeft: 4 }} />
+                                <AgencyBadge agencyName={user.agency_name || user.agencyName} size={16} />
                             )}
                             {user?.nobilityKey && (
                                 <View style={[styles.nobilityBadge, { backgroundColor: `${user.nobilityNameColor || '#FFD166'}20`, borderColor: user.nobilityNameColor || '#FFD166', borderWidth: 1 }]}>
@@ -907,79 +872,38 @@ const ProfileScreen = ({ route }) => {
                                 </View>
                             )}
                         </View>
-                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 4 }}>
-                            <View style={styles.idBadge}>
-                                <Text style={styles.idText}>ID: {String(user?.id || '').slice(-6).toUpperCase()}</Text>
-                            </View>
-                            {user?.nobilityKey && (
-                                <View style={styles.nobilityExpiryRow}>
-                                    <Ionicons name="time-outline" size={11} color="#8e85a6" style={{ marginRight: 2 }} />
-                                    <Text style={styles.nobilityExpiryText}>
-                                        {Math.max(0, Math.ceil((new Date(user.nobility_expires_at).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)))} Gün kaldı
-                                    </Text>
-                                </View>
-                            )}
-                        </View>
-                        {isEditingBio ? (
-                            <View style={styles.inlineBioEdit}>
-                                <TextInput
-                                    style={styles.inlineBioInput}
-                                    value={tempBio}
-                                    onChangeText={setTempBio}
-                                    autoFocus
-                                    multiline
-                                    onBlur={() => {
-                                        setIsEditingBio(false);
-                                        handleUpdateProfile('bio', tempBio);
-                                    }}
-                                    maxLength={200}
-                                />
-                                <TouchableOpacity onPress={() => {
-                                    setIsEditingBio(false);
-                                    handleUpdateProfile('bio', tempBio);
-                                }}>
-                                    <Ionicons name="checkmark-circle" size={24} color="#10b981" />
-                                </TouchableOpacity>
-                            </View>
-                        ) : (
-                            <TouchableOpacity 
-                                style={styles.bioEditContainer} 
-                                onPress={() => { 
-                                    setTempBio(user?.bio || ''); 
-                                    setIsEditingBio(true);
-                                }}
-                            >
-                                <Text style={styles.userBio} numberOfLines={2}>
-                                    {user?.bio || 'Biyografi henüz eklenmemiş...'}
+                        {user?.nobilityKey && (
+                            <View style={[styles.nobilityExpiryRow, { marginTop: 8 }]}>
+                                <Ionicons name="time-outline" size={11} color="#8e85a6" style={{ marginRight: 2 }} />
+                                <Text style={styles.nobilityExpiryText}>
+                                    {Math.max(0, Math.ceil((new Date(user.nobility_expires_at).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)))} Gün kaldı
                                 </Text>
-                                <View style={styles.bioPencilCircle}>
-                                    <Ionicons name="pencil" size={10} color="#fff" />
-                                </View>
-                            </TouchableOpacity>
+                            </View>
                         )}
                     </View>
 
-                    {/* Glass Stats Pods */}
-                    <View style={styles.statsContainer}>
+                    {/* Modern Dating Style Stats */}
+                    <View style={styles.statsContainerClean}>
                         {stats.map((stat, index) => (
-                            <View key={index} style={styles.statPod}>
-                                <BlurView intensity={25} tint="light" style={styles.statBlur}>
-                                    <Text style={styles.statValue}>{stat.value}</Text>
-                                    <Text style={styles.statLabel}>{stat.label}</Text>
-                                </BlurView>
-                            </View>
+                            <React.Fragment key={index}>
+                                <View style={styles.statPodClean}>
+                                    <Text style={styles.statValueClean}>{stat.value}</Text>
+                                    <Text style={styles.statLabelClean}>{stat.label}</Text>
+                                </View>
+                                {index < stats.length - 1 && <View style={styles.statDividerVertical} />}
+                            </React.Fragment>
                         ))}
                     </View>
                 </View>
 
                 {/* VIP Daily Boost Claim Card */}
                 {parseInt(user?.vip_level) > 0 && (
-                    <VipBoostClaimWidget 
-                        userId={user.id} 
-                        vipLevel={parseInt(user?.vip_level)} 
-                        balance={balance} 
-                        setBalance={setBalance} 
-                        showAlert={showAlert} 
+                    <VipBoostClaimWidget
+                        userId={user.id}
+                        vipLevel={parseInt(user?.vip_level)}
+                        balance={balance}
+                        setBalance={setBalance}
+                        showAlert={showAlert}
                     />
                 )}
 
@@ -998,8 +922,8 @@ const ProfileScreen = ({ route }) => {
                                     <GradientIcon IconComponent={Ionicons} name="business-outline" size={26} colors={['#60A5FA', '#3B82F6']} />
                                 </View>
                                 <Text style={styles.qaLabel} numberOfLines={1}>
-                                     {(user?.agency_id || user?.is_agency_owner) ? 'Ajansım' : 'Ajans'}
-                                 </Text>
+                                    {(user?.agency_id || user?.is_agency_owner) ? 'Ajansım' : 'Ajans'}
+                                </Text>
                             </TouchableOpacity>
 
                             <TouchableOpacity style={styles.qaItem} onPress={() => navigation.navigate('ProfileVisitors', { user })}>
@@ -1074,87 +998,79 @@ const ProfileScreen = ({ route }) => {
                     </View>
                 </View>
 
-                {/* Wallet Glass Card */}
-                {!isShowWallet && (
-                    <TouchableOpacity style={styles.glassCardWrapper} onPress={() => navigation.navigate('Shop')} activeOpacity={0.8}>
-                        <View style={styles.walletCard}>
-                            <View style={styles.walletLeft}>
-                                <View style={styles.coinIconBox}>
-                                    <GradientIcon IconComponent={FontAwesome5} name="coins" size={18} colors={['#FFE082', '#F59E0B']} />
+                {/* Unified Actions Card (Wallet, Boost, Invite) */}
+                <View style={styles.glassCardWrapper}>
+                    {!isShowWallet && (
+                        <View>
+                            <TouchableOpacity style={styles.unifiedCardItem} onPress={() => navigation.navigate('Shop')} activeOpacity={0.7}>
+                                <View style={styles.walletCard}>
+                                    <View style={styles.walletLeft}>
+                                        <View style={styles.coinIconBox}>
+                                            <GradientIcon IconComponent={FontAwesome5} name="coins" size={18} colors={['#FFE082', '#F59E0B']} />
+                                        </View>
+                                        <View>
+                                            <Text style={styles.walletTitle}>CÜZDAN BAKİYESİ</Text>
+                                            <Text style={styles.walletValue}>
+                                                <Text style={styles.walletValueHighlight}>{balance}</Text> Kredi
+                                            </Text>
+                                        </View>
+                                    </View>
+                                    <LinearGradient
+                                        colors={['#FDE68A', '#F59E0B']}
+                                        style={styles.depositBtn}
+                                        start={{ x: 0, y: 0 }}
+                                        end={{ x: 1, y: 1 }}
+                                    >
+                                        <Text style={styles.depositBtnText}>Yükle</Text>
+                                    </LinearGradient>
+                                </View>
+                            </TouchableOpacity>
+                            <View style={styles.unifiedDivider} />
+                        </View>
+                    )}
+
+                    <View>
+                        <TouchableOpacity style={styles.unifiedCardItem} activeOpacity={0.7} onPress={handleBoost}>
+                            <View style={styles.boostCard}>
+                                <View style={styles.boostLeft}>
+                                    <View style={styles.boostIconCircle}>
+                                        <GradientIcon
+                                            IconComponent={Ionicons}
+                                            name={user?.is_boosted ? "flash" : "rocket"}
+                                            size={18}
+                                            colors={user?.is_boosted ? ['#10B981', '#059669'] : ['#FF4FA3', '#8B5CFF']}
+                                        />
+                                    </View>
+                                    <View>
+                                        <Text style={styles.boostMainText}>
+                                            {user?.is_boosted ? 'Profilin Öne Çıkarıldı' : 'Profilini Öne Çıkar'}
+                                        </Text>
+                                        <Text style={styles.boostSubText}>
+                                            {user?.is_boosted ? 'Daha fazla eşleşme ve etkileşim alıyorsun' : 'Daha fazla eşleşme ve etkileşim al'}
+                                        </Text>
+                                    </View>
+                                </View>
+                                <Ionicons name="chevron-forward" size={16} color="#8e85a6" />
+                            </View>
+                        </TouchableOpacity>
+                        <View style={styles.unifiedDivider} />
+                    </View>
+
+                    <TouchableOpacity style={styles.unifiedCardItem} activeOpacity={0.7} onPress={() => navigation.navigate('Invite')}>
+                        <View style={styles.boostCard}>
+                            <View style={styles.boostLeft}>
+                                <View style={styles.boostIconCircle}>
+                                    <GradientIcon IconComponent={Ionicons} name="gift-outline" size={20} colors={['#FF5F6D', '#FFC371']} />
                                 </View>
                                 <View>
-                                    <Text style={styles.walletTitle}>CÜZDAN BAKİYESİ</Text>
-                                    <Text style={styles.walletValue}>
-                                        <Text style={styles.walletValueHighlight}>{balance}</Text> Kredi
-                                    </Text>
+                                    <Text style={styles.boostMainText}>Davet Et, Kazan!</Text>
+                                    <Text style={styles.boostSubText}>Arkadaşlarını davet et, 500 Coin kazan.</Text>
                                 </View>
                             </View>
-                            <LinearGradient
-                                colors={['#FDE68A', '#F59E0B']}
-                                style={styles.depositBtn}
-                                start={{ x: 0, y: 0 }}
-                                end={{ x: 1, y: 1 }}
-                            >
-                                <Text style={styles.depositBtnText}>Yükle</Text>
-                            </LinearGradient>
+                            <Ionicons name="chevron-forward" size={16} color="#8e85a6" />
                         </View>
                     </TouchableOpacity>
-                )}
-
-                {/* Boost Premium Card */}
-                <TouchableOpacity 
-                    style={[styles.premiumSolidCard, !user?.is_boosted && styles.promoBorderGlow]} 
-                    activeOpacity={0.8}
-                    onPress={handleBoost}
-                >
-                    <View style={styles.boostCard}>
-                        <View style={styles.boostLeft}>
-                            <View style={styles.boostIconCircle}>
-                                <GradientIcon 
-                                    IconComponent={Ionicons} 
-                                    name={user?.is_boosted ? "flash" : "rocket"} 
-                                    size={18} 
-                                    colors={user?.is_boosted ? ['#10B981', '#059669'] : ['#FF4FA3', '#8B5CFF']} 
-                                />
-                            </View>
-                            <View>
-                                <Text style={styles.boostMainText}>
-                                    {user?.is_boosted ? 'Profilin Öne Çıkarıldı' : 'Profilini Öne Çıkar'}
-                                </Text>
-                                <Text style={styles.boostSubText}>
-                                    {user?.is_boosted ? 'Daha fazla eşleşme ve etkileşim alıyorsun' : 'Daha fazla eşleşme ve etkileşim al'}
-                                </Text>
-                            </View>
-                        </View>
-                        <Ionicons name="chevron-forward" size={16} color="#8e85a6" />
-                    </View>
-                </TouchableOpacity>
-
-                {/* Invite & Earn Card */}
-                <TouchableOpacity 
-                    style={styles.premiumSolidCard} 
-                    activeOpacity={0.8}
-                    onPress={() => navigation.navigate('Invite')}
-                >
-                    <View style={styles.boostCard}>
-                        <LinearGradient
-                            colors={['rgba(255, 95, 109, 0.15)', 'rgba(255, 195, 113, 0.15)']}
-                            style={StyleSheet.absoluteFill}
-                            start={{ x: 0, y: 0 }}
-                            end={{ x: 1, y: 1 }}
-                        />
-                        <View style={styles.boostLeft}>
-                            <View style={styles.boostIconCircle}>
-                                <GradientIcon IconComponent={Ionicons} name="gift-outline" size={20} colors={['#FF5F6D', '#FFC371']} />
-                            </View>
-                            <View>
-                                <Text style={styles.boostMainText}>Davet Et, Kazan!</Text>
-                                <Text style={styles.boostSubText}>Arkadaşlarını davet et, 500 Coin kazan.</Text>
-                            </View>
-                        </View>
-                        <Ionicons name="chevron-forward" size={16} color="#8e85a6" />
-                    </View>
-                </TouchableOpacity>
+                </View>
 
                 {/* Görevler (Missions) Card - Visible to female users and operators */}
                 {isFemaleOrOperator && (
@@ -1210,19 +1126,44 @@ const ProfileScreen = ({ route }) => {
 
 
 
-                {/* Album Section */}
+                {/* Unified Info Card (Album, Temel Bilgiler, İlgi Alanları) */}
                 <View style={styles.glassCardWrapper}>
-                    <View style={styles.albumSection}>
-                        <View style={styles.sectionHeader}>
-                            <Text style={styles.sectionTitle}>Albüm</Text>
+                    <View style={[styles.albumSection, { paddingBottom: 6 }]}>
+                        <View style={[styles.sectionHeader, { paddingRight: 20 }]}>
+                            <Text style={[styles.sectionTitle, { fontSize: 15 }]}>Hakkımda</Text>
+                            <TouchableOpacity onPress={() => {
+                                setTempName(user?.name || user?.display_name || '');
+                                setTempBio(user?.bio || '');
+                                setIsEditModalVisible(true);
+                            }} style={[styles.miniEditBtn, { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 }]}>
+                                <Text style={[styles.editLink, { fontSize: 10 }]}>Düzenle</Text>
+                            </TouchableOpacity>
                         </View>
+
+                        <View style={{ marginBottom: 16, paddingRight: 20 }}>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
+                                <Text style={{ width: 80, color: 'rgba(255,255,255,0.5)', fontSize: 13, fontWeight: '500' }}>İsim</Text>
+                                <Text style={{ fontSize: 12, color: 'rgba(255,255,255,0.9)', fontWeight: '400' }}>
+                                    {user?.name || user?.display_name || 'Kullanıcı'}
+                                </Text>
+                            </View>
+                            {user?.bio ? (
+                                <View style={{ flexDirection: 'row', alignItems: 'flex-start' }}>
+                                    <Text style={{ width: 80, color: 'rgba(255,255,255,0.5)', fontSize: 13, fontWeight: '500', marginTop: 1 }}>Açıklama</Text>
+                                    <Text style={{ flex: 1, color: 'rgba(255,255,255,0.9)', fontSize: 12, lineHeight: 18, marginTop: 1 }}>
+                                        {user.bio}
+                                    </Text>
+                                </View>
+                            ) : null}
+                        </View>
+
                         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.albumScroll}>
                             <TouchableOpacity style={styles.addPhotoButton} onPress={pickAlbumPhoto} activeOpacity={0.7}>
                                 <Ionicons name="add" size={32} color="#8e85a6" />
                             </TouchableOpacity>
                             {userPhotos.map((photo, index) => (
                                 <View key={`approved_${index}`} style={styles.albumPhotoWrapper}>
-                                    <TouchableOpacity 
+                                    <TouchableOpacity
                                         onPress={() => {
                                             setCurrentImageIndex(index);
                                             setIsImageViewerVisible(true);
@@ -1231,8 +1172,8 @@ const ProfileScreen = ({ route }) => {
                                     >
                                         <Image source={{ uri: resolveImageUrl(photo) }} style={styles.albumPhoto} />
                                     </TouchableOpacity>
-                                    <TouchableOpacity 
-                                        style={styles.removePhotoBadge} 
+                                    <TouchableOpacity
+                                        style={styles.removePhotoBadge}
                                         onPress={() => handleRemovePhoto(photo)}
                                     >
                                         <Ionicons name="close-circle" size={20} color="#ef4444" />
@@ -1248,8 +1189,8 @@ const ProfileScreen = ({ route }) => {
                                             <Text style={styles.moderationText}>İncelemede</Text>
                                         </View>
                                     </View>
-                                    <TouchableOpacity 
-                                        style={styles.removePhotoBadge} 
+                                    <TouchableOpacity
+                                        style={styles.removePhotoBadge}
                                         onPress={() => handleRemovePhoto(photo.url, true, photo.id)}
                                     >
                                         <Ionicons name="close-circle" size={20} color="#ef4444" />
@@ -1258,18 +1199,12 @@ const ProfileScreen = ({ route }) => {
                             ))}
                         </ScrollView>
                     </View>
-                </View>
 
-                {/* Merged Info Sections */}
-                <View style={styles.glassCardWrapper}>
-                    <View style={styles.infoSection}>
+                    <View style={[styles.sectionDivider, { marginVertical: 0 }]} />
+
+                    {/* Merged Info Sections */}
+                    <View style={[styles.infoSection, { paddingTop: 10 }]}>
                         {/* Temel Bilgiler Section */}
-                        <View style={styles.sectionHeader}>
-                            <Text style={styles.sectionTitle}>Temel Bilgiler</Text>
-                            <TouchableOpacity onPress={() => { setEditingSection('basic'); setIsEditModalVisible(true); }} style={styles.miniEditBtn}>
-                                <Text style={styles.editLink}>Düzenle</Text>
-                            </TouchableOpacity>
-                        </View>
                         <View style={styles.infoGrid}>
                             <View style={styles.infoPill}>
                                 <View style={[styles.infoPillIconContainer, { backgroundColor: 'rgba(6, 182, 212, 0.12)' }]}>
@@ -1321,15 +1256,9 @@ const ProfileScreen = ({ route }) => {
                             </View>
                         </View>
 
-                        <View style={styles.sectionDivider} />
+                        <View style={[styles.sectionDivider, { marginVertical: 10, marginHorizontal: -20 }]} />
 
                         {/* İlgi Alanları Section */}
-                        <View style={styles.sectionHeader}>
-                            <Text style={styles.sectionTitle}>İlgi Alanları</Text>
-                            <TouchableOpacity onPress={() => { setEditingSection('interests'); setIsEditModalVisible(true); }} style={styles.miniEditBtn}>
-                                <Text style={styles.editLink}>Düzenle</Text>
-                            </TouchableOpacity>
-                        </View>
                         <View style={styles.infoGrid}>
                             {(() => {
                                 let ints = user?.interests;
@@ -1348,47 +1277,6 @@ const ProfileScreen = ({ route }) => {
                             })()}
                         </View>
                     </View>
-                </View>
-
-                {/* Footer Actions */}
-                <View style={styles.footerContainer}>
-                    <TouchableOpacity style={styles.footerItem} onPress={() => navigation.navigate('Settings')}>
-                        <View style={[styles.footerIconBg, { backgroundColor: 'rgba(59, 130, 246, 0.12)' }]}>
-                            <Ionicons name="settings-outline" size={15} color="#3b82f6" />
-                        </View>
-                        <Text style={styles.footerText}>Ayarlar</Text>
-                        <Ionicons name="chevron-forward" size={14} color="#8e85a6" />
-                    </TouchableOpacity>
-
-                    <TouchableOpacity 
-                        style={styles.footerItem} 
-                        onPress={() => {
-                            Linking.openURL('mailto:falkasoft@gmail.com').catch(() => {
-                                Alert.alert('Hata', 'E-posta uygulaması bulunamadı.');
-                            });
-                        }}
-                    >
-                        <View style={[styles.footerIconBg, { backgroundColor: 'rgba(245, 158, 11, 0.12)' }]}>
-                            <Ionicons name="mail-outline" size={15} color="#f59e0b" />
-                        </View>
-                        <Text style={styles.footerText}>E-posta Destek</Text>
-                        <Ionicons name="chevron-forward" size={14} color="#8e85a6" />
-                    </TouchableOpacity>
-
-                    <TouchableOpacity 
-                        style={styles.footerItem} 
-                        onPress={() => {
-                            Linking.openURL('https://wa.me/905414738700').catch(() => {
-                                Alert.alert('Hata', 'WhatsApp uygulaması bulunamadı.');
-                            });
-                        }}
-                    >
-                        <View style={[styles.footerIconBg, { backgroundColor: 'rgba(37, 211, 102, 0.12)' }]}>
-                            <Ionicons name="logo-whatsapp" size={15} color="#25d366" />
-                        </View>
-                        <Text style={styles.footerText}>WhatsApp Destek</Text>
-                        <Ionicons name="chevron-forward" size={14} color="#8e85a6" />
-                    </TouchableOpacity>
                 </View>
 
                 <View style={{ height: 120 }} />
@@ -1412,9 +1300,9 @@ const ProfileScreen = ({ route }) => {
                 onRequestClose={() => setIsEditModalVisible(false)}
             >
                 <View style={styles.modalOverlay}>
-                    <TouchableOpacity 
-                        style={StyleSheet.absoluteFill} 
-                        onPress={() => setIsEditModalVisible(false)} 
+                    <TouchableOpacity
+                        style={StyleSheet.absoluteFill}
+                        onPress={() => setIsEditModalVisible(false)}
                     />
                     <BlurView intensity={95} tint="dark" style={styles.modalContent}>
                         <LinearGradient
@@ -1424,10 +1312,10 @@ const ProfileScreen = ({ route }) => {
                         <View style={styles.modalHeader}>
                             <View>
                                 <Text style={styles.modalTitle}>
-                                    {editingSection === 'basic' ? 'Profilini Tamamla' : 'İlgi Alanlarını Keşfet'}
+                                    Profili Düzenle
                                 </Text>
                                 <Text style={styles.modalSubtitle}>
-                                    {editingSection === 'basic' ? 'Kendinden bahset, daha çok eşleş yakala' : 'Hobilerini seç, ortak noktaları bul'}
+                                    Kendinden bahset, ilgi alanlarını ekle
                                 </Text>
                             </View>
                             <TouchableOpacity style={styles.closeModalBtn} onPress={() => setIsEditModalVisible(false)}>
@@ -1436,286 +1324,353 @@ const ProfileScreen = ({ route }) => {
                         </View>
 
                         <ScrollView style={styles.modalScroll} showsVerticalScrollIndicator={false}>
-                            {editingSection === 'basic' ? (
-                                <View style={styles.editContentWrapper}>
-                                    {/* Şehir Card */}
-                                    <View style={styles.modernEditCard}>
-                                        <View style={styles.cardHeaderSmall}>
-                                            <View style={[styles.cardIconBg, { backgroundColor: '#06b6d420' }]}>
-                                                <Ionicons name="location" size={14} color="#06b6d4" />
-                                            </View>
-                                            <Text style={styles.cardTitleSmall}>ŞEHİR</Text>
+                            <View style={styles.editContentWrapper}>
+                                {/* İsim Card */}
+                                <View style={styles.modernEditCard}>
+                                    <View style={styles.cardHeaderSmall}>
+                                        <View style={styles.cardIconBg}>
+                                            <Ionicons name="person" size={14} color="#a855f7" />
                                         </View>
-                                        <View style={styles.cityInputWrapper}>
-                                            <TextInput
-                                                style={styles.cityTextInput}
-                                                placeholder="Şehir adı arayın..."
-                                                placeholderTextColor="rgba(255, 255, 255, 0.4)"
-                                                value={cityInput}
-                                                onChangeText={(val) => {
-                                                    setCityInput(val);
-                                                    setShowCitySuggestions(true);
-                                                }}
-                                                onFocus={() => setShowCitySuggestions(true)}
-                                                color="white"
-                                            />
-                                            {cityInput.trim().length > 0 && (
-                                                <TouchableOpacity 
-                                                    style={styles.clearCityBtn}
-                                                    onPress={() => {
-                                                        setCityInput('');
-                                                        setShowCitySuggestions(false);
-                                                        handleUpdateProfile('city', null);
-                                                    }}
-                                                >
-                                                    <Ionicons name="close-circle" size={16} color="rgba(255,255,255,0.4)" />
-                                                </TouchableOpacity>
-                                            )}
-                                        </View>
+                                        <Text style={styles.cardTitleSmall}>İSİM</Text>
+                                    </View>
+                                    <View style={styles.cityInputWrapper}>
+                                        <TextInput
+                                            style={styles.cityTextInput}
+                                            placeholder="İsminiz..."
+                                            placeholderTextColor="rgba(255, 255, 255, 0.4)"
+                                            value={tempName}
+                                            onChangeText={setTempName}
+                                            onBlur={() => {
+                                                if (tempName.trim() && tempName.trim() !== (user?.name || user?.display_name)) {
+                                                    handleUpdateProfile('name', tempName.trim());
+                                                }
+                                            }}
+                                            color="white"
+                                            maxLength={30}
+                                        />
+                                    </View>
+                                </View>
 
-                                        {/* Suggestions Dropdown */}
-                                        {showCitySuggestions && cityInput.trim().length > 0 && (
-                                            <View style={styles.citySuggestionsList}>
-                                                <ScrollView keyboardShouldPersistTaps="always" style={{ maxHeight: 150 }} nestedScrollEnabled={true}>
-                                                    {TURKISH_CITIES.filter(c => c.toLowerCase().includes(cityInput.toLowerCase()))
-                                                        .slice(0, 5)
-                                                        .map(c => (
-                                                            <TouchableOpacity
-                                                                key={c}
-                                                                style={styles.citySuggestionItem}
-                                                                onPress={() => {
-                                                                    setCityInput(c);
-                                                                    setShowCitySuggestions(false);
-                                                                    handleUpdateProfile('city', c);
-                                                                }}
-                                                            >
-                                                                <Ionicons name="location-outline" size={12} color="#06b6d4" style={{ marginRight: 6 }} />
-                                                                <Text style={styles.citySuggestionText}>{c}</Text>
-                                                            </TouchableOpacity>
-                                                        ))
-                                                    }
-                                                </ScrollView>
-                                            </View>
+                                {/* Bio Card */}
+                                <View style={styles.modernEditCard}>
+                                    <View style={styles.cardHeaderSmall}>
+                                        <View style={styles.cardIconBg}>
+                                            <Ionicons name="document-text" size={14} color="#f59e0b" />
+                                        </View>
+                                        <Text style={styles.cardTitleSmall}>BİYOGRAFİ</Text>
+                                    </View>
+                                    <View style={[styles.cityInputWrapper, { height: 80, alignItems: 'flex-start' }]}>
+                                        <TextInput
+                                            style={[styles.cityTextInput, { flex: 1, textAlignVertical: 'top', marginTop: 8 }]}
+                                            placeholder="Kendinizden bahsedin..."
+                                            placeholderTextColor="rgba(255, 255, 255, 0.4)"
+                                            value={tempBio}
+                                            onChangeText={setTempBio}
+                                            onBlur={() => {
+                                                if (tempBio !== (user?.bio || '')) {
+                                                    handleUpdateProfile('bio', tempBio);
+                                                }
+                                            }}
+                                            color="white"
+                                            multiline
+                                            maxLength={200}
+                                        />
+                                    </View>
+                                </View>
+
+                                {/* Şehir Card */}
+                                <View style={styles.modernEditCard}>
+                                    <View style={styles.cardHeaderSmall}>
+                                        <View style={styles.cardIconBg}>
+                                            <Ionicons name="location" size={14} color="#06b6d4" />
+                                        </View>
+                                        <Text style={styles.cardTitleSmall}>ŞEHİR</Text>
+                                    </View>
+                                    <View style={styles.cityInputWrapper}>
+                                        <TextInput
+                                            style={styles.cityTextInput}
+                                            placeholder="Şehir adı arayın..."
+                                            placeholderTextColor="rgba(255, 255, 255, 0.4)"
+                                            value={cityInput}
+                                            onChangeText={(val) => {
+                                                setCityInput(val);
+                                                setShowCitySuggestions(true);
+                                            }}
+                                            onFocus={() => setShowCitySuggestions(true)}
+                                            color="white"
+                                        />
+                                        {cityInput.trim().length > 0 && (
+                                            <TouchableOpacity
+                                                style={styles.clearCityBtn}
+                                                onPress={() => {
+                                                    setCityInput('');
+                                                    setShowCitySuggestions(false);
+                                                    handleUpdateProfile('city', null);
+                                                }}
+                                            >
+                                                <Ionicons name="close-circle" size={16} color="rgba(255,255,255,0.4)" />
+                                            </TouchableOpacity>
                                         )}
                                     </View>
 
-                                    {/* Meslek Card */}
-                                    <View style={styles.modernEditCard}>
-                                        <View style={styles.cardHeaderSmall}>
-                                            <View style={[styles.cardIconBg, { backgroundColor: '#ec489920' }]}>
-                                                <Ionicons name="briefcase" size={14} color="#ec4899" />
-                                            </View>
-                                            <Text style={styles.cardTitleSmall}>MESLEK</Text>
-                                        </View>
-                                        <View style={styles.optionGrid}>
-                                            {editOptions.job.map(job => (
-                                                <TouchableOpacity 
-                                                    key={job} 
-                                                    style={[styles.optionChip, user?.job === job && styles.optionChipSelected]}
-                                                    onPress={() => handleUpdateProfile('job', job)}
-                                                >
-                                                    {user?.job === job && (
-                                                        <LinearGradient
-                                                            colors={['#7c3aed', '#ec4899']}
-                                                            start={{ x: 0, y: 0 }}
-                                                            end={{ x: 1, y: 1 }}
-                                                            style={StyleSheet.absoluteFill}
-                                                        />
-                                                    )}
-                                                    <Text style={[styles.optionText, user?.job === job && styles.optionTextSelected]}>{job}</Text>
-                                                </TouchableOpacity>
-                                            ))}
-                                        </View>
-                                    </View>
-
-                                    {/* Eğitim Card */}
-                                    <View style={styles.modernEditCard}>
-                                        <View style={styles.cardHeaderSmall}>
-                                            <View style={[styles.cardIconBg, { backgroundColor: '#8b5cf620' }]}>
-                                                <Ionicons name="school" size={14} color="#8b5cf6" />
-                                            </View>
-                                            <Text style={styles.cardTitleSmall}>EĞİTİM</Text>
-                                        </View>
-                                        <View style={styles.optionGrid}>
-                                            {editOptions.edu.map(edu => (
-                                                <TouchableOpacity 
-                                                    key={edu} 
-                                                    style={[styles.optionChip, user?.edu === edu && styles.optionChipSelected]}
-                                                    onPress={() => handleUpdateProfile('edu', edu)}
-                                                >
-                                                    {user?.edu === edu && (
-                                                        <LinearGradient
-                                                            colors={['#7c3aed', '#ec4899']}
-                                                            start={{ x: 0, y: 0 }}
-                                                            end={{ x: 1, y: 1 }}
-                                                            style={StyleSheet.absoluteFill}
-                                                        />
-                                                    )}
-                                                    <Text style={[styles.optionText, user?.edu === edu && styles.optionTextSelected]}>{edu}</Text>
-                                                </TouchableOpacity>
-                                            ))}
-                                        </View>
-                                    </View>
-
-                                    {/* Burç Card */}
-                                    <View style={styles.modernEditCard}>
-                                        <View style={styles.cardHeaderSmall}>
-                                            <View style={[styles.cardIconBg, { backgroundColor: '#f59e0b20' }]}>
-                                                <Ionicons name="moon" size={14} color="#f59e0b" />
-                                            </View>
-                                            <Text style={styles.cardTitleSmall}>BURÇ</Text>
-                                        </View>
-                                        <View style={styles.optionGrid}>
-                                            {editOptions.zodiac.map(z => (
-                                                <TouchableOpacity 
-                                                    key={z} 
-                                                    style={[styles.optionChip, user?.zodiac === z && styles.optionChipSelected]}
-                                                    onPress={() => handleUpdateProfile('zodiac', z)}
-                                                >
-                                                    {user?.zodiac === z && (
-                                                        <LinearGradient
-                                                            colors={['#7c3aed', '#ec4899']}
-                                                            start={{ x: 0, y: 0 }}
-                                                            end={{ x: 1, y: 1 }}
-                                                            style={StyleSheet.absoluteFill}
-                                                        />
-                                                    )}
-                                                    <Text style={[styles.optionText, user?.zodiac === z && styles.optionTextSelected]}>{z}</Text>
-                                                </TouchableOpacity>
-                                            ))}
-                                        </View>
-                                    </View>
-
-                                    {/* İlişki Card */}
-                                    <View style={styles.modernEditCard}>
-                                        <View style={styles.cardHeaderSmall}>
-                                            <View style={[styles.cardIconBg, { backgroundColor: '#ef444420' }]}>
-                                                <Ionicons name="heart" size={14} color="#ef4444" />
-                                            </View>
-                                            <Text style={styles.cardTitleSmall}>İLİŞKİ DURUMU / AMAÇ</Text>
-                                        </View>
-                                        <View style={styles.optionGrid}>
-                                            {editOptions.relationship.map(r => (
-                                                <TouchableOpacity 
-                                                    key={r} 
-                                                    style={[styles.optionChip, user?.relationship === r && styles.optionChipSelected]}
-                                                    onPress={() => handleUpdateProfile('relationship', r)}
-                                                >
-                                                    {user?.relationship === r && (
-                                                        <LinearGradient
-                                                            colors={['#7c3aed', '#ec4899']}
-                                                            start={{ x: 0, y: 0 }}
-                                                            end={{ x: 1, y: 1 }}
-                                                            style={StyleSheet.absoluteFill}
-                                                        />
-                                                    )}
-                                                    <Text style={[styles.optionText, user?.relationship === r && styles.optionTextSelected]}>{r}</Text>
-                                                </TouchableOpacity>
-                                            ))}
-                                        </View>
-                                    </View>
-
-                                    {/* Boy Scroll */}
-                                    <View style={styles.modernEditCard}>
-                                        <View style={styles.cardHeaderSmall}>
-                                            <View style={[styles.cardIconBg, { backgroundColor: '#3b82f620' }]}>
-                                                <Ionicons name="resize" size={14} color="#3b82f6" />
-                                            </View>
-                                            <Text style={styles.cardTitleSmall}>BOY (CM)</Text>
-                                        </View>
-                                        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.horizontalScrollOptions}>
-                                            {editOptions.boy.map(h => (
-                                                <TouchableOpacity 
-                                                    key={h} 
-                                                    style={[styles.optionChip, user?.boy === String(h) && styles.optionChipSelected]}
-                                                    onPress={() => handleUpdateProfile('boy', String(h))}
-                                                >
-                                                    {user?.boy === String(h) && (
-                                                        <LinearGradient
-                                                            colors={['#7c3aed', '#ec4899']}
-                                                            start={{ x: 0, y: 0 }}
-                                                            end={{ x: 1, y: 1 }}
-                                                            style={StyleSheet.absoluteFill}
-                                                        />
-                                                    )}
-                                                    <Text style={[styles.optionText, user?.boy === String(h) && styles.optionTextSelected]}>{h}</Text>
-                                                </TouchableOpacity>
-                                            ))}
-                                        </ScrollView>
-                                    </View>
-
-                                    {/* Kilo Scroll */}
-                                    <View style={styles.modernEditCard}>
-                                        <View style={styles.cardHeaderSmall}>
-                                            <View style={[styles.cardIconBg, { backgroundColor: '#10b98120' }]}>
-                                                <Ionicons name="speedometer" size={14} color="#10b981" />
-                                            </View>
-                                            <Text style={styles.cardTitleSmall}>KİLO (KG)</Text>
-                                        </View>
-                                        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.horizontalScrollOptions}>
-                                            {editOptions.kilo.map(k => (
-                                                <TouchableOpacity 
-                                                    key={k} 
-                                                    style={[styles.optionChip, user?.kilo === String(k) && styles.optionChipSelected]}
-                                                    onPress={() => handleUpdateProfile('kilo', String(k))}
-                                                >
-                                                    {user?.kilo === String(k) && (
-                                                        <LinearGradient
-                                                            colors={['#7c3aed', '#ec4899']}
-                                                            start={{ x: 0, y: 0 }}
-                                                            end={{ x: 1, y: 1 }}
-                                                            style={StyleSheet.absoluteFill}
-                                                        />
-                                                    )}
-                                                    <Text style={[styles.optionText, user?.kilo === String(k) && styles.optionTextSelected]}>{k}</Text>
-                                                </TouchableOpacity>
-                                            ))}
-                                        </ScrollView>
-                                    </View>
-                                </View>
-                            ) : (
-                                <View style={styles.editContentWrapper}>
-                                    <View style={styles.modernEditCard}>
-                                        <View style={styles.cardHeaderSmall}>
-                                            <View style={[styles.cardIconBg, { backgroundColor: '#ec489920' }]}>
-                                                <Ionicons name="sparkles" size={14} color="#ec4899" />
-                                            </View>
-                                            <Text style={styles.cardTitleSmall}>İLGİ ALANLARI</Text>
-                                        </View>
-                                        <View style={styles.optionGrid}>
-                                            {editOptions.interests.map(interest => {
-                                                let currentInts = user?.interests || [];
-                                                if (typeof currentInts === 'string') {
-                                                    try { currentInts = JSON.parse(currentInts); } catch (e) { currentInts = []; }
+                                    {/* Suggestions Dropdown */}
+                                    {showCitySuggestions && cityInput.trim().length > 0 && (
+                                        <View style={styles.citySuggestionsList}>
+                                            <ScrollView keyboardShouldPersistTaps="always" style={{ maxHeight: 150 }} nestedScrollEnabled={true}>
+                                                {TURKISH_CITIES.filter(c => c.toLowerCase().includes(cityInput.toLowerCase()))
+                                                    .slice(0, 5)
+                                                    .map(c => (
+                                                        <TouchableOpacity
+                                                            key={c}
+                                                            style={styles.citySuggestionItem}
+                                                            onPress={() => {
+                                                                setCityInput(c);
+                                                                setShowCitySuggestions(false);
+                                                                handleUpdateProfile('city', c);
+                                                            }}
+                                                        >
+                                                            <Ionicons name="location-outline" size={12} color="#06b6d4" style={{ marginRight: 6 }} />
+                                                            <Text style={styles.citySuggestionText}>{c}</Text>
+                                                        </TouchableOpacity>
+                                                    ))
                                                 }
-                                                if (!Array.isArray(currentInts)) currentInts = [];
-                                                const isSelected = currentInts.includes(interest);
-                                                return (
-                                                    <TouchableOpacity 
-                                                        key={interest} 
-                                                        style={[styles.optionChip, isSelected && styles.optionChipSelected]}
-                                                        onPress={() => {
-                                                            toggleInterest(interest);
-                                                        }}
-                                                    >
-                                                        {isSelected && (
-                                                            <LinearGradient
-                                                                colors={['#7c3aed', '#ec4899']}
-                                                                start={{ x: 0, y: 0 }}
-                                                                end={{ x: 1, y: 1 }}
-                                                                style={StyleSheet.absoluteFill}
-                                                            />
-                                                        )}
-                                                        <Text style={[styles.optionText, isSelected && styles.optionTextSelected]}>{interest}</Text>
-                                                    </TouchableOpacity>
-                                                );
-                                            })}
+                                            </ScrollView>
                                         </View>
+                                    )}
+                                </View>
+
+                                {/* Meslek Card */}
+                                <View style={styles.modernEditCard}>
+                                    <View style={styles.cardHeaderSmall}>
+                                        <View style={styles.cardIconBg}>
+                                            <Ionicons name="briefcase" size={14} color="#ec4899" />
+                                        </View>
+                                        <Text style={styles.cardTitleSmall}>MESLEK</Text>
+                                    </View>
+                                    <View style={styles.optionGrid}>
+                                        {editOptions.job.map(job => (
+                                            <TouchableOpacity
+                                                key={job}
+                                                style={[styles.optionChip, user?.job === job && styles.optionChipSelected]}
+                                                onPress={() => handleUpdateProfile('job', job)}
+                                            >
+                                                {user?.job === job && (
+                                                    <LinearGradient
+                                                        colors={['#7c3aed', '#ec4899']}
+                                                        start={{ x: 0, y: 0 }}
+                                                        end={{ x: 1, y: 1 }}
+                                                        style={StyleSheet.absoluteFill}
+                                                    />
+                                                )}
+                                                <Text style={[styles.optionText, user?.job === job && styles.optionTextSelected]}>{job}</Text>
+                                            </TouchableOpacity>
+                                        ))}
                                     </View>
                                 </View>
-                            )}
-                            <View style={{ height: 100 }} />
+
+                                {/* Eğitim Card */}
+                                <View style={styles.modernEditCard}>
+                                    <View style={styles.cardHeaderSmall}>
+                                        <View style={styles.cardIconBg}>
+                                            <Ionicons name="school" size={14} color="#8b5cf6" />
+                                        </View>
+                                        <Text style={styles.cardTitleSmall}>EĞİTİM</Text>
+                                    </View>
+                                    <View style={styles.optionGrid}>
+                                        {editOptions.edu.map(edu => (
+                                            <TouchableOpacity
+                                                key={edu}
+                                                style={[styles.optionChip, user?.edu === edu && styles.optionChipSelected]}
+                                                onPress={() => handleUpdateProfile('edu', edu)}
+                                            >
+                                                {user?.edu === edu && (
+                                                    <LinearGradient
+                                                        colors={['#7c3aed', '#ec4899']}
+                                                        start={{ x: 0, y: 0 }}
+                                                        end={{ x: 1, y: 1 }}
+                                                        style={StyleSheet.absoluteFill}
+                                                    />
+                                                )}
+                                                <Text style={[styles.optionText, user?.edu === edu && styles.optionTextSelected]}>{edu}</Text>
+                                            </TouchableOpacity>
+                                        ))}
+                                    </View>
+                                </View>
+
+                                {/* Burç Card */}
+                                <View style={styles.modernEditCard}>
+                                    <View style={styles.cardHeaderSmall}>
+                                        <View style={styles.cardIconBg}>
+                                            <Ionicons name="moon" size={14} color="#f59e0b" />
+                                        </View>
+                                        <Text style={styles.cardTitleSmall}>BURÇ</Text>
+                                    </View>
+                                    <View style={styles.optionGrid}>
+                                        {editOptions.zodiac.map(z => (
+                                            <TouchableOpacity
+                                                key={z}
+                                                style={[styles.optionChip, user?.zodiac === z && styles.optionChipSelected]}
+                                                onPress={() => handleUpdateProfile('zodiac', z)}
+                                            >
+                                                {user?.zodiac === z && (
+                                                    <LinearGradient
+                                                        colors={['#7c3aed', '#ec4899']}
+                                                        start={{ x: 0, y: 0 }}
+                                                        end={{ x: 1, y: 1 }}
+                                                        style={StyleSheet.absoluteFill}
+                                                    />
+                                                )}
+                                                <Text style={[styles.optionText, user?.zodiac === z && styles.optionTextSelected]}>{z}</Text>
+                                            </TouchableOpacity>
+                                        ))}
+                                    </View>
+                                </View>
+
+                                {/* İlişki Card */}
+                                <View style={styles.modernEditCard}>
+                                    <View style={styles.cardHeaderSmall}>
+                                        <View style={styles.cardIconBg}>
+                                            <Ionicons name="heart" size={14} color="#ef4444" />
+                                        </View>
+                                        <Text style={styles.cardTitleSmall}>İLİŞKİ DURUMU / AMAÇ</Text>
+                                    </View>
+                                    <View style={styles.optionGrid}>
+                                        {editOptions.relationship.map(r => (
+                                            <TouchableOpacity
+                                                key={r}
+                                                style={[styles.optionChip, user?.relationship === r && styles.optionChipSelected]}
+                                                onPress={() => handleUpdateProfile('relationship', r)}
+                                            >
+                                                {user?.relationship === r && (
+                                                    <LinearGradient
+                                                        colors={['#7c3aed', '#ec4899']}
+                                                        start={{ x: 0, y: 0 }}
+                                                        end={{ x: 1, y: 1 }}
+                                                        style={StyleSheet.absoluteFill}
+                                                    />
+                                                )}
+                                                <Text style={[styles.optionText, user?.relationship === r && styles.optionTextSelected]}>{r}</Text>
+                                            </TouchableOpacity>
+                                        ))}
+                                    </View>
+                                </View>
+
+                                {/* Boy Scroll */}
+                                <View style={styles.modernEditCard}>
+                                    <View style={styles.cardHeaderSmall}>
+                                        <View style={styles.cardIconBg}>
+                                            <Ionicons name="resize" size={14} color="#3b82f6" />
+                                        </View>
+                                        <Text style={styles.cardTitleSmall}>BOY (CM)</Text>
+                                    </View>
+                                    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.horizontalScrollOptions}>
+                                        {editOptions.boy.map(h => (
+                                            <TouchableOpacity
+                                                key={h}
+                                                style={[styles.optionChip, user?.boy === String(h) && styles.optionChipSelected]}
+                                                onPress={() => handleUpdateProfile('boy', String(h))}
+                                            >
+                                                {user?.boy === String(h) && (
+                                                    <LinearGradient
+                                                        colors={['#7c3aed', '#ec4899']}
+                                                        start={{ x: 0, y: 0 }}
+                                                        end={{ x: 1, y: 1 }}
+                                                        style={StyleSheet.absoluteFill}
+                                                    />
+                                                )}
+                                                <Text style={[styles.optionText, user?.boy === String(h) && styles.optionTextSelected]}>{h}</Text>
+                                            </TouchableOpacity>
+                                        ))}
+                                    </ScrollView>
+                                </View>
+
+                                {/* Kilo Scroll */}
+                                <View style={styles.modernEditCard}>
+                                    <View style={styles.cardHeaderSmall}>
+                                        <View style={styles.cardIconBg}>
+                                            <Ionicons name="speedometer" size={14} color="#10b981" />
+                                        </View>
+                                        <Text style={styles.cardTitleSmall}>KİLO (KG)</Text>
+                                    </View>
+                                    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.horizontalScrollOptions}>
+                                        {editOptions.kilo.map(k => (
+                                            <TouchableOpacity
+                                                key={k}
+                                                style={[styles.optionChip, user?.kilo === String(k) && styles.optionChipSelected]}
+                                                onPress={() => handleUpdateProfile('kilo', String(k))}
+                                            >
+                                                {user?.kilo === String(k) && (
+                                                    <LinearGradient
+                                                        colors={['#7c3aed', '#ec4899']}
+                                                        start={{ x: 0, y: 0 }}
+                                                        end={{ x: 1, y: 1 }}
+                                                        style={StyleSheet.absoluteFill}
+                                                    />
+                                                )}
+                                                <Text style={[styles.optionText, user?.kilo === String(k) && styles.optionTextSelected]}>{k}</Text>
+                                            </TouchableOpacity>
+                                        ))}
+                                    </ScrollView>
+                                </View>
+
+                                <View style={styles.modernEditCard}>
+                                    <View style={styles.cardHeaderSmall}>
+                                        <View style={styles.cardIconBg}>
+                                            <Ionicons name="sparkles" size={14} color="#ec4899" />
+                                        </View>
+                                        <Text style={styles.cardTitleSmall}>İLGİ ALANLARI</Text>
+                                    </View>
+                                    <View style={styles.optionGrid}>
+                                        {editOptions.interests.map(interest => {
+                                            let currentInts = user?.interests || [];
+                                            if (typeof currentInts === 'string') {
+                                                try { currentInts = JSON.parse(currentInts); } catch (e) { currentInts = []; }
+                                            }
+                                            if (!Array.isArray(currentInts)) currentInts = [];
+                                            const isSelected = currentInts.includes(interest);
+                                            return (
+                                                <TouchableOpacity
+                                                    key={interest}
+                                                    style={[styles.optionChip, isSelected && styles.optionChipSelected]}
+                                                    onPress={() => {
+                                                        toggleInterest(interest);
+                                                    }}
+                                                >
+                                                    {isSelected && (
+                                                        <LinearGradient
+                                                            colors={['#7c3aed', '#ec4899']}
+                                                            start={{ x: 0, y: 0 }}
+                                                            end={{ x: 1, y: 1 }}
+                                                            style={StyleSheet.absoluteFill}
+                                                        />
+                                                    )}
+                                                    <Text style={[styles.optionText, isSelected && styles.optionTextSelected]}>{interest}</Text>
+                                                </TouchableOpacity>
+                                            );
+                                        })}
+                                    </View>
+                                </View>
+                            </View>
+                            <View style={{ height: 120 }} />
                         </ScrollView>
+
+                        <View style={styles.floatingSaveWrapper}>
+                            <TouchableOpacity
+                                style={styles.floatingSaveBtn}
+                                onPress={() => setIsEditModalVisible(false)}
+                                activeOpacity={0.9}
+                            >
+                                <LinearGradient
+                                    colors={['#7c3aed', '#ec4899']}
+                                    start={{ x: 0, y: 0 }}
+                                    end={{ x: 1, y: 1 }}
+                                    style={styles.floatingSaveGradient}
+                                >
+                                    <Text style={styles.floatingSaveText}>KAYDET VE KAPAT</Text>
+                                </LinearGradient>
+                            </TouchableOpacity>
+                        </View>
+
                     </BlurView>
                 </View>
             </Modal>
@@ -1825,8 +1780,6 @@ const styles = StyleSheet.create({
     },
     cameraBadge: {
         position: 'absolute',
-        bottom: 0,
-        right: 0,
         backgroundColor: '#FF4FA3',
         width: 26,
         height: 26,
@@ -1835,17 +1788,17 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         borderWidth: 2,
         borderColor: '#09021a',
+        zIndex: 10,
     },
     onlineStatus: {
         position: 'absolute',
-        top: 2,
-        right: 2,
         backgroundColor: '#10b981',
         width: 14,
         height: 14,
         borderRadius: 7,
         borderWidth: 3,
         borderColor: '#09021a',
+        zIndex: 10,
     },
     profileInfo: {
         alignItems: 'center',
@@ -1935,35 +1888,34 @@ const styles = StyleSheet.create({
         fontWeight: 'bold',
         fontSize: 16,
     },
-    statsContainer: {
+    statsContainerClean: {
         flexDirection: 'row',
-        justifyContent: 'center',
-        marginTop: 20,
-        gap: 10,
-    },
-    statPod: {
-        width: (width - 64) / 3,
-        height: 50,
-        borderRadius: 14,
-        overflow: 'hidden',
-    },
-    statBlur: {
-        flex: 1,
-        justifyContent: 'center',
+        justifyContent: 'space-evenly',
         alignItems: 'center',
-        backgroundColor: 'rgba(255,255,255,0.03)',
-        borderWidth: 1,
-        borderColor: 'rgba(255,255,255,0.05)',
+        marginTop: 24,
+        paddingHorizontal: 20,
     },
-    statValue: {
-        fontSize: 14,
-        fontWeight: 'bold',
+    statPodClean: {
+        alignItems: 'center',
+        flex: 1,
+    },
+    statValueClean: {
+        fontSize: 18,
+        fontWeight: '900',
         color: '#fff',
+        letterSpacing: 0.5,
     },
-    statLabel: {
-        fontSize: 9,
-        color: '#8e85a6',
-        marginTop: 2,
+    statLabelClean: {
+        fontSize: 10,
+        color: 'rgba(255,255,255,0.6)',
+        marginTop: 4,
+        textTransform: 'uppercase',
+        letterSpacing: 1,
+    },
+    statDividerVertical: {
+        width: 1,
+        height: 24,
+        backgroundColor: 'rgba(255,255,255,0.1)',
     },
     glassCardWrapper: {
         marginHorizontal: 16,
@@ -2079,6 +2031,14 @@ const styles = StyleSheet.create({
         shadowOpacity: 0.35,
         shadowRadius: 8,
         elevation: 6,
+    },
+    unifiedCardItem: {
+        backgroundColor: 'transparent',
+    },
+    unifiedDivider: {
+        height: 1,
+        backgroundColor: 'rgba(255, 255, 255, 0.05)',
+        marginHorizontal: 16,
     },
     premiumSolidCard: {
         marginHorizontal: 16,
@@ -2228,9 +2188,8 @@ const styles = StyleSheet.create({
         gap: 10,
     },
     cardIconBg: {
-        width: 28,
+        width: 20,
         height: 28,
-        borderRadius: 8,
         alignItems: 'center',
         justifyContent: 'center',
     },
@@ -2298,7 +2257,7 @@ const styles = StyleSheet.create({
         fontWeight: '500',
     },
     albumSection: {
-        padding: 14,
+        padding: 20,
     },
     albumScroll: {
         marginTop: 10,
@@ -2621,6 +2580,35 @@ const styles = StyleSheet.create({
         color: '#ffffff',
         fontSize: 13,
         fontWeight: '600',
+    },
+    floatingSaveWrapper: {
+        position: 'absolute',
+        bottom: Platform.OS === 'ios' ? 40 : 24,
+        left: 20,
+        right: 20,
+        zIndex: 50,
+    },
+    floatingSaveBtn: {
+        width: '100%',
+        height: 56,
+        borderRadius: 28,
+        shadowColor: '#ec4899',
+        shadowOffset: { width: 0, height: 8 },
+        shadowOpacity: 0.4,
+        shadowRadius: 12,
+        elevation: 8,
+    },
+    floatingSaveGradient: {
+        flex: 1,
+        borderRadius: 28,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    floatingSaveText: {
+        color: '#ffffff',
+        fontSize: 16,
+        fontWeight: 'bold',
+        letterSpacing: 1,
     },
 });
 

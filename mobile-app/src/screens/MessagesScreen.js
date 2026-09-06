@@ -28,38 +28,10 @@ import PremiumCoinCard from '../components/hero/PremiumCoinCard';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const OnlinePulse = ({ themeMode, theme }) => {
-    const scale = useSharedValue(1);
-    const opacity = useSharedValue(0.8);
-
-    useEffect(() => {
-        scale.value = withRepeat(
-            withSequence(
-                withTiming(1.2, { duration: 1000, easing: Easing.inOut(Easing.sin) }),
-                withTiming(1, { duration: 1000, easing: Easing.inOut(Easing.sin) })
-            ),
-            -1,
-            true
-        );
-        opacity.value = withRepeat(
-            withSequence(
-                withTiming(0.3, { duration: 1000, easing: Easing.inOut(Easing.sin) }),
-                withTiming(0.8, { duration: 1000, easing: Easing.inOut(Easing.sin) })
-            ),
-            -1,
-            true
-        );
-    }, []);
-
-    const animatedStyle = useAnimatedStyle(() => ({
-        transform: [{ scale: scale.value }],
-        opacity: opacity.value,
-    }));
-
     return (
-        <Animated.View style={[
+        <View style={[
             styles.onlineBadge,
-            { borderColor: themeMode === 'dark' ? '#0f172a' : theme.colors.background },
-            animatedStyle
+            { borderColor: themeMode === 'dark' ? '#0f172a' : theme.colors.background }
         ]} />
     );
 };
@@ -80,6 +52,7 @@ export default function MessagesScreen({ navigation, route }) {
     const [loadingMore, setLoadingMore] = useState(false);
     const [hasMore, setHasMore] = useState(true);
     const [pendingInvitations, setPendingInvitations] = useState([]);
+    const [familyChat, setFamilyChat] = useState(null);
 
     useFocusEffect(
         React.useCallback(() => {
@@ -88,6 +61,7 @@ export default function MessagesScreen({ navigation, route }) {
                 fetchUnreadCount(user.id);
                 fetchBalance(user.id);
                 fetchInvitations();
+                fetchFamilyChat();
             } else {
                 setLoading(false);
             }
@@ -102,6 +76,7 @@ export default function MessagesScreen({ navigation, route }) {
             console.log('[MessagesScreen] Realtime socket update:', data);
             fetchChats(0, true);
             fetchUnreadCount(user.id);
+            fetchFamilyChat();
         };
 
         socket.on('new_message', handleRealtimeUpdate);
@@ -129,6 +104,44 @@ export default function MessagesScreen({ navigation, route }) {
             }
         } catch (error) {
             console.log('Error fetching pending invitations in MessagesScreen:', error.message);
+        }
+    };
+
+    const fetchFamilyChat = async () => {
+        try {
+            const token = await AsyncStorage.getItem('token');
+            if (!token) return;
+
+            const familyRes = await axios.get(`${API_URL}/families/my`, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+
+            if (!familyRes.data?.family) {
+                setFamilyChat(null);
+                return;
+            }
+
+            const family = familyRes.data.family;
+            const chatRes = await axios.get(`${API_URL}/families/${family.id}/chat`, {
+                headers: { Authorization: `Bearer ${token}` }
+            }).catch(() => ({ data: [] }));
+            const last = chatRes.data?.[chatRes.data.length - 1];
+
+            setFamilyChat({
+                id: `family-${family.id}`,
+                is_family_chat: true,
+                family_id: family.id,
+                name: family.name,
+                avatar_url: family.badge_url,
+                last_message: last?.message || 'Aile sohbeti hazır',
+                last_message_at: last?.created_at || family.created_at,
+                unread_count: 0,
+                is_online: true,
+                vip_level: 0,
+                gender: 'family'
+            });
+        } catch (error) {
+            console.log('Error fetching family chat in MessagesScreen:', error.message);
         }
     };
 
@@ -263,12 +276,22 @@ export default function MessagesScreen({ navigation, route }) {
             });
         }
 
+        if (familyChat) {
+            mergedChats = [
+                familyChat,
+                ...mergedChats.filter(chat => chat.id?.toString() !== familyChat.id.toString())
+            ];
+        }
+
         let result = searchText 
-            ? mergedChats.filter(chat => chat.name.toLowerCase().includes(searchText.toLowerCase()))
+            ? mergedChats.filter(chat => chat.name?.toLowerCase().includes(searchText.toLowerCase()))
             : [...mergedChats];
 
         // Sort: Strictly by date (Newest First) - with NaN protection
         return [...result].sort((a, b) => {
+            if (a.is_family_chat) return -1;
+            if (b.is_family_chat) return 1;
+
             const timeA = a.last_message_at ? new Date(a.last_message_at).getTime() : 0;
             const timeB = b.last_message_at ? new Date(b.last_message_at).getTime() : 0;
             
@@ -278,10 +301,11 @@ export default function MessagesScreen({ navigation, route }) {
             
             return finalB - finalA;
         });
-    }, [chats, pendingInvitations, searchText, user?.id]);
+    }, [chats, pendingInvitations, familyChat, searchText, user?.id]);
 
     const renderChatItem = React.useCallback(({ item, index }) => {
         const hasUnread = item.unread_count > 0;
+        const isFamilyChat = item.is_family_chat;
         const formatLastMessage = (msg, type) => {
             if (!msg) return 'Sohbet Başladı 💬';
             
@@ -312,8 +336,10 @@ export default function MessagesScreen({ navigation, route }) {
                     onPress={() => {
                         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                         navigation.navigate('Chat', {
-                            operatorId: item.operator_id === user.id ? item.user_id : item.operator_id,
-                            chatId: item.id.toString().startsWith('virtual-invite-') ? null : item.id,
+                            chatType: isFamilyChat ? 'family' : 'direct',
+                            familyId: item.family_id,
+                            operatorId: isFamilyChat ? null : (item.operator_id === user.id ? item.user_id : item.operator_id),
+                            chatId: isFamilyChat || item.id.toString().startsWith('virtual-invite-') ? null : item.id,
                             name: item.name,
                             gender: item.gender,
                             avatar_url: item.avatar_url,
@@ -321,27 +347,36 @@ export default function MessagesScreen({ navigation, route }) {
                             user
                         });
                     }}
-                    style={{ marginBottom: 12, marginHorizontal: 16 }}
-                    activeOpacity={0.8}
+                    style={{ marginBottom: 0 }} // Removed margin entirely to eliminate the gap line
+                    activeOpacity={0.7}
                 >
-                    <GlassCard
-                        intensity={(hasUnread || item.is_agency_invite) ? 50 : 35}
-                        tint={themeMode === 'dark' ? 'dark' : 'light'}
+                    <View
                         style={[
                             styles.chatItem,
-                            (hasUnread || item.is_agency_invite)
-                                ? { borderColor: 'rgba(236, 72, 153, 0.5)', borderWidth: 1.5 }
-                                : { borderColor: 'rgba(255, 255, 255, 0.1)', borderWidth: 1 }
+                            (hasUnread || item.is_agency_invite || isFamilyChat)
+                                ? { borderLeftColor: '#ec4899', borderLeftWidth: 4, backgroundColor: 'rgba(255, 255, 255, 0.03)' } // Slight highlight for unread
+                                : {}
                         ]}
                     >
                         <View style={styles.avatarContainer}>
-                            <VipFrame
-                                level={item.gender === 'coin_bayisi' ? 'dealer' : (item.vip_level || 0)}
-                                avatar={item.avatar_url}
-                                size={48}
-                                isStatic={true}
-                            />
-                            {item.is_agency_invite ? (
+                            {isFamilyChat ? (
+                                <Image
+                                    source={{ uri: item.avatar_url || 'https://ui-avatars.com/api/?name=Aile&background=ec4899&color=fff' }}
+                                    style={styles.familyChatAvatar}
+                                />
+                            ) : (
+                                <VipFrame
+                                    level={item.gender === 'coin_bayisi' ? 'dealer' : (item.vip_level || 0)}
+                                    avatar={item.avatar_url}
+                                    size={56}
+                                    isStatic={true}
+                                />
+                            )}
+                            {isFamilyChat ? (
+                                <View style={[styles.onlineBadge, { backgroundColor: '#ec4899', width: 18, height: 18, borderRadius: 9, alignItems: 'center', justifyContent: 'center', borderColor: themeMode === 'dark' ? '#0f172a' : theme.colors.background }]}>
+                                    <Ionicons name="people" size={10} color="white" />
+                                </View>
+                            ) : item.is_agency_invite ? (
                                 <View style={[styles.onlineBadge, { backgroundColor: '#ec4899', width: 14, height: 14, borderRadius: 7, alignItems: 'center', justifyContent: 'center', borderColor: themeMode === 'dark' ? '#0f172a' : theme.colors.background }]}>
                                     <Ionicons name="flash" size={8} color="white" />
                                 </View>
@@ -358,7 +393,15 @@ export default function MessagesScreen({ navigation, route }) {
                                             {item.name}
                                         </Text>
  
-                                        {item.is_agency_invite ? (
+                                        {isFamilyChat ? (
+                                            <LinearGradient
+                                                colors={['#ec4899', '#8b5cf6']}
+                                                start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+                                                style={[styles.vipBadge, { marginLeft: 6 }]}
+                                            >
+                                                <Text style={styles.vipText}>AİLE</Text>
+                                            </LinearGradient>
+                                        ) : item.is_agency_invite ? (
                                             <LinearGradient
                                                 colors={['#ec4899', '#8b5cf6']}
                                                 start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
@@ -428,7 +471,7 @@ export default function MessagesScreen({ navigation, route }) {
                                 </View>
                             </View>
                         </View>
-                    </GlassCard>
+                    </View>
                 </TouchableOpacity>
             </Animated.View>
         );
@@ -567,20 +610,23 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         paddingVertical: 14,
-        paddingHorizontal: 16,
-        borderRadius: 20,
-        backgroundColor: 'rgba(255, 255, 255, 0.04)',
+        paddingLeft: 12,
+        paddingRight: 20,
+        borderRadius: 0, 
+        backgroundColor: 'transparent', // Fully transparent to match the screen background
         overflow: 'hidden',
-        // Premium Shadow
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 6 },
-        shadowOpacity: 0.2,
-        shadowRadius: 15,
-        elevation: 0,
     },
     avatarContainer: {
         position: 'relative',
         marginRight: 16,
+    },
+    familyChatAvatar: {
+        width: 56,
+        height: 56,
+        borderRadius: 16,
+        borderWidth: 2,
+        borderColor: '#ec4899',
+        backgroundColor: '#1f1232',
     },
     onlineBadge: {
         position: 'absolute',

@@ -153,7 +153,7 @@ router.post('/', authenticateToken, async (req, res) => {
         const { balance, is_agency_owner } = userRes.rows[0];
         const cost = 5000;
 
-        if (!is_agency_owner) {
+        if (true) {
             if (balance < cost) {
                 await db.query('ROLLBACK');
                 return res.status(400).json({ error: `Yetersiz bakiye. Aile kurmak için ${cost} altın gereklidir.` });
@@ -194,6 +194,27 @@ router.post('/', authenticateToken, async (req, res) => {
 });
 
 // ─── 2. LIST/SEARCH FAMILIES ─────────────────────────────────────────────────
+// Update family profile (leader only)
+router.patch('/:id', authenticateToken, async (req, res) => {
+    const { id } = req.params;
+    const { name, description, badgeUrl } = req.body;
+    try {
+        const leader = await db.query(
+            `SELECT 1 FROM family_members WHERE family_id = $1 AND user_id = $2 AND role = 'leader'`,
+            [id, req.user.id]
+        );
+        if (leader.rows.length === 0) return res.status(403).json({ error: 'Sadece aile lideri düzenleyebilir.' });
+        if (!name || !name.trim()) return res.status(400).json({ error: 'Aile adı boş olamaz.' });
+        const updated = await db.query(
+            `UPDATE families SET name = $1, description = $2, badge_url = $3 WHERE id = $4 RETURNING *`,
+            [name.trim(), description || '', badgeUrl || null, id]
+        );
+        res.json(updated.rows[0]);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 router.get('/', authenticateToken, async (req, res) => {
     const { search } = req.query;
     try {
@@ -607,14 +628,8 @@ router.delete('/:id/leave', authenticateToken, async (req, res) => {
         const { role } = memberRes.rows[0];
 
         if (role === 'leader') {
-            // Check if there are other members
-            const memberCountCheck = await db.query('SELECT COUNT(*)::int as count FROM family_members WHERE family_id = $1', [id]);
-            if (memberCountCheck.rows[0].count > 1) {
-                await db.query('ROLLBACK');
-                return res.status(400).json({ error: 'Aile lideri ayrılmadan önce liderliği başka bir üyeye devretmelidir.' });
-            }
-            // If they are the only member, delete family completely
-            await db.query('DELETE FROM families WHERE id = $1', [id]);
+            await db.query('ROLLBACK');
+            return res.status(400).json({ error: 'Aile lideri aileden ayrılamaz. Önce liderliği devredin veya aileyi kaldırın.' });
         } else {
             // Remove member
             await db.query('DELETE FROM family_members WHERE family_id = $1 AND user_id = $2', [id, userId]);
@@ -626,6 +641,27 @@ router.delete('/:id/leave', authenticateToken, async (req, res) => {
 
     } catch (err) {
         await db.query('ROLLBACK');
+        res.status(500).json({ error: err.message });
+    }
+});
+
+router.delete('/:id', authenticateToken, async (req, res) => {
+    const { id } = req.params;
+    const userId = req.user.id;
+
+    try {
+        const leaderRes = await db.query(
+            "SELECT role FROM family_members WHERE family_id = $1 AND user_id = $2 AND role = 'leader'",
+            [id, userId]
+        );
+
+        if (leaderRes.rows.length === 0) {
+            return res.status(403).json({ error: 'Sadece aile lideri aileyi kaldırabilir.' });
+        }
+
+        await db.query('DELETE FROM families WHERE id = $1', [id]);
+        res.json({ success: true, message: 'Aile kaldırıldı.' });
+    } catch (err) {
         res.status(500).json({ error: err.message });
     }
 });

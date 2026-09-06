@@ -5,11 +5,13 @@ import {
 } from 'react-native';
 import { Ionicons, FontAwesome5 } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import * as ImagePicker from 'expo-image-picker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
 import { API_URL } from '../config';
 import { useAlert } from '../contexts/AlertContext';
 import { useAppStore } from '../store/useAppStore';
+import { useTheme } from '../contexts/ThemeContext';
 
 const { width } = Dimensions.get('window');
 
@@ -80,7 +82,7 @@ function getLevelInfo(points) {
 }
 
 function getNextLevelThreshold(points) {
-    const sorted = [...LEVEL_THRESHOLDS].sort((a,b) => a.xp - b.xp);
+    const sorted = [...LEVEL_THRESHOLDS].sort((a, b) => a.xp - b.xp);
     for (const lvl of sorted) {
         if (lvl.xp > points) {
             return lvl;
@@ -92,12 +94,14 @@ function getNextLevelThreshold(points) {
 export default function FamilyScreen({ navigation }) {
     const { showAlert } = useAlert();
     const { user: currentUser, balance, setBalance } = useAppStore();
+    const { theme } = useTheme();
 
     // Loading & state states
     const [loading, setLoading] = useState(true);
     const [myFamilyData, setMyFamilyData] = useState(null); // { family, members, myRole }
     const [searchQuery, setSearchQuery] = useState('');
     const [familiesList, setFamiliesList] = useState([]);
+    const [showFamilyDiscovery, setShowFamilyDiscovery] = useState(true);
     const [activeTab, setActiveTab] = useState('members'); // 'members', 'chat', 'tasks', 'manage'
 
     // Create Modal state
@@ -107,6 +111,64 @@ export default function FamilyScreen({ navigation }) {
     const [familyBadge, setFamilyBadge] = useState('');
     const [familyJoinType, setFamilyJoinType] = useState('approval_required'); // 'open', 'approval_required', 'invite_only'
     const [submitting, setSubmitting] = useState(false);
+    const [editFamilyVisible, setEditFamilyVisible] = useState(false);
+    const [editFamilyName, setEditFamilyName] = useState('');
+    const [editFamilyDesc, setEditFamilyDesc] = useState('');
+    const [editFamilyBadge, setEditFamilyBadge] = useState('');
+
+    const pickFamilyLogo = async () => {
+        const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (permission.status !== 'granted') return;
+
+        const result = await ImagePicker.launchImageLibraryAsync({
+            mediaTypes: ImagePicker.MediaTypeOptions.Images,
+            allowsEditing: true,
+            aspect: [1, 1],
+            quality: 0.8,
+        });
+        if (!result.canceled && result.assets?.[0]?.uri) {
+            setFamilyBadge(result.assets[0].uri);
+        }
+    };
+
+    const openFamilyEdit = () => {
+        const family = myFamilyData?.family;
+        if (!family || myFamilyData.myRole !== 'leader') return;
+        setEditFamilyName(family.name || '');
+        setEditFamilyDesc(family.description || '');
+        setEditFamilyBadge(family.badge_url || '');
+        setEditFamilyVisible(true);
+    };
+
+    const saveFamilyEdit = async () => {
+        if (!editFamilyName.trim()) return;
+        setSubmitting(true);
+        try {
+            const token = await AsyncStorage.getItem('token');
+            let badgeUrl = editFamilyBadge;
+            if (editFamilyBadge && !editFamilyBadge.startsWith('http')) {
+                const formData = new FormData();
+                formData.append('file', { uri: editFamilyBadge, type: 'image/jpeg', name: `family_${Date.now()}.jpg` });
+                const uploadRes = await axios.post(`${API_URL}/upload`, formData, {
+                    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'multipart/form-data' }
+                });
+                badgeUrl = uploadRes.data?.url || null;
+            }
+            const res = await axios.patch(`${API_URL}/families/${myFamilyData.family.id}`, {
+                name: editFamilyName,
+                description: editFamilyDesc,
+                badgeUrl
+            }, { headers: { Authorization: `Bearer ${token}` } });
+            setMyFamilyData(prev => ({ ...prev, family: { ...prev.family, ...res.data } }));
+            setEditFamilyVisible(false);
+            showAlert({ title: 'Başarılı', message: 'Aile bilgileri güncellendi.', type: 'success' });
+            fetchFamilies(searchQuery);
+        } catch (e) {
+            showAlert({ title: 'Hata', message: e.response?.data?.error || 'Aile güncellenemedi.', type: 'error' });
+        } finally {
+            setSubmitting(false);
+        }
+    };
 
     // Chat States
     const [chatMessages, setChatMessages] = useState([]);
@@ -133,7 +195,7 @@ export default function FamilyScreen({ navigation }) {
             setMyFamilyData(res.data);
             if (res.data) {
                 // If in a family, load additional family data
-                fetchChatHistory(res.data.family.id);
+                fetchFamilies(searchQuery);
                 if (['leader', 'co_leader', 'officer'].includes(res.data.myRole)) {
                     fetchApplications(res.data.family.id);
                 }
@@ -211,10 +273,9 @@ export default function FamilyScreen({ navigation }) {
             return;
         }
 
-        const isOwner = currentUser?.is_agency_owner;
         const creationCost = 5000;
 
-        if (!isOwner && balance < creationCost) {
+        if (balance < creationCost) {
             showAlert({ title: 'Yetersiz Bakiye', message: `Aile kurmak için ${creationCost} altın gereklidir.`, type: 'error' });
             return;
         }
@@ -222,10 +283,23 @@ export default function FamilyScreen({ navigation }) {
         setSubmitting(true);
         try {
             const token = await AsyncStorage.getItem('token');
+            let badgeUrl = null;
+            if (familyBadge) {
+                const formData = new FormData();
+                formData.append('file', {
+                    uri: familyBadge,
+                    type: 'image/jpeg',
+                    name: `family_${Date.now()}.jpg`,
+                });
+                const uploadRes = await axios.post(`${API_URL}/upload`, formData, {
+                    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'multipart/form-data' },
+                });
+                badgeUrl = uploadRes.data?.url || null;
+            }
             const res = await axios.post(`${API_URL}/families`, {
                 name: familyName,
                 description: familyDesc,
-                badgeUrl: familyBadge || 'https://via.placeholder.com/150',
+                badgeUrl,
                 joinType: familyJoinType
             }, {
                 headers: { Authorization: `Bearer ${token}` }
@@ -233,8 +307,9 @@ export default function FamilyScreen({ navigation }) {
 
             showAlert({ title: 'Tebrikler!', message: 'Aileniz başarıyla kuruldu!', type: 'success' });
             setCreateModalVisible(false);
-            setBalance(balance - (isOwner ? 0 : creationCost));
+            setBalance(balance - creationCost);
             setMyFamilyData({ family: res.data, members: [], myRole: 'leader' });
+            setFamiliesList(prev => [res.data, ...prev.filter(f => String(f.id) !== String(res.data.id))]);
             fetchMyFamily();
         } catch (e) {
             const errorMsg = e.response?.data?.error || 'Aile kurulurken bir hata oluştu.';
@@ -267,10 +342,10 @@ export default function FamilyScreen({ navigation }) {
                 headers: { Authorization: `Bearer ${token}` }
             });
 
-            showAlert({ 
-                title: 'Başarılı', 
-                message: action === 'accept' ? 'Başvuru onaylandı ve üye eklendi.' : 'Katılım isteği reddedildi.', 
-                type: 'success' 
+            showAlert({
+                title: 'Başarılı',
+                message: action === 'accept' ? 'Başvuru onaylandı ve üye eklendi.' : 'Katılım isteği reddedildi.',
+                type: 'success'
             });
             fetchApplications(familyId);
             fetchMyFamily();
@@ -358,10 +433,15 @@ export default function FamilyScreen({ navigation }) {
     };
 
     const handleLeaveFamily = () => {
+        if (myFamilyData.myRole === 'leader') {
+            handleDeleteFamily();
+            return;
+        }
+
         const isLeader = myFamilyData.myRole === 'leader';
         showAlert({
             title: 'Aileden Ayrıl',
-            message: isLeader 
+            message: isLeader
                 ? 'Lideri olduğunuz aileden ayrılmak üzeresiniz. Eğer ailede başka üyeler varsa önce liderliği devretmelisiniz. Ailede tek başınaysanız aile tamamen silinecektir. Devam edilsin mi?'
                 : 'Bu aileden ayrılmak istediğinize emin misiniz?',
             type: 'warning',
@@ -377,6 +457,31 @@ export default function FamilyScreen({ navigation }) {
                     fetchMyFamily();
                 } catch (e) {
                     const errorMsg = e.response?.data?.error || 'Ayrılma işlemi başarısız.';
+                    showAlert({ title: 'Hata', message: errorMsg, type: 'error' });
+                }
+            }
+        });
+    };
+
+    const handleDeleteFamily = () => {
+        showAlert({
+            title: 'Aileyi Kaldır',
+            message: 'Bu aile kalıcı olarak kaldırılacak. Bu işlem geri alınamaz.',
+            type: 'warning',
+            onConfirm: async () => {
+                try {
+                    const token = await AsyncStorage.getItem('token');
+                    const familyId = myFamilyData.family.id;
+                    await axios.delete(`${API_URL}/families/${familyId}`, {
+                        headers: { Authorization: `Bearer ${token}` }
+                    });
+                    showAlert({ title: 'Kaldırıldı', message: 'Aile başarıyla kaldırıldı.', type: 'success' });
+                    setMyFamilyData(null);
+                    setShowFamilyDiscovery(true);
+                    setFamiliesList(prev => prev.filter(f => String(f.id) !== String(familyId)));
+                    fetchFamilies();
+                } catch (e) {
+                    const errorMsg = e.response?.data?.error || 'Aile kaldırılamadı.';
                     showAlert({ title: 'Hata', message: errorMsg, type: 'error' });
                 }
             }
@@ -399,12 +504,25 @@ export default function FamilyScreen({ navigation }) {
                         <Text style={styles.familyStatsText}>👥 {item.member_count} / {item.max_members}</Text>
                     </View>
                 </View>
-                <TouchableOpacity 
+                {myFamilyData && (
+                    <TouchableOpacity
+                        onPress={() => {
+                            setShowFamilyDiscovery(!showFamilyDiscovery);
+                            if (!showFamilyDiscovery) fetchFamilies();
+                        }}
+                        style={styles.familyViewToggle}
+                        activeOpacity={0.7}
+                    >
+                        <Ionicons name={showFamilyDiscovery ? "people-outline" : "home-outline"} size={16} color="#fff" />
+                        <Text style={styles.familyViewToggleText}>{showFamilyDiscovery ? 'Aileleri keşfet' : 'Ailem'}</Text>
+                    </TouchableOpacity>
+                )}
+                <TouchableOpacity
                     style={styles.familyJoinBtn}
                     onPress={() => handleApply(item.id)}
                     activeOpacity={0.8}
                 >
-                    <LinearGradient colors={['#ec4899', '#8b5cf6']} style={styles.joinBtnGradient}>
+                    <LinearGradient colors={['rgba(255,255,255,0.18)', 'rgba(139,92,246,0.28)']} style={styles.joinBtnGradient}>
                         <Text style={styles.joinBtnText}>Katıl</Text>
                     </LinearGradient>
                 </TouchableOpacity>
@@ -421,47 +539,57 @@ export default function FamilyScreen({ navigation }) {
     }
 
     return (
-        <View style={styles.container}>
+        <LinearGradient
+            colors={['#08051A', '#160627', '#090014']}
+            style={styles.container}
+        >
             <StatusBar barStyle="light-content" />
-            <LinearGradient colors={['#08051A', '#160627', '#090014']} style={StyleSheet.absoluteFill} />
 
             {/* HEADER */}
             <View style={styles.header}>
                 <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn} activeOpacity={0.7}>
-                    <LinearGradient colors={['rgba(255,255,255,0.12)', 'rgba(255,255,255,0.03)']} style={styles.backBtnGradient}>
+                    <View style={styles.backBtnGradient}>
                         <Ionicons name="chevron-back" size={20} color="#fff" />
-                    </LinearGradient>
+                    </View>
                 </TouchableOpacity>
                 <Text style={styles.headerTitle}>Klan ve Aileler</Text>
-                <TouchableOpacity 
-                    onPress={() => showAlert({ 
-                        title: 'Klan ve Aileler', 
-                        message: 'Bir aileye katılarak günlük XP limitlerini zorlayın, görevleri tamamlayın ve haftalık sıralamada ödüller kazanın!', 
-                        type: 'info' 
-                    })}
-                    style={styles.backBtn} 
+                <TouchableOpacity
+                    style={styles.familyViewToggle}
+                    onPress={() => myFamilyData ? setShowFamilyDiscovery(!showFamilyDiscovery) : setCreateModalVisible(true)}
                     activeOpacity={0.7}
                 >
-                    <LinearGradient colors={['rgba(255,255,255,0.12)', 'rgba(255,255,255,0.03)']} style={styles.backBtnGradient}>
+                    <Ionicons name={myFamilyData ? 'home-outline' : 'add'} size={16} color="#fff" />
+                    <Text style={styles.familyViewToggleText}>Ailem</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                    onPress={() => showAlert({
+                        title: 'Klan ve Aileler',
+                        message: 'Bir aileye katılarak günlük XP limitlerini zorlayın, görevleri tamamlayın ve haftalık sıralamada ödüller kazanın!',
+                        type: 'info'
+                    })}
+                    style={styles.backBtn}
+                    activeOpacity={0.7}
+                >
+                    <View style={styles.backBtnGradient}>
                         <Ionicons name="information-circle-outline" size={20} color="#fff" />
-                    </LinearGradient>
+                    </View>
                 </TouchableOpacity>
             </View>
 
-            {myFamilyData === null ? (
+            {myFamilyData === null || showFamilyDiscovery ? (
                 /* ─── NOT IN A FAMILY VIEW ─── */
                 <View style={{ flex: 1 }}>
-                    <ScrollView 
+                    <ScrollView
                         ref={scrollViewRef}
-                        showsVerticalScrollIndicator={false} 
+                        showsVerticalScrollIndicator={false}
                         contentContainerStyle={{ paddingBottom: 60 }}
                     >
 
 
                         {/* Quick Action Cards */}
-                        <View style={styles.quickActionsContainer}>
-                            <TouchableOpacity 
-                                style={styles.quickActionCard} 
+                        <View style={[styles.quickActionsContainer, { display: 'none' }]}>
+                            <TouchableOpacity
+                                style={styles.quickActionCard}
                                 onPress={() => setCreateModalVisible(true)}
                                 activeOpacity={0.8}
                             >
@@ -472,8 +600,8 @@ export default function FamilyScreen({ navigation }) {
                                 </LinearGradient>
                             </TouchableOpacity>
 
-                            <TouchableOpacity 
-                                style={styles.quickActionCard} 
+                            <TouchableOpacity
+                                style={styles.quickActionCard}
                                 onPress={() => searchInputRef.current?.focus()}
                                 activeOpacity={0.8}
                             >
@@ -484,8 +612,8 @@ export default function FamilyScreen({ navigation }) {
                                 </LinearGradient>
                             </TouchableOpacity>
 
-                            <TouchableOpacity 
-                                style={styles.quickActionCard} 
+                            <TouchableOpacity
+                                style={styles.quickActionCard}
                                 onPress={() => {
                                     // Scroll down to ranking section
                                     scrollViewRef.current?.scrollTo({ y: 340, animated: true });
@@ -521,8 +649,8 @@ export default function FamilyScreen({ navigation }) {
                             </View>
 
                             {/* Horizontal Filters */}
-                            <ScrollView 
-                                horizontal 
+                            <ScrollView
+                                horizontal
                                 showsHorizontalScrollIndicator={false}
                                 contentContainerStyle={styles.filtersScrollContent}
                                 style={{ marginTop: 4, marginBottom: 8 }}
@@ -532,8 +660,8 @@ export default function FamilyScreen({ navigation }) {
                                     { id: 'new', label: 'Yeni', icon: 'sparkles-outline' },
                                     { id: 'high_level', label: 'Yüksek Seviye', icon: 'trending-up-outline' },
                                     { id: 'open', label: 'Açık Katılım', icon: 'lock-open-outline' },
-                                    { id: 'weekly_best', label: 'Haftanın Enleri', icon: 'ribbon-outline' }
-                                ].map((filter) => {
+                                    { id: 'weekly_best', label: 'Haftanın Aileleri', icon: 'ribbon-outline' }
+                                ].filter((filter) => ['popular', 'new'].includes(filter.id)).map((filter) => {
                                     const isSelected = selectedFilter === filter.id;
                                     return (
                                         <TouchableOpacity
@@ -551,14 +679,14 @@ export default function FamilyScreen({ navigation }) {
                         </View>
 
                         {/* Weekly Ranking Preview */}
-                        <View style={styles.rankingPreviewSection}>
+                        {familiesList.length > 0 && <View style={styles.rankingPreviewSection}>
                             <View style={styles.sectionHeaderRow}>
-                                <Text style={styles.sectionHeaderTitle}>Haftanın Enleri</Text>
+                                <Text style={styles.sectionHeaderTitle}>Haftanın Aileleri</Text>
                                 <Ionicons name="trophy-outline" size={16} color="#FFB84D" />
                             </View>
-                            
+
                             <View style={styles.rankingRowsWrapper}>
-                                {DEMO_FAMILIES.map((fam, idx) => (
+                                {familiesList.slice(0, 3).map((fam, idx) => (
                                     <View key={fam.id} style={styles.rankMiniRow}>
                                         <View style={[styles.rankNumberCircle, idx === 0 ? styles.rank1Bg : idx === 1 ? styles.rank2Bg : styles.rank3Bg]}>
                                             <Text style={styles.rankNumberText}>{idx + 1}</Text>
@@ -566,27 +694,24 @@ export default function FamilyScreen({ navigation }) {
                                         <Image source={{ uri: fam.badge_url }} style={styles.rankAvatar} />
                                         <View style={styles.rankInfoBox}>
                                             <Text style={styles.rankFamilyName}>{fam.name}</Text>
-                                            <Text style={styles.rankLeaderName}>Lider: {fam.leader_name}</Text>
                                         </View>
                                         <Text style={styles.rankLevelText}>Lv.{fam.level}</Text>
                                     </View>
                                 ))}
                             </View>
-                        </View>
+                        </View>}
 
                         {/* Recommended Families */}
                         <View style={styles.listSection}>
                             <View style={styles.sectionHeaderRow}>
                                 <Text style={styles.sectionHeaderTitle}>Önerilen Aileler</Text>
-                                <TouchableOpacity onPress={() => searchInputRef.current?.focus()}>
+                                <TouchableOpacity style={{ display: 'none' }} onPress={() => searchInputRef.current?.focus()}>
                                     <Text style={styles.seeAllText}>Tümünü Gör</Text>
                                 </TouchableOpacity>
                             </View>
-                            
+
                             {(() => {
-                                const items = searchQuery.trim() !== '' 
-                                    ? familiesList 
-                                    : DEMO_FAMILIES;
+                                const items = familiesList;
 
                                 if (items.length === 0) {
                                     return (
@@ -594,7 +719,7 @@ export default function FamilyScreen({ navigation }) {
                                             <Ionicons name="sad-outline" size={44} color="rgba(255,255,255,0.15)" />
                                             <Text style={styles.emptyTitle}>Henüz uygun aile yok</Text>
                                             <Text style={styles.emptySubtitle}>İlk ailelerden birini kurarak sıralamada öne çıkabilirsin.</Text>
-                                            <TouchableOpacity 
+                                            <TouchableOpacity
                                                 style={styles.emptyCreateBtn}
                                                 onPress={() => setCreateModalVisible(true)}
                                                 activeOpacity={0.8}
@@ -606,18 +731,21 @@ export default function FamilyScreen({ navigation }) {
                                 }
 
                                 return items.map((item) => {
+                                    const isMyFamilyCard = String(myFamilyData?.family?.id) === String(item.id);
                                     const nextLvlXp = item.nextXp || 25000;
                                     const currentPoints = item.points || 18400;
                                     const progressPercent = Math.min(100, Math.max(5, (currentPoints / nextLvlXp) * 100));
-                                    
+
                                     return (
                                         <View key={item.id || item.name} style={styles.familyPremiumCard}>
                                             <View style={styles.cardHeaderRow}>
                                                 <Image source={{ uri: item.badge_url || 'https://via.placeholder.com/100' }} style={styles.cardBadge} />
                                                 <View style={styles.cardMiddleInfo}>
                                                     <Text style={styles.cardFamilyName}>{item.name}</Text>
-                                                    <Text style={styles.cardLeaderText}>Lider: {item.leader_name || item.leader?.username || 'Belirtilmemiş'}</Text>
-                                                    
+                                                    <Text style={styles.cardDescriptionText} numberOfLines={1}>
+                                                        {item.description || 'Açıklama bulunmuyor.'}
+                                                    </Text>
+
                                                     <View style={styles.cardSubStatsRow}>
                                                         <View style={styles.levelMiniBadge}>
                                                             <Text style={styles.levelMiniBadgeText}>Lv.{item.level}</Text>
@@ -632,14 +760,14 @@ export default function FamilyScreen({ navigation }) {
                                                             <Text style={styles.cardRankText}>#{item.rank}</Text>
                                                         </View>
                                                     )}
-                                                    
-                                                    <TouchableOpacity 
+
+                                                    <TouchableOpacity
                                                         style={styles.cardJoinBtn}
-                                                        onPress={() => handleApply(item.id)}
+                                                        onPress={() => isMyFamilyCard ? setShowFamilyDiscovery(false) : handleApply(item.id)}
                                                         activeOpacity={0.8}
                                                     >
-                                                        <LinearGradient colors={['#FF3D8B', '#7B2CFF']} style={styles.cardJoinBtnGradient}>
-                                                            <Text style={styles.cardJoinText}>Katıl</Text>
+                                                        <LinearGradient colors={['rgba(255,255,255,0.20)', 'rgba(123,44,255,0.28)']} style={styles.cardJoinBtnGradient}>
+                                                            <Text style={styles.cardJoinText}>{isMyFamilyCard ? 'Ailem' : 'Katıl'}</Text>
                                                         </LinearGradient>
                                                     </TouchableOpacity>
                                                 </View>
@@ -652,11 +780,11 @@ export default function FamilyScreen({ navigation }) {
                                                     <Text style={styles.cardXpVal}>{currentPoints.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ".")} / {nextLvlXp.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ".")}</Text>
                                                 </View>
                                                 <View style={styles.cardXpTrack}>
-                                                    <LinearGradient 
+                                                    <LinearGradient
                                                         colors={['#FF3D8B', '#FFB84D']}
                                                         start={{ x: 0, y: 0 }}
                                                         end={{ x: 1, y: 0 }}
-                                                        style={[styles.cardXpFill, { width: `${progressPercent}%` }]} 
+                                                        style={[styles.cardXpFill, { width: `${progressPercent}%` }]}
                                                     />
                                                 </View>
                                             </View>
@@ -668,8 +796,8 @@ export default function FamilyScreen({ navigation }) {
 
                         {/* Integrated CTA: Create Family Inline Section */}
                         <View style={styles.ctaWrapper}>
-                            <LinearGradient 
-                                colors={['rgba(255, 184, 77, 0.12)', 'rgba(255, 61, 139, 0.05)']} 
+                            <LinearGradient
+                                colors={['rgba(255, 184, 77, 0.12)', 'rgba(255, 61, 139, 0.05)']}
                                 style={styles.ctaContainer}
                             >
                                 <View style={styles.ctaTextSection}>
@@ -678,17 +806,17 @@ export default function FamilyScreen({ navigation }) {
                                         <Text style={styles.ctaTitle}>Kendi Aileni Kur</Text>
                                     </View>
                                     <Text style={styles.ctaSubtitle}>
-                                        {currentUser?.is_agency_owner 
-                                            ? 'İlk aileni ücretsiz kurabilirsin.' 
+                                        {false
+                                            ? 'İlk aileni ücretsiz kurabilirsin.'
                                             : '5.000 Altın ile aileni oluştur. Ajans sahiplerine ilk aile ücretsiz.'}
                                     </Text>
                                 </View>
-                                <TouchableOpacity 
+                                <TouchableOpacity
                                     style={styles.ctaButton}
                                     onPress={() => setCreateModalVisible(true)}
                                     activeOpacity={0.8}
                                 >
-                                    <LinearGradient colors={['#FFB84D', '#FF3D8B']} style={styles.ctaButtonGradient}>
+                                    <LinearGradient colors={['rgba(255,255,255,0.24)', 'rgba(255,61,139,0.26)']} style={styles.ctaButtonGradient}>
                                         <Ionicons name="star" size={14} color="#fff" style={{ marginRight: 6 }} />
                                         <Text style={styles.ctaButtonText}>Kur</Text>
                                     </LinearGradient>
@@ -701,14 +829,17 @@ export default function FamilyScreen({ navigation }) {
                 /* ─── FAMILY DASHBOARD VIEW (ALREADY IN FAMILY) ─── */
                 <View style={{ flex: 1 }}>
                     {/* Family Header Summary Panel */}
-                    <LinearGradient 
-                        colors={['rgba(139, 92, 246, 0.12)', 'rgba(0, 0, 0, 0.25)']} 
-                        style={styles.familyHeaderCard}
-                    >
+                    <View style={styles.familyHeaderCard}>
                         <Image source={{ uri: myFamilyData.family.badge_url }} style={styles.familyBadgeImage} />
                         <View style={styles.familyHeaderTextInfo}>
                             <View style={styles.familyTitleRow}>
                                 <Text style={styles.familyName} numberOfLines={1}>{myFamilyData.family.name}</Text>
+                                {myFamilyData.myRole === 'leader' && (
+                                    <TouchableOpacity style={styles.headerEditFamilyButton} onPress={openFamilyEdit} activeOpacity={0.8}>
+                                        <Ionicons name="create-outline" size={16} color="#fff" />
+                                        <Text style={styles.headerEditFamilyText}>Düzenle</Text>
+                                    </TouchableOpacity>
+                                )}
                                 <LinearGradient colors={['#fbbf24', '#d97706']} style={styles.levelBadge}>
                                     <Text style={styles.levelBadgeText}>Lv.{myFamilyData.family.level}</Text>
                                 </LinearGradient>
@@ -718,14 +849,14 @@ export default function FamilyScreen({ navigation }) {
                             </Text>
                             <Text style={styles.familyCountsText}>👥 Üye Limiti: {myFamilyData.family.member_count} / {myFamilyData.family.max_members}</Text>
                         </View>
-                    </LinearGradient>
+                    </View>
 
                     {/* Progress Bar (Level Progression) */}
                     <View style={styles.progressContainer}>
                         {(() => {
                             const currentPoints = myFamilyData.family.points;
                             const nextLvl = getNextLevelThreshold(currentPoints);
-                            
+
                             const formatNum = (num) => num ? num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ".") : "0";
 
                             if (!nextLvl) {
@@ -758,10 +889,10 @@ export default function FamilyScreen({ navigation }) {
                                         <Text style={styles.xpValue}>{formatNum(currentPoints)} / {formatNum(nextLvl.xp)} XP</Text>
                                     </View>
                                     <View style={styles.progressTrack}>
-                                        <LinearGradient 
-                                            colors={['#8b5cf6', '#ec4899']} 
-                                            start={{x:0, y:0}} end={{x:1, y:0}}
-                                            style={[styles.progressFill, { width: `${percent}%` }]} 
+                                        <LinearGradient
+                                            colors={['#8b5cf6', '#ec4899']}
+                                            start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+                                            style={[styles.progressFill, { width: `${percent}%` }]}
                                         />
                                     </View>
                                     <View style={styles.extraInfoRow}>
@@ -775,29 +906,29 @@ export default function FamilyScreen({ navigation }) {
 
                     {/* Tab Navigation Menu */}
                     <View style={styles.tabBar}>
-                        <TouchableOpacity 
+                        <TouchableOpacity
                             style={[styles.tabItem, activeTab === 'members' && styles.activeTabItem]}
                             onPress={() => setActiveTab('members')}
                             activeOpacity={0.8}
                         >
                             <Text style={[styles.tabText, activeTab === 'members' && styles.activeTabText]}>Üyeler</Text>
                         </TouchableOpacity>
-                        <TouchableOpacity 
+                        {false && <TouchableOpacity 
                             style={[styles.tabItem, activeTab === 'chat' && styles.activeTabItem]}
                             onPress={() => setActiveTab('chat')}
                             activeOpacity={0.8}
                         >
                             <Text style={[styles.tabText, activeTab === 'chat' && styles.activeTabText]}>Sohbet</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity 
+                        </TouchableOpacity>}
+                        <TouchableOpacity
                             style={[styles.tabItem, activeTab === 'tasks' && styles.activeTabItem]}
                             onPress={() => setActiveTab('tasks')}
                             activeOpacity={0.8}
                         >
-                            <Text style={[styles.tabText, activeTab === 'tasks' && styles.activeTabText]}>XP & Check-in</Text>
+                            <Text style={[styles.tabText, activeTab === 'tasks' && styles.activeTabText]}>Check-in</Text>
                         </TouchableOpacity>
                         {['leader', 'co_leader', 'officer'].includes(myFamilyData.myRole) && (
-                            <TouchableOpacity 
+                            <TouchableOpacity
                                 style={[styles.tabItem, activeTab === 'manage' && styles.activeTabItem]}
                                 onPress={() => setActiveTab('manage')}
                                 activeOpacity={0.8}
@@ -824,8 +955,8 @@ export default function FamilyScreen({ navigation }) {
                                             <Image source={{ uri: item.avatar_url || 'https://via.placeholder.com/80' }} style={styles.memberAvatar} />
                                             <View style={styles.memberInfo}>
                                                 <Text style={styles.memberName}>{item.display_name || item.username}</Text>
-                                                <LinearGradient 
-                                                    colors={item.role === 'leader' ? ['#fbbf24', '#d97706'] : ['#8b5cf6', '#6d28d9']} 
+                                                <LinearGradient
+                                                    colors={item.role === 'leader' ? ['#fbbf24', '#d97706'] : ['#8b5cf6', '#6d28d9']}
                                                     style={styles.roleContainer}
                                                 >
                                                     <Text style={styles.roleText}>{item.role.toUpperCase()}</Text>
@@ -835,17 +966,17 @@ export default function FamilyScreen({ navigation }) {
                                                 <Text style={styles.memberXpText}>+{item.daily_xp_contributed} XP</Text>
                                                 <Text style={styles.memberTotalXpText}>Toplam: {item.total_xp_contributed} XP</Text>
                                             </View>
-                                            
+
                                             {canActions && (
                                                 <View style={styles.memberActionsRow}>
-                                                    <TouchableOpacity 
-                                                        style={styles.actionCircleBtn} 
+                                                    <TouchableOpacity
+                                                        style={styles.actionCircleBtn}
                                                         onPress={() => handleTransferLeadership(item.user_id, item.display_name || item.username)}
                                                     >
                                                         <Ionicons name="key" size={12} color="#fbbf24" />
                                                     </TouchableOpacity>
-                                                    <TouchableOpacity 
-                                                        style={[styles.actionCircleBtn, { backgroundColor: 'rgba(239, 68, 68, 0.12)', borderColor: 'rgba(239,68,68,0.25)', borderWidth: 1 }]} 
+                                                    <TouchableOpacity
+                                                        style={[styles.actionCircleBtn, { backgroundColor: '#2a0b16', borderColor: '#7f1d1d', borderWidth: 1 }]}
                                                         onPress={() => handleKickMember(item.user_id, item.display_name || item.username)}
                                                     >
                                                         <Ionicons name="trash" size={12} color="#ef4444" />
@@ -858,7 +989,7 @@ export default function FamilyScreen({ navigation }) {
                             />
                         )}
 
-                        {activeTab === 'chat' && (
+                        {false && activeTab === 'chat' && (
                             /* ── Tab: Yazılı Grup Sohbeti ── */
                             <View style={{ flex: 1, backgroundColor: 'transparent' }}>
                                 <FlatList
@@ -900,18 +1031,18 @@ export default function FamilyScreen({ navigation }) {
 
                         {activeTab === 'tasks' && (
                             /* ── Tab: XP ve Check-in ── */
-                            <ScrollView contentContainerStyle={{ padding: 20 }}>
+                            <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 100 }}>
                                 <View style={styles.checkInContainer}>
                                     <Text style={styles.checkInTitle}>Günlük Check-in</Text>
                                     <Text style={styles.checkInSubtitle}>Günde bir kez check-in yaparak ailenize +10 XP puanı kazandırın.</Text>
-                                    <TouchableOpacity 
+                                    <TouchableOpacity
                                         style={[styles.checkInBtn, checkedInToday && styles.checkInBtnDisabled]}
                                         onPress={handleDailyCheckIn}
                                         disabled={checkedInToday}
                                         activeOpacity={0.8}
                                     >
-                                        <LinearGradient 
-                                            colors={checkedInToday ? ['#374151', '#1f2937'] : ['#10b981', '#047857']} 
+                                        <LinearGradient
+                                            colors={checkedInToday ? ['rgba(255,255,255,0.06)', 'rgba(255,255,255,0.03)'] : ['rgba(255,255,255,0.18)', 'rgba(16,185,129,0.24)']}
                                             style={styles.checkInBtnGradient}
                                         >
                                             <Text style={styles.checkInBtnText}>
@@ -934,8 +1065,8 @@ export default function FamilyScreen({ navigation }) {
                                     </View>
                                 </View>
 
-                                <TouchableOpacity style={styles.leaveFamilyDangerBtn} onPress={handleLeaveFamily} activeOpacity={0.8}>
-                                    <Text style={styles.leaveFamilyText}>Aileden Ayrıl</Text>
+                                <TouchableOpacity style={styles.leaveFamilyDangerBtn} onPress={myFamilyData.myRole === 'leader' ? handleDeleteFamily : handleLeaveFamily} activeOpacity={0.8}>
+                                    <Text style={styles.leaveFamilyText}>{myFamilyData.myRole === 'leader' ? 'Aileyi Kaldır' : 'Aileden Ayrıl'}</Text>
                                 </TouchableOpacity>
                             </ScrollView>
                         )}
@@ -943,10 +1074,16 @@ export default function FamilyScreen({ navigation }) {
                         {activeTab === 'manage' && (
                             /* ── Tab: Yönetim Paneli ── */
                             <ScrollView contentContainerStyle={{ padding: 20 }}>
+                                {myFamilyData.myRole === 'leader' && (
+                                    <TouchableOpacity style={styles.editFamilyButton} onPress={openFamilyEdit} activeOpacity={0.8}>
+                                        <Ionicons name="create-outline" size={20} color="#fff" />
+                                        <Text style={styles.editFamilyButtonText}>Aile bilgilerini düzenle</Text>
+                                    </TouchableOpacity>
+                                )}
                                 <Text style={styles.sectionHeaderTitle}>Bekleyen Başvurular</Text>
                                 {applications.length === 0 ? (
                                     <View style={styles.emptyContainer}>
-                                        <Ionicons name="mail-open-outline" size={40} color="rgba(255,255,255,0.06)" />
+                                        <Ionicons name="mail-open-outline" size={40} color="#2a1b3b" />
                                         <Text style={styles.noApplicationsText}>Bekleyen bir katılım isteği bulunmamaktadır.</Text>
                                     </View>
                                 ) : (
@@ -955,14 +1092,14 @@ export default function FamilyScreen({ navigation }) {
                                             <Image source={{ uri: app.avatar_url || 'https://via.placeholder.com/80' }} style={styles.appAvatar} />
                                             <Text style={styles.appName}>{app.display_name || app.username}</Text>
                                             <View style={styles.appActions}>
-                                                <TouchableOpacity 
-                                                    style={styles.appActionReject} 
+                                                <TouchableOpacity
+                                                    style={styles.appActionReject}
                                                     onPress={() => handleResolveApplication(app.id, 'reject')}
                                                 >
                                                     <Ionicons name="close" size={16} color="#fff" />
                                                 </TouchableOpacity>
-                                                <TouchableOpacity 
-                                                    style={styles.appActionAccept} 
+                                                <TouchableOpacity
+                                                    style={styles.appActionAccept}
                                                     onPress={() => handleResolveApplication(app.id, 'accept')}
                                                 >
                                                     <Ionicons name="checkmark" size={16} color="#fff" />
@@ -978,6 +1115,33 @@ export default function FamilyScreen({ navigation }) {
             )}
 
             {/* ─── CREATE FAMILY MODAL ─── */}
+            <Modal visible={editFamilyVisible} animationType="slide" transparent onRequestClose={() => setEditFamilyVisible(false)}>
+                <View style={styles.modalOverlay}>
+                    <View style={styles.modalContent}>
+                        <Text style={styles.modalTitle}>Aileyi Düzenle</Text>
+                        <Text style={styles.inputLabel}>Aile Adı</Text>
+                        <TextInput style={styles.modalInput} value={editFamilyName} onChangeText={setEditFamilyName} maxLength={30} />
+                        <Text style={styles.inputLabel}>Açıklama</Text>
+                        <TextInput style={[styles.modalInput, { height: 70, textAlignVertical: 'top', paddingTop: 8 }]} value={editFamilyDesc} onChangeText={setEditFamilyDesc} multiline maxLength={150} />
+                        <Text style={styles.inputLabel}>Aile Logosu</Text>
+                        <TouchableOpacity style={styles.logoPicker} onPress={async () => {
+                            const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+                            if (permission.status !== 'granted') return;
+                            const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, allowsEditing: true, aspect: [1, 1], quality: 0.8 });
+                            if (!result.canceled && result.assets?.[0]?.uri) setEditFamilyBadge(result.assets[0].uri);
+                        }}>
+                            {editFamilyBadge ? <Image source={{ uri: editFamilyBadge }} style={styles.logoPreview} /> : <Ionicons name="camera-outline" size={28} color="#ff4fa3" />}
+                            <Text style={styles.logoPickerTitle}>{editFamilyBadge ? 'Logoyu değiştir' : 'Galeriden logo seç'}</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity style={styles.modalSubmitBtn} onPress={saveFamilyEdit} disabled={submitting}>
+                            <LinearGradient colors={['rgba(255,255,255,0.18)', 'rgba(139,92,246,0.28)']} style={styles.submitBtnGradient}>
+                                {submitting ? <ActivityIndicator color="#fff" /> : <Text style={styles.submitBtnText}>Değişiklikleri Kaydet</Text>}
+                            </LinearGradient>
+                        </TouchableOpacity>
+                    </View>
+                </View>
+            </Modal>
+
             <Modal
                 visible={createModalVisible}
                 animationType="slide"
@@ -1011,31 +1175,36 @@ export default function FamilyScreen({ navigation }) {
                             maxLength={150}
                         />
 
-                        <Text style={styles.inputLabel}>Badge URL (Logo Resim Adresi)</Text>
-                        <TextInput
-                            style={styles.modalInput}
-                            placeholder="Resim linkini girin..."
-                            placeholderTextColor="#6c6484"
-                            value={familyBadge}
-                            onChangeText={setFamilyBadge}
-                        />
+                        <Text style={styles.inputLabel}>Aile Logosu</Text>
+                        <TouchableOpacity style={styles.logoPicker} onPress={pickFamilyLogo} activeOpacity={0.8}>
+                            {familyBadge ? (
+                                <Image source={{ uri: familyBadge }} style={styles.logoPreview} />
+                            ) : (
+                                <Ionicons name="camera-outline" size={28} color="#ff4fa3" />
+                            )}
+                            <View style={styles.logoPickerText}>
+                                <Text style={styles.logoPickerTitle}>{familyBadge ? 'Logoyu değiştir' : 'Galeriden logo seç'}</Text>
+                                <Text style={styles.logoPickerDesc}>Kare bir görsel kullanabilirsin</Text>
+                            </View>
+                            <Ionicons name="chevron-forward" size={18} color="#8c849e" />
+                        </TouchableOpacity>
 
                         <Text style={styles.inputLabel}>Katılım Türü</Text>
                         <View style={styles.joinTypeRow}>
-                            <TouchableOpacity 
-                                style={[styles.joinTypeBtn, familyJoinType === 'approval_required' && styles.joinTypeBtnSelected]} 
+                            <TouchableOpacity
+                                style={[styles.joinTypeBtn, familyJoinType === 'approval_required' && styles.joinTypeBtnSelected]}
                                 onPress={() => setFamilyJoinType('approval_required')}
                             >
                                 <Text style={[styles.joinTypeText, familyJoinType === 'approval_required' && styles.joinTypeTextSelected]}>Onay Gerekli</Text>
                             </TouchableOpacity>
-                            <TouchableOpacity 
-                                style={[styles.joinTypeBtn, familyJoinType === 'open' && styles.joinTypeBtnSelected]} 
+                            <TouchableOpacity
+                                style={[styles.joinTypeBtn, familyJoinType === 'open' && styles.joinTypeBtnSelected]}
                                 onPress={() => setFamilyJoinType('open')}
                             >
                                 <Text style={[styles.joinTypeText, familyJoinType === 'open' && styles.joinTypeTextSelected]}>Herkese Açık</Text>
                             </TouchableOpacity>
-                            <TouchableOpacity 
-                                style={[styles.joinTypeBtn, familyJoinType === 'invite_only' && styles.joinTypeBtnSelected]} 
+                            <TouchableOpacity
+                                style={[styles.joinTypeBtn, familyJoinType === 'invite_only' && styles.joinTypeBtnSelected]}
                                 onPress={() => setFamilyJoinType('invite_only')}
                             >
                                 <Text style={[styles.joinTypeText, familyJoinType === 'invite_only' && styles.joinTypeTextSelected]}>Sadece Davet</Text>
@@ -1046,7 +1215,7 @@ export default function FamilyScreen({ navigation }) {
                             <ActivityIndicator size="large" color="#ec4899" style={{ marginTop: 24 }} />
                         ) : (
                             <TouchableOpacity style={styles.modalSubmitBtn} onPress={handleCreateFamily}>
-                                <LinearGradient colors={['#fbbf24', '#d97706']} style={styles.submitBtnGradient}>
+                                <LinearGradient colors={['rgba(255,255,255,0.18)', 'rgba(139,92,246,0.28)']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.submitBtnGradient}>
                                     <Text style={styles.submitBtnText}>Aileyi Kur (5000 Altın)</Text>
                                 </LinearGradient>
                             </TouchableOpacity>
@@ -1054,13 +1223,14 @@ export default function FamilyScreen({ navigation }) {
                     </View>
                 </View>
             </Modal>
-        </View>
+        </LinearGradient>
     );
 }
 
 const styles = StyleSheet.create({
     container: {
         flex: 1,
+        backgroundColor: '#09021a',
     },
     center: {
         flex: 1,
@@ -1081,7 +1251,7 @@ const styles = StyleSheet.create({
         paddingTop: 50,
         paddingBottom: 15,
         paddingHorizontal: 16,
-        backgroundColor: 'rgba(12, 6, 26, 0.85)',
+        backgroundColor: '#0c061a',
         borderBottomWidth: 1,
         borderBottomColor: 'rgba(255,255,255,0.06)',
     },
@@ -1089,9 +1259,29 @@ const styles = StyleSheet.create({
         borderRadius: 12,
         overflow: 'hidden',
     },
+    familyViewToggle: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
+        paddingHorizontal: 12,
+        height: 42,
+        borderRadius: 21,
+        backgroundColor: 'rgba(255,255,255,0.12)',
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.32)',
+    },
+    familyViewToggleText: {
+        color: '#fff',
+        fontSize: 12,
+        fontWeight: '800',
+    },
     backBtnGradient: {
         width: 36,
         height: 36,
+        backgroundColor: 'rgba(255,255,255,0.10)',
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.22)',
         justifyContent: 'center',
         alignItems: 'center',
     },
@@ -1140,10 +1330,10 @@ const styles = StyleSheet.create({
     searchBarContainer: {
         flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: 'rgba(255,255,255,0.04)',
+        backgroundColor: 'rgba(255,255,255,0.07)',
         marginHorizontal: 16,
-        borderRadius: 18,
-        height: 48,
+        borderRadius: 26,
+        height: 54,
         borderWidth: 1,
         borderColor: 'rgba(255,255,255,0.08)',
         marginBottom: 24,
@@ -1170,9 +1360,26 @@ const styles = StyleSheet.create({
     },
     sectionHeaderTitle: {
         color: '#fff',
-        fontSize: 14,
+        fontSize: 20,
         fontWeight: '900',
         letterSpacing: 0.5,
+    },
+    editFamilyButton: {
+        backgroundColor: 'rgba(255,255,255,0.12)',
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.30)',
+        paddingVertical: 14,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 8,
+        marginBottom: 22,
+    },
+    editFamilyButtonText: {
+        color: '#fff',
+        fontSize: 15,
+        fontWeight: '800',
     },
     sectionHeaderLine: {
         flex: 1,
@@ -1182,8 +1389,12 @@ const styles = StyleSheet.create({
     emptyContainer: {
         alignItems: 'center',
         justifyContent: 'center',
-        paddingVertical: 40,
+        paddingVertical: 58,
         gap: 10,
+        backgroundColor: '#12091f',
+        borderWidth: 1,
+        borderColor: '#211336',
+        borderRadius: 16,
     },
     noFamilyText: {
         color: '#6c6484',
@@ -1251,7 +1462,8 @@ const styles = StyleSheet.create({
         borderRadius: 10,
         overflow: 'hidden',
         borderWidth: 1,
-        borderColor: 'rgba(255,255,255,0.12)',
+        borderColor: 'rgba(255,255,255,0.32)',
+        backgroundColor: 'rgba(255,255,255,0.08)',
     },
     joinBtnGradient: {
         width: '100%',
@@ -1305,7 +1517,8 @@ const styles = StyleSheet.create({
         borderRadius: 12,
         overflow: 'hidden',
         borderWidth: 1,
-        borderColor: 'rgba(255,255,255,0.15)',
+        borderColor: 'rgba(255,255,255,0.32)',
+        backgroundColor: 'rgba(255,255,255,0.10)',
     },
     createStickyBtnGradient: {
         width: '100%',
@@ -1320,17 +1533,21 @@ const styles = StyleSheet.create({
     },
     familyHeaderCard: {
         flexDirection: 'row',
-        padding: 18,
-        borderBottomWidth: 1,
-        borderBottomColor: 'rgba(255,255,255,0.05)',
+        marginHorizontal: 16,
+        marginTop: 14,
+        padding: 14,
+        borderRadius: 18,
+        backgroundColor: '#160d27',
+        borderWidth: 1,
+        borderColor: '#221238',
         alignItems: 'center',
     },
     familyBadgeImage: {
-        width: 64,
-        height: 64,
-        borderRadius: 18,
+        width: 70,
+        height: 70,
+        borderRadius: 16,
         borderWidth: 2,
-        borderColor: 'rgba(255,255,255,0.1)',
+        borderColor: '#ff3d8b',
     },
     familyHeaderTextInfo: {
         flex: 1,
@@ -1341,16 +1558,32 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         gap: 8,
     },
+    headerEditFamilyButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: 'rgba(255,255,255,0.12)',
+        borderRadius: 8,
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.28)',
+        paddingHorizontal: 8,
+        paddingVertical: 5,
+    },
+    headerEditFamilyText: {
+        color: '#fff',
+        fontSize: 11,
+        fontWeight: '800',
+        marginLeft: 3,
+    },
     familyName: {
         color: '#fff',
-        fontSize: 16,
+        fontSize: 18,
         fontWeight: '900',
         flex: 1,
     },
     levelBadge: {
-        paddingHorizontal: 7,
-        paddingVertical: 2,
-        borderRadius: 8,
+        paddingHorizontal: 9,
+        paddingVertical: 4,
+        borderRadius: 10,
         shadowColor: '#fbbf24',
         shadowOffset: { width: 0, height: 2 },
         shadowOpacity: 0.3,
@@ -1359,27 +1592,29 @@ const styles = StyleSheet.create({
     },
     levelBadgeText: {
         color: '#fff',
-        fontSize: 9,
+        fontSize: 10,
         fontWeight: '900',
     },
     familyDescription: {
-        color: '#8e85a6',
-        fontSize: 11,
-        marginTop: 4,
-        lineHeight: 16,
+        color: '#b4a8c8',
+        fontSize: 12,
+        marginTop: 5,
+        lineHeight: 17,
     },
     familyCountsText: {
-        color: '#ec4899',
-        fontSize: 10,
-        fontWeight: '700',
-        marginTop: 6,
+        color: '#ff4fa3',
+        fontSize: 11,
+        fontWeight: '800',
+        marginTop: 8,
     },
     progressContainer: {
-        paddingHorizontal: 18,
-        paddingVertical: 14,
-        backgroundColor: 'rgba(255,255,255,0.01)',
-        borderBottomWidth: 1,
-        borderBottomColor: 'rgba(255,255,255,0.05)',
+        marginHorizontal: 16,
+        marginTop: 12,
+        padding: 14,
+        borderRadius: 16,
+        backgroundColor: '#12091f',
+        borderWidth: 1,
+        borderColor: '#1f1232',
     },
     xpRow: {
         flexDirection: 'row',
@@ -1397,8 +1632,8 @@ const styles = StyleSheet.create({
         fontWeight: 'bold',
     },
     progressTrack: {
-        height: 8,
-        backgroundColor: 'rgba(255,255,255,0.06)',
+        height: 7,
+        backgroundColor: '#2a1b3b',
         borderRadius: 4,
         overflow: 'hidden',
     },
@@ -1419,23 +1654,25 @@ const styles = StyleSheet.create({
     },
     tabBar: {
         flexDirection: 'row',
-        backgroundColor: 'rgba(12, 6, 26, 0.4)',
-        borderBottomWidth: 1,
-        borderBottomColor: 'rgba(255,255,255,0.05)',
+        marginHorizontal: 16,
+        marginTop: 14,
+        padding: 4,
+        borderRadius: 12,
+        backgroundColor: '#100719',
     },
     tabItem: {
         flex: 1,
-        paddingVertical: 14,
+        paddingVertical: 10,
         alignItems: 'center',
-        borderBottomWidth: 2.5,
-        borderBottomColor: 'transparent',
+        borderRadius: 12,
     },
     activeTabItem: {
-        borderBottomColor: '#ec4899',
+        backgroundColor: '#ff3d8b',
+        borderRadius: 10,
     },
     tabText: {
-        color: '#6c6484',
-        fontSize: 12,
+        color: '#8f84a8',
+        fontSize: 11,
         fontWeight: '800',
     },
     activeTabText: {
@@ -1444,19 +1681,19 @@ const styles = StyleSheet.create({
     memberRow: {
         flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: 'rgba(255,255,255,0.02)',
+        backgroundColor: '#150d24',
         padding: 14,
-        borderRadius: 18,
-        marginBottom: 8,
+        borderRadius: 14,
+        marginBottom: 10,
         borderWidth: 1,
-        borderColor: 'rgba(255,255,255,0.04)',
+        borderColor: '#24163a',
     },
     memberAvatar: {
         width: 42,
         height: 42,
         borderRadius: 14,
         borderWidth: 1,
-        borderColor: 'rgba(255,255,255,0.08)',
+        borderColor: '#2b1a40',
     },
     memberInfo: {
         flex: 1,
@@ -1502,8 +1739,8 @@ const styles = StyleSheet.create({
         width: 26,
         height: 26,
         borderRadius: 8,
-        backgroundColor: 'rgba(251,191,36,0.12)',
-        borderColor: 'rgba(251,191,36,0.25)',
+        backgroundColor: 'rgba(255,255,255,0.10)',
+        borderColor: 'rgba(255,255,255,0.26)',
         borderWidth: 1,
         justifyContent: 'center',
         alignItems: 'center',
@@ -1527,7 +1764,7 @@ const styles = StyleSheet.create({
         borderRadius: 10,
         marginRight: 8,
         borderWidth: 1,
-        borderColor: 'rgba(255,255,255,0.08)',
+        borderColor: '#2b1a40',
     },
     msgBubble: {
         padding: 12,
@@ -1542,10 +1779,10 @@ const styles = StyleSheet.create({
         borderTopRightRadius: 2,
     },
     msgBubbleOther: {
-        backgroundColor: 'rgba(255,255,255,0.05)',
+        backgroundColor: '#150d24',
         borderTopLeftRadius: 2,
         borderWidth: 1,
-        borderColor: 'rgba(255,255,255,0.04)',
+        borderColor: '#24163a',
     },
     chatSenderName: {
         color: '#ec4899',
@@ -1563,16 +1800,16 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         paddingHorizontal: 16,
         paddingVertical: 12,
-        backgroundColor: 'rgba(12, 6, 26, 0.95)',
+        backgroundColor: '#0c061a',
         borderTopWidth: 1,
-        borderTopColor: 'rgba(255,255,255,0.05)',
+        borderTopColor: '#1f1232',
     },
     chatInput: {
         flex: 1,
         height: 40,
-        backgroundColor: 'rgba(255,255,255,0.04)',
+        backgroundColor: '#150d24',
         borderWidth: 1,
-        borderColor: 'rgba(255,255,255,0.06)',
+        borderColor: '#24163a',
         borderRadius: 14,
         paddingHorizontal: 14,
         color: '#fff',
@@ -1582,19 +1819,20 @@ const styles = StyleSheet.create({
         width: 40,
         height: 40,
         borderRadius: 14,
-        backgroundColor: '#ec4899',
+        backgroundColor: 'rgba(255,255,255,0.14)',
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.30)',
         justifyContent: 'center',
         alignItems: 'center',
         marginLeft: 10,
     },
     checkInContainer: {
-        backgroundColor: 'rgba(255,255,255,0.01)',
-        borderRadius: 24,
-        padding: 24,
-        borderWidth: 1,
-        borderColor: 'rgba(255,255,255,0.05)',
+        backgroundColor: '#100719',
+        borderRadius: 10,
+        padding: 18,
+        borderWidth: 0,
         alignItems: 'center',
-        marginBottom: 16,
+        marginBottom: 12,
     },
     checkInTitle: {
         color: '#fff',
@@ -1603,7 +1841,7 @@ const styles = StyleSheet.create({
         letterSpacing: 0.3,
     },
     checkInSubtitle: {
-        color: '#8e85a6',
+        color: '#a69ab8',
         fontSize: 12,
         textAlign: 'center',
         marginTop: 6,
@@ -1611,10 +1849,12 @@ const styles = StyleSheet.create({
     },
     checkInBtn: {
         width: '100%',
-        height: 46,
-        borderRadius: 16,
+        height: 48,
+        borderRadius: 14,
         overflow: 'hidden',
         marginTop: 18,
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.30)',
     },
     checkInBtnGradient: {
         width: '100%',
@@ -1631,12 +1871,11 @@ const styles = StyleSheet.create({
         opacity: 0.4,
     },
     dailyLimitCard: {
-        backgroundColor: 'rgba(255,255,255,0.01)',
-        borderRadius: 24,
-        padding: 24,
-        borderWidth: 1,
-        borderColor: 'rgba(255,255,255,0.05)',
-        marginBottom: 24,
+        backgroundColor: '#100719',
+        borderRadius: 10,
+        padding: 18,
+        borderWidth: 0,
+        marginBottom: 20,
     },
     limitTitle: {
         color: '#fff',
@@ -1645,7 +1884,7 @@ const styles = StyleSheet.create({
         letterSpacing: 0.3,
     },
     limitSubtitle: {
-        color: '#8c849e',
+        color: '#a69ab8',
         fontSize: 11,
         marginTop: 4,
         lineHeight: 17,
@@ -1668,7 +1907,7 @@ const styles = StyleSheet.create({
     },
     limitProgressTrack: {
         height: 6,
-        backgroundColor: 'rgba(255,255,255,0.06)',
+        backgroundColor: '#261337',
         borderRadius: 3,
         overflow: 'hidden',
     },
@@ -1678,10 +1917,10 @@ const styles = StyleSheet.create({
         borderRadius: 3,
     },
     leaveFamilyDangerBtn: {
-        backgroundColor: 'rgba(239, 68, 68, 0.05)',
-        borderColor: 'rgba(239, 68, 68, 0.2)',
-        borderWidth: 1,
-        borderRadius: 16,
+        backgroundColor: '#2a0612',
+        borderColor: '#ef4444',
+        borderWidth: 1.5,
+        borderRadius: 10,
         paddingVertical: 14,
         alignItems: 'center',
     },
@@ -1698,12 +1937,12 @@ const styles = StyleSheet.create({
     appRow: {
         flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: 'rgba(255,255,255,0.02)',
+        backgroundColor: '#150d24',
         padding: 14,
-        borderRadius: 18,
-        marginBottom: 8,
+        borderRadius: 14,
+        marginBottom: 10,
         borderWidth: 1,
-        borderColor: 'rgba(255,255,255,0.04)',
+        borderColor: '#24163a',
     },
     appAvatar: {
         width: 38,
@@ -1775,6 +2014,35 @@ const styles = StyleSheet.create({
         marginTop: 10,
         marginBottom: 6,
     },
+    logoPicker: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        padding: 12,
+        marginBottom: 18,
+        borderRadius: 18,
+        backgroundColor: 'rgba(255,79,163,0.08)',
+        borderWidth: 1,
+        borderColor: 'rgba(255,79,163,0.25)',
+    },
+    logoPreview: {
+        width: 48,
+        height: 48,
+        borderRadius: 15,
+    },
+    logoPickerText: {
+        flex: 1,
+        marginLeft: 12,
+    },
+    logoPickerTitle: {
+        color: '#fff',
+        fontSize: 13,
+        fontWeight: '800',
+    },
+    logoPickerDesc: {
+        color: '#8c849e',
+        fontSize: 11,
+        marginTop: 3,
+    },
     modalInput: {
         backgroundColor: 'rgba(255,255,255,0.03)',
         borderRadius: 12,
@@ -1798,11 +2066,11 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         alignItems: 'center',
         borderWidth: 1,
-        borderColor: 'rgba(255,255,255,0.06)',
+        borderColor: 'rgba(255,255,255,0.24)',
     },
     joinTypeBtnSelected: {
-        backgroundColor: '#ec4899',
-        borderColor: 'transparent',
+        backgroundColor: 'rgba(255,255,255,0.16)',
+        borderColor: 'rgba(255,255,255,0.38)',
     },
     joinTypeText: {
         color: '#8e85a6',
@@ -1813,20 +2081,29 @@ const styles = StyleSheet.create({
         color: '#fff',
     },
     modalSubmitBtn: {
-        height: 46,
-        borderRadius: 16,
+        height: 58,
+        borderRadius: 20,
         overflow: 'hidden',
         marginTop: 24,
+        shadowColor: '#ff4fa3',
+        shadowOffset: { width: 0, height: 8 },
+        shadowOpacity: 0.3,
+        shadowRadius: 14,
+        elevation: 0,
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.34)',
     },
     submitBtnGradient: {
         width: '100%',
         height: '100%',
         justifyContent: 'center',
         alignItems: 'center',
+        flexDirection: 'row',
+        gap: 8,
     },
     submitBtnText: {
         color: '#fff',
-        fontSize: 14,
+        fontSize: 16,
         fontWeight: '900',
     },
     heroTextContent: {
@@ -1874,24 +2151,24 @@ const styles = StyleSheet.create({
         flexWrap: 'wrap',
         justifyContent: 'space-between',
         paddingHorizontal: 16,
-        marginTop: 16,
-        marginBottom: 20,
+        marginTop: 22,
+        marginBottom: 24,
         gap: 8,
     },
     quickActionCard: {
         width: '31.5%',
-        borderRadius: 16,
+        borderRadius: 22,
         overflow: 'hidden',
         borderWidth: 1,
-        borderColor: 'rgba(255,255,255,0.06)',
+        borderColor: 'rgba(255,255,255,0.1)',
     },
     quickActionGradient: {
-        padding: 14,
+        padding: 16,
         alignItems: 'flex-start',
     },
     quickActionTitle: {
         color: '#fff',
-        fontSize: 13,
+        fontSize: 14,
         fontWeight: '900',
         marginTop: 8,
         letterSpacing: 0.2,
@@ -1921,11 +2198,11 @@ const styles = StyleSheet.create({
         paddingVertical: 8,
         borderRadius: 14,
         borderWidth: 1,
-        borderColor: 'rgba(255,255,255,0.06)',
+        borderColor: 'rgba(255,255,255,0.20)',
     },
     filterChipActive: {
-        backgroundColor: '#FF3D8B',
-        borderColor: 'transparent',
+        backgroundColor: 'rgba(255,255,255,0.16)',
+        borderColor: 'rgba(255,255,255,0.34)',
     },
     filterChipText: {
         color: 'rgba(255,255,255,0.6)',
@@ -2006,12 +2283,12 @@ const styles = StyleSheet.create({
         fontWeight: 'bold',
     },
     familyPremiumCard: {
-        backgroundColor: 'rgba(255,255,255,0.03)',
-        borderRadius: 24,
-        padding: 16,
+        backgroundColor: 'rgba(255,255,255,0.055)',
+        borderRadius: 28,
+        padding: 22,
         marginBottom: 12,
         borderWidth: 1,
-        borderColor: 'rgba(255,255,255,0.06)',
+        borderColor: 'rgba(255,255,255,0.1)',
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 4 },
         shadowOpacity: 0.1,
@@ -2022,9 +2299,9 @@ const styles = StyleSheet.create({
         alignItems: 'center',
     },
     cardBadge: {
-        width: 52,
-        height: 52,
-        borderRadius: 16,
+        width: 68,
+        height: 68,
+        borderRadius: 20,
         borderWidth: 1.5,
         borderColor: 'rgba(255,255,255,0.08)',
     },
@@ -2034,8 +2311,13 @@ const styles = StyleSheet.create({
     },
     cardFamilyName: {
         color: '#fff',
-        fontSize: 14,
+        fontSize: 19,
         fontWeight: '900',
+    },
+    cardDescriptionText: {
+        color: 'rgba(255,255,255,0.55)',
+        fontSize: 14,
+        marginTop: 2,
     },
     cardLeaderText: {
         color: 'rgba(255,255,255,0.5)',
@@ -2082,10 +2364,13 @@ const styles = StyleSheet.create({
         fontWeight: '900',
     },
     cardJoinBtn: {
-        width: 68,
-        height: 30,
-        borderRadius: 10,
+        width: 84,
+        flexShrink: 0,
+        height: 38,
+        borderRadius: 19,
         overflow: 'hidden',
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.34)',
     },
     cardJoinBtnGradient: {
         width: '100%',
@@ -2095,8 +2380,9 @@ const styles = StyleSheet.create({
     },
     cardJoinText: {
         color: '#fff',
-        fontSize: 11,
+        fontSize: 12,
         fontWeight: '900',
+        letterSpacing: 0.2,
     },
     cardXpSection: {
         marginTop: 14,
@@ -2165,10 +2451,13 @@ const styles = StyleSheet.create({
         lineHeight: 14,
     },
     ctaButton: {
-        width: 72,
-        height: 36,
-        borderRadius: 12,
+        width: 88,
+        flexShrink: 0,
+        height: 42,
+        borderRadius: 21,
         overflow: 'hidden',
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.38)',
     },
     ctaButtonGradient: {
         width: '100%',
@@ -2179,8 +2468,9 @@ const styles = StyleSheet.create({
     },
     ctaButtonText: {
         color: '#fff',
-        fontSize: 12,
+        fontSize: 13,
         fontWeight: '900',
+        letterSpacing: 0.2,
     },
     emptyTitle: {
         color: '#fff',
@@ -2197,10 +2487,17 @@ const styles = StyleSheet.create({
     },
     emptyCreateBtn: {
         marginTop: 14,
-        backgroundColor: '#FF3D8B',
-        paddingHorizontal: 20,
-        paddingVertical: 8,
-        borderRadius: 12,
+        backgroundColor: 'rgba(255,255,255,0.14)',
+        paddingHorizontal: 22,
+        paddingVertical: 11,
+        borderRadius: 22,
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.34)',
+        shadowColor: '#FF3D8B',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.25,
+        shadowRadius: 7,
+        elevation: 4,
     },
     emptyCreateBtnText: {
         color: '#fff',
@@ -2208,4 +2505,3 @@ const styles = StyleSheet.create({
         fontWeight: '900',
     }
 });
-

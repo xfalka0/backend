@@ -20,8 +20,11 @@ class MockRtcProvider extends RtcProvider {
 // 2. Agora RTC Provider
 class AgoraRtcProvider extends RtcProvider {
     async createJoinToken(userId, roomId, role) {
-        const appId = process.env.AGORA_APP_ID || 'f80faf42fd0845a9816658ea7e16a755';
-        const appCertificate = process.env.AGORA_APP_CERTIFICATE || 'e3361c06460541418754881b12bc3247';
+        const appId = process.env.AGORA_APP_ID;
+        const appCertificate = process.env.AGORA_APP_CERTIFICATE;
+        if (!appId || !appCertificate) {
+            throw new Error('Agora yapılandırması eksik: AGORA_APP_ID ve AGORA_APP_CERTIFICATE gerekli.');
+        }
         
         const channelName = String(roomId).startsWith('room_') ? String(roomId) : `room_${roomId}`;
         

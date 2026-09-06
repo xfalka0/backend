@@ -360,7 +360,7 @@ function handlePartyRoomSockets(io, socket) {
                 ORDER BY nt.priority_weight DESC LIMIT 1
             `, [socket.user.id.toString()]);
             
-            const nobility = nobRes.rows[0] || {};
+            const nobility = nobRes?.rows?.[0] || {};
 
             io.to(roomName).emit('receive_party_message', {
                 id: `msg_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
@@ -532,7 +532,7 @@ function handlePartyRoomSockets(io, socket) {
 
             // Broadcast balance update to sender
             const newBalRes = await client.query('SELECT balance FROM users WHERE id = $1', [senderId]);
-            const newBalance = newBalRes.rows[0].balance;
+            const newBalance = newBalRes?.rows?.[0]?.balance ?? null;
             socket.emit('balance_update', { userId: senderId, newBalance });
 
             // Fetch updated room gift points
@@ -541,7 +541,9 @@ function handlePartyRoomSockets(io, socket) {
                 FROM party_room_members 
                 WHERE room_id = $1 AND user_id = $2
             `, [roomId, targetUserId]);
-            const receiverRoomGiftPoints = pointsRes.rows.length > 0 ? parseInt(pointsRes.rows[0].room_gift_points || 0) : gift.cost;
+            const receiverRoomGiftPoints = (pointsRes?.rows?.length || 0) > 0
+                ? parseInt(pointsRes.rows[0].room_gift_points || 0)
+                : gift.cost;
 
             // Broadcast room:gift_received to everyone in the room
             io.to(roomName).emit('room:gift_received', {

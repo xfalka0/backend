@@ -156,7 +156,7 @@ const VipFrame = memo(({ level = 0, avatar, size = 80, isStatic = false }) => {
 
         return (
             <View style={{ width: innerSizeValue, height: innerSizeValue }}>
-                {fallback}
+                {!source && fallback}
                 {source && (
                     <Image
                         key={source.uri || (typeof avatar === 'string' ? avatar : JSON.stringify(avatar))}
@@ -233,7 +233,7 @@ const VipFrame = memo(({ level = 0, avatar, size = 80, isStatic = false }) => {
                     width: innerSize,
                     height: innerSize,
                     borderRadius: innerSize / 2,
-                    backgroundColor: theme.colors.glass,
+                    backgroundColor: 'transparent',
                     alignItems: 'center',
                     justifyContent: 'center',
                     zIndex: 3,

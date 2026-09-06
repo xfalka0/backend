@@ -50,6 +50,16 @@ describe('Party Rooms REST API Tests', () => {
         // Ensure db.pool.connect returns a valid mock client even after clearAllMocks
         const mockClient = {
             query: jest.fn().mockImplementation((sql, params) => {
+                if (sql && sql.includes('SELECT id, role, agency_id, balance FROM users')) {
+                    return Promise.resolve({
+                        rows: [{
+                            id: 'c917f7d6-cc44-4b04-8917-1dbbed0b1e9b',
+                            role: 'user',
+                            agency_id: null,
+                            balance: 10000
+                        }]
+                    });
+                }
                 if (sql && sql.includes('INSERT INTO party_rooms')) {
                     return Promise.resolve({
                         rows: [{ id: 'room-uuid', title: 'Test Room', host_id: 'c917f7d6-cc44-4b04-8917-1dbbed0b1e9b' }]

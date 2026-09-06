@@ -14,6 +14,10 @@ jest.mock('../utils/notificationUtils', () => ({
     sendPushNotification: jest.fn().mockResolvedValue({ success: true })
 }));
 
+jest.mock('axios', () => ({
+    post: jest.fn().mockResolvedValue({ data: { message: 'ok' } })
+}));
+
 const request = require('supertest');
 const db = require('../db');
 const { app } = require('../server');

@@ -62,7 +62,7 @@ try {
 
 export default function VideoCallScreen({ route, navigation }) {
     useKeepAwake();
-    const { receiver, isIncoming: initialIsIncoming, chatId: routeChatId, rtcToken: initialRtcToken, channelName: initialChannelName, callId: initialCallId } = route.params || {};
+    const { receiver, isIncoming: initialIsIncoming, chatId: routeChatId, rtcToken: initialRtcToken, channelName: initialChannelName, appId: initialAppId, callId: initialCallId } = route.params || {};
     const otherUser = receiver || {};
     const otherUserName = otherUser.name || otherUser.display_name || otherUser.username || 'Fiva Kullanıcısı';
     const otherUserImage = resolveImageUrl(otherUser.avatar_url || otherUser.avatar);
@@ -287,7 +287,7 @@ export default function VideoCallScreen({ route, navigation }) {
         return true;
     };
 
-    const initAgora = async (token, channelName) => {
+    const initAgora = async (token, channelName, appId) => {
         if (!AgoraRTC) {
             console.log('[Agora Video] Mock Mode: Joining simulated video channel.');
             isJoinedRef.current = true;
@@ -310,7 +310,7 @@ export default function VideoCallScreen({ route, navigation }) {
             agoraEngineRef.current = engine;
 
             // Initialize App
-            const appId = 'f80faf42fd0845a9816658ea7e16a755';
+            if (!appId) throw new Error('Agora App ID eksik.');
             await engine.initialize({ appId });
 
             // Set Communication Profile for 1-to-1 Calls
@@ -521,6 +521,7 @@ export default function VideoCallScreen({ route, navigation }) {
             try {
                 let rtcToken = initialRtcToken;
                 let channelName = initialChannelName;
+                let appId = initialAppId;
                 const callId = callIdRef.current;
 
                 if (!rtcToken || !channelName) {
@@ -531,11 +532,12 @@ export default function VideoCallScreen({ route, navigation }) {
 
                     rtcToken = res.data.token;
                     channelName = res.data.channelName;
+                    appId = res.data.appId;
                 }
 
                 // Caller immediately initializes local camera preview & Agora channel
                 console.log('[CALLER AGORA DEBUG]', { rtcToken: rtcToken?.substring(0,20), channelName, callId });
-                await initAgora(rtcToken, channelName);
+                await initAgora(rtcToken, channelName, appId);
 
                 if (socket) {
                     socket.emit('call_request', {
@@ -596,6 +598,7 @@ export default function VideoCallScreen({ route, navigation }) {
             // Use channelName from server response; fall back to what caller sent
             const rtcToken = res.data.token;
             const channelName = res.data.channelName || initialChannelName;
+            const appId = res.data.appId || initialAppId;
 
             if (socket) {
                 socket.emit('call_accept', { chatId, callerId: otherUser.id });
@@ -607,7 +610,7 @@ export default function VideoCallScreen({ route, navigation }) {
                 channelName,
                 initialChannelName
             });
-            await initAgora(rtcToken, channelName);
+            await initAgora(rtcToken, channelName, appId);
         } catch (err) {
             console.error('[RECEIVER ACCEPT ERROR]', err?.response?.status, err?.response?.data, err.message);
             handleDecline();

@@ -46,7 +46,12 @@ export const StarterPackProvider = ({ children }) => {
                     }
                 }
             } catch (e) {
-                console.error('[StarterPack] Error loading state/eligibility:', e);
+                if (![401, 403].includes(e.response?.status)) {
+                    console.error('[StarterPack] Error loading state/eligibility:', e);
+                }
+                setIsEligible(false);
+                setShowBubble(false);
+                await AsyncStorage.setItem('starter_pack_bubble_visible', 'false');
             }
         };
         loadStateAndCheck();

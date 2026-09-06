@@ -77,7 +77,7 @@ export default function InsufficientCoinsModal({ visible, onClose, onBuyCoins, o
                 setStarterPack(res.data.pack);
             }
         } catch (error) {
-            setIsEligible(true); 
+            setIsEligible(![401, 403].includes(error.response?.status));
         }
     };
 

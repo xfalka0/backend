@@ -1030,7 +1030,7 @@ router.post('/:id/rtc-token', authenticateToken, async (req, res) => {
             token,
             channelName: `room_${id}`,
             role,
-            appId: process.env.AGORA_APP_ID || 'f80faf42fd0845a9816658ea7e16a755'
+            appId: process.env.AGORA_APP_ID || null
         });
 
     } catch (err) {

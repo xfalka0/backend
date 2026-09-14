@@ -334,7 +334,7 @@ export default function HomeScreen({ navigation, route }) {
                 <DestinyHero onPress={() => setShowMatchModal(true)} />
             </View>
 
-            <TouchableOpacity 
+            {false && <TouchableOpacity 
                 activeOpacity={0.85} 
                 style={styles.partyBannerWrapper}
                 onPress={() => navigation.navigate('Main', { screen: 'Odalar' })}
@@ -358,7 +358,7 @@ export default function HomeScreen({ navigation, route }) {
                         <Text style={styles.partyBadgeText}>Canlı</Text>
                     </View>
                 </LinearGradient>
-            </TouchableOpacity>
+            </TouchableOpacity>}
             
             <View style={[styles.tabContainer, { justifyContent: 'space-between' }]}>
                 <View style={{ flexDirection: 'row', gap: 10, alignItems: 'center' }}>
@@ -720,4 +720,3 @@ const styles = StyleSheet.create({
         textTransform: 'uppercase',
     },
 });
-

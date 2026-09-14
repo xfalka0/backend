@@ -39,6 +39,7 @@ const bcrypt = require('bcrypt');
 const { authenticateToken, authorizeRole, SECRET_KEY } = require('./middleware/auth');
 const { getVipLevel, getVipProgress } = require('./utils/vipUtils');
 const { recordOperatorCommission } = require('./utils/commissionUtils');
+const { AGENCY_SYSTEM_ENABLED } = require('./utils/featureFlags');
 const jwt = require('jsonwebtoken');
 const socialRoutes = require('./routes/socialRoutes');
 const authRoutes = require('./routes/authRoutes');
@@ -4188,6 +4189,7 @@ app.get('/api/debug/dump-users', async (req, res) => {
 
 // Auto-claim any reached but unclaimed daily mission rewards from the past 7 days
 async function autoClaimPendingMissions(userId) {
+    if (!AGENCY_SYSTEM_ENABLED) return;
     try {
         const statsRes = await db.query(
             `SELECT date::text, 
@@ -4429,6 +4431,9 @@ app.get('/api/operator/my-stats', authenticateToken, getDetailedOperatorStats);
 app.get('/api/operators/my/stats', authenticateToken, getDetailedOperatorStats);
 
 app.post('/api/operators/my/claim-mission', authenticateToken, async (req, res) => {
+    if (!AGENCY_SYSTEM_ENABLED) {
+        return res.status(410).json({ error: 'Elmas görevleri şu anda devre dışıdır.' });
+    }
     const { missionId, milestoneValue, rewardAmount } = req.body;
     const userId = req.user.id;
 

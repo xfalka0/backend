@@ -1,28 +1,28 @@
 export const DARK_THEME = {
     mode: 'dark',
     colors: {
-        background: '#0D1429',     // Deep blue, not black
-        surface: '#151A36',        // Deep blue surface
-        card: '#1D2045',           // Card color
+        background: '#0F080A',     // Blackened ember background
+        surface: '#1B0C11',        // Deep wine surface
+        card: '#281017',           // Dark warm card
         text: '#ffffff',
-        textSecondary: '#9CA3C8',    // Soft muted text
-        primary: '#A855F7',          // Vibrant Purple
-        secondary: '#EC4899',        // Vibrant Pink
-        accent: '#FBBF24',           // Premium Gold
+        textSecondary: '#C7A6A6',    // Warm muted text
+        primary: '#E83E50',          // Deep coral red
+        secondary: '#B5123E',        // Dark dating crimson
+        accent: '#FFB020',           // Warm gold
         success: '#10B981',
         danger: '#F43F5E',
         glass: 'rgba(255, 255, 255, 0.06)',
         glassBorder: 'rgba(255, 255, 255, 0.1)',
-        inputBg: 'rgba(29, 32, 69, 0.6)',
+        inputBg: 'rgba(40, 16, 23, 0.82)',
         border: 'rgba(255, 255, 255, 0.1)',
-        backgroundSecondary: '#111730',
+        backgroundSecondary: '#160A0F',
     },
     gradients: {
-        primary: ['#A855F7', '#EC4899'],
-        dark: ['#0E1736', '#2A1431'], // Deep blue to dark purple-pink mix, lighter than black
+        primary: ['#E83E50', '#991B4D'],
+        dark: ['#0F080A', '#29101A'],
         vip: ['#F59E0B', '#D97706'],
         glass: ['rgba(255,255,255,0.08)', 'rgba(255,255,255,0.02)'],
-        card: ['#1D2045', '#24162B'], // Subtle mix for cards
+        card: ['#281017', '#1B0C11'],
     }
 };
 
@@ -67,7 +67,7 @@ export const SHADOWS = {
         elevation: 10,
     },
     glow: {
-        shadowColor: "#A855F7",
+        shadowColor: "#D92F4F",
         shadowOffset: { width: 0, height: 4 },
         shadowOpacity: 0.6,
         shadowRadius: 15,

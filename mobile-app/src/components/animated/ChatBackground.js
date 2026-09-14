@@ -26,7 +26,7 @@ const ChatBackground = React.memo(({ themeMode }) => {
         <View style={styles.background} pointerEvents="none">
             {/* Pure Gradient Background */}
             <LinearGradient
-                colors={themeMode === 'dark' ? ['#0f051a', '#1a0b2e', '#0f051a'] : ['#fff0f5', '#ffe4f0', '#fff0f5']}
+                colors={themeMode === 'dark' ? ['#0F080A', '#29101A', '#0F080A'] : ['#fff0f5', '#ffe4f0', '#fff0f5']}
                 style={StyleSheet.absoluteFill}
             />
 
@@ -37,7 +37,7 @@ const ChatBackground = React.memo(({ themeMode }) => {
                         key={heart.id}
                         name="heart"
                         size={heart.size}
-                        color={themeMode === 'dark' ? '#fff' : '#ff4d6d'}
+                        color={themeMode === 'dark' ? '#FF4D5A' : '#ff4d6d'}
                         style={{
                             position: 'absolute',
                             top: heart.top,
@@ -81,7 +81,7 @@ const ChatBackground = React.memo(({ themeMode }) => {
                 <View 
                     style={[
                         StyleSheet.absoluteFill, 
-                        { backgroundColor: themeMode === 'dark' ? 'rgba(15, 5, 26, 0.4)' : 'rgba(255, 255, 255, 0.3)' }
+                        { backgroundColor: themeMode === 'dark' ? 'rgba(15, 8, 10, 0.38)' : 'rgba(255, 255, 255, 0.3)' }
                     ]} 
                 />
             )}

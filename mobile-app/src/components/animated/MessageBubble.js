@@ -156,7 +156,7 @@ const MessageBubble = React.memo(({ children, isMine, index, isRead, avatar, vip
                                     noBorder={true}
                                 >
                                     <LinearGradient
-                                        colors={['rgba(139, 92, 246, 0.45)', 'rgba(217, 70, 239, 0.6)']}
+                                        colors={['rgba(181, 18, 62, 0.62)', 'rgba(232, 62, 80, 0.78)']}
                                         start={{ x: 0, y: 0 }}
                                         end={{ x: 1, y: 1 }}
                                         style={StyleSheet.absoluteFill}
@@ -201,7 +201,7 @@ const MessageBubble = React.memo(({ children, isMine, index, isRead, avatar, vip
                         </View>
                     </TouchableWithoutFeedback>
 
-                    {!isMine && isReplied && parseFloat(earnedDiamonds) > 0 && (
+                    {false && !isMine && isReplied && parseFloat(earnedDiamonds) > 0 && (
                         <View style={styles.earningBadge}>
                             <Ionicons name="checkmark-circle" size={10} color="#10b981" />
                             <Text style={styles.earningBadgeText}>

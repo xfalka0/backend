@@ -4,6 +4,7 @@ import * as Device from 'expo-device';
 import { Platform } from 'react-native';
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import Constants from 'expo-constants';
 import { API_URL } from '../config';
 
 // Configure how notifications are handled when the app is in foreground
@@ -42,7 +43,8 @@ export const NotificationService = {
       }
 
       // Get the token from Expo
-      token = (await Notifications.getExpoPushTokenAsync()).data;
+      const projectId = Constants.expoConfig?.extra?.eas?.projectId;
+      token = (await Notifications.getExpoPushTokenAsync({ projectId })).data;
       console.log('[NOTIFY] Expo Push Token:', token);
 
       if (Platform.OS === 'android') {

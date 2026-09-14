@@ -2,6 +2,11 @@ const express = require('express');
 const router = express.Router();
 const db = require('../db');
 const { authenticateToken, authorizeRole } = require('../middleware/auth');
+const { AGENCY_SYSTEM_ENABLED } = require('../utils/featureFlags');
+
+if (!AGENCY_SYSTEM_ENABLED) {
+    router.use((req, res) => res.status(410).json({ error: 'Ajans sistemi şu anda devre dışıdır.' }));
+}
 
 // Ensure agency_payouts table exists on startup
 db.query(`

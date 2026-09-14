@@ -16,6 +16,7 @@ const Chats = () => {
     const [messages, setMessages] = useState([]);
     const [isTyping, setIsTyping] = useState(false);
     const [input, setInput] = useState('');
+    const [showQuickMessages, setShowQuickMessages] = useState(false);
     const [uploading, setUploading] = useState(false);
     const [isLockedImage, setIsLockedImage] = useState(false);
     const [lockedImageCost, setLockedImageCost] = useState(200);
@@ -273,9 +274,8 @@ const Chats = () => {
         }
     };
 
-    const sendMessage = (e) => {
-        e.preventDefault();
-        if (!input.trim() || !selectedChat) return;
+    const sendTextMessage = (content) => {
+        if (!content.trim() || !selectedChat) return;
 
         // Stop typing immediately
         socketRef.current.emit('typing_end', { chatId: selectedChat.id });
@@ -286,7 +286,7 @@ const Chats = () => {
         const msgData = {
             chatId: selectedChat.id,
             senderId: selectedChat.operator_id,
-            content: input,
+            content: content.trim(),
             type: 'text',
             tempId: tempId
         };
@@ -296,7 +296,7 @@ const Chats = () => {
         const optimisticMsg = {
             id: tempId,
             sender_id: selectedChat.operator_id,
-            content: input,
+            content: content.trim(),
             chat_id: selectedChat.id,
             created_at: new Date().toISOString(),
             is_optimistic: true,
@@ -305,6 +305,16 @@ const Chats = () => {
 
         setMessages((prev) => [...prev, optimisticMsg]);
         setInput('');
+    };
+
+    const sendMessage = (e) => {
+        e.preventDefault();
+        sendTextMessage(input);
+    };
+
+    const sendQuickMessage = (message) => {
+        sendTextMessage(message);
+        setShowQuickMessages(false);
     };
 
     const handleImageUpload = async (e) => {
@@ -371,7 +381,7 @@ const Chats = () => {
                 className={`w-full p-5 flex items-center gap-4 hover:bg-white/5 transition-all text-left border-b border-white/5 relative group ${selectedChat?.id === chat.id ? 'bg-fuchsia-600/10 border-r-4 border-r-fuchsia-600' : ''} ${chat.unread_count > 0 ? 'bg-fuchsia-500/20 shadow-[inset_0_0_30px_rgba(217,70,239,0.4)] border-l-4 border-l-fuchsia-500' : ''}`}
             >
                 <div className="relative">
-                    <div className={`w-14 h-14 rounded-2xl overflow-hidden border-2 shadow-2xl transition-all ${chat.unread_count > 0 ? 'border-fuchsia-500 shadow-fuchsia-500/20' : 'border-white/5'}`}>
+                    <div className={`w-16 h-16 rounded-2xl overflow-hidden border-2 shadow-2xl transition-all ${chat.unread_count > 0 ? 'border-fuchsia-500 shadow-fuchsia-500/20' : 'border-white/5'}`}>
                         {chat.user_avatar ? (
                             <img
                                 src={chat.user_avatar}
@@ -398,10 +408,10 @@ const Chats = () => {
                 <div className="flex-1 overflow-hidden">
                     <div className="flex justify-between items-start">
                         <div className="flex flex-col flex-1 min-w-0">
-                            <h3 className={`font-black text-base truncate transition-colors uppercase tracking-tight ${chat.unread_count > 0 ? 'text-fuchsia-400' : 'text-white group-hover:text-fuchsia-400'}`}>
+                            <h3 className={`font-black text-lg truncate transition-colors uppercase tracking-tight ${chat.unread_count > 0 ? 'text-fuchsia-400' : 'text-white group-hover:text-fuchsia-400'}`}>
                                 {chat.user_name}
                             </h3>
-                            <p className={`text-xs truncate font-medium mt-1 ${chat.unread_count > 0 ? 'text-white opacity-90' : 'text-slate-400 opacity-60'}`}>
+                            <p className={`text-sm truncate font-medium mt-1 ${chat.unread_count > 0 ? 'text-white opacity-90' : 'text-slate-400 opacity-60'}`}>
                                 {chat.last_message || 'Sohbeti başlattı ✨'}
                             </p>
                         </div>
@@ -430,7 +440,7 @@ const Chats = () => {
                 key={idx}
                 className={`flex ${msg.sender_id === selectedChat.operator_id || msg.sender_id === user?.id ? 'justify-end' : 'justify-start'}`}
             >
-                <div className={`max-w-[70%] space-y-1`}>
+                <div className={`max-w-[82%] space-y-1`}>
                     {/* Gift Message Styling */}
                     {(msg.content_type === 'gift' || msg.type === 'gift' || msg.gift_id) ? (
                         <div className="bg-gradient-to-r from-amber-200 via-yellow-300 to-amber-200 text-amber-900 p-0.5 rounded-2xl shadow-lg shadow-amber-500/20 transform hover:scale-[1.02] transition-transform duration-300">
@@ -457,7 +467,7 @@ const Chats = () => {
                         </div>
                     ) : (
                         <div
-                            className={`p-4 rounded-2xl text-sm font-medium shadow-sm ${msg.sender_id === selectedChat.operator_id || msg.sender_id === user?.id
+                            className={`p-5 rounded-2xl text-[15px] font-medium shadow-sm ${msg.sender_id === selectedChat.operator_id || msg.sender_id === user?.id
                                 ? 'bg-purple-600 text-white rounded-br-none'
                                 : 'bg-slate-800 text-slate-200 rounded-bl-none border border-slate-700'
                                 }`}
@@ -495,10 +505,10 @@ const Chats = () => {
     }, [messages, selectedChat, user?.id]);
 
     return (
-        <div className="flex h-[calc(100vh-160px)] bg-slate-950/50 rounded-3xl overflow-hidden border border-white/5 m-8">
-            <div className="w-80 border-r border-white/5 flex flex-col bg-slate-900/50">
-                <div className="p-6 border-b border-white/5">
-                    <h2 className="text-xl font-black text-white">Sohbetler</h2>
+        <div className="flex h-[calc(100vh-120px)] bg-slate-950/50 rounded-3xl overflow-hidden border border-white/5 m-4">
+            <div className="w-96 border-r border-white/5 flex flex-col bg-slate-900/50">
+                <div className="p-7 border-b border-white/5">
+                    <h2 className="text-2xl font-black text-white">Sohbetler</h2>
                 </div>
                 <div 
                     ref={chatListRef}
@@ -518,9 +528,9 @@ const Chats = () => {
             <div className="flex-1 flex flex-col bg-slate-950/20">
                 {selectedChat ? (
                     <>
-                        <div className="p-4 border-b border-white/5 bg-slate-900/40 flex items-center justify-between">
+                        <div className="p-6 border-b border-white/5 bg-slate-900/40 flex items-center justify-between">
                             <div className="flex items-center gap-4">
-                                <div className="w-10 h-10 rounded-full overflow-hidden border-2 border-white/10">
+                                <div className="w-14 h-14 rounded-full overflow-hidden border-2 border-white/10">
                                     {selectedChat.user_avatar ? (
                                         <img
                                             src={selectedChat.user_avatar}
@@ -536,14 +546,14 @@ const Chats = () => {
                                         className="w-full h-full bg-gradient-to-br from-fuchsia-600 to-purple-600 flex items-center justify-center"
                                         style={{ display: selectedChat.user_avatar ? 'none' : 'flex' }}
                                     >
-                                        <span className="text-white font-bold text-sm">
+                                        <span className="text-white font-bold text-lg">
                                             {selectedChat.user_name?.charAt(0)?.toUpperCase() || '?'}
                                         </span>
                                     </div>
                                 </div>
                                 <div>
                                     <div className="flex items-center gap-3">
-                                        <h3 className="font-black text-white">
+                                        <h3 className="text-lg font-black text-white">
                                             {selectedChat.user_name} - <span className="text-fuchsia-400 uppercase">{selectedChat.operator_name}</span>
                                         </h3>
                                         {/* User Coin Balance Badge */}
@@ -562,7 +572,7 @@ const Chats = () => {
                             </div>
                         </div>
 
-                        <div className="flex-1 overflow-y-auto p-4 space-y-4 relative scrollbar-thin scrollbar-thumb-slate-700 scrollbar-track-transparent">
+                        <div className="flex-1 overflow-y-auto p-6 space-y-5 relative scrollbar-thin scrollbar-thumb-slate-700 scrollbar-track-transparent">
                             {/* Load More Button */}
                             <div className="flex justify-center mb-4">
                                 <button
@@ -590,7 +600,29 @@ const Chats = () => {
                         </div>
 
                         <form onSubmit={sendMessage} className="p-6 bg-slate-900/40 border-t border-white/5 flex gap-4 relative">
-                            <input
+                            <div className="relative flex-1">
+                                <button
+                                    type="button"
+                                    onClick={() => setShowQuickMessages((open) => !open)}
+                                    disabled={uploading}
+                                    title="Hazır mesajlar"
+                                    className="absolute left-3 top-1/2 z-10 -translate-y-1/2 rounded-full border border-fuchsia-400/30 bg-fuchsia-500/10 p-2 text-fuchsia-300 transition hover:bg-fuchsia-500/25 active:scale-95 disabled:opacity-50"
+                                >
+                                    <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 10h.01M12 10h.01M16 10h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                                    </svg>
+                                </button>
+                                {showQuickMessages && (
+                                    <div className="absolute bottom-[calc(100%+12px)] left-0 z-30 w-72 rounded-2xl border border-fuchsia-400/30 bg-slate-900 p-2 shadow-2xl shadow-fuchsia-950/40">
+                                        <p className="px-3 py-2 text-[10px] font-black uppercase tracking-widest text-fuchsia-300">Hazır mesajlar</p>
+                                        {['Merhaba, nasılsın?', 'Sana nasıl yardımcı olabilirim?', 'Mesajını aldım, hemen ilgileniyorum.', 'Güzel bir gün dilerim ✨'].map((message) => (
+                                            <button key={message} type="button" onClick={() => sendQuickMessage(message)} className="block w-full rounded-xl px-3 py-2 text-left text-sm font-medium text-slate-200 transition hover:bg-fuchsia-500/20 hover:text-white">
+                                                {message}
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
+                                <input
                                 type="file"
                                 ref={fileInputRef}
                                 className="hidden"
@@ -629,8 +661,9 @@ const Chats = () => {
                                 onChange={handleTyping}
                                 placeholder={uploading ? "Resim yükleniyor..." : "Mesajınızı yazın..."}
                                 disabled={uploading}
-                                className="flex-1 bg-slate-800/50 border border-white/10 rounded-xl px-4 text-sm text-white focus:outline-none focus:border-fuchsia-500 transition-all font-medium disabled:opacity-50"
-                            />
+                                className="w-full bg-slate-800/50 border border-white/10 rounded-xl px-4 pl-14 text-sm text-white focus:outline-none focus:border-fuchsia-500 transition-all font-medium disabled:opacity-50"
+                                />
+                            </div>
                             <button
                                 type="submit"
                                 disabled={uploading || !input.trim()}

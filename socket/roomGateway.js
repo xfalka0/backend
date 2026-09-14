@@ -1,5 +1,6 @@
 const jwt = require('jsonwebtoken');
 const db = require('../db');
+const { AGENCY_SYSTEM_ENABLED } = require('../utils/featureFlags');
 const { createClient } = require('redis');
 
 const SECRET_KEY = process.env.JWT_SECRET || 'your_super_secret_key_change_in_prod';
@@ -402,7 +403,7 @@ function initializeRoomGateway(io) {
                     receiverName = recipient.username;
                     const isFemale = (recipient.gender || '').toLowerCase() === 'kadin';
                     
-                    if (isFemale) {
+                    if (AGENCY_SYSTEM_ENABLED && isFemale) {
                         const baseRate = 4.35;
                         const earned = Math.round(totalCost * baseRate * 100) / 100;
 

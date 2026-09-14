@@ -4,6 +4,7 @@ import { Platform } from 'react-native';
 export const BASE_URL = 'https://backend-kj17.onrender.com';
 export const API_URL = `${BASE_URL}/api`;
 export const SOCKET_URL = BASE_URL;
+export const AGENCY_SYSTEM_ENABLED = false;
 
 // Performance & Animations
 export const PERFORMANCE = {

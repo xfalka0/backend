@@ -24,7 +24,13 @@ const CATEGORIES = [
     { id: 'gift_effect', label: 'Hediye', icon: 'gift-outline', desc: 'Gönderildiğinde tam ekranda parlayacak özel hediye efektleri.' }
 ];
 
-const IS_MAINTENANCE_MODE = true;
+const PREMIUM_PLANS = [
+    { months: 1, label: '1 Aylık Premium', subtitle: 'Premium ayrıcalıkları keşfet', badge: 'BAŞLANGIÇ', price: '249,99 ₺' },
+    { months: 3, label: '3 Aylık Premium', subtitle: 'Daha uzun, daha avantajlı', badge: 'POPÜLER', price: '599,99 ₺' },
+    { months: 6, label: '6 Aylık Premium', subtitle: 'En iyi değer seçeneği', badge: 'EN AVANTAJLI', price: '999,99 ₺' },
+];
+
+const IS_MAINTENANCE_MODE = false;
 
 export default function StoreScreen({ navigation, route }) {
     console.log("RENDER StoreScreen");
@@ -374,7 +380,7 @@ export default function StoreScreen({ navigation, route }) {
         <View style={styles.container}>
             <StatusBar barStyle="light-content" />
             <LinearGradient
-                colors={['#312361', '#140E30']}
+                colors={['#29101A', '#0F080A']}
                 style={StyleSheet.absoluteFill}
             />
 
@@ -429,6 +435,56 @@ export default function StoreScreen({ navigation, route }) {
                     </LinearGradient>
                 </View>
 
+                {/* Coin & Premium Offers */}
+                <View style={styles.storeOffers}>
+                    <Text style={styles.premiumSectionTitle}>PREMIUM ÜYELİK</Text>
+                    <Text style={styles.premiumSectionSubtitle}>Sana en uygun süreyi seç</Text>
+                    <View style={styles.premiumPlansRow}>
+                    {PREMIUM_PLANS.map((plan, index) => (
+                        <Animated.View key={plan.months} style={[styles.planAnimated, { transform: [{ translateY: floatAnim }] }]}>
+                        <TouchableOpacity
+                            style={[styles.premiumOffer, index === 1 && styles.premiumOfferPopular, index === 2 && styles.premiumOfferBest]}
+                            onPress={() => navigation.navigate('Vip', { premiumPlan: plan.months })}
+                            activeOpacity={0.86}
+                        >
+                            <LinearGradient
+                                colors={index === 2 ? ['#74152F', '#2A0D16'] : ['#3B1421', '#1E0B12']}
+                                style={StyleSheet.absoluteFill}
+                            />
+                            <View style={[styles.offerIcon, index === 2 && styles.offerIconBest]}>
+                                <Ionicons name="diamond" size={20} color="#FFB020" />
+                            </View>
+                            <View style={styles.offerTextWrap}>
+                                <View style={styles.planTitleRow}>
+                                    <Text style={styles.offerTitle}>{plan.label}</Text>
+                                    <View style={[styles.planBadge, index === 2 && styles.planBadgeBest]}>
+                                        <Text style={styles.planBadgeText}>{plan.badge}</Text>
+                                    </View>
+                                </View>
+                                <Text style={styles.offerSubtitle}>{plan.subtitle}</Text>
+                                <Text style={styles.planPrice}>{plan.price}</Text>
+                                <View style={styles.planBenefits}>
+                                    {[
+                                        'Sesli ve görüntülü arama',
+                                        'Konum gönderme ve alma',
+                                        'Sınırsız beğeni',
+                                        'Keşfette paylaşım hakkı',
+                                        'Keşfette daha üstte görün',
+                                    ].map((benefit) => (
+                                        <View key={benefit} style={styles.planBenefitRow}>
+                                            <Ionicons name="checkmark-circle" size={13} color="#FFB020" />
+                                            <Text style={styles.planBenefitText}>{benefit}</Text>
+                                        </View>
+                                    ))}
+                                </View>
+                            </View>
+                        </TouchableOpacity>
+                        </Animated.View>
+                    ))}
+                    </View>
+                </View>
+
+                {false && (<>
                 {/* Fixed Grid Category Tabs (No Scroll) */}
                 <View style={styles.tabsContainer}>
                     <View style={styles.tabsGrid}>
@@ -573,6 +629,7 @@ export default function StoreScreen({ navigation, route }) {
                         }
                     />
                 )}
+                </>)}
 
                 {/* MODAL 1: ProductPreviewModal */}
                 <Modal
@@ -801,6 +858,151 @@ const styles = StyleSheet.create({
         color: '#ffffff',
         fontSize: 11.5,
         fontWeight: '900',
+    },
+    storeOffers: {
+        paddingHorizontal: 20,
+        marginBottom: 14,
+    },
+    premiumPlansRow: {
+        flexDirection: 'row',
+        alignItems: 'stretch',
+        justifyContent: 'space-between',
+        gap: 8,
+        marginTop: 10,
+        height: 450,
+    },
+    planAnimated: {
+        flex: 0,
+        width: (width - 56) / 3,
+        height: 450,
+    },
+    premiumSectionTitle: {
+        color: '#FFB020',
+        fontSize: 11,
+        fontWeight: '900',
+        letterSpacing: 1.6,
+        marginBottom: -4,
+    },
+    premiumSectionSubtitle: {
+        color: 'rgba(255,255,255,0.55)',
+        fontSize: 12,
+        marginBottom: 2,
+    },
+    premiumOffer: {
+        height: 450,
+        flex: 0,
+        width: '100%',
+        borderRadius: 16,
+        overflow: 'hidden',
+        paddingHorizontal: 8,
+        paddingVertical: 16,
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        borderWidth: 1,
+        borderColor: 'rgba(232, 62, 80, 0.38)',
+    },
+    premiumOfferPopular: {
+        borderColor: 'rgba(255, 176, 32, 0.52)',
+    },
+    premiumOfferBest: {
+        borderColor: 'rgba(255, 77, 90, 0.68)',
+        shadowColor: '#E83E50',
+        shadowOpacity: 0.28,
+        shadowRadius: 12,
+        elevation: 6,
+    },
+    coinOffer: {
+        minHeight: 78,
+        borderRadius: 22,
+        paddingHorizontal: 14,
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#281017',
+        borderWidth: 1,
+        borderColor: 'rgba(255, 176, 32, 0.24)',
+    },
+    offerIcon: {
+        width: 42,
+        height: 42,
+        borderRadius: 21,
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: 'rgba(255, 176, 32, 0.14)',
+        marginRight: 0,
+        marginBottom: 8,
+    },
+    offerTextWrap: {
+        flex: 1,
+        width: '100%',
+        alignItems: 'center',
+    },
+    planTitleRow: {
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'flex-start',
+        height: 82,
+        gap: 4,
+    },
+    planBadge: {
+        paddingHorizontal: 7,
+        paddingVertical: 3,
+        borderRadius: 8,
+        backgroundColor: 'rgba(255, 176, 32, 0.18)',
+    },
+    planBadgeBest: {
+        backgroundColor: 'rgba(232, 62, 80, 0.28)',
+    },
+    planBadgeText: {
+        color: '#FFB020',
+        fontSize: 8,
+        fontWeight: '900',
+        letterSpacing: 0.4,
+    },
+    offerEyebrow: {
+        color: '#FFB020',
+        fontSize: 9,
+        fontWeight: '900',
+        letterSpacing: 1.2,
+    },
+    offerTitle: {
+        color: '#fff',
+        fontSize: 14,
+        fontWeight: '900',
+        marginTop: 0,
+        textAlign: 'center',
+    },
+    offerSubtitle: {
+        color: 'rgba(255,255,255,0.58)',
+        fontSize: 11,
+        marginTop: 6,
+        textAlign: 'center',
+        minHeight: 30,
+    },
+    planPrice: {
+        color: '#FFB020',
+        fontSize: 17,
+        fontWeight: '900',
+        marginTop: 14,
+        textAlign: 'center',
+        height: 24,
+    },
+    planBenefits: {
+        width: '100%',
+        marginTop: 16,
+        gap: 8,
+    },
+    planBenefitRow: {
+        flexDirection: 'row',
+        alignItems: 'flex-start',
+        paddingHorizontal: 4,
+    },
+    planBenefitText: {
+        flex: 1,
+        color: 'rgba(255,255,255,0.72)',
+        fontSize: 9,
+        lineHeight: 13,
+        marginLeft: 4,
     },
     tabsContainer: {
         paddingHorizontal: 16,

@@ -58,7 +58,7 @@ const slides = [
         isHeart: false,
         isAgency: true
     }
-];
+].filter(item => !item.isAgency);
 
 
 const FloatingEmber = ({ delay, startX }) => {

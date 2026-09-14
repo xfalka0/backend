@@ -17,7 +17,7 @@ import * as Haptics from 'expo-haptics';
 const { width } = Dimensions.get('window');
 
 // MaskedView-based GradientIcon (uses compiled native module)
-const GradientIcon = ({ name, size = 26, colors = ['#FFFFFF', '#EC4899'] }) => (
+const GradientIcon = ({ name, size = 26, colors = ['#FFFFFF', '#E83E50'] }) => (
     <MaskedView
         style={{ width: size, height: size }}
         maskElement={
@@ -37,7 +37,8 @@ const GradientIcon = ({ name, size = 26, colors = ['#FFFFFF', '#EC4899'] }) => (
 
 const AnimatedTab = ({ state, descriptors, navigation }) => {
     // Equal-width slots keep the rooms action exactly in the center.
-    const tabWidth = (width - 60) / state.routes.length;
+    // Match the tab bar's inner width: total width minus horizontal padding.
+    const tabWidth = (width - 48) / state.routes.length;
 
     const indicatorPos = useSharedValue(0);
     const indicatorOpacity = useSharedValue(1);
@@ -69,7 +70,7 @@ const AnimatedTab = ({ state, descriptors, navigation }) => {
                 {/* Sliding Indicator */}
                 <Animated.View style={[styles.indicatorWrapper, { width: tabWidth }, indicatorStyle]}>
                     <LinearGradient
-                        colors={['#EC4899', '#FFFFFF']}
+                        colors={['#E83E50', '#991B4D']}
                         style={styles.slidingIndicator}
                         start={{ x: 0, y: 0 }}
                         end={{ x: 1, y: 1 }}
@@ -137,27 +138,27 @@ const TabItem = ({ isFocused, onPress, icon, isCenter = false }) => {
             <Animated.View style={animatedStyle}>
                 {isCenter ? (
                     <LinearGradient
-                        colors={isFocused ? ['#EC4899', '#FFFFFF'] : ['rgba(255, 255, 255, 0.15)', 'rgba(255, 255, 255, 0.05)']}
+                        colors={isFocused ? ['#E83E50', '#991B4D'] : ['rgba(255, 255, 255, 0.15)', 'rgba(255, 255, 255, 0.05)']}
                         start={{ x: 0, y: 0 }}
                         end={{ x: 1, y: 1 }}
                         style={[styles.centerButton, isFocused && styles.centerButtonFocused]}
                     >
                         <View style={styles.centerButtonInner}>
                             {isFocused ? (
-                                <GradientIcon name="mic" size={26} colors={['#FFFFFF', '#EC4899']} />
+                                <GradientIcon name="mic" size={28} colors={['#FFFFFF', '#E83E50']} />
                             ) : (
-                                <Ionicons name="mic" size={26} color="#8e85a6" />
+                                <Ionicons name="mic" size={28} color="#8e85a6" />
                             )}
                         </View>
                     </LinearGradient>
                 ) : (
-                    <View style={{ position: 'relative', width: 28, height: 28, justifyContent: 'center', alignItems: 'center' }}>
+                    <View style={{ position: 'relative', width: 32, height: 32, justifyContent: 'center', alignItems: 'center' }}>
                         {isFocused ? (
-                            <GradientIcon name={icon} size={28} />
+                            <GradientIcon name={icon} size={30} colors={['#FFFFFF', '#E83E50']} />
                         ) : (
                             <Ionicons
                                 name={icon}
-                                size={26}
+                                size={28}
                                 color="#8e85a6"
                             />
                         )}
@@ -188,12 +189,12 @@ const styles = StyleSheet.create({
         paddingVertical: 18,
         paddingHorizontal: 10,
         borderRadius: 40,
-        width: width - 40,
+        width: width - 28,
         justifyContent: 'flex-start',
         alignItems: 'center',
         borderWidth: 1,
         borderColor: 'rgba(255,255,255,0.15)',
-        shadowColor: '#EC4899',
+        shadowColor: '#D92F4F',
         shadowOffset: { width: 0, height: 8 },
         shadowOpacity: 0.15,
         shadowRadius: 20,
@@ -227,7 +228,7 @@ const styles = StyleSheet.create({
         padding: 2.5, // Outer gradient border width
         alignItems: 'center',
         justifyContent: 'center',
-        shadowColor: '#EC4899',
+        shadowColor: '#D92F4F',
         shadowOffset: { width: 0, height: 6 },
         shadowOpacity: 0.3,
         shadowRadius: 12,
@@ -238,7 +239,7 @@ const styles = StyleSheet.create({
         width: '100%',
         height: '100%',
         borderRadius: 24,
-        backgroundColor: '#171430', // Sleek dark matching tab bar
+        backgroundColor: '#160A0F', // Warm dark matching tab bar
         alignItems: 'center',
         justifyContent: 'center',
     },

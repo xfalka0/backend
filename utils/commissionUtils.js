@@ -1,5 +1,6 @@
 
 const db = require('../db');
+const { AGENCY_SYSTEM_ENABLED } = require('./featureFlags');
 
 /**
  * Calculates and records commission for an operator when a user spends coins.
@@ -10,6 +11,7 @@ const db = require('../db');
  * @param {string} type - Action type ('text', 'image', 'gift', etc.)
  */
 async function recordOperatorCommission(client, chatId, senderId, cost, type, callId = null) {
+    if (!AGENCY_SYSTEM_ENABLED) return;
     if (cost <= 0) return;
 
     // 1. Find the users in this chat

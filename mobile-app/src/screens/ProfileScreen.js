@@ -766,7 +766,7 @@ const ProfileScreen = ({ route }) => {
                 </View>
 
                 {/* Agency Invitation Banner */}
-                {pendingInvitations && pendingInvitations.length > 0 && (
+                {false && pendingInvitations && pendingInvitations.length > 0 && (
                     <View style={styles.inviteBannerContainer}>
                         {pendingInvitations.map((invite) => (
                             <GlassCard key={invite.id} intensity={30} tint="dark" style={styles.inviteBannerCard}>
@@ -860,7 +860,7 @@ const ProfileScreen = ({ route }) => {
                             <View style={styles.idBadge}>
                                 <Text style={styles.idText}>ID: {String(user?.id || '').slice(-6).toUpperCase()}</Text>
                             </View>
-                            {(user?.agency_name || user?.agencyName) && (
+                            {false && (user?.agency_name || user?.agencyName) && (
                                 <AgencyBadge agencyName={user.agency_name || user.agencyName} size={16} />
                             )}
                             {user?.nobilityKey && (
@@ -911,7 +911,7 @@ const ProfileScreen = ({ route }) => {
                 <View style={styles.glassCardWrapper}>
                     <View style={styles.glassCard}>
                         <View style={styles.quickActionsGrid}>
-                            <TouchableOpacity style={styles.qaItem} onPress={() => {
+                            {false && (<TouchableOpacity style={styles.qaItem} onPress={() => {
                                 if (user?.is_agency_owner) {
                                     navigation.navigate('AgencyDashboard');
                                 } else {
@@ -924,7 +924,7 @@ const ProfileScreen = ({ route }) => {
                                 <Text style={styles.qaLabel} numberOfLines={1}>
                                     {(user?.agency_id || user?.is_agency_owner) ? 'Ajansım' : 'Ajans'}
                                 </Text>
-                            </TouchableOpacity>
+                            </TouchableOpacity>)}
 
                             <TouchableOpacity style={styles.qaItem} onPress={() => navigation.navigate('ProfileVisitors', { user })}>
                                 <View style={styles.qaIconOnly}>
@@ -969,12 +969,12 @@ const ProfileScreen = ({ route }) => {
                                 <Text style={styles.qaLabel} numberOfLines={1}>Favori</Text>
                             </TouchableOpacity>
 
-                            <TouchableOpacity style={styles.qaItem} onPress={() => navigation.navigate('Family')}>
+                            {false && (<TouchableOpacity style={styles.qaItem} onPress={() => navigation.navigate('Family')}>
                                 <View style={styles.qaIconOnly}>
                                     <GradientIcon IconComponent={Ionicons} name="people-outline" size={26} colors={['#A78BFA', '#6366F1']} />
                                 </View>
                                 <Text style={styles.qaLabel} numberOfLines={1}>Ailem</Text>
-                            </TouchableOpacity>
+                            </TouchableOpacity>)}
 
                             <TouchableOpacity style={styles.qaItem} onPress={() => navigation.navigate('Nobility')}>
                                 <View style={styles.qaIconOnly}>
@@ -1073,7 +1073,7 @@ const ProfileScreen = ({ route }) => {
                 </View>
 
                 {/* Görevler (Missions) Card - Visible to female users and operators */}
-                {isFemaleOrOperator && (
+                {false && isFemaleOrOperator && (
                     <TouchableOpacity
                         style={styles.glassCardWrapper}
                         activeOpacity={0.82}

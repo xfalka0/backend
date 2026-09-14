@@ -100,16 +100,16 @@ function MainTabs({ route }) {
                 options={{ tabBarIconName: 'compass' }}
             />
             <Tab.Screen
-                name="Odalar"
-                component={PartyRoomsListScreen}
-                initialParams={{ user }}
-                options={{ tabBarIconName: 'mic', tabBarCenterButton: true }}
-            />
-            <Tab.Screen
                 name="Sohbet"
                 component={MessagesScreen}
                 initialParams={{ user }}
                 options={{ tabBarIconName: 'chatbubbles' }}
+            />
+            <Tab.Screen
+                name="Mağaza"
+                component={StoreScreen}
+                initialParams={{ user }}
+                options={{ tabBarIconName: 'cart' }}
             />
             <Tab.Screen
                 name="Profil"

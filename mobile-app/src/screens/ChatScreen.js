@@ -82,6 +82,7 @@ export default function ChatScreen({ route, navigation }) {
     // User Handling
     const TEST_USER_ID = 'c917f7d6-cc44-4b04-8917-1dbbed0b1e9b';
     const user = { ...routeUser, id: routeUser.id || TEST_USER_ID };
+    const isPremiumMember = user?.is_vip === true || user?.is_vip === 'true' || Number(user?.vip_level) > 0;
 
     const [messages, setMessages] = useState([]);
     const [isTyping, setIsTyping] = useState(false);
@@ -199,6 +200,30 @@ export default function ChatScreen({ route, navigation }) {
 
     const [showIcebreakers, setShowIcebreakers] = useState(false);
     const [showQuickActions, setShowQuickActions] = useState(false);
+    const [fakeCall, setFakeCall] = useState(null);
+    const fakeCallPulse = useRef(new Animated.Value(1)).current;
+
+    useEffect(() => {
+        if (!fakeCall) return undefined;
+
+        const pulse = Animated.loop(
+            Animated.sequence([
+                Animated.timing(fakeCallPulse, { toValue: 1.18, duration: 800, useNativeDriver: true }),
+                Animated.timing(fakeCallPulse, { toValue: 1, duration: 800, useNativeDriver: true }),
+            ])
+        );
+        pulse.start();
+        return () => pulse.stop();
+    }, [fakeCall, fakeCallPulse]);
+
+    const handleFakeCall = (type) => {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        if (!isPremiumMember) {
+            Alert.alert('Premium Gerekli', 'Arama özelliğini kullanabilmek için Premium olmanız gerekmektedir.');
+            return;
+        }
+        setFakeCall(type);
+    };
     const [currentPlayingUri, setCurrentPlayingUri] = useState(null);
     const [sound, setSound] = useState(null);
 
@@ -1250,7 +1275,7 @@ export default function ChatScreen({ route, navigation }) {
     const renderMessage = React.useCallback(({ item, index }) => {
         const isUser = item.sender_id === user.id;
 
-        if (item.type === 'agency_invite' || item.is_agency_invite) {
+        if (false && (item.type === 'agency_invite' || item.is_agency_invite)) {
             return (
                 <MessageBubble
                     isMine={false}
@@ -1553,11 +1578,7 @@ export default function ChatScreen({ route, navigation }) {
                     style={styles.callStubContainer}
                     onPress={() => {
                         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                        if (isVideo) {
-                            navigation.navigate('VideoCall', { receiver: { id: operatorId, name, avatar_url }, chatId });
-                        } else {
-                            navigation.navigate('VoiceCall', { receiver: { id: operatorId, name, avatar_url }, chatId });
-                        }
+                        handleFakeCall(isVideo ? 'video' : 'voice');
                     }}
                     activeOpacity={0.85}
                 >
@@ -1625,6 +1646,24 @@ export default function ChatScreen({ route, navigation }) {
         <View style={styles.container}>
             <StatusBar style="light" translucent backgroundColor="transparent" />
             <ChatBackground themeMode={themeMode} />
+
+            <Modal visible={!!fakeCall} transparent animationType="fade" onRequestClose={() => setFakeCall(null)}>
+                <View style={styles.fakeCallOverlay}>
+                    <View style={styles.fakeCallCard}>
+                        <Animated.View style={[styles.fakeCallPulse, { transform: [{ scale: fakeCallPulse }] }]}>
+                            <Ionicons name={fakeCall === 'video' ? 'videocam' : 'call'} size={34} color="#fff" />
+                        </Animated.View>
+                        <Text style={styles.fakeCallTitle}>{fakeCall === 'video' ? 'Görüntülü Aranıyor' : 'Aranıyor'}</Text>
+                        <Text style={styles.fakeCallName}>{name || 'Kullanıcı'}</Text>
+                        <Text style={styles.fakeCallSubtitle}>Çalıyor...</Text>
+                        <Text style={styles.fakeCallNote}>Arama bağlantısı bekleniyor</Text>
+                        <TouchableOpacity style={styles.fakeCallEndButton} onPress={() => setFakeCall(null)}>
+                            <Ionicons name="call" size={20} color="#fff" style={{ transform: [{ rotate: '135deg' }] }} />
+                            <Text style={styles.fakeCallEndText}>Aramayı Sonlandır</Text>
+                        </TouchableOpacity>
+                    </View>
+                </View>
+            </Modal>
 
             <QuickActionsModal 
                 visible={showQuickActions}
@@ -1806,33 +1845,13 @@ export default function ChatScreen({ route, navigation }) {
 
                         {/* Bottom Action Bar */}
                         {!isFamilyChat && <View style={styles.actionBar}>
-                            <TouchableOpacity style={styles.modernActionBtn} onPress={() => {
-                                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                                if (!isOperator && currentBalance < 120 && (user.vip_level || 0) < 1) {
-                                    handleInsufficientCoins();
-                                    return;
-                                }
-                                navigation.navigate('VideoCall', { 
-                                    receiver: { id: operatorId, name, avatar_url },
-                                    chatId: chatId
-                                });
-                            }}>
+                            <TouchableOpacity style={styles.modernActionBtn} onPress={() => handleFakeCall('video')}>
                                 <View style={styles.btnBlur}>
                                     <Ionicons name="videocam" size={22} color="rgba(255,255,255,0.8)" />
                                 </View>
                             </TouchableOpacity>
 
-                            <TouchableOpacity style={styles.modernActionBtn} onPress={() => {
-                                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                                if (!isOperator && currentBalance < 50 && (user.vip_level || 0) < 1) {
-                                    handleInsufficientCoins();
-                                    return;
-                                }
-                                navigation.navigate('VoiceCall', { 
-                                    receiver: { id: operatorId, name, avatar_url },
-                                    chatId: chatId
-                                });
-                            }}>
+                            <TouchableOpacity style={styles.modernActionBtn} onPress={() => handleFakeCall('voice')}>
                                 <View style={styles.btnBlur}>
                                     <Ionicons name="call" size={22} color="rgba(255,255,255,0.8)" />
                                 </View>
@@ -1938,7 +1957,7 @@ export default function ChatScreen({ route, navigation }) {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#0f051a', // Fallback color
+        backgroundColor: '#0F080A', // Fallback color
     },
     background: {
         ...StyleSheet.absoluteFillObject,
@@ -2393,6 +2412,74 @@ const styles = StyleSheet.create({
         borderWidth: 1,
         borderColor: 'rgba(255, 255, 255, 0.1)',
         minWidth: 220,
+    },
+    fakeCallOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(15, 8, 10, 0.92)',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: 24,
+    },
+    fakeCallCard: {
+        width: '100%',
+        maxWidth: 340,
+        alignItems: 'center',
+        paddingVertical: 34,
+        paddingHorizontal: 24,
+        borderRadius: 30,
+        backgroundColor: '#281017',
+        borderWidth: 1,
+        borderColor: 'rgba(232, 62, 80, 0.45)',
+    },
+    fakeCallPulse: {
+        width: 82,
+        height: 82,
+        borderRadius: 41,
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: '#B5123E',
+        shadowColor: '#E83E50',
+        shadowOpacity: 0.7,
+        shadowRadius: 18,
+        elevation: 10,
+    },
+    fakeCallTitle: {
+        marginTop: 22,
+        color: '#fff',
+        fontSize: 22,
+        fontWeight: '800',
+    },
+    fakeCallName: {
+        marginTop: 8,
+        color: '#FFB0B8',
+        fontSize: 18,
+        fontWeight: '700',
+    },
+    fakeCallSubtitle: {
+        marginTop: 20,
+        color: '#E83E50',
+        fontSize: 15,
+        fontWeight: '700',
+    },
+    fakeCallNote: {
+        marginTop: 8,
+        color: 'rgba(255,255,255,0.5)',
+        fontSize: 12,
+    },
+    fakeCallEndButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginTop: 28,
+        paddingHorizontal: 18,
+        paddingVertical: 12,
+        borderRadius: 24,
+        backgroundColor: '#B5123E',
+    },
+    fakeCallEndText: {
+        marginLeft: 8,
+        color: '#fff',
+        fontSize: 13,
+        fontWeight: '700',
     },
     callStubIconCircle: {
         width: 36,

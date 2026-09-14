@@ -1,4 +1,5 @@
 const db = require('../db');
+const { AGENCY_SYSTEM_ENABLED } = require('../utils/featureFlags');
 
 const inMemoryPartyIdempotencyKeys = new Set();
 const pendingPartyIdempotencyKeys = new Set();
@@ -464,7 +465,7 @@ function handlePartyRoomSockets(io, socket) {
                 const recipient = recRes.rows[0];
                 const isFemale = (recipient.gender || '').toLowerCase() === 'kadin';
                 
-                if (isFemale) {
+                if (AGENCY_SYSTEM_ENABLED && isFemale) {
                     const baseRate = 4.35; // Standard paying conversion rate
                     const earned = Math.round(gift.cost * baseRate * 100) / 100;
 

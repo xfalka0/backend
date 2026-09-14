@@ -17,7 +17,15 @@
       "bundleIdentifier": "com.fivachat.app",
       "infoPlist": {
         "NSCameraUsageDescription": "Görüntülü arama yapabilmek için kameranıza erişim gerekiyor.",
-        "NSMicrophoneUsageDescription": "Sesli ve görüntülü konuşma yapabilmek için mikrofonunuza erişim gerekiyor."
+        "NSMicrophoneUsageDescription": "Sesli ve görüntülü konuşma yapabilmek için mikrofonunuza erişim gerekiyor.",
+        "SKAdNetworkItems": [
+          {
+            "SKAdNetworkIdentifier": "v9wttpbfk9.skadnetwork"
+          },
+          {
+            "SKAdNetworkIdentifier": "n38lu8286q.skadnetwork"
+          }
+        ]
       }
     },
     "android": {
@@ -27,7 +35,10 @@
       },
       "package": "com.fivachat.app",
       "googleServicesFile": "./google-services.json",
-      "versionCode": 100
+      "versionCode": 100,
+      "permissions": [
+        "android.permission.INTERNET"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -63,6 +74,12 @@
           "advertiserIDCollectionEnabled": true
         }
       ]
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "39f2753e-8bbe-487c-a7a8-e83a7cfe4d74"
+      }
+    },
+    "owner": "thefalka"
   }
 }

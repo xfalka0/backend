@@ -312,6 +312,41 @@ const Chats = () => {
         sendTextMessage(input);
     };
 
+    const sendLocationMessage = () => {
+        if (!selectedChat) return;
+        if (navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition((position) => {
+                const { latitude, longitude } = position.coords;
+                const content = `${latitude},${longitude}`;
+                const tempId = Date.now().toString();
+                const msgData = {
+                    chatId: selectedChat.id,
+                    senderId: selectedChat.operator_id,
+                    content: content,
+                    type: 'location',
+                    tempId: tempId
+                };
+                socketRef.current.emit('send_message', msgData);
+
+                const optimisticMsg = {
+                    id: tempId,
+                    sender_id: selectedChat.operator_id,
+                    content: content,
+                    content_type: 'location',
+                    chat_id: selectedChat.id,
+                    created_at: new Date().toISOString(),
+                    is_optimistic: true,
+                    tempId: tempId
+                };
+                setMessages((prev) => [...prev, optimisticMsg]);
+            }, (err) => {
+                alert('Konum alınamadı: ' + err.message);
+            });
+        } else {
+            alert('Tarayıcınız konum servisini desteklemiyor.');
+        }
+    };
+
     const sendQuickMessage = (message) => {
         sendTextMessage(message);
         setShowQuickMessages(false);
@@ -467,12 +502,43 @@ const Chats = () => {
                         </div>
                     ) : (
                         <div
+                    {/* Gift Message Styling */}
+                    {(msg.content_type === 'gift' || msg.type === 'gift' || msg.gift_id) ? (
+                        <div className="bg-gradient-to-r from-amber-200 via-yellow-300 to-amber-200 text-amber-900 p-0.5 rounded-2xl shadow-lg shadow-amber-500/20 transform hover:scale-[1.02] transition-transform duration-300">
+                            <div className="bg-gradient-to-br from-amber-50 to-white px-4 py-3 rounded-[14px] flex items-center gap-4 relative overflow-hidden">
+                                <div className="absolute top-0 right-0 -mr-4 -mt-4 w-20 h-20 bg-yellow-400/20 blur-2xl rounded-full"></div>
+                                <div className="text-4xl filter drop-shadow-md">
+                                    {msg.gift_icon ? <img src={msg.gift_icon} className="w-12 h-12 object-contain" alt="Gift" /> : '🎁'}
+                                </div>
+                                <div>
+                                    <p className="min-w-[100px] font-black text-amber-900 text-sm uppercase tracking-wider">{msg.gift_name || msg.content}</p>
+                                    <div className="flex items-center gap-1 mt-1">
+                                        <span className="bg-amber-100/80 text-amber-800 text-[10px] font-bold px-2 py-0.5 rounded-full border border-amber-200/50 shadow-sm">
+                                            {msg.gift_cost ? `${msg.gift_cost} COINS` : 'HEDİYE'}
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div className="absolute -bottom-1 -right-1">
+                                <span className="flex h-3 w-3">
+                                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-yellow-400 opacity-75"></span>
+                                    <span className="relative inline-flex rounded-full h-3 w-3 bg-yellow-500"></span>
+                                </span>
+                            </div>
+                        </div>
+                    ) : (
+                        <div
                             className={`p-5 rounded-2xl text-[15px] font-medium shadow-sm ${msg.sender_id === selectedChat.operator_id || msg.sender_id === user?.id
                                 ? 'bg-purple-600 text-white rounded-br-none'
                                 : 'bg-slate-800 text-slate-200 rounded-bl-none border border-slate-700'
                                 }`}
                         >
-                            {msg.content_type === 'image' || msg.content_type === 'locked_image' || msg.type === 'image' || msg.type === 'locked_image' ? (
+                            {msg.content_type === 'location' || msg.type === 'location' ? (
+                                <div className="relative group/loc flex flex-col items-center p-2 bg-blue-500/10 rounded-lg border border-blue-500/30 cursor-pointer" onClick={() => window.open(`https://www.google.com/maps/search/?api=1&query=${msg.content}`, '_blank')}>
+                                    <span className="text-3xl mb-1 drop-shadow-md">📍</span>
+                                    <span className="text-xs font-bold text-blue-400 underline">Konum Görüntüle</span>
+                                </div>
+                            ) : msg.content_type === 'image' || msg.content_type === 'locked_image' || msg.type === 'image' || msg.type === 'locked_image' ? (
                                 <div className="relative group/img">
                                     <img
                                         src={msg.content}
@@ -623,45 +689,60 @@ const Chats = () => {
                                     </div>
                                 )}
                                 <input
-                                type="file"
-                                ref={fileInputRef}
-                                className="hidden"
-                                accept="image/*"
-                                onChange={handleImageUpload}
-                            />
-                            <div className="flex flex-col items-center justify-center gap-1">
-                                <button
-                                    type="button"
-                                    onClick={() => fileInputRef.current?.click()}
-                                    disabled={uploading}
-                                    className={`p-3 rounded-xl border border-white/10 transition-all hover:bg-white/5 active:scale-95 ${uploading ? 'animate-pulse opacity-50' : ''} ${isLockedImage ? 'border-yellow-500/50 bg-yellow-500/10 text-yellow-500' : 'text-slate-400'}`}
-                                >
-                                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                                    </svg>
-                                </button>
-                                <div className="flex items-center gap-1">
-                                    <label className="flex items-center gap-1 cursor-pointer group">
-                                        <input 
-                                            type="checkbox" 
-                                            checked={isLockedImage}
-                                            onChange={(e) => setIsLockedImage(e.target.checked)}
-                                            className="w-3 h-3 rounded bg-slate-800 border-white/20 text-yellow-500 focus:ring-yellow-500/50 cursor-pointer"
-                                        />
-                                        <span className="text-[9px] font-black uppercase text-slate-500 group-hover:text-yellow-500 transition-colors">Ücretli</span>
-                                    </label>
-                                    {isLockedImage && (
-                                        <span className="text-[10px] font-black text-yellow-500 bg-yellow-500/10 border border-yellow-500/20 px-2 py-0.5 rounded ml-1">200 Coin</span>
-                                    )}
+                                    type="file"
+                                    ref={fileInputRef}
+                                    className="hidden"
+                                    accept="image/*"
+                                    onChange={handleImageUpload}
+                                />
+                                <div className="flex flex-col items-center justify-center gap-1">
+                                    <div className="flex gap-2">
+                                        <button
+                                            type="button"
+                                            onClick={sendLocationMessage}
+                                            disabled={uploading}
+                                            title="Konum Gönder"
+                                            className="p-3 rounded-xl border border-white/10 transition-all hover:bg-white/5 active:scale-95 text-slate-400"
+                                        >
+                                            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                                            </svg>
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => fileInputRef.current?.click()}
+                                            disabled={uploading}
+                                            title="Resim Gönder"
+                                            className={`p-3 rounded-xl border border-white/10 transition-all hover:bg-white/5 active:scale-95 ${uploading ? 'animate-pulse opacity-50' : ''} ${isLockedImage ? 'border-yellow-500/50 bg-yellow-500/10 text-yellow-500' : 'text-slate-400'}`}
+                                        >
+                                            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                            </svg>
+                                        </button>
+                                    </div>
+                                    <div className="flex items-center gap-1">
+                                        <label className="flex items-center gap-1 cursor-pointer group">
+                                            <input 
+                                                type="checkbox" 
+                                                checked={isLockedImage}
+                                                onChange={(e) => setIsLockedImage(e.target.checked)}
+                                                className="w-3 h-3 rounded bg-slate-800 border-white/20 text-yellow-500 focus:ring-yellow-500/50 cursor-pointer"
+                                            />
+                                            <span className="text-[9px] font-black uppercase text-slate-500 group-hover:text-yellow-500 transition-colors">Ücretli</span>
+                                        </label>
+                                        {isLockedImage && (
+                                            <span className="text-[10px] font-black text-yellow-500 bg-yellow-500/10 border border-yellow-500/20 px-2 py-0.5 rounded ml-1">200 Coin</span>
+                                        )}
+                                    </div>
                                 </div>
-                            </div>
-                            <input
-                                type="text"
-                                value={input}
-                                onChange={handleTyping}
-                                placeholder={uploading ? "Resim yükleniyor..." : "Mesajınızı yazın..."}
-                                disabled={uploading}
-                                className="w-full bg-slate-800/50 border border-white/10 rounded-xl px-4 pl-14 text-sm text-white focus:outline-none focus:border-fuchsia-500 transition-all font-medium disabled:opacity-50"
+                                <input
+                                    type="text"
+                                    value={input}
+                                    onChange={handleTyping}
+                                    placeholder={uploading ? "Resim yükleniyor..." : "Mesajınızı yazın..."}
+                                    disabled={uploading}
+                                    className="w-full bg-slate-800/50 border border-white/10 rounded-xl px-4 pl-14 text-sm text-white focus:outline-none focus:border-fuchsia-500 transition-all font-medium disabled:opacity-50"
                                 />
                             </div>
                             <button

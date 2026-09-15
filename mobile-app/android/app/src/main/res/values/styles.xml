@@ -4,7 +4,7 @@
     <item name="android:editTextStyle">@style/ResetEditText</item>
     <item name="android:editTextBackground">@drawable/rn_edit_text_material</item>
     <item name="colorPrimary">@color/colorPrimary</item>
-    <item name="android:statusBarColor">#1a0533</item>
+    <item name="android:statusBarColor">#0F080A</item>
     <!-- Cursor and control tint color — pink brand color -->
     <item name="colorControlActivated">#EC4DA7</item>
     <item name="colorAccent">#EC4DA7</item>

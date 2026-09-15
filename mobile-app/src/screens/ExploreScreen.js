@@ -455,30 +455,17 @@ export default function ExploreScreen({ navigation, route }) {
             
             lastFetchedUserId.current = currentUser?.id;
             
-            // Apply gender filtering to posts and stories
-            const userGender = getProfileGender(currentUser) === 'kadin' ? 'kadin' : 'erkek';
-            const targetGender = userGender === 'kadin' ? 'erkek' : 'kadin';
+            // Apply gender filtering to posts and stories (Relaxed for testing so all users are visible)
+            // const userGender = getProfileGender(currentUser) === 'kadin' ? 'kadin' : 'erkek';
+            // const targetGender = userGender === 'kadin' ? 'erkek' : 'kadin';
             
-            const filteredPosts = exploreRes.data.posts.filter(p => {
-                const profileGender = getProfileGender(p);
-                const isDealerOrAdmin = profileGender === 'coin_bayisi' || p.role === 'admin';
-                return userGender === 'kadin' || profileGender === targetGender || isDealerOrAdmin;
-            });
-            
-            const filteredStories = exploreRes.data.stories.filter(s => {
-                const profileGender = getProfileGender(s);
-                const isDealerOrAdmin = profileGender === 'coin_bayisi' || s.role === 'admin';
-                return userGender === 'kadin' || profileGender === targetGender || isDealerOrAdmin;
-            });
+            const filteredPosts = exploreRes.data.posts;
+            const filteredStories = exploreRes.data.stories;
 
             setPosts(filteredPosts);
             fetchPostCommentPreviews(filteredPosts);
             setStories(filteredStories);
-            setOperators(operatorsRes.data.filter(op => {
-                const profileGender = getProfileGender(op);
-                const isDealer = profileGender === 'coin_bayisi';
-                return userGender === 'kadin' || profileGender === targetGender || isDealer;
-            }));
+            setOperators(operatorsRes.data);
         } catch (err) {
             console.error('Fetch Explore Error:', err);
         } finally {
@@ -672,18 +659,20 @@ export default function ExploreScreen({ navigation, route }) {
 
     const checkVipAccess = (actionType) => {
         const userVipLevel = user?.vip_level || 0;
-        if (userVipLevel >= 2) {
+        const isPremium = user?.is_premium;
+
+        if (userVipLevel >= 2 || isPremium) {
             return true;
         }
 
         showAlert({
-            title: "VIP Özellik 👑",
-            message: `${actionType === 'story' ? 'Hikaye' : 'Post'} paylaşmak için VIP Seviye 2 veya üzeri olmalısın.`,
+            title: "Premium Özellik 👑",
+            message: `${actionType === 'story' ? 'Hikaye' : 'Post'} paylaşmak için Premium üye olmalısın.`,
             type: 'warning',
             showCancel: true,
             cancelText: "Vazgeç",
-            confirmText: "VIP Ol",
-            onConfirm: () => navigation.navigate('Vip')
+            confirmText: "Premium Al",
+            onConfirm: () => navigation.navigate('Store')
         });
         return false;
     };
@@ -695,7 +684,7 @@ export default function ExploreScreen({ navigation, route }) {
             // Mevcut hikayeyi izle (kısıtlama yok)
             navigation.navigate('Story', { story: { ...user, name: 'Sen', avatar: user.avatar_url || user.avatar, id: user.id, image_url: stories.find(s => s.operator_id === user.id)?.image_url } });
         } else {
-            // Yeni hikaye ekle (VIP 2+ Kısıtlaması)
+            // Yeni hikaye ekle
             if (checkVipAccess('story')) {
                 navigation.navigate('CreatePost', { isStory: true });
             }
@@ -703,12 +692,11 @@ export default function ExploreScreen({ navigation, route }) {
     };
 
     const handlePostCreation = () => {
-        // Yeni Post ekle (VIP 2+ Kısıtlaması)
+        // Yeni Post ekle
         if (checkVipAccess('post')) {
             navigation.navigate('CreatePost', { isStory: false });
         }
     };
-
         const renderStory = React.useCallback(({ item, index }) => {
         if (item.id === 'add') {
             const hasStory = !!user?.hasStory;

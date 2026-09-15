@@ -83,9 +83,31 @@ export const PurchaseService = {
         }
     },
 
-    purchaseProductByIdentifier: async (productIdentifier, type = Purchases.PURCHASE_TYPE.INAPP) => {
+    purchaseProductByIdentifier: async (productIdentifier, type = 'INAPP') => {
         try {
-            const { customerInfo } = await Purchases.purchaseProduct(productIdentifier, null, type);
+            const purchaseType = type === 'SUBS' ? Purchases.PURCHASE_TYPE.SUBS : Purchases.PURCHASE_TYPE.INAPP;
+            console.log(`[Purchases] Fetching product details for ${productIdentifier} (${purchaseType})...`);
+
+            const products = await Purchases.getProducts([productIdentifier], purchaseType);
+            if (products && products.length > 0) {
+                const storeProduct = products[0];
+                console.log(`[Purchases] Found storeProduct: ${storeProduct.identifier}, defaultOption: ${storeProduct.defaultOption?.id || 'none'}`);
+
+                let purchaseResult;
+                if (type === 'SUBS' && storeProduct.defaultOption) {
+                    console.log(`[Purchases] Purchasing via purchaseSubscriptionOption...`);
+                    purchaseResult = await Purchases.purchaseSubscriptionOption(storeProduct.defaultOption);
+                } else if (Purchases.purchaseStoreProduct) {
+                    console.log(`[Purchases] Purchasing via purchaseStoreProduct...`);
+                    purchaseResult = await Purchases.purchaseStoreProduct(storeProduct);
+                } else {
+                    purchaseResult = await Purchases.purchaseProduct(productIdentifier, null, purchaseType);
+                }
+                return { success: true, customerInfo: purchaseResult.customerInfo };
+            }
+
+            console.log(`[Purchases] getProducts returned empty list, using purchaseProduct fallback for ${productIdentifier}...`);
+            const { customerInfo } = await Purchases.purchaseProduct(productIdentifier, null, purchaseType);
             return { success: true, customerInfo };
         } catch (e) {
             if (!e.userCancelled) {

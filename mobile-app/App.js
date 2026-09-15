@@ -266,7 +266,7 @@ export default function App() {
         }
     }, [fontsLoaded]);
 
-    if (!fontsLoaded) return <View style={{ flex: 1, backgroundColor: '#ffffff' }} />;
+    if (!fontsLoaded) return <View style={{ flex: 1, backgroundColor: '#0F080A' }} />;
 
     return (
         <GestureHandlerRootView style={{ flex: 1 }}>

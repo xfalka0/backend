@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, TextInput, FlatList, StyleSheet, KeyboardAvoidingView, Platform, TouchableOpacity, Image, RefreshControl, Animated, ScrollView, Keyboard, PanResponder, Alert } from 'react-native';
+import { View, Text, TextInput, FlatList, StyleSheet, KeyboardAvoidingView, Platform, TouchableOpacity, Image, RefreshControl, Animated, ScrollView, Keyboard, PanResponder, Alert, Linking } from 'react-native';
 
 import * as Haptics from 'expo-haptics';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -218,11 +218,117 @@ export default function ChatScreen({ route, navigation }) {
 
     const handleFakeCall = (type) => {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-        if (!isPremiumMember) {
-            Alert.alert('Premium Gerekli', 'Arama özelliğini kullanabilmek için Premium olmanız gerekmektedir.');
+        if (!isPremiumMember && !isOperator) {
+            showAlert({
+                title: 'Premium Gerekli 👑',
+                message: 'Sesli ve görüntülü arama yapmak için Premium üye olmanız gerekmektedir.',
+                type: 'info',
+                showCancel: true,
+                cancelText: 'Vazgeç',
+                confirmText: 'Premium Al',
+                onConfirm: () => navigation.navigate('Store')
+            });
             return;
         }
         setFakeCall(type);
+    };
+
+    const handleSendLocation = async () => {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        if (!isPremiumMember && !isOperator) {
+            showAlert({
+                title: 'Premium Gerekli 👑',
+                message: 'Konum göndermek için Premium üye olmanız gerekmektedir.',
+                type: 'info',
+                showCancel: true,
+                cancelText: 'Vazgeç',
+                confirmText: 'Premium Al',
+                onConfirm: () => navigation.navigate('Store')
+            });
+            return;
+        }
+
+        if (!isFamilyChat && !socketRef.current?.connected) {
+            showAlert({ title: 'Bağlantı Hatası', message: 'Sunucu ile bağlantı kurulamadı.', type: 'error' });
+            return;
+        }
+
+        if (!isOperator && currentBalance < 500 && (user.vip_level || 0) < 1) {
+            handleInsufficientCoins();
+            return;
+        }
+
+        try {
+            let coords = { latitude: 41.0082, longitude: 28.9784 };
+            let address = 'İstanbul, Türkiye';
+
+            try {
+                const Location = require('expo-location');
+                const { status } = await Location.requestForegroundPermissionsAsync();
+                if (status === 'granted') {
+                    let loc = await Location.getLastKnownPositionAsync({});
+                    if (!loc) {
+                        loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Lowest });
+                    }
+                    if (loc) {
+                        coords = { latitude: loc.coords.latitude, longitude: loc.coords.longitude };
+                    }
+                }
+            } catch (locErr) {
+                console.log('[Location] Location fetch fallback:', locErr.message);
+            }
+
+            const locationData = JSON.stringify({
+                latitude: coords.latitude,
+                longitude: coords.longitude,
+                address: address
+            });
+
+            const tempId = `loc-${Date.now()}`;
+            if (isFamilyChat) {
+                const token = await AsyncStorage.getItem('token');
+                await axios.post(`${API_URL}/families/${familyId}/chat`, { message: locationData }, {
+                    headers: { Authorization: `Bearer ${token}` }
+                });
+                return;
+            }
+
+            const nextBalance = Math.max(0, currentBalance - 500);
+            setCurrentBalance(nextBalance);
+            if (nextBalance <= 0 && (user.vip_level || 0) < 1) {
+                setTimeout(() => {
+                    handleInsufficientCoins();
+                }, 1000); 
+            }
+
+            const msgData = {
+                chatId: chatId,
+                senderId: user.id,
+                content: locationData,
+                type: 'location',
+                tempId: tempId
+            };
+
+            if (socketRef.current) {
+                socketRef.current.emit('send_message', msgData);
+            }
+
+            const optimisticMsg = {
+                id: tempId,
+                sender_id: user.id,
+                content: locationData,
+                type: 'location',
+                content_type: 'location',
+                created_at: new Date().toISOString(),
+                is_optimistic: true,
+                tempId: tempId
+            };
+
+            setMessages(prev => [optimisticMsg, ...prev]);
+        } catch (err) {
+            console.error('[ChatScreen] Send location error:', err);
+            showAlert({ title: 'Hata', message: 'Konum gönderilemedi.', type: 'error' });
+        }
     };
     const [currentPlayingUri, setCurrentPlayingUri] = useState(null);
     const [sound, setSound] = useState(null);
@@ -967,7 +1073,7 @@ export default function ChatScreen({ route, navigation }) {
             });
 
             const token = await AsyncStorage.getItem('token');
-            const res = await axios.post(`${API_URL}/upload`, formData, {
+            const res = await axios.post(`${API_URL}/media-upload`, formData, {
                 headers: { 
                     'Content-Type': 'multipart/form-data',
                     'Authorization': `Bearer ${token}`
@@ -1156,7 +1262,7 @@ export default function ChatScreen({ route, navigation }) {
             });
 
             const token = await AsyncStorage.getItem('token');
-            const res = await axios.post(`${API_URL}/upload`, formData, {
+            const res = await axios.post(`${API_URL}/media-upload`, formData, {
                 headers: { 
                     'Content-Type': 'multipart/form-data',
                     'Authorization': `Bearer ${token}`
@@ -1538,6 +1644,56 @@ export default function ChatScreen({ route, navigation }) {
                     <Text style={styles.voiceDurationText}>{duration}</Text>
                 </View>
             );
+        } else if (item.content_type === 'location' || item.type === 'location') {
+            let locData = {};
+            try {
+                locData = typeof item.content === 'string' ? JSON.parse(item.content) : (item.content || {});
+            } catch(e) {}
+            
+            content = (
+                <TouchableOpacity
+                    activeOpacity={0.8}
+                    onPress={() => {
+                        if (!isPremiumMember && !isUser && !isOperator) {
+                            showAlert({
+                                title: 'Premium Özellik',
+                                message: 'Bu konumu görüntüleyebilmek için Premium üye olmanız gerekmektedir.',
+                                type: 'info',
+                                showCancel: true,
+                                cancelText: 'Kapat',
+                                confirmText: 'Premium Al',
+                                onConfirm: () => navigation.navigate('Store')
+                            });
+                        } else {
+                            const url = `https://maps.google.com/?q=${locData.latitude},${locData.longitude}`;
+                            Linking.openURL(url);
+                        }
+                    }}
+                >
+                    <View style={{ width: 220, height: 160, borderRadius: 16, backgroundColor: '#cbd5e1', overflow: 'hidden' }}>
+                        <View style={{ flex: 1, backgroundColor: '#e2e8f0', justifyContent: 'center', alignItems: 'center' }}>
+                            <Ionicons name="map" size={48} color="#94a3b8" />
+                            {(!isPremiumMember && !isUser && !isOperator) && (
+                                <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(9,2,26,0.6)', justifyContent: 'center', alignItems: 'center' }}>
+                                    <LinearGradient
+                                        colors={['#ec4899', '#8b5cf6']}
+                                        start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+                                        style={{ paddingHorizontal: 12, paddingVertical: 8, borderRadius: 12, alignItems: 'center' }}
+                                    >
+                                        <Ionicons name="lock-closed" size={20} color="#fff" />
+                                        <Text style={{ color: '#fff', fontSize: 10, fontWeight: 'bold', marginTop: 4 }}>Premium Gerekli</Text>
+                                    </LinearGradient>
+                                </View>
+                            )}
+                        </View>
+                        <View style={{ padding: 10, backgroundColor: theme.colors.surface }}>
+                            <Text style={{ color: theme.colors.text, fontSize: 12, fontWeight: 'bold' }} numberOfLines={2}>
+                                {locData.address || 'Paylaşılan Konum'}
+                            </Text>
+                        </View>
+                    </View>
+                </TouchableOpacity>
+            );
         } else if (item.content_type === 'call_stub' || item.type === 'call_stub') {
             let stubInfo = {};
             try {
@@ -1857,25 +2013,7 @@ export default function ChatScreen({ route, navigation }) {
                                 </View>
                             </TouchableOpacity>
 
-                            <TouchableOpacity style={styles.giftIconContainer} onPress={() => {
-                                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                                setShowGiftModal(true);
-                            }}>
-                                <Animated.View style={{
-                                    transform: [{
-                                        translateY: giftAnim.interpolate({
-                                            inputRange: [0, 1],
-                                            outputRange: [0, -8]
-                                        })
-                                    }]
-                                }}>
-                                    <Image
-                                        source={require('../assets/gift_icon.webp')}
-                                        style={styles.giftLogoLarge}
-                                        resizeMode="contain"
-                                    />
-                                </Animated.View>
-                            </TouchableOpacity>
+
  
                             <TouchableOpacity style={styles.modernActionBtn} onPress={() => {
                                 Keyboard.dismiss();
@@ -1889,10 +2027,32 @@ export default function ChatScreen({ route, navigation }) {
 
                             <TouchableOpacity style={styles.modernActionBtn} onPress={() => {
                                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                                handleSendLocation();
+                            }}>
+                                <View style={styles.btnBlur}>
+                                    <Ionicons name="location" size={22} color="rgba(255,255,255,0.8)" />
+                                </View>
+                            </TouchableOpacity>
+
+                            <TouchableOpacity style={styles.modernActionBtn} onPress={() => {
+                                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                                 handleSendImage();
                             }}>
                                 <View style={styles.btnBlur}>
                                     <Ionicons name="image" size={22} color="rgba(255,255,255,0.8)" />
+                                </View>
+                            </TouchableOpacity>
+
+                            <TouchableOpacity style={styles.modernActionBtn} onPress={() => {
+                                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                                setShowGiftModal(true);
+                            }}>
+                                <View style={styles.btnBlur}>
+                                    <Image
+                                        source={require('../assets/gift_icon.webp')}
+                                        style={{ width: 22, height: 22 }}
+                                        resizeMode="contain"
+                                    />
                                 </View>
                             </TouchableOpacity>
                         </View>}
@@ -2042,22 +2202,107 @@ const styles = StyleSheet.create({
         width: 44,
         height: 44,
         borderRadius: 22,
-        marginLeft: 10,
-        ...SHADOWS.glow,
+        overflow: 'hidden',
     },
     sendGradient: {
         flex: 1,
-        borderRadius: 22,
         alignItems: 'center',
         justifyContent: 'center',
     },
+    optionsMenu: {
+        position: 'absolute',
+        top: 60,
+        right: 20,
+        borderRadius: 16,
+        borderWidth: 1,
+        padding: 8,
+        minWidth: 160,
+        zIndex: 1000,
+        ...SHADOWS.large,
+    },
+    optionItem: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        padding: 12,
+        gap: 12,
+    },
+    optionText: {
+        fontSize: 15,
+        fontWeight: '600',
+    },
+    divider: {
+        height: 1,
+        backgroundColor: 'rgba(255,255,255,0.1)',
+        marginVertical: 4,
+    },
+    quickMsgToggle: {
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        backgroundColor: 'rgba(255,255,255,0.05)',
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginRight: 8,
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.1)',
+        position: 'relative'
+    },
+    recordingRipple: {
+        position: 'absolute',
+        top: 0, left: 0, right: 0, bottom: 0,
+        borderRadius: 20,
+        backgroundColor: '#ec4899',
+    },
+    inputFlexContainer: {
+        flex: 1,
+    },
+    recordingRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        flex: 1,
+        paddingRight: 10,
+    },
+    recordingIndicator: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+    },
+    recordingDot: {
+        width: 8,
+        height: 8,
+        borderRadius: 4,
+        backgroundColor: '#ef4444',
+    },
+    recordTimerText: {
+        color: 'white',
+        fontSize: 14,
+        fontVariant: ['tabular-nums'],
+    },
+    waveformContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 3,
+        height: 24,
+    },
+    waveBar: {
+        width: 3,
+        backgroundColor: '#ec4899',
+        borderRadius: 2,
+    },
+    slideHintText: {
+        color: 'rgba(255,255,255,0.4)',
+        fontSize: 12,
+        marginRight: 10,
+    },
     actionBar: {
         flexDirection: 'row',
-        justifyContent: 'space-between',
+        justifyContent: 'space-evenly',
         alignItems: 'center',
-        paddingHorizontal: 28,
-        paddingBottom: 16,
-        paddingTop: 4,
+        paddingVertical: 12,
+        borderTopWidth: 1,
+        borderColor: 'rgba(255,255,255,0.08)',
+        backgroundColor: 'rgba(0,0,0,0.2)',
     },
     modernActionBtn: {
         width: 44,
@@ -2067,450 +2312,235 @@ const styles = StyleSheet.create({
     },
     btnBlur: {
         flex: 1,
+        backgroundColor: 'rgba(255,255,255,0.08)',
         alignItems: 'center',
         justifyContent: 'center',
-        backgroundColor: 'rgba(255, 255, 255, 0.1)',
         borderWidth: 1,
-        borderColor: 'rgba(255, 255, 255, 0.15)',
+        borderColor: 'rgba(255,255,255,0.12)',
         borderRadius: 22,
     },
     giftIconContainer: {
         alignItems: 'center',
         justifyContent: 'center',
-        height: 50,
-        width: 60,
     },
     giftLogoLarge: {
-        width: 52,
-        height: 52,
-        zIndex: 2,
-    },
-    giftEmoji: {
-        fontSize: 24,
-    },
-    optionsMenu: {
-        position: 'absolute',
-        top: 60,
-        right: 20,
-        borderRadius: 16,
-        padding: 8,
-        width: 160,
-        zIndex: 100,
-        borderWidth: 1,
-        ...SHADOWS.medium,
-    },
-    optionsContainer: {
-        position: 'absolute',
-        top: 0,
-        left: 0,
-        right: 0,
-        borderBottomLeftRadius: 30,
-        borderBottomRightRadius: 30,
-        padding: 20,
-        elevation: 10,
-        zIndex: 1000,
-        borderBottomWidth: 1,
-        borderWidth: 1,
-        borderColor: COLORS.glassBorder,
-        ...SHADOWS.medium,
-    },
-    optionItem: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        paddingVertical: 12,
-        paddingHorizontal: 12,
-        borderRadius: 8,
-    },
-    optionText: {
-        marginLeft: 12,
-        fontSize: 14,
-        fontWeight: '600',
-    },
-    quickMsgToggle: {
-        width: 44,
-        height: 44,
-        borderRadius: 22,
-        justifyContent: 'center',
-        alignItems: 'center',
-        marginRight: 10,
-        marginLeft: 8,
-        backgroundColor: 'rgba(255,255,255,0.08)',
-        zIndex: 10,
-    },
-    recordingRipple: {
-        position: 'absolute',
-        width: 44,
-        height: 44,
-        borderRadius: 22,
-        backgroundColor: '#ec4899',
-        zIndex: -1,
-    },
-    inputFlexContainer: {
-        flex: 1,
-        height: 44,
-        justifyContent: 'center',
-    },
-    recordingRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        paddingHorizontal: 15,
-        backgroundColor: 'rgba(236, 72, 153, 0.1)',
-        borderRadius: 22,
-        height: '100%',
-    },
-    waveformContainer: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        paddingHorizontal: 8,
-    },
-    waveBar: {
-        width: 3,
-        backgroundColor: 'rgba(255,255,255,0.4)',
-        marginHorizontal: 1.5,
-        borderRadius: 1.5,
+        width: 55,
+        height: 55,
+        marginBottom: 8
     },
     voiceContent: {
         flexDirection: 'row',
         alignItems: 'center',
-        paddingVertical: 6,
+        gap: 12,
+        minWidth: 180,
     },
     voicePlayButton: {
-        width: 36,
-        height: 36,
-        borderRadius: 18,
-        backgroundColor: 'rgba(255,255,255,0.15)',
-        justifyContent: 'center',
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        backgroundColor: '#ec4899',
         alignItems: 'center',
+        justifyContent: 'center',
+        ...SHADOWS.small
     },
     voiceDurationText: {
+        color: 'rgba(255,255,255,0.7)',
         fontSize: 12,
-        color: 'white',
-        fontWeight: '600',
-        marginLeft: 8,
+        fontVariant: ['tabular-nums'],
     },
-    recordingIndicator: {
-        flexDirection: 'row',
-        alignItems: 'center',
-    },
-    recordingDot: {
-        width: 8,
-        height: 8,
-        borderRadius: 4,
-        backgroundColor: '#ef4444',
-        marginRight: 6,
-    },
-    recordTimerText: {
-        color: 'white',
-        fontSize: 14,
-        fontWeight: '700',
-        fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
-    },
-    slideHintText: {
-        color: 'rgba(255,255,255,0.4)',
-        fontSize: 12,
-        marginLeft: 10,
-    },
-    lightboxClose: {
-        position: 'absolute',
-        top: 50,
-        right: 25,
-        zIndex: 100,
-        padding: 10,
-    },
-    lightboxContent: {
+    fakeCallModalContainer: {
         flex: 1,
+        backgroundColor: 'rgba(0,0,0,0.85)',
         justifyContent: 'center',
         alignItems: 'center',
     },
-    fullImage: {
-        width: '100%',
-        height: '80%',
-    },
-    typingText: {
-        fontSize: 12,
-        fontStyle: 'italic',
-    },
-    icebreakerContainer: {
-        marginBottom: 12,
-    },
-    icebreakerScroll: {
-        paddingHorizontal: 15,
-    },
-    icebreakerPill: {
-        paddingHorizontal: 12,
-        paddingVertical: 7,
-        borderRadius: 18,
-        marginRight: 8,
-        borderWidth: 1,
-        borderColor: 'rgba(255,255,255,0.12)',
-        backgroundColor: 'rgba(255,255,255,0.06)',
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.05,
-        shadowRadius: 2,
-    },
-    icebreakerText: {
-        fontSize: 12,
-        fontWeight: '700',
-        color: '#fff',
-    },
-    divider: {
-        height: 1,
-        marginVertical: 4,
-    },
-    inputContainer: {
-        flexDirection: 'row',
+    fakeCallContent: {
         alignItems: 'center',
-        paddingHorizontal: 15,
-        paddingVertical: 10,
-        borderRadius: 30,
-        marginHorizontal: 15,
+        padding: 40,
+    },
+    fakeCallAvatarContainer: {
+        marginBottom: 30,
+        alignItems: 'center',
+    },
+    fakeCallAvatar: {
+        width: 120,
+        height: 120,
+        borderRadius: 60,
+        borderWidth: 3,
+        borderColor: '#22c55e',
+    },
+    fakeCallTitle: {
+        color: 'white',
+        fontSize: 24,
+        fontWeight: 'bold',
         marginBottom: 10,
-        borderWidth: 1,
     },
-    giftBubbleContainer: {
-        marginVertical: 8,
-        maxWidth: '80%',
-    },
-    giftMessageContent: {
-        alignItems: 'center',
-        padding: 10,
-        minWidth: 120,
-    },
-    giftIconLarge: {
-        fontSize: 48,
-        marginBottom: 8,
-    },
-    giftInfo: {
-        alignItems: 'center',
-    },
-    giftNameText: {
-        color: '#fff',
+    fakeCallStatus: {
+        color: '#22c55e',
         fontSize: 16,
-        fontWeight: '900',
-        textTransform: 'uppercase',
-        letterSpacing: 1,
-        marginBottom: 4,
+        marginBottom: 40,
     },
-    giftPriceBadge: {
-        backgroundColor: 'rgba(251, 191, 36, 0.2)',
-        paddingHorizontal: 8,
-        paddingVertical: 2,
-        borderRadius: 8,
-        borderWidth: 1,
-        borderColor: 'rgba(251, 191, 36, 0.3)',
+    fakeCallActions: {
+        flexDirection: 'row',
+        gap: 40,
     },
-    giftPriceText: {
-        color: '#fbbf24',
-        fontSize: 12,
-        fontWeight: '900',
+    fakeCallEndBtn: {
+        alignItems: 'center',
+        gap: 10,
+    },
+    fakeCallEndIcon: {
+        width: 64,
+        height: 64,
+        borderRadius: 32,
+        backgroundColor: '#ef4444',
+        justifyContent: 'center',
+        alignItems: 'center',
+        ...SHADOWS.medium
+    },
+    fakeCallEndText: {
+        color: 'white',
+        fontSize: 14,
     },
     modalOverlay: {
         flex: 1,
-        backgroundColor: 'rgba(9, 2, 26, 0.8)',
+        backgroundColor: 'rgba(0,0,0,0.7)',
         justifyContent: 'center',
         alignItems: 'center',
-        paddingHorizontal: 20
+        padding: 20,
     },
     imageLockCard: {
         width: '100%',
+        maxWidth: 400,
         padding: 24,
-        borderRadius: 36,
-        borderWidth: 1,
-        borderColor: 'rgba(255, 255, 255, 0.1)',
-        alignItems: 'center'
+        borderRadius: 24,
+        alignItems: 'center',
     },
     imageLockTitle: {
         color: '#fff',
         fontSize: 20,
-        fontWeight: '900',
-        letterSpacing: -0.5
+        fontWeight: 'bold',
+        marginBottom: 10,
     },
     imageLockSub: {
-        color: 'rgba(255, 255, 255, 0.6)',
-        fontSize: 12,
+        color: 'rgba(255,255,255,0.6)',
         textAlign: 'center',
-        marginTop: 6,
-        lineHeight: 16,
-        marginBottom: 16
+        fontSize: 13,
+        marginBottom: 20,
     },
     imageLockPreview: {
         width: 140,
         height: 140,
-        borderRadius: 20,
-        marginBottom: 20,
-        backgroundColor: '#cbd5e1'
+        borderRadius: 16,
+        marginBottom: 24,
+        borderWidth: 2,
+        borderColor: 'rgba(236,72,153,0.3)',
     },
     pricingPillContainer: {
         flexDirection: 'row',
         flexWrap: 'wrap',
         justifyContent: 'center',
-        gap: 8,
-        marginBottom: 24
+        gap: 10,
+        marginBottom: 24,
     },
     pricingPill: {
-        paddingHorizontal: 12,
-        paddingVertical: 8,
-        borderRadius: 14,
-        backgroundColor: 'rgba(255, 255, 255, 0.05)',
+        paddingHorizontal: 16,
+        paddingVertical: 10,
+        borderRadius: 20,
+        backgroundColor: 'rgba(255,255,255,0.05)',
         borderWidth: 1,
-        borderColor: 'rgba(255, 255, 255, 0.08)'
+        borderColor: 'rgba(255,255,255,0.1)',
     },
     pricingPillActive: {
-        backgroundColor: '#ec4899',
-        borderColor: 'transparent'
+        backgroundColor: 'rgba(236,72,153,0.15)',
+        borderColor: '#ec4899',
     },
     pricingPillText: {
-        color: 'rgba(255, 255, 255, 0.6)',
-        fontSize: 12,
-        fontWeight: '800'
+        color: '#fff',
+        fontWeight: '600',
     },
     pricingPillTextActive: {
-        color: '#fff'
+        color: '#ec4899',
     },
     imageLockBtnRow: {
         flexDirection: 'row',
+        gap: 12,
         width: '100%',
-        gap: 12
     },
     imageLockCancelBtn: {
         flex: 1,
-        backgroundColor: 'rgba(255, 255, 255, 0.05)',
         paddingVertical: 14,
         borderRadius: 16,
+        backgroundColor: 'rgba(255,255,255,0.1)',
         alignItems: 'center',
-        borderWidth: 1,
-        borderColor: 'rgba(255, 255, 255, 0.08)'
     },
     imageLockCancelBtnText: {
-        color: 'rgba(255, 255, 255, 0.6)',
-        fontSize: 13,
-        fontWeight: '900'
+        color: '#fff',
+        fontWeight: 'bold',
     },
     imageLockSubmitBtn: {
-        flex: 1.5,
+        flex: 1,
         borderRadius: 16,
-        overflow: 'hidden'
+        overflow: 'hidden',
     },
     imageLockSubmitGradient: {
         paddingVertical: 14,
-        alignItems: 'center'
+        alignItems: 'center',
     },
     imageLockSubmitBtnText: {
         color: '#fff',
-        fontSize: 13,
-        fontWeight: '900'
+        fontWeight: 'bold',
     },
-    callStubContainer: {
+    agencyInviteCard: {
+        position: 'absolute',
+        top: 100, // Below header
+        left: 20,
+        right: 20,
+        backgroundColor: 'rgba(15, 8, 10, 0.95)',
+        borderRadius: 16,
+        padding: 16,
+        borderWidth: 1,
+        borderColor: '#ec4899',
+        zIndex: 999,
+        ...SHADOWS.large
+    },
+    agencyInviteHeader: {
         flexDirection: 'row',
         alignItems: 'center',
-        paddingHorizontal: 12,
-        paddingVertical: 10,
-        borderRadius: 14,
-        backgroundColor: 'rgba(15, 23, 42, 0.6)',
-        borderWidth: 1,
-        borderColor: 'rgba(255, 255, 255, 0.1)',
-        minWidth: 220,
+        gap: 8,
+        marginBottom: 10
     },
-    fakeCallOverlay: {
+    agencyInviteTitle: {
+        color: 'white',
+        fontSize: 16,
+        fontWeight: 'bold'
+    },
+    agencyInviteText: {
+        color: 'rgba(255,255,255,0.8)',
+        fontSize: 13,
+        marginBottom: 16,
+        lineHeight: 20
+    },
+    agencyInviteActions: {
+        flexDirection: 'row',
+        gap: 12
+    },
+    agencyInviteBtn: {
         flex: 1,
-        backgroundColor: 'rgba(15, 8, 10, 0.92)',
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: 24,
-    },
-    fakeCallCard: {
-        width: '100%',
-        maxWidth: 340,
-        alignItems: 'center',
-        paddingVertical: 34,
-        paddingHorizontal: 24,
-        borderRadius: 30,
-        backgroundColor: '#281017',
-        borderWidth: 1,
-        borderColor: 'rgba(232, 62, 80, 0.45)',
-    },
-    fakeCallPulse: {
-        width: 82,
-        height: 82,
-        borderRadius: 41,
-        alignItems: 'center',
-        justifyContent: 'center',
-        backgroundColor: '#B5123E',
-        shadowColor: '#E83E50',
-        shadowOpacity: 0.7,
-        shadowRadius: 18,
-        elevation: 10,
-    },
-    fakeCallTitle: {
-        marginTop: 22,
-        color: '#fff',
-        fontSize: 22,
-        fontWeight: '800',
-    },
-    fakeCallName: {
-        marginTop: 8,
-        color: '#FFB0B8',
-        fontSize: 18,
-        fontWeight: '700',
-    },
-    fakeCallSubtitle: {
-        marginTop: 20,
-        color: '#E83E50',
-        fontSize: 15,
-        fontWeight: '700',
-    },
-    fakeCallNote: {
-        marginTop: 8,
-        color: 'rgba(255,255,255,0.5)',
-        fontSize: 12,
-    },
-    fakeCallEndButton: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        marginTop: 28,
-        paddingHorizontal: 18,
         paddingVertical: 12,
-        borderRadius: 24,
-        backgroundColor: '#B5123E',
+        borderRadius: 10,
+        alignItems: 'center'
     },
-    fakeCallEndText: {
-        marginLeft: 8,
-        color: '#fff',
-        fontSize: 13,
-        fontWeight: '700',
+    agencyInviteBtnReject: {
+        backgroundColor: 'rgba(239, 68, 68, 0.2)',
+        borderWidth: 1,
+        borderColor: '#ef4444'
     },
-    callStubIconCircle: {
-        width: 36,
-        height: 36,
-        borderRadius: 18,
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
-    callStubTitle: {
-        color: '#fff',
-        fontSize: 13,
-        fontWeight: 'bold',
-    },
-    callStubSub: {
-        color: 'rgba(255, 255, 255, 0.5)',
-        fontSize: 11,
-        marginTop: 2,
-    },
-    callBackBtn: {
-        flexDirection: 'row',
-        alignItems: 'center',
+    agencyInviteBtnAccept: {
         backgroundColor: '#ec4899',
-        paddingHorizontal: 10,
-        paddingVertical: 6,
-        borderRadius: 12,
-        marginLeft: 8,
     },
-    callBackBtnText: {
-        color: '#fff',
-        fontSize: 11,
+    agencyInviteBtnText: {
+        color: 'white',
         fontWeight: 'bold',
-        marginLeft: 4,
+        fontSize: 14
     }
 });

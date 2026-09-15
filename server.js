@@ -57,6 +57,7 @@ const nobilityRoutes = require('./routes/nobilityRoutes');
 const storeRoutes = require('./routes/store');
 const chatRoutes = require('./routes/chatRoutes');
 const messageRoutes = require('./routes/messageRoutes');
+const vipRoutes = require('./routes/vip');
 const { sanitizeUser, logActivity } = require('./utils/helpers');
 const { sendPushNotification } = require('./utils/notificationUtils');
 const { checkProfileText, checkPhotoSecurity } = require('./utils/moderationFilter');
@@ -1675,6 +1676,7 @@ app.use('/api/starter-pack', starterPackRoutes);
 app.use('/api/families', familyRoutes);
 app.use('/api/nobility', nobilityRoutes);
 app.use('/api/store', storeRoutes);
+app.use('/api/vip', vipRoutes);
 
 // TEMPORARY: Fix Genders Route
 app.get('/api/admin/fix-genders', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
@@ -1794,7 +1796,7 @@ app.delete('/api/admin/packages/:id', authenticateToken, authorizeRole('admin', 
 });
 
 // CLOUDINARY UPLOAD ENDPOINT
-app.post('/api/upload', (req, res, next) => {
+app.post('/api/media-upload-legacy', (req, res, next) => {
     upload.single('file')(req, res, (err) => {
         if (err instanceof multer.MulterError) {
             console.error('[MULTER ERROR]:', err);
@@ -2704,7 +2706,7 @@ app.get('/api/admin/users', authenticateToken, authorizeRole('admin', 'super_adm
     try {
         console.log(`[ADMIN] Fetching users list for admin: ${req.user.id}`);
         const result = await db.query(`
-            SELECT id, username, email, role, account_status, balance, 
+            SELECT id, username, display_name, email, phone, role, account_status, balance, 
                    is_vip, created_at, last_login_at, ban_expires_at, avatar_url 
             FROM users 
             ORDER BY created_at DESC
@@ -3861,7 +3863,7 @@ app.get('/api/admin/referrals/stats', authenticateToken, async (req, res) => {
 // --- MODERATION API ---
 
 // File Upload Endpoint with Optimization
-app.post('/api/upload', authenticateToken, upload.any(), async (req, res) => {
+app.post('/api/media-upload', authenticateToken, upload.any(), async (req, res) => {
     try {
         console.log('[UPLOAD] Request handler started');
 
@@ -5369,6 +5371,8 @@ io.on('connection', (socket) => {
                     cost = 50;
                 } else if (type === 'audio') {
                     cost = 30;
+                } else if (type === 'location') {
+                    cost = 500;
                 }
 
                 const userResult = await client.query('SELECT balance FROM users WHERE id = $1 FOR UPDATE', [senderId]);

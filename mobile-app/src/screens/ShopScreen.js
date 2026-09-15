@@ -235,23 +235,27 @@ export default function ShopScreen({ navigation, route }) {
                     console.log('[Shop] RevenueCat offerings fetch error:', e.message);
                 }
 
-                // Filter out Starter Packs
+                // Filter out Starter Packs and Premium subscription packages
                 const filteredRC = availablePackages.filter(p => 
                     !p.product.identifier.toLowerCase().includes('starter') &&
-                    !p.product.title.toLowerCase().includes('başlangıç')
+                    !p.product.title.toLowerCase().includes('başlangıç') &&
+                    !p.product.identifier.toLowerCase().includes('premium')
                 );
 
-                // Map of existing RevenueCat package coin amounts
-                const rcCoinAmounts = new Set(
-                    filteredRC.map(p => parseInt(p.product.title.split(' ')[0], 10) || 0)
+                // Map of RevenueCat product identifiers that are active
+                const rcIdentifiers = new Set(
+                    filteredRC.map(p => p.product.identifier.toLowerCase())
                 );
 
-                // Transform backend packages that are missing from RevenueCat active offerings
+                // Start with RevenueCat packages
                 const mergedList = [...filteredRC];
                 
+                // Add backend packages whose revenuecat_id is NOT in RevenueCat active offerings
                 backendPackages.forEach(pkg => {
+                    const rcId = (pkg.revenuecat_id || '').toLowerCase();
                     const coinCount = parseInt(pkg.coins, 10);
-                    if (coinCount > 0 && !rcCoinAmounts.has(coinCount)) {
+                    // Skip if this exact product is already returned from RevenueCat
+                    if (coinCount > 0 && (!rcId || !rcIdentifiers.has(rcId))) {
                         mergedList.push({
                             isLocal: true,
                             product: {

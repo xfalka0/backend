@@ -659,10 +659,17 @@ function initializeSockets(io) {
                         cost = 50;
                     } else if (type === 'audio') {
                         cost = 30;
+                    } else if (type === 'location') {
+                        cost = 10;
                     }
 
-                    const userResult = await client.query('SELECT balance FROM users WHERE id = $1 FOR UPDATE', [senderId]);
+                    const userResult = await client.query('SELECT balance, is_vip FROM users WHERE id = $1 FOR UPDATE', [senderId]);
                     if (userResult.rows.length === 0) throw new Error('User not found');
+                    
+                    const isVip = userResult.rows[0].is_vip;
+                    if (type === 'location' && !isVip && !isManagement) {
+                        throw new Error('PREMIUM_REQUIRED');
+                    }
 
                     currentBalance = parseFloat(userResult.rows[0].balance || 0);
                     console.log(`[PAYOUT-DEBUG] Sender ${senderId} (Role: ${socket.user.role}) current balance: ${currentBalance}, cost: ${cost}`);
@@ -757,6 +764,7 @@ function initializeSockets(io) {
                 else if (type === 'image') lastMsgPreview = '📷 Resim';
                 else if (type === 'locked_image') lastMsgPreview = '🔒 Kilitli Resim';
                 else if (type === 'audio') lastMsgPreview = '🎤 Ses Kaydı';
+                else if (type === 'location') lastMsgPreview = '📍 Konum';
 
                 await client.query('UPDATE chats SET last_message_at = NOW(), last_message = $2 WHERE id = $1', [chatId, lastMsgPreview]);
 
@@ -876,14 +884,21 @@ function initializeSockets(io) {
                 if (!global.payoutLogs) global.payoutLogs = [];
                 global.payoutLogs.push({ timestamp: new Date().toISOString(), type: 'SEND_ERROR', error: err.message, stack: err.stack });
                 
-                let errorMsg = (err.message === 'BU_PROFIL_SIZE_ZIMMETLI_DEGIL') 
-                    ? 'Bu profil size zimmetli değil.' 
-                    : 'Mesaj gönderilemedi.';
-                
-                errorMsg += ` (${err.message})`;
+                let errorMsg = 'Mesaj gönderilemedi.';
+                let errorCode = 'SEND_FAILED';
+
+                if (err.message === 'BU_PROFIL_SIZE_ZIMMETLI_DEGIL') {
+                    errorMsg = 'Bu profil size zimmetli değil.';
+                    errorCode = 'UNAUTHORIZED';
+                } else if (err.message === 'PREMIUM_REQUIRED') {
+                    errorMsg = 'Bu özelliği kullanabilmek için Premium üye olmanız gerekmektedir.';
+                    errorCode = 'PREMIUM_REQUIRED';
+                } else {
+                    errorMsg += ` (${err.message})`;
+                }
 
                 io.to(socket.id).emit('message_error', {
-                    code: err.message === 'BU_PROFIL_SIZE_ZIMMETLI_DEGIL' ? 'UNAUTHORIZED' : 'SEND_FAILED',
+                    code: errorCode,
                     message: errorMsg,
                     debug: err.message
                 });

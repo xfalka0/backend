@@ -7,7 +7,7 @@
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "splash": {
-      "backgroundColor": "#1a0533"
+      "backgroundColor": "#0F080A"
     },
     "assetBundlePatterns": [
       "**/*"
@@ -30,8 +30,8 @@
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#8b5cf6"
+        "foregroundImage": "./assets/icon.png",
+        "backgroundColor": "#0F080A"
       },
       "package": "com.fivachat.app",
       "googleServicesFile": "./google-services.json",

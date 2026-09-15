@@ -76,7 +76,7 @@ export default function SocialPage() {
         try {
             setUploading(true);
             const token = localStorage.getItem('token');
-            const res = await axios.post(`${API_URL}/api/upload`, uploadData, {
+            const res = await axios.post(`${API_URL}/api/media-upload`, uploadData, {
                 headers: {
                     'Content-Type': 'multipart/form-data',
                     Authorization: `Bearer ${token}`

@@ -5,7 +5,13 @@ const { authenticateToken, authorizeRole } = require('../middleware/auth');
 const { AGENCY_SYSTEM_ENABLED } = require('../utils/featureFlags');
 
 if (!AGENCY_SYSTEM_ENABLED) {
-    router.use((req, res) => res.status(410).json({ error: 'Ajans sistemi şu anda devre dışıdır.' }));
+    router.use((req, res, next) => {
+        const path = req.path.toLowerCase();
+        if (path.includes('agency') || path.includes('agencies')) {
+            return res.status(410).json({ error: 'Ajans sistemi şu anda devre dışıdır.' });
+        }
+        next();
+    });
 }
 
 // Ensure agency_payouts table exists on startup

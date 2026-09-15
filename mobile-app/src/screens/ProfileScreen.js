@@ -955,13 +955,6 @@ const ProfileScreen = ({ route }) => {
                             </TouchableOpacity>
 
 
-                            <TouchableOpacity style={styles.qaItem} onPress={() => navigation.navigate('Store')}>
-                                <View style={styles.qaIconOnly}>
-                                    <GradientIcon IconComponent={Ionicons} name="cart-outline" size={26} colors={['#FFB74D', '#F97316']} />
-                                </View>
-                                <Text style={styles.qaLabel} numberOfLines={1}>Mağaza</Text>
-                            </TouchableOpacity>
-
                             <TouchableOpacity style={styles.qaItem} onPress={() => navigation.navigate('Favorites', { user })}>
                                 <View style={styles.qaIconOnly}>
                                     <GradientIcon IconComponent={Ionicons} name="heart-outline" size={26} colors={['#FDA4AF', '#E11D48']} />
@@ -986,13 +979,6 @@ const ProfileScreen = ({ route }) => {
                                     </Animated.View>
                                 </View>
                                 <Text style={styles.qaLabel} numberOfLines={1}>Asalet</Text>
-                            </TouchableOpacity>
-
-                            <TouchableOpacity style={styles.qaItem} onPress={() => navigation.navigate('Bag')}>
-                                <View style={styles.qaIconOnly}>
-                                    <GradientIcon IconComponent={Ionicons} name="briefcase-outline" size={26} colors={['#4DD0E1', '#00ACC1']} />
-                                </View>
-                                <Text style={styles.qaLabel} numberOfLines={1}>Çantam</Text>
                             </TouchableOpacity>
                         </View>
                     </View>

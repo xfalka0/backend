@@ -112,8 +112,8 @@ export default function SplashScreen({ navigation }) {
             }
         };
 
-        // Start the session check after a shorter delay
-        const timer = setTimeout(checkSession, 1000);
+        // Allow the Fiva splash animation to be clearly visible for 1.5 seconds before navigating
+        const timer = setTimeout(checkSession, 1500);
         return () => clearTimeout(timer);
     }, []);
 
@@ -130,20 +130,20 @@ export default function SplashScreen({ navigation }) {
         <View style={styles.container} pointerEvents="none">
             <StatusBar barStyle="light-content" />
 
-            {/* Layer 1: Base Gradient (Static) - WHITE/PASTEL */}
+            {/* Layer 1: Base Gradient (Static) - Deep Dark Crimson/Wine */}
             <View style={StyleSheet.absoluteFill} pointerEvents="none">
                 <LinearGradient
-                    colors={['#1a0533', '#2d0a5e', '#4c1d95']}
+                    colors={['#0F080A', '#1B0C11', '#29101A']}
                     start={{ x: 0, y: 0 }}
                     end={{ x: 1, y: 1 }}
                     style={styles.background}
                 />
             </View>
 
-            {/* Layer 2: Overlay Gradient (Animated Opacity) - SLIGHTLY DIFFERENT WHITE/PASTEL */}
+            {/* Layer 2: Overlay Gradient (Animated Opacity) - Soft Ember Pulse */}
             <Animated.View style={[StyleSheet.absoluteFill, animatedGradientStyle]} pointerEvents="none">
                 <LinearGradient
-                    colors={['#2d0a5e', '#6d28d9', '#4c1d95']}
+                    colors={['#1B0C11', '#3B1421', '#29101A']}
                     start={{ x: 0.2, y: 0 }}
                     end={{ x: 0.8, y: 1 }}
                     style={styles.background}
@@ -163,7 +163,7 @@ export default function SplashScreen({ navigation }) {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#1a0533',
+        backgroundColor: '#0F080A',
         alignItems: 'center',
         justifyContent: 'center',
     },
@@ -180,8 +180,6 @@ const styles = StyleSheet.create({
         fontSize: 64,
         fontFamily: 'Outfit_800ExtraBold',
         letterSpacing: 2,
-        // Arkaplan beyaz olduğu için yazı artık Koyu Mor/Lacivert olmalı
         color: '#ffffff',
-        // Text Shadow/Glow tamamen kaldırıldı
     }
 });

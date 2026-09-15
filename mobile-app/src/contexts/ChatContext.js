@@ -97,7 +97,7 @@ export const ChatProvider = ({ children }) => {
                                 operatorId: data.sender_id,
                                 name: data.sender_name,
                                 avatar_url: data.sender_avatar,
-                                user: user
+                                user: useAppStore.getState().user
                             });
                         }
                     });

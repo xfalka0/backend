@@ -361,7 +361,7 @@ const Chats = () => {
         formData.append('file', file);
 
         try {
-            const res = await axios.post(`${API_URL}/api/upload`, formData, {
+            const res = await axios.post(`${API_URL}/api/media-upload`, formData, {
                 headers: { 
                     'Content-Type': 'multipart/form-data',
                     Authorization: `Bearer ${token}`
@@ -476,32 +476,6 @@ const Chats = () => {
                 className={`flex ${msg.sender_id === selectedChat.operator_id || msg.sender_id === user?.id ? 'justify-end' : 'justify-start'}`}
             >
                 <div className={`max-w-[82%] space-y-1`}>
-                    {/* Gift Message Styling */}
-                    {(msg.content_type === 'gift' || msg.type === 'gift' || msg.gift_id) ? (
-                        <div className="bg-gradient-to-r from-amber-200 via-yellow-300 to-amber-200 text-amber-900 p-0.5 rounded-2xl shadow-lg shadow-amber-500/20 transform hover:scale-[1.02] transition-transform duration-300">
-                            <div className="bg-gradient-to-br from-amber-50 to-white px-4 py-3 rounded-[14px] flex items-center gap-4 relative overflow-hidden">
-                                <div className="absolute top-0 right-0 -mr-4 -mt-4 w-20 h-20 bg-yellow-400/20 blur-2xl rounded-full"></div>
-                                <div className="text-4xl filter drop-shadow-md">
-                                    {msg.gift_icon ? <img src={msg.gift_icon} className="w-12 h-12 object-contain" alt="Gift" /> : '🎁'}
-                                </div>
-                                <div>
-                                    <p className="min-w-[100px] font-black text-amber-900 text-sm uppercase tracking-wider">{msg.gift_name || msg.content}</p>
-                                    <div className="flex items-center gap-1 mt-1">
-                                        <span className="bg-amber-100/80 text-amber-800 text-[10px] font-bold px-2 py-0.5 rounded-full border border-amber-200/50 shadow-sm">
-                                            {msg.gift_cost ? `${msg.gift_cost} COINS` : 'HEDİYE'}
-                                        </span>
-                                    </div>
-                                </div>
-                            </div>
-                            <div className="absolute -bottom-1 -right-1">
-                                <span className="flex h-3 w-3">
-                                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-yellow-400 opacity-75"></span>
-                                    <span className="relative inline-flex rounded-full h-3 w-3 bg-yellow-500"></span>
-                                </span>
-                            </div>
-                        </div>
-                    ) : (
-                        <div
                     {/* Gift Message Styling */}
                     {(msg.content_type === 'gift' || msg.type === 'gift' || msg.gift_id) ? (
                         <div className="bg-gradient-to-r from-amber-200 via-yellow-300 to-amber-200 text-amber-900 p-0.5 rounded-2xl shadow-lg shadow-amber-500/20 transform hover:scale-[1.02] transition-transform duration-300">

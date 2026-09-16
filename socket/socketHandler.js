@@ -825,11 +825,19 @@ function initializeSockets(io) {
                 `, [finalSenderId.toString()]);
                 const senderNobility = senderNobilityRes.rows[0] || {};
 
+                // Fetch sender display name & avatar
+                const senderRes = await client.query('SELECT display_name, username, avatar_url FROM users WHERE id = $1', [finalSenderId]);
+                const senderName = senderRes.rows[0]?.display_name || senderRes.rows[0]?.username || 'Bir kullanıcı';
+                const senderAvatar = senderRes.rows[0]?.avatar_url || null;
+
                 const msgToEmit = { 
                     ...savedMsg, 
                     chat_id: savedMsg.chat_id.toString(), 
                     type: savedMsg.content_type, // Alias for mobile app compatibility
                     tempId,
+                    sender_id: finalSenderId.toString(),
+                    sender_name: senderName,
+                    sender_avatar: senderAvatar,
                     nobility_key: senderNobility.nobility_key || null,
                     nobility_name: senderNobility.nobility_name || null,
                     nobility_level: senderNobility.nobility_level || null,
@@ -859,13 +867,16 @@ function initializeSockets(io) {
                             const { user_id, operator_id } = chatRes.rows[0];
                             const recipientId = finalSenderId.toString() === user_id.toString() ? operator_id : user_id;
 
-                            const senderRes = await client.query('SELECT display_name FROM users WHERE id = $1', [finalSenderId]);
-                            const senderName = senderRes.rows[0]?.display_name || 'Bir kullanıcı';
-
                             await sendPushNotification(recipientId, {
-                                title: `Yeni Mesaj: ${senderName}`,
+                                title: senderName,
                                 body: type === 'text' ? content : (type === 'gift' ? '🎁 Sana bir hediye gönderdi!' : '📷 Bir medya dosyası gönderdi'),
-                                data: { chatId: chatId.toString(), type: 'message' }
+                                data: {
+                                    chatId: chatId.toString(),
+                                    senderId: finalSenderId.toString(),
+                                    senderName: senderName,
+                                    senderAvatar: senderAvatar,
+                                    type: 'message'
+                                }
                             });
                         }
                     } catch (pushErr) {

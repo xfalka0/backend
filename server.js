@@ -1282,7 +1282,19 @@ if (process.env.REDIS_URL) {
 
 app.use(cors());
 app.use(express.json());
-app.use('/uploads', express.static(uploadsDir));
+app.use('/uploads', express.static(uploadsDir, {
+    setHeaders: (res, filePath) => {
+        if (filePath.endsWith('.m4a')) {
+            res.setHeader('Content-Type', 'audio/mp4');
+        } else if (filePath.endsWith('.aac')) {
+            res.setHeader('Content-Type', 'audio/aac');
+        } else if (filePath.endsWith('.mp3')) {
+            res.setHeader('Content-Type', 'audio/mpeg');
+        }
+        // Allow cross-origin audio playback from mobile app
+        res.setHeader('Access-Control-Allow-Origin', '*');
+    }
+}));
 app.use(express.static(path.join(__dirname, 'public/admin')));
 app.use('/admin', express.static(path.join(__dirname, 'public/admin')));
 
@@ -3893,40 +3905,52 @@ app.post('/api/media-upload', authenticateToken, upload.any(), async (req, res) 
 
         console.log(`[UPLOAD] Processing file: ${file.filename}, ext: ${ext}, path: ${filePath}`);
 
-        // Handle Image Optimization and Cloudinary Upload
+        // Handle Optimization and Cloudinary Upload for Image / Audio / Video
         let finalUrl = '';
         const isImage = ['.jpg', '.jpeg', '.png', '.webp'].includes(ext);
+        const isAudioOrVideo = ['.mp3', '.m4a', '.aac', '.wav', '.ogg', '.mp4', '.webm', '.3gp'].includes(ext) || file.mimetype?.startsWith('audio/') || file.mimetype?.startsWith('video/');
 
-        if (isImage) {
-            try {
-                console.log(`[UPLOAD] Uploading to Cloudinary: ${filePath}`);
-
-                // Upload directly to Cloudinary
-                const cloudResult = await cloudinary.uploader.upload(filePath, {
-                    folder: 'dating_app_avatars',
-                    resource_type: 'auto',
-                    transformation: [
-                        { width: 1000, height: 1000, crop: 'limit' },
-                        { quality: 'auto' }
-                    ]
-                });
-
-                finalUrl = cloudResult.secure_url;
-                console.log('[UPLOAD] Cloudinary Success:', finalUrl);
-
-                // Delete local file after upload
-                if (fs.existsSync(filePath)) {
-                    fs.unlinkSync(filePath);
-                }
-            } catch (cloudErr) {
-                console.error('[UPLOAD] Cloudinary Error:', cloudErr.message);
-                // Fallback to local if Cloudinary fails (not ideal but safe)
-                const protocol = req.protocol;
-                const host = req.get('host');
-                finalUrl = `${protocol}://${host}/uploads/${file.filename}`;
+        try {
+            // Verify Cloudinary config before attempting upload
+            const cloudConfig = cloudinary.config();
+            if (!cloudConfig.cloud_name || !cloudConfig.api_key || !cloudConfig.api_secret) {
+                throw new Error('Cloudinary not configured: missing env vars (CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET)');
             }
-        } else {
-            // Non-image files (if any) stay local for now
+
+            console.log(`[UPLOAD] Uploading to Cloudinary: ${filePath}, type: ${file.mimetype}, resource_type: ${isAudioOrVideo ? 'video' : 'auto'}`);
+
+            const uploadOptions = {
+                folder: isImage ? 'dating_app_avatars' : 'dating_app_media',
+                resource_type: isAudioOrVideo ? 'video' : 'auto'
+            };
+
+            if (isImage) {
+                uploadOptions.transformation = [
+                    { width: 1000, height: 1000, crop: 'limit' },
+                    { quality: 'auto' }
+                ];
+            }
+
+            const cloudResult = await cloudinary.uploader.upload(filePath, uploadOptions);
+            finalUrl = cloudResult.secure_url;
+            console.log('[UPLOAD] Cloudinary Success:', finalUrl);
+
+            // Delete local temp file after upload
+            if (fs.existsSync(filePath)) {
+                fs.unlinkSync(filePath);
+            }
+        } catch (cloudErr) {
+            console.error('[UPLOAD] Cloudinary FAILED:', cloudErr.message, '| http_code:', cloudErr.http_code, '| error:', JSON.stringify(cloudErr.error));
+            // Save to backend /uploads directory if Cloudinary fails
+            const targetDir = path.join(__dirname, 'uploads');
+            if (!fs.existsSync(targetDir)) {
+                fs.mkdirSync(targetDir, { recursive: true });
+            }
+            const targetPath = path.join(targetDir, file.filename);
+            if (fs.existsSync(filePath) && filePath !== targetPath) {
+                fs.copyFileSync(filePath, targetPath);
+                try { fs.unlinkSync(filePath); } catch (e) {}
+            }
             const protocol = req.protocol;
             const host = req.get('host');
             finalUrl = `${protocol}://${host}/uploads/${file.filename}`;
@@ -3935,7 +3959,7 @@ app.post('/api/media-upload', authenticateToken, upload.any(), async (req, res) 
         console.log(`[UPLOAD] Success! Final URL: ${finalUrl}`);
         res.json({
             url: finalUrl,
-            relativePath: isImage ? '' : `/uploads/${file.filename}`,
+            relativePath: finalUrl.includes('cloudinary') ? '' : `/uploads/${file.filename}`,
             provider: finalUrl.includes('cloudinary') ? 'cloudinary' : 'local'
         });
     } catch (err) {

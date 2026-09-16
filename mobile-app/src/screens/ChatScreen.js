@@ -82,7 +82,7 @@ export default function ChatScreen({ route, navigation }) {
     // User Handling
     const TEST_USER_ID = 'c917f7d6-cc44-4b04-8917-1dbbed0b1e9b';
     const user = { ...routeUser, id: routeUser.id || TEST_USER_ID };
-    const isPremiumMember = user?.is_vip === true || user?.is_vip === 'true' || Number(user?.vip_level) > 0;
+    const isPremiumMember = user?.is_vip === true || user?.is_vip === 'true' || user?.is_vip === 1;
 
     const [messages, setMessages] = useState([]);
     const [isTyping, setIsTyping] = useState(false);
@@ -92,6 +92,35 @@ export default function ChatScreen({ route, navigation }) {
     const [selectedImageUri, setSelectedImageUri] = useState(null);
     const [showImageLockModal, setShowImageLockModal] = useState(false);
     const [unlockCostSelection, setUnlockCostSelection] = useState(200);
+    const [partnerName, setPartnerName] = useState(name);
+    const [partnerAvatar, setPartnerAvatar] = useState(avatar_url);
+
+    useEffect(() => {
+        let active = true;
+        const fetchPartner = async () => {
+            if (!operatorId) return;
+            if (name && avatar_url) {
+                setPartnerName(name);
+                setPartnerAvatar(avatar_url);
+                return;
+            }
+            try {
+                const token = await AsyncStorage.getItem('token');
+                const res = await axios.get(`${API_URL}/users/${operatorId}`, {
+                    headers: { Authorization: `Bearer ${token}` }
+                });
+                if (active && res.data) {
+                    setPartnerName(res.data.display_name || res.data.username || name);
+                    setPartnerAvatar(res.data.avatar_url || avatar_url);
+                }
+            } catch (err) {
+                console.warn('[ChatScreen] Auto-fetch partner profile error:', err.message);
+            }
+        };
+        fetchPartner();
+        return () => { active = false; };
+    }, [operatorId, name, avatar_url]);
+
     const [chatId, setChatId] = useState(existingChatId || (isFamilyChat && familyId ? `family-${familyId}` : null));
 
     useEffect(() => {
@@ -183,13 +212,21 @@ export default function ChatScreen({ route, navigation }) {
     const { openStarterPack, handleInsufficientCoins } = useStarterPack();
 
     // Track Balance for Gift Modal (Initial from route, updated via socket)
-    const [currentBalance, setCurrentBalance] = useState(user.balance || 0);
+    const [currentBalance, setCurrentBalance] = useState(user?.balance ?? user?.coins ?? user?.hearts ?? 0);
     const [recording, setRecording] = useState(null);
+    const [sound, setSound] = useState(null);
+    const [currentPlayingUri, setCurrentPlayingUri] = useState(null);
     const [activeGift, setActiveGift] = useState(null);
     const [isRecording, setIsRecording] = useState(false);
     const [recordTime, setRecordTime] = useState('0:00');
     const [audioLevel, setAudioLevel] = useState(0);
     const timerRef = useRef(null);
+    const socketRef = useRef(null);
+    const flatListRef = useRef(null);
+    const recordingRef = useRef(null);
+    const isRecordingRef = useRef(false);
+    const typingTimeoutRef = useRef(null);
+    const lastSentMessageRef = useRef({ text: '', time: 0 });
     const waveAnim = useRef(new Animated.Value(0)).current;
     const blinkAnim = useRef(new Animated.Value(1)).current;
     const slideAnim = useRef(new Animated.Value(0)).current;
@@ -197,6 +234,25 @@ export default function ChatScreen({ route, navigation }) {
     const isCancellingRef = useRef(false);
     const startTimeRef = useRef(0);
     const startXRef = useRef(0);
+
+    const panResponder = useRef(
+        PanResponder.create({
+            onStartShouldSetPanResponder: () => true,
+            onMoveShouldSetPanResponder: () => true,
+            onPanResponderGrant: () => {
+                startRecording();
+            },
+            onPanResponderMove: (evt, gestureState) => {
+                handleRecordingMove(evt);
+            },
+            onPanResponderRelease: () => {
+                stopRecording();
+            },
+            onPanResponderTerminate: () => {
+                stopRecording();
+            }
+        })
+    ).current;
 
     const [showIcebreakers, setShowIcebreakers] = useState(false);
     const [showQuickActions, setShowQuickActions] = useState(false);
@@ -215,6 +271,14 @@ export default function ChatScreen({ route, navigation }) {
         pulse.start();
         return () => pulse.stop();
     }, [fakeCall, fakeCallPulse]);
+
+    useEffect(() => {
+        return () => {
+            if (sound) {
+                sound.unloadAsync().catch(() => {});
+            }
+        };
+    }, [sound]);
 
     const handleFakeCall = (type) => {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -235,6 +299,19 @@ export default function ChatScreen({ route, navigation }) {
 
     const handleSendLocation = async () => {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+
+        if (!isPremiumMember && !isOperator) {
+            showAlert({
+                title: 'Premium Gerekli 👑',
+                message: 'Konum gönderebilmek için Premium üye olmanız gerekmektedir.',
+                type: 'info',
+                showCancel: true,
+                cancelText: 'Kapat',
+                confirmText: 'Premium Al',
+                onConfirm: () => navigation.navigate('Main', { screen: 'Mağaza' })
+            });
+            return;
+        }
 
         if (!isFamilyChat && !socketRef.current?.connected) {
             showAlert({ title: 'Bağlantı Hatası', message: 'Sunucu ile bağlantı kurulamadı.', type: 'error' });
@@ -281,15 +358,20 @@ export default function ChatScreen({ route, navigation }) {
                 await axios.post(`${API_URL}/families/${familyId}/chat`, { message: locationData }, {
                     headers: { Authorization: `Bearer ${token}` }
                 });
-                return;
             }
 
-            const nextBalance = Math.max(0, currentBalance - 500);
-            setCurrentBalance(nextBalance);
-            if (nextBalance <= 0 && (user.vip_level || 0) < 1) {
-                setTimeout(() => {
-                    handleInsufficientCoins();
-                }, 1000); 
+            // Optimistic Balance Update
+            if (!isFamilyChat) {
+                if (!isOperator && !isPremiumMember) {
+                    const nextBalance = Math.max(0, currentBalance - 10);
+                    setCurrentBalance(nextBalance);
+
+                    if (nextBalance <= 0) {
+                        setTimeout(() => {
+                            handleInsufficientCoins();
+                        }, 1000); 
+                    }
+                }
             }
 
             const msgData = {
@@ -321,91 +403,22 @@ export default function ChatScreen({ route, navigation }) {
             showAlert({ title: 'Hata', message: 'Konum gönderilemedi.', type: 'error' });
         }
     };
-    const [currentPlayingUri, setCurrentPlayingUri] = useState(null);
-    const [sound, setSound] = useState(null);
-
-    const ICEBREAKERS = [
-        "Selam, nasılsın? 😊",
-        "Seninle tanışmak istiyorum ✨",
-        "Profilin çok etkileyici 💜",
-        "Harika bir enerjin var! 🔥",
-        "Sohbet etmek ister misin? 💬"
-    ];
-
-    const socketRef = useRef(null);
-    const flatListRef = useRef(null);
-    const typingTimeoutRef = useRef(null);
-    const lastSentMessageRef = useRef({ text: '', time: 0 });
-    const giftAnim = useRef(new Animated.Value(0)).current;
-    const offerPulseAnim = useRef(new Animated.Value(1)).current;
-
-    const recordingRef = useRef(null);
-    const isRecordingRef = useRef(false);
-
-    const panResponder = useRef(
-        PanResponder.create({
-            onStartShouldSetPanResponder: () => true,
-            onMoveShouldSetPanResponder: () => true,
-            onPanResponderGrant: (evt, gestureState) => {
-                startRecording();
-            },
-            onPanResponderMove: (evt, gestureState) => {
-                if (!isRecordingRef.current) return;
-                
-                const dx = gestureState.dx;
-                
-                // Slide to the right by more than 100 pixels triggers cancellation
-                if (dx > 100) {
-                    if (!isCancellingRef.current) {
-                        isCancellingRef.current = true;
-                        setIsCancelling(true);
-                        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-                    }
-                } else {
-                    if (isCancellingRef.current) {
-                        isCancellingRef.current = false;
-                        setIsCancelling(false);
-                    }
-                }
-                
-                // Visual slide effect (move right)
-                slideAnim.setValue(Math.min(150, Math.max(0, dx)));
-            },
-            onPanResponderRelease: (evt, gestureState) => {
-                stopRecording();
-            },
-            onPanResponderTerminate: (evt, gestureState) => {
-                stopRecording();
-            }
-        })
-    ).current;
-
-    // Gift Floating & Offer Pulse Animations
-    useEffect(() => {
-        Animated.loop(
-            Animated.sequence([
-                Animated.timing(giftAnim, { toValue: 1, duration: 1500, useNativeDriver: true }),
-                Animated.timing(giftAnim, { toValue: 0, duration: 1500, useNativeDriver: true }),
-            ])
-        ).start();
-
-        Animated.loop(
-            Animated.sequence([
-                Animated.timing(offerPulseAnim, { toValue: 1.1, duration: 1000, useNativeDriver: true }),
-                Animated.timing(offerPulseAnim, { toValue: 1, duration: 1000, useNativeDriver: true }),
-            ])
-        ).start();
-    }, []);
 
     // Header Config
     React.useLayoutEffect(() => {
         navigation.setOptions({
             headerShown: true,
+            headerTransparent: true,
+            headerTitleAlign: 'center',
             headerTitle: () => (
-                <View style={{ alignItems: 'center' }}>
+                <TouchableOpacity 
+                    onPress={() => !isFamilyChat && navigation.navigate('OperatorProfile', { operator: { id: operatorId, name: partnerName || name, avatar_url: partnerAvatar || avatar_url, is_online, vip_level }, user })}
+                    activeOpacity={0.8}
+                    style={{ alignItems: 'center' }}
+                >
                     <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 1, gap: 4 }}>
                         <Text style={{ color: nobility_name_color || theme.colors.text, fontSize: 15, fontWeight: '900', marginRight: 4 }}>
-                            {name ? name.toUpperCase() : 'SOHBET'}
+                            {partnerName ? partnerName.toUpperCase() : (name ? name.toUpperCase() : 'SOHBET')}
                         </Text>
 
                         {nobility_key && (
@@ -449,7 +462,7 @@ export default function ChatScreen({ route, navigation }) {
                             {is_online ? 'Çevrimiçi' : 'Çevrimdışı'}
                         </Text>
                     </View>}
-                </View>
+                </TouchableOpacity>
             ),
             headerLeft: () => (
                 <TouchableOpacity onPress={() => navigation.goBack()} style={{ marginLeft: 10, padding: 5 }}>
@@ -457,25 +470,18 @@ export default function ChatScreen({ route, navigation }) {
                 </TouchableOpacity>
             ),
             headerRight: () => isFamilyChat ? null : (
-                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                    <TouchableOpacity
-                        onPress={() => navigation.navigate('OperatorProfile', { operator: { id: operatorId, name, avatar_url, is_online, vip_level }, user })}
-                        style={{ marginRight: 15 }}
-                    >
-                        <VipFrame
-                            level={gender === 'coin_bayisi' ? 'dealer' : vip_level}
-                            avatar={avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(name || 'User')}&background=random&color=fff`}
-                            size={40}
-                            isStatic={true}
-                        />
-                    </TouchableOpacity>
-                    <TouchableOpacity onPress={() => setShowOptions(!showOptions)} style={{ padding: 5, marginRight: 5 }}>
-                        <Ionicons name="ellipsis-vertical" size={24} color={theme.colors.text} />
-                    </TouchableOpacity>
-                </View>
+                <TouchableOpacity 
+                    onPress={() => navigation.navigate('OperatorProfile', { operator: { id: operatorId, name: partnerName || name, avatar_url: partnerAvatar || avatar_url, is_online, vip_level }, user })} 
+                    style={{ marginRight: 10 }}
+                >
+                    <VipFrame
+                        avatar={partnerAvatar || avatar_url}
+                        level={vip_level}
+                        size={40}
+                        isStatic={true}
+                    />
+                </TouchableOpacity>
             ),
-            headerTitleAlign: 'center',
-            headerTransparent: true,
             headerStyle: {
                 backgroundColor: 'transparent',
                 elevation: 0,
@@ -484,7 +490,7 @@ export default function ChatScreen({ route, navigation }) {
             headerTintColor: theme.colors.text,
             headerBackVisible: false,
         });
-    }, [navigation, showOptions, name, is_online, avatar_url, operatorId, user, vip_level, nobility_key, nobility_name, nobility_name_color, isFamilyChat]);
+    }, [navigation, showOptions, partnerName, partnerAvatar, name, is_online, avatar_url, operatorId, user, vip_level, nobility_key, nobility_name, nobility_name_color, isFamilyChat]);
 
     // Initialize Chat
     useEffect(() => {
@@ -927,23 +933,9 @@ export default function ChatScreen({ route, navigation }) {
         }
 
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-        // Check Balance
-        if (currentBalance < 10 && (user.vip_level || 0) < 1) { 
-            console.log('[ChatScreen] Insufficient balance detected! Current:', currentBalance, 'User VIP:', user.vip_level);
-            handleInsufficientCoins();
-            return;
-        }
+        // Balance check is server-side — message_error with INSUFFICIENT_FUNDS triggers handleInsufficientCoins
 
-        // Optimistic Balance Update
-        const nextBalance = Math.max(0, currentBalance - 10);
-        setCurrentBalance(nextBalance);
 
-        // If balance reached 0, trigger the centralized flow
-        if (nextBalance <= 0 && (user.vip_level || 0) < 1) {
-            setTimeout(() => {
-                handleInsufficientCoins();
-            }, 1000); 
-        }
 
         const tempId = Date.now().toString();
         const optimisticMsg = {
@@ -1078,7 +1070,6 @@ export default function ChatScreen({ route, navigation }) {
             }
         }
     };
-
     const uploadAndSendImage = async (uri, isLocked = false, unlockCost = 0) => {
         try {
             const formData = new FormData();
@@ -1129,79 +1120,65 @@ export default function ChatScreen({ route, navigation }) {
         }
     };
 
+
     // --- VOICE MESSAGE LOGIC ---
     const startRecording = async () => {
-        if (currentBalance < 30 && (user.vip_level || 0) < 1) {
-            handleInsufficientCoins();
-            return;
-        }
-
+        // Balance validation is handled server-side via message_error -> INSUFFICIENT_FUNDS
+        // Do not check currentBalance here as it may be stale (0) before API load completes
         try {
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-            const permission = await Audio.requestPermissionsAsync();
-            if (permission.status === 'granted') {
-                await Audio.setAudioModeAsync({
-                    allowsRecordingIOS: true,
-                    playsInSilentModeIOS: true,
-                });
-                const { recording: newRecording } = await Audio.Recording.createAsync(
-                    Audio.RecordingOptionsPresets.HIGH_QUALITY
-                );
-                setRecording(newRecording);
-                recordingRef.current = newRecording;
-                setIsRecording(true);
-                isRecordingRef.current = true;
-                setIsCancelling(false);
-                isCancellingRef.current = false;
-                slideAnim.setValue(0);
-                startTimeRef.current = Date.now();
-                startXRef.current = 0;
-                
-                // Start Timer
-                let seconds = 0;
-                setRecordTime('0:00');
-                timerRef.current = setInterval(() => {
-                    seconds += 1;
-                    const mins = Math.floor(seconds / 60);
-                    const secs = seconds % 60;
-                    setRecordTime(`${mins}:${secs < 10 ? '0' : ''}${secs}`);
-                }, 1000);
-
-                // Start Blink Animation
-                Animated.loop(
-                    Animated.sequence([
-                        Animated.timing(blinkAnim, { toValue: 0.3, duration: 500, useNativeDriver: true }),
-                        Animated.timing(blinkAnim, { toValue: 1, duration: 500, useNativeDriver: true }),
-                    ])
-                ).start();
-
-                // Start Wave Animation
-                Animated.loop(
-                    Animated.sequence([
-                        Animated.timing(waveAnim, { toValue: 1, duration: 400, useNativeDriver: false }),
-                        Animated.timing(waveAnim, { toValue: 0, duration: 400, useNativeDriver: false }),
-                    ])
-                ).start();
-
-            } else {
-                showAlert({ title: 'İzin Gerekli', message: 'Mikrofon izni vermelisiniz.', type: 'warning' });
+            if (recordingRef.current) {
+                try { await recordingRef.current.stopAndUnloadAsync(); } catch (e) {}
+                recordingRef.current = null;
             }
+            const permission = await Audio.requestPermissionsAsync();
+            if (permission.status !== 'granted') {
+                showAlert({ title: 'İzin Gerekli', message: 'Mikrofon izni vermelisiniz.', type: 'warning' });
+                return;
+            }
+            await Audio.setAudioModeAsync({ allowsRecordingIOS: true, playsInSilentModeIOS: true });
+            const { recording: newRecording } = await Audio.Recording.createAsync(Audio.RecordingOptionsPresets.HIGH_QUALITY);
+            setRecording(newRecording);
+            recordingRef.current = newRecording;
+            setIsRecording(true);
+            isRecordingRef.current = true;
+            setIsCancelling(false);
+            isCancellingRef.current = false;
+            slideAnim.setValue(0);
+            startTimeRef.current = Date.now();
+            startXRef.current = 0;
+
+            let seconds = 0;
+            setRecordTime('0:00');
+            if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
+            timerRef.current = setInterval(() => {
+                seconds += 1;
+                const mins = Math.floor(seconds / 60);
+                const secs = seconds % 60;
+                setRecordTime(mins + ':' + (secs < 10 ? '0' : '') + secs);
+            }, 1000);
+
+            Animated.loop(Animated.sequence([
+                Animated.timing(blinkAnim, { toValue: 0.3, duration: 500, useNativeDriver: true }),
+                Animated.timing(blinkAnim, { toValue: 1, duration: 500, useNativeDriver: true }),
+            ])).start();
+            Animated.loop(Animated.sequence([
+                Animated.timing(waveAnim, { toValue: 1, duration: 400, useNativeDriver: false }),
+                Animated.timing(waveAnim, { toValue: 0, duration: 400, useNativeDriver: false }),
+            ])).start();
         } catch (err) {
             console.error('Failed to start recording', err);
+            if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
+            setIsRecording(false);
+            isRecordingRef.current = false;
         }
     };
 
     const handleRecordingMove = (event) => {
-        if (!isRecording) return;
+        if (!isRecordingRef.current) return;
         const { pageX } = event.nativeEvent;
-        
-        if (startXRef.current === 0) {
-            startXRef.current = pageX;
-        }
-
-        // Use absolute pageX for cancellation for better reliability (button is on the left)
-        // If user slides right far enough (middle of screen or more)
-        if (pageX > 160) { 
+        if (startXRef.current === 0) { startXRef.current = pageX; }
+        if (pageX > 160) {
             if (!isCancellingRef.current) {
                 isCancellingRef.current = true;
                 setIsCancelling(true);
@@ -1213,23 +1190,20 @@ export default function ChatScreen({ route, navigation }) {
                 setIsCancelling(false);
             }
         }
-        
-        // Visual slide effect (move right)
-        const diff = Math.max(0, pageX - startXRef.current);
-        slideAnim.setValue(diff);
+        slideAnim.setValue(Math.max(0, pageX - startXRef.current));
     };
 
     const stopRecording = async () => {
         const toStop = recordingRef.current;
         if (!toStop) return;
-        
+
         const wasCancelling = isCancellingRef.current;
         const duration = Date.now() - startTimeRef.current;
 
-        // Clean up UI and state immediately
-        if (timerRef.current) clearInterval(timerRef.current);
-        blinkAnim.setValue(1);
-        waveAnim.setValue(0);
+        // Clear timer immediately
+        if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
+        blinkAnim.stopAnimation(); blinkAnim.setValue(1);
+        waveAnim.stopAnimation(); waveAnim.setValue(0);
         setRecording(null);
         recordingRef.current = null;
         setIsRecording(false);
@@ -1237,31 +1211,25 @@ export default function ChatScreen({ route, navigation }) {
         setIsCancelling(false);
         isCancellingRef.current = false;
         slideAnim.setValue(0);
-        
+        setRecordTime('0:00');
+
         try {
             await toStop.stopAndUnloadAsync();
-            
             if (wasCancelling) {
-                console.log('[Voice] Recording cancelled by user');
                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                return; // DO NOT SEND
+                return;
             }
-
             if (duration < 1000) {
                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                 showAlert({ title: 'Kısa Kayıt', message: 'Ses çok kısa, en az 1 saniye olmalı.', type: 'warning' });
-                return; // Too short
+                return;
             }
-
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
             const uri = toStop.getURI();
-            
-            // Format duration in minutes:seconds
             const durationSec = Math.max(1, Math.round(duration / 1000));
-            const minutes = Math.floor(durationSec / 60);
-            const seconds = durationSec % 60;
-            const durationStr = `${minutes}:${seconds < 10 ? '0' : ''}${seconds}`;
-
+            const mins = Math.floor(durationSec / 60);
+            const secs = durationSec % 60;
+            const durationStr = mins + ':' + (secs < 10 ? '0' : '') + secs;
             uploadAndSendAudio(uri, durationStr);
         } catch (err) {
             console.error('Stop Recording Error:', err);
@@ -1269,93 +1237,133 @@ export default function ChatScreen({ route, navigation }) {
     };
 
     const uploadAndSendAudio = async (uri, durationStr) => {
+        if (!chatId) return;
+        if (!socketRef.current || !socketRef.current.connected) {
+            showAlert({ title: 'Bağlantı Hatası', message: 'Sunucu bağlantısı yok.', type: 'error' });
+            return;
+        }
         try {
             const formData = new FormData();
-            formData.append('file', {
-                uri: uri,
-                type: 'audio/m4a',
-                name: 'voice_message.m4a',
-            });
-
+            formData.append('file', { uri: uri, type: 'audio/m4a', name: 'voice_message.m4a' });
             const token = await AsyncStorage.getItem('token');
-            const res = await axios.post(`${API_URL}/media-upload`, formData, {
-                headers: { 
-                    'Content-Type': 'multipart/form-data',
-                    'Authorization': `Bearer ${token}`
-                },
+            const res = await axios.post(API_URL + '/media-upload', formData, {
+                headers: { 'Content-Type': 'multipart/form-data', 'Authorization': 'Bearer ' + token },
             });
-
-            const audioUrl = res.data.url || `${API_URL}${res.data.relativePath}`;
-
+            // Strip /api suffix from base URL for file uploads (they live at root /uploads/...)
+            const baseUrl = API_URL.replace(/\/api$/, '');
+            const audioUrl = res.data.url || (baseUrl + res.data.relativePath);
             const tempId = Date.now().toString();
-            const optimisticMsg = {
-                id: tempId,
-                chat_id: chatId,
-                sender_id: user.id,
-                content: audioUrl,
-                type: 'audio',
-                content_type: 'audio',
-                duration: durationStr,
-                created_at: new Date().toISOString(),
-                is_optimistic: true
-            };
-            setMessages(prev => [optimisticMsg, ...prev]);
-
-            const msgData = {
-                chatId: chatId,
-                senderId: user.id,
-                content: audioUrl,
-                type: 'audio',
-                tempId: tempId,
-                duration: durationStr
-            };
-            socketRef.current?.emit('send_message', msgData);
-
+            setMessages(prev => [{
+                id: tempId, chat_id: chatId, sender_id: user.id,
+                content: audioUrl, type: 'audio', content_type: 'audio',
+                duration: durationStr, created_at: new Date().toISOString(), is_optimistic: true
+            }, ...prev]);
+            socketRef.current && socketRef.current.emit('send_message', {
+                chatId: chatId, senderId: user.id, content: audioUrl,
+                type: 'audio', tempId: tempId, duration: durationStr
+            });
         } catch (error) {
             console.error('Audio Upload Error:', error);
             showAlert({ title: 'Hata', message: 'Ses gönderilemedi.', type: 'error' });
         }
     };
 
+
+    const resolveAudioUrl = (url) => {
+        if (!url || typeof url !== 'string') return null;
+        const trimmed = url.trim();
+
+        if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+            // Remap localhost/emulator to device-accessible address
+            const isLocal =
+                trimmed.includes('localhost') ||
+                trimmed.includes('127.0.0.1') ||
+                trimmed.includes('10.0.2.2') ||
+                trimmed.includes('192.168.');
+            if (isLocal) {
+                const parts = trimmed.split('/');
+                if (parts.length > 3) {
+                    const relativePart = '/' + parts.slice(3).join('/');
+                    const baseUrl = API_URL.replace('/api', '');
+                    return baseUrl + relativePart;
+                }
+            }
+
+            // For Cloudinary audio/video URLs: add fl_attachment to force direct download
+            // without this, Cloudinary may stream HLS which ExoPlayer can't parse as m4a
+            if (trimmed.includes('res.cloudinary.com') && trimmed.includes('/video/upload/')) {
+                // Insert fl_attachment transformation after /video/upload/
+                return trimmed.replace('/video/upload/', '/video/upload/fl_attachment/');
+            }
+
+            return trimmed;
+        }
+
+        // Relative path
+        const baseUrl = API_URL.replace('/api', '');
+        return baseUrl + (trimmed.startsWith('/') ? trimmed : '/' + trimmed);
+    };
+
     const playAudio = async (uri) => {
+        if (!uri || typeof uri !== 'string') return;
+        if (uri.startsWith('[') || uri.startsWith('call_') || uri.includes('Sesli Arama') || uri.includes('Görüntülü Arama')) {
+            return;
+        }
+
         try {
+            // Stop currently playing sound
             if (sound) {
-                await sound.unloadAsync();
+                await sound.unloadAsync().catch(() => {});
+                setSound(null);
                 if (currentPlayingUri === uri) {
-                    setSound(null);
                     setCurrentPlayingUri(null);
                     return;
                 }
             }
 
+            const resolved = resolveAudioUrl(uri);
+            if (!resolved) return;
+
+            console.log('[Audio] Playing:', resolved);
+
+            // Switch audio mode to playback
+            await Audio.setAudioModeAsync({
+                allowsRecordingIOS: false,
+                playsInSilentModeIOS: true,
+            });
+
             const { sound: newSound } = await Audio.Sound.createAsync(
-                { uri: resolveImageUrl(uri) },
+                {
+                    uri: resolved,
+                    overrideFileExtensionAndroid: 'm4a',
+                    headers: { Accept: 'audio/*' },
+                },
                 { shouldPlay: true }
             );
-            
+
             setSound(newSound);
             setCurrentPlayingUri(uri);
 
             newSound.setOnPlaybackStatusUpdate(async (status) => {
                 if (status.didJustFinish) {
                     setCurrentPlayingUri(null);
-                    await newSound.unloadAsync();
+                    await newSound.unloadAsync().catch(() => {});
+                    setSound(null);
                 }
             });
         } catch (error) {
             console.error('Playback Error:', error);
             setCurrentPlayingUri(null);
+            setSound(null);
         }
     };
 
     const handleSelectVoice = (voice) => {
-        // Here we would typically send a predefined audio message
-        // For now, let's just show an alert or send a placeholder if we had URLs
-        // Since we don't have real URLs for the quick voices yet, we'll just send a text for now
-        // or if the user wants real functionality, we'd need to upload these voices first.
         sendMessage(`[Sesli Mesaj: ${voice.title}]`);
         showAlert({ title: 'Hızlı Ses', message: 'Sesli mesaj gönderildi.', type: 'info' });
     };
+
+
 
     const handleBlock = async () => {
         try {
@@ -1492,64 +1500,6 @@ export default function ChatScreen({ route, navigation }) {
             );
         }
 
-        if (item.type === 'call_stub' || item.content_type === 'call_stub') {
-            let info = { duration: '0:00', status: 'ended', reason: 'ended' };
-            try {
-                info = JSON.parse(item.content);
-            } catch (e) {}
-
-            const isMine = item.sender_id === user.id;
-            let iconName = "call-outline";
-            let callText = "Sesli Arama";
-            let textColor = "rgba(255,255,255,0.9)";
-
-            if (info.status === 'rejected' || info.reason === 'rejected') {
-                iconName = "call-sharp";
-                callText = "Arama Reddedildi";
-                textColor = "#ef4444";
-            } else if (info.status === 'cancelled' || info.reason === 'cancelled') {
-                iconName = "close-circle-outline";
-                callText = "İptal Edilen Arama";
-                textColor = "rgba(255,255,255,0.5)";
-            } else if (info.status === 'busy' || info.reason === 'busy') {
-                iconName = "volume-mute-outline";
-                callText = "Meşgul";
-                textColor = "#f59e0b";
-            } else if (info.status === 'no_answer' || info.reason === 'no_answer') {
-                iconName = "call-outline";
-                callText = "Cevapsız Arama";
-                textColor = "#ef4444";
-            } else {
-                iconName = "call-outline";
-                callText = `Arama Bitti (${info.duration || '0:00'})`;
-                textColor = "#10b981";
-            }
-
-            return (
-                <MessageBubble 
-                    isMine={isMine} 
-                    index={index} 
-                    isRead={item.is_read}
-                    avatar={resolveImageUrl(isMine ? (user.avatar_url || user.avatar) : avatar_url)}
-                    vipLevel={isMine ? user.vip_level : vip_level}
-                    onAvatarPress={!isMine ? () => navigation.navigate('OperatorProfile', { operator: { id: operatorId, name, avatar_url, is_online, vip_level }, user }) : undefined}
-                    timestamp={item.created_at}
-                    reaction={item.reaction}
-                    onReaction={(type) => {
-                        socketRef.current?.emit('message_reaction', { messageId: item.id, reaction: type, chatId });
-                        setMessages(prev => prev.map(m => m.id === item.id ? { ...m, reaction: type } : m));
-                    }}
-                >
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 6, paddingHorizontal: 12 }}>
-                        <Ionicons name={iconName} size={20} color={textColor} />
-                        <Text style={{ color: textColor, fontSize: 13, fontWeight: '700' }}>
-                            {callText}
-                        </Text>
-                    </View>
-                </MessageBubble>
-            );
-        }
-
         if (item.type === 'gift' || item.content_type === 'gift') {
             const giftId = parseInt(item.gift_id || item.giftId);
             const gift = GIFTS.find(g => g.id === giftId) || { name: item.content || 'Hediye', price: '?' };
@@ -1604,14 +1554,14 @@ export default function ChatScreen({ route, navigation }) {
                     <View style={{ position: 'relative' }}>
                         <Image
                             source={{ uri: resolveImageUrl(item.content) }}
-                            style={{ width: 220, height: 220, borderRadius: 16, backgroundColor: '#cbd5e1' }}
+                            style={{ width: 220, height: 220, borderRadius: 16, backgroundColor: '#0f172a', opacity: isLocked ? 0.12 : 1 }}
                             resizeMode="cover"
-                            blurRadius={isLocked ? 30 : 0}
+                            blurRadius={isLocked ? 95 : 0}
                         />
                         {isLocked && (
-                            <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(9, 2, 26, 0.45)', borderRadius: 16 }}>
+                            <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(15, 23, 42, 0.88)', borderRadius: 16 }}>
                                 <LinearGradient
-                                    colors={['rgba(236, 72, 153, 0.85)', 'rgba(139, 92, 246, 0.9)']}
+                                    colors={['rgba(236, 72, 153, 0.9)', 'rgba(139, 92, 246, 0.95)']}
                                     start={{ x: 0, y: 0 }}
                                     end={{ x: 1, y: 1 }}
                                     style={{ paddingHorizontal: 14, paddingVertical: 12, borderRadius: 20, alignItems: 'center', shadowColor: '#ec4899', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.35, shadowRadius: 10, elevation: 6, width: '85%' }}
@@ -1710,15 +1660,20 @@ export default function ChatScreen({ route, navigation }) {
                     </View>
                 </TouchableOpacity>
             );
-        } else if (item.content_type === 'call_stub' || item.type === 'call_stub') {
+        } else if (
+            item.content_type === 'call_stub' || item.type === 'call_stub' ||
+            item.content_type === 'call_audio' || item.type === 'call_audio' ||
+            item.content_type === 'call_video' || item.type === 'call_video' ||
+            (typeof item.content === 'string' && (item.content.includes('Sesli Arama') || item.content.includes('Görüntülü Arama')))
+        ) {
             let stubInfo = {};
             try {
-                stubInfo = typeof item.content === 'string' ? JSON.parse(item.content) : (item.content || {});
+                stubInfo = typeof item.content === 'string' && item.content.startsWith('{') ? JSON.parse(item.content) : (item.content || {});
             } catch (e) {
-                stubInfo = { reason: 'ended', duration: item.content || '0:00' };
+                stubInfo = { reason: 'ended', duration: '0:00' };
             }
 
-            const isVideo = stubInfo.callType === 'video';
+            const isVideo = item.content_type === 'call_video' || item.type === 'call_video' || (typeof item.content === 'string' && item.content.includes('Görüntülü')) || stubInfo.callType === 'video';
             const status = stubInfo.status || stubInfo.reason || 'ended';
             const isMissed = ['missed', 'rejected', 'cancelled', 'busy'].includes(status);
             const durationText = stubInfo.duration && stubInfo.duration !== '0:00' ? stubInfo.duration : null;
@@ -1754,19 +1709,19 @@ export default function ChatScreen({ route, navigation }) {
                     }}
                     activeOpacity={0.85}
                 >
-                    <View style={[styles.callStubIconCircle, { backgroundColor: iconColor + '20' }]}>
+                    <View style={[styles.callStubIconCircle, { backgroundColor: iconColor + '30' }]}>
                         <Ionicons name={iconName} size={18} color={iconColor} />
                     </View>
 
                     <View style={{ flex: 1, marginLeft: 10 }}>
                         <Text style={styles.callStubTitle}>{callTitle}</Text>
                         <Text style={styles.callStubSub}>
-                            {durationText ? `Süre: ${durationText}` : (isMissed ? 'Geri aramak için dokunun' : 'Tamamlandı')}
+                            {durationText ? `Süre: ${durationText}` : (isMissed ? 'Geri aramak için dokunun' : 'Arama yapıldı')}
                         </Text>
                     </View>
 
                     <View style={styles.callBackBtn}>
-                        <Ionicons name={isVideo ? "videocam" : "call"} size={13} color="#fff" />
+                        <Ionicons name={isVideo ? "videocam" : "call"} size={12} color="#fff" />
                         <Text style={styles.callBackBtnText}>Geri Ara</Text>
                     </View>
                 </TouchableOpacity>
@@ -1778,9 +1733,9 @@ export default function ChatScreen({ route, navigation }) {
                 isMine={isUser}
                 index={index}
                 isRead={item.is_read}
-                avatar={resolveImageUrl(isUser ? (user.avatar_url || user.avatar) : (isFamilyChat ? item.avatar_url : avatar_url))}
+                avatar={resolveImageUrl(isUser ? (user.avatar_url || user.avatar) : (isFamilyChat ? item.avatar_url : (partnerAvatar || avatar_url)))}
                 vipLevel={isFamilyChat ? 0 : (isUser ? user.vip_level : vip_level)}
-                onAvatarPress={!isUser && !isFamilyChat ? () => navigation.navigate('OperatorProfile', { operator: { id: operatorId, name, avatar_url, is_online, vip_level }, user }) : undefined}
+                onAvatarPress={!isUser && !isFamilyChat ? () => navigation.navigate('OperatorProfile', { operator: { id: operatorId, name: partnerName || name, avatar_url: partnerAvatar || avatar_url, is_online, vip_level }, user }) : undefined}
                 timestamp={item.created_at}
                 reaction={item.reaction}
                 isReplied={item.is_replied}
@@ -2558,5 +2513,48 @@ const styles = StyleSheet.create({
         color: 'white',
         fontWeight: 'bold',
         fontSize: 14
+    },
+    callStubContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingVertical: 10,
+        paddingHorizontal: 12,
+        borderRadius: 16,
+        backgroundColor: 'rgba(255,255,255,0.08)',
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.15)',
+        minWidth: 220,
+    },
+    callStubIconCircle: {
+        width: 38,
+        height: 38,
+        borderRadius: 19,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    callStubTitle: {
+        color: '#ffffff',
+        fontSize: 14,
+        fontWeight: 'bold',
+    },
+    callStubSub: {
+        color: 'rgba(255,255,255,0.7)',
+        fontSize: 11,
+        marginTop: 2,
+    },
+    callBackBtn: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 4,
+        backgroundColor: '#ec4899',
+        paddingHorizontal: 10,
+        paddingVertical: 6,
+        borderRadius: 12,
+        marginLeft: 8,
+    },
+    callBackBtnText: {
+        color: '#ffffff',
+        fontSize: 11,
+        fontWeight: 'bold',
     }
 });

@@ -130,8 +130,40 @@ function PartyRoomsListRedirect({ navigation }) {
     return null;
 }
 
+function StoreRedirect({ navigation }) {
+    useEffect(() => {
+        navigation.replace('Main', { screen: 'Mağaza' });
+    }, [navigation]);
+    return null;
+}
+
+import * as Notifications from 'expo-notifications';
+import { useAppStore } from './src/store/useAppStore';
+
 function AppContent() {
     const { theme } = useTheme();
+
+    useEffect(() => {
+        const subscription = Notifications.addNotificationResponseReceivedListener(response => {
+            try {
+                const data = response?.notification?.request?.content?.data;
+                console.log('[PUSH TAP 📲] System notification tapped with payload:', JSON.stringify(data));
+                if (data && data.chatId) {
+                    const currentUser = useAppStore.getState().user;
+                    RootNavigation.navigate('Chat', {
+                        chatId: data.chatId.toString(),
+                        operatorId: data.senderId || data.callerId,
+                        name: data.senderName || 'Sohbet',
+                        avatar_url: data.senderAvatar,
+                        user: currentUser
+                    });
+                }
+            } catch (err) {
+                console.error('[PUSH TAP ❌] Notification tap error:', err.message);
+            }
+        });
+        return () => subscription.remove();
+    }, []);
 
     return (
         <NavigationContainer ref={navigationRef} onReady={flushPendingNavigation}>
@@ -152,7 +184,7 @@ function AppContent() {
                     <Stack.Screen name="Vip" component={VipScreen} />
                     <Stack.Screen name="VipDetails" component={VipDetailsScreen} />
                     <Stack.Screen name="Shop" component={ShopScreen} />
-                    <Stack.Screen name="Store" component={StoreScreen} />
+                    <Stack.Screen name="Store" component={StoreRedirect} />
                     <Stack.Screen name="Bag" component={BagScreen} />
                     <Stack.Screen name="Favorites" component={FavoritesScreen} />
                     <Stack.Screen name="ProfileVisitors" component={ProfileVisitorsScreen} />

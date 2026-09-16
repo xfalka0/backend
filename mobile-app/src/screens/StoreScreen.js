@@ -49,6 +49,7 @@ export default function StoreScreen({ navigation, route }) {
     const [previewItem, setPreviewItem] = useState(null);
     const [purchaseItem, setPurchaseItem] = useState(null);
     const [purchasing, setPurchasing] = useState(false);
+    const [selectedPlanIndex, setSelectedPlanIndex] = useState(1);
 
     const [alertConfig, setAlertConfig] = useState({ visible: false, title: '', message: '', type: 'info' });
 
@@ -59,11 +60,31 @@ export default function StoreScreen({ navigation, route }) {
     const bannerScale = useRef(new Animated.Value(1)).current;
     const bannerGlow = useRef(new Animated.Value(0)).current;
 
+    // 3-Card Popular Pulse & Glow Animations
+    const cardPulseAnim = useRef(new Animated.Value(1)).current;
+    const cardGlowAnim = useRef(new Animated.Value(0.4)).current;
+
     useEffect(() => {
         Animated.loop(
             Animated.sequence([
                 Animated.timing(floatAnim, { toValue: -6, duration: 1500, useNativeDriver: true }),
                 Animated.timing(floatAnim, { toValue: 0, duration: 1500, useNativeDriver: true })
+            ])
+        ).start();
+
+        // Popular card breathing pulse
+        Animated.loop(
+            Animated.sequence([
+                Animated.timing(cardPulseAnim, { toValue: 1.035, duration: 1400, useNativeDriver: true }),
+                Animated.timing(cardPulseAnim, { toValue: 1, duration: 1400, useNativeDriver: true })
+            ])
+        ).start();
+
+        // Popular card glowing border opacity pulse
+        Animated.loop(
+            Animated.sequence([
+                Animated.timing(cardGlowAnim, { toValue: 1, duration: 1200, useNativeDriver: true }),
+                Animated.timing(cardGlowAnim, { toValue: 0.3, duration: 1200, useNativeDriver: true })
             ])
         ).start();
 
@@ -478,14 +499,14 @@ export default function StoreScreen({ navigation, route }) {
                             end={{ x: 1, y: 1 }}
                         >
                             <View style={styles.balanceLeft}>
-                                <Animated.View style={{ transform: [{ translateY: floatAnim }], marginRight: 12 }}>
+                                <View style={{ marginRight: 12 }}>
                                     <LinearGradient
                                         colors={['#F6C453', '#F29C38']}
                                         style={styles.coinIconCircle}
                                     >
                                         <FontAwesome5 name="coins" size={16} color="#ffffff" />
                                     </LinearGradient>
-                                </Animated.View>
+                                </View>
                                 <View>
                                     <Text style={styles.balanceLabel}>ALTIN CÜZDANIM</Text>
                                     <Text style={styles.balanceValue}>{balance.toLocaleString('tr-TR')}</Text>
@@ -524,16 +545,26 @@ export default function StoreScreen({ navigation, route }) {
                                     style={[
                                         styles.premiumBannerShimmer,
                                         {
-                                            transform: [{
-                                                translateX: bannerShimmer.interpolate({
-                                                    inputRange: [0, 1],
-                                                    outputRange: [-width, width],
-                                                })
-                                            }]
+                                            transform: [
+                                                {
+                                                    translateX: bannerShimmer.interpolate({
+                                                        inputRange: [0, 1],
+                                                        outputRange: [-150, width + 100],
+                                                    })
+                                                },
+                                                { skewX: '-20deg' }
+                                            ]
                                         }
                                     ]}
                                     pointerEvents="none"
-                                />
+                                >
+                                    <LinearGradient
+                                        colors={['transparent', 'rgba(255, 255, 255, 0.28)', 'transparent']}
+                                        start={{ x: 0, y: 0 }}
+                                        end={{ x: 1, y: 0 }}
+                                        style={StyleSheet.absoluteFill}
+                                    />
+                                </Animated.View>
 
                                 {/* Glow top circle */}
                                 <Animated.View
@@ -596,69 +627,86 @@ export default function StoreScreen({ navigation, route }) {
                             {PREMIUM_PLANS.map((plan, index) => {
                                 const isPopular = index === 1;
                                 const isBest = index === 2;
+                                const isSelected = selectedPlanIndex === index;
+
                                 return (
-                                    <TouchableOpacity
+                                    <Animated.View
                                         key={plan.months}
                                         style={[
-                                            styles.segmentedPlanCard,
-                                            isPopular && styles.segmentedPlanCardPopular,
-                                            isBest && styles.segmentedPlanCardBest,
+                                            { flex: 1 },
+                                            isPopular && { transform: [{ scale: cardPulseAnim }], zIndex: 10 }
                                         ]}
-                                        onPress={() => handlePremiumPurchase(plan)}
-                                        activeOpacity={0.88}
                                     >
-                                        <LinearGradient
-                                            colors={
-                                                isPopular
-                                                    ? ['#8A1538', '#3D0918']
-                                                    : isBest
-                                                    ? ['#5C1027', '#290610']
-                                                    : ['rgba(255, 255, 255, 0.05)', 'rgba(255, 255, 255, 0.02)']
-                                            }
-                                            style={StyleSheet.absoluteFill}
-                                        />
-
-                                        {/* Top Badge */}
-                                        <View style={[
-                                            styles.segmentedBadge,
-                                            isPopular && styles.segmentedBadgePopular,
-                                            isBest && styles.segmentedBadgeBest
-                                        ]}>
-                                            <Text style={[
-                                                styles.segmentedBadgeText,
-                                                isPopular && styles.segmentedBadgeTextPopular,
-                                                isBest && styles.segmentedBadgeTextBest
-                                            ]}>{plan.badge}</Text>
-                                        </View>
-
-                                        {/* Icon */}
-                                        <View style={[styles.segmentedIconCircle, isPopular && styles.segmentedIconCirclePopular]}>
-                                            <Ionicons name="diamond" size={18} color={isPopular ? "#FFD700" : isBest ? "#FF4FA3" : "#F6C453"} />
-                                        </View>
-
-                                        {/* Title */}
-                                        <Text style={styles.segmentedPlanTitle}>{plan.label}</Text>
-                                        <Text style={styles.segmentedPlanSub}>Premium</Text>
-
-                                        {/* Price */}
-                                        <Text style={[styles.segmentedPlanPrice, isPopular && { color: '#FFD700' }]}>{plan.price}</Text>
-
-                                        {/* Monthly Price Breakdown */}
-                                        <Text style={styles.segmentedMonthlyPrice}>
-                                            {plan.months === 1 ? '449,99 ₺/ay' : plan.months === 3 ? '323 ₺/ay' : '250 ₺/ay'}
-                                        </Text>
-
-                                        {/* Purchase Button */}
-                                        <View style={[styles.segmentedBuyBtn, isPopular && styles.segmentedBuyBtnPopular]}>
+                                        <TouchableOpacity
+                                            style={[
+                                                styles.segmentedPlanCard,
+                                                isPopular && styles.segmentedPlanCardPopular,
+                                                isBest && styles.segmentedPlanCardBest,
+                                                isSelected && styles.segmentedPlanCardSelected,
+                                            ]}
+                                            onPress={() => {
+                                                setSelectedPlanIndex(index);
+                                                handlePremiumPurchase(plan);
+                                            }}
+                                            activeOpacity={0.85}
+                                        >
                                             <LinearGradient
-                                                colors={isPopular ? ['#FFD700', '#F29C38'] : ['#FF4FA3', '#8B5CFF']}
-                                                style={styles.segmentedBuyGradient}
-                                                start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
-                                            >
-                                                <Text style={[styles.segmentedBuyText, isPopular && { color: '#1A0008' }]}>SEÇ</Text>
-                                            </LinearGradient>
-                                        </View>
-                                    </TouchableOpacity>
+                                                colors={
+                                                    isPopular
+                                                        ? ['#9E1842', '#470B1D']
+                                                        : isBest
+                                                        ? ['#6E1230', '#2E0613']
+                                                        : ['rgba(255, 255, 255, 0.06)', 'rgba(255, 255, 255, 0.02)']
+                                                }
+                                                style={StyleSheet.absoluteFill}
+                                            />
+
+                                            {/* Top Badge */}
+                                            <View style={[
+                                                styles.segmentedBadge,
+                                                isPopular && styles.segmentedBadgePopular,
+                                                isBest && styles.segmentedBadgeBest
+                                            ]}>
+                                                <Text style={[
+                                                    styles.segmentedBadgeText,
+                                                    isPopular && styles.segmentedBadgeTextPopular,
+                                                    isBest && styles.segmentedBadgeTextBest
+                                                ]}>{plan.badge}</Text>
+                                            </View>
+
+                                            {/* Icon with floating floatAnim effect */}
+                                            <Animated.View style={[
+                                                styles.segmentedIconCircle,
+                                                isPopular && styles.segmentedIconCirclePopular,
+                                                { transform: [{ translateY: isPopular ? floatAnim : 0 }] }
+                                            ]}>
+                                                <Ionicons name="diamond" size={18} color={isPopular ? "#FFD700" : isBest ? "#FF4FA3" : "#F6C453"} />
+                                            </Animated.View>
+
+                                            {/* Title */}
+                                            <Text style={styles.segmentedPlanTitle}>{plan.label}</Text>
+                                            <Text style={styles.segmentedPlanSub}>Premium</Text>
+
+                                            {/* Price */}
+                                            <Text style={[styles.segmentedPlanPrice, isPopular && { color: '#FFD700' }]}>{plan.price}</Text>
+
+                                            {/* Monthly Price Breakdown */}
+                                            <Text style={styles.segmentedMonthlyPrice}>
+                                                {plan.months === 1 ? '449,99 ₺/ay' : plan.months === 3 ? '323 ₺/ay' : '250 ₺/ay'}
+                                            </Text>
+
+                                            {/* Purchase Button */}
+                                            <View style={[styles.segmentedBuyBtn, isPopular && styles.segmentedBuyBtnPopular]}>
+                                                <LinearGradient
+                                                    colors={isPopular ? ['#FFD700', '#F29C38'] : ['#FF4FA3', '#8B5CFF']}
+                                                    style={styles.segmentedBuyGradient}
+                                                    start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+                                                >
+                                                    <Text style={[styles.segmentedBuyText, isPopular && { color: '#1A0008' }]}>SEÇ</Text>
+                                                </LinearGradient>
+                                            </View>
+                                        </TouchableOpacity>
+                                    </Animated.View>
                                 );
                             })}
                         </View>
@@ -1098,11 +1146,10 @@ const styles = StyleSheet.create({
     premiumBannerShimmer: {
         position: 'absolute',
         top: 0,
+        bottom: 0,
         left: 0,
-        width: 40,
-        height: '100%',
-        backgroundColor: 'rgba(255,255,255,0.07)',
-        transform: [{ skewX: '-15deg' }],
+        width: 80,
+        zIndex: 2,
     },
     premiumBannerGlowCircle: {
         position: 'absolute',
@@ -1213,29 +1260,164 @@ const styles = StyleSheet.create({
         fontSize: 12,
         marginBottom: 2,
     },
-    premiumOffer: {
-        height: 450,
-        flex: 0,
-        width: '100%',
-        borderRadius: 16,
+    // Joined Segmented 3-Card Layout
+    segmentedPlansWrapper: {
+        flexDirection: 'row',
+        alignItems: 'stretch',
+        backgroundColor: 'rgba(255, 255, 255, 0.03)',
+        borderRadius: 22,
+        borderWidth: 1,
+        borderColor: 'rgba(255, 79, 163, 0.25)',
+        padding: 4,
+        marginTop: 12,
+        marginBottom: 16,
         overflow: 'hidden',
-        paddingHorizontal: 8,
-        paddingVertical: 16,
-        flexDirection: 'column',
+    },
+    segmentedPlanCard: {
+        flex: 1,
         alignItems: 'center',
         justifyContent: 'space-between',
-        borderWidth: 1,
-        borderColor: 'rgba(232, 62, 80, 0.38)',
+        paddingVertical: 14,
+        paddingHorizontal: 4,
+        borderRadius: 18,
+        overflow: 'hidden',
+        minHeight: 220,
     },
-    premiumOfferPopular: {
-        borderColor: 'rgba(255, 176, 32, 0.52)',
-    },
-    premiumOfferBest: {
-        borderColor: 'rgba(255, 77, 90, 0.68)',
-        shadowColor: '#E83E50',
-        shadowOpacity: 0.28,
-        shadowRadius: 12,
+    segmentedPlanCardPopular: {
+        borderColor: '#FFD700',
+        borderWidth: 1.5,
+        shadowColor: '#FFD700',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.35,
+        shadowRadius: 10,
         elevation: 6,
+        transform: [{ scale: 1.02 }],
+    },
+    segmentedPlanCardBest: {
+        borderColor: 'rgba(255, 79, 163, 0.4)',
+        borderWidth: 1,
+    },
+    segmentedBadge: {
+        paddingHorizontal: 6,
+        paddingVertical: 2,
+        borderRadius: 8,
+        backgroundColor: 'rgba(255, 255, 255, 0.08)',
+        marginBottom: 8,
+    },
+    segmentedBadgePopular: {
+        backgroundColor: 'rgba(255, 215, 0, 0.22)',
+    },
+    segmentedBadgeBest: {
+        backgroundColor: 'rgba(255, 79, 163, 0.2)',
+    },
+    segmentedBadgeText: {
+        color: 'rgba(255, 255, 255, 0.7)',
+        fontSize: 7.5,
+        fontWeight: '900',
+        letterSpacing: 0.5,
+    },
+    segmentedBadgeTextPopular: {
+        color: '#FFD700',
+    },
+    segmentedBadgeTextBest: {
+        color: '#FF4FA3',
+    },
+    segmentedIconCircle: {
+        width: 32,
+        height: 32,
+        borderRadius: 16,
+        backgroundColor: 'rgba(255, 255, 255, 0.06)',
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginBottom: 6,
+    },
+    segmentedIconCirclePopular: {
+        backgroundColor: 'rgba(255, 215, 0, 0.15)',
+    },
+    segmentedPlanTitle: {
+        color: '#ffffff',
+        fontSize: 14,
+        fontWeight: '900',
+        textAlign: 'center',
+    },
+    segmentedPlanSub: {
+        color: 'rgba(255, 255, 255, 0.45)',
+        fontSize: 10,
+        marginBottom: 8,
+    },
+    segmentedPlanPrice: {
+        color: '#FFB020',
+        fontSize: 15,
+        fontWeight: '900',
+        textAlign: 'center',
+    },
+    segmentedMonthlyPrice: {
+        color: 'rgba(255, 255, 255, 0.5)',
+        fontSize: 9.5,
+        fontWeight: '600',
+        marginBottom: 10,
+    },
+    segmentedBuyBtn: {
+        width: '88%',
+        height: 30,
+        borderRadius: 15,
+        overflow: 'hidden',
+    },
+    segmentedBuyBtnPopular: {},
+    segmentedBuyGradient: {
+        width: '100%',
+        height: '100%',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    segmentedBuyText: {
+        color: '#ffffff',
+        fontSize: 10.5,
+        fontWeight: '900',
+        letterSpacing: 0.8,
+    },
+    // Benefits Card
+    benefitsCard: {
+        borderRadius: 20,
+        overflow: 'hidden',
+        borderWidth: 1,
+        borderColor: 'rgba(255, 79, 163, 0.18)',
+        marginBottom: 20,
+    },
+    benefitsCardGradient: {
+        padding: 16,
+    },
+    benefitsHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: 12,
+    },
+    benefitsTitle: {
+        color: '#ffffff',
+        fontSize: 13,
+        fontWeight: '800',
+        letterSpacing: 0.3,
+    },
+    benefitsGrid: {
+        gap: 10,
+    },
+    benefitRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+    benefitIconWrap: {
+        width: 26,
+        height: 26,
+        borderRadius: 13,
+        backgroundColor: 'rgba(255, 79, 163, 0.12)',
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginRight: 10,
+    },
+    benefitRowText: {
+        color: 'rgba(255, 255, 255, 0.85)',
+        fontSize: 12,
+        fontWeight: '600',
     },
     coinOffer: {
         minHeight: 78,

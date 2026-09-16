@@ -8,6 +8,7 @@ import Animated, {
     withDelay,
     withSpring,
     withRepeat,
+    withSequence,
     interpolate,
     runOnJS,
     Easing

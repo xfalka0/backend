@@ -88,16 +88,17 @@ export const ChatProvider = ({ children }) => {
                 if (incomingChatId !== myActiveChatId) {
                     showNotification({
                         title: data.sender_name || 'Yeni Mesaj',
-                        body: data.content_type === 'text' ? data.content : (data.content_type === 'gift' ? '🎁 Hediye gönderdi' : '📷 Medya gönderdi'),
+                        body: data.content_type === 'text' ? data.content : (data.content_type === 'gift' ? '🎁 Hediye gönderdi' : (data.content_type === 'image' || data.content_type === 'locked_image' ? '📷 Medya gönderdi' : '💬 Mesaj gönderdi')),
                         icon: resolveImageUrl(data.sender_avatar),
-                        data: { chatId: incomingChatId },
+                        data: { chatId: incomingChatId, senderId: data.sender_id, senderName: data.sender_name, senderAvatar: data.sender_avatar },
                         onPress: () => {
+                            const currentUser = useAppStore.getState().user;
                             RootNavigation.navigate('Chat', {
                                 chatId: incomingChatId,
                                 operatorId: data.sender_id,
                                 name: data.sender_name,
                                 avatar_url: data.sender_avatar,
-                                user: useAppStore.getState().user
+                                user: currentUser
                             });
                         }
                     });
@@ -208,9 +209,9 @@ export const ChatProvider = ({ children }) => {
                     if (incomingChatId !== currentActiveId) {
                         showNotification({
                             title: data.sender_name || 'Yeni Mesaj',
-                            body: data.content_type === 'text' ? data.content : (data.content_type === 'gift' ? '🎁 Hediye gönderdi' : '📷 Medya gönderdi'),
+                            body: data.content_type === 'text' ? data.content : (data.content_type === 'gift' ? '🎁 Hediye gönderdi' : (data.content_type === 'image' || data.content_type === 'locked_image' ? '📷 Medya gönderdi' : '💬 Mesaj gönderdi')),
                             icon: resolveImageUrl(data.sender_avatar),
-                            data: { chatId: incomingChatId },
+                            data: { chatId: incomingChatId, senderId: data.sender_id, senderName: data.sender_name, senderAvatar: data.sender_avatar },
                             onPress: () => {
                                 RootNavigation.navigate('Chat', {
                                     chatId: incomingChatId,

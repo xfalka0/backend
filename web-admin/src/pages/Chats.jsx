@@ -347,6 +347,58 @@ const Chats = () => {
         }
     };
 
+    const sendVoiceCallMessage = () => {
+        if (!selectedChat) return;
+        const tempId = Date.now().toString();
+        const content = '📞 Sesli Arama';
+        const msgData = {
+            chatId: selectedChat.id,
+            senderId: selectedChat.operator_id,
+            content: content,
+            type: 'call_audio',
+            tempId: tempId
+        };
+        socketRef.current.emit('send_message', msgData);
+
+        const optimisticMsg = {
+            id: tempId,
+            sender_id: selectedChat.operator_id,
+            content: content,
+            content_type: 'call_audio',
+            chat_id: selectedChat.id,
+            created_at: new Date().toISOString(),
+            is_optimistic: true,
+            tempId: tempId
+        };
+        setMessages((prev) => [...prev, optimisticMsg]);
+    };
+
+    const sendVideoCallMessage = () => {
+        if (!selectedChat) return;
+        const tempId = Date.now().toString();
+        const content = '📹 Görüntülü Arama';
+        const msgData = {
+            chatId: selectedChat.id,
+            senderId: selectedChat.operator_id,
+            content: content,
+            type: 'call_video',
+            tempId: tempId
+        };
+        socketRef.current.emit('send_message', msgData);
+
+        const optimisticMsg = {
+            id: tempId,
+            sender_id: selectedChat.operator_id,
+            content: content,
+            content_type: 'call_video',
+            chat_id: selectedChat.id,
+            created_at: new Date().toISOString(),
+            is_optimistic: true,
+            tempId: tempId
+        };
+        setMessages((prev) => [...prev, optimisticMsg]);
+    };
+
     const sendQuickMessage = (message) => {
         sendTextMessage(message);
         setShowQuickMessages(false);
@@ -512,6 +564,30 @@ const Chats = () => {
                                     <span className="text-3xl mb-1 drop-shadow-md">📍</span>
                                     <span className="text-xs font-bold text-blue-400 underline">Konum Görüntüle</span>
                                 </div>
+                            ) : msg.content_type === 'call_audio' || msg.type === 'call_audio' || msg.content?.includes('Sesli Arama') ? (
+                                <div className="flex items-center gap-3 p-1 text-emerald-300">
+                                    <div className="w-9 h-9 rounded-full bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shrink-0">
+                                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                                        </svg>
+                                    </div>
+                                    <div>
+                                        <p className="text-sm font-bold text-emerald-400">Sesli Arama</p>
+                                        <p className="text-[11px] opacity-70">Arama başlatıldı</p>
+                                    </div>
+                                </div>
+                            ) : msg.content_type === 'call_video' || msg.type === 'call_video' || msg.content?.includes('Görüntülü Arama') ? (
+                                <div className="flex items-center gap-3 p-1 text-indigo-300">
+                                    <div className="w-9 h-9 rounded-full bg-indigo-500/20 border border-indigo-500/30 flex items-center justify-center text-indigo-400 shrink-0">
+                                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                                        </svg>
+                                    </div>
+                                    <div>
+                                        <p className="text-sm font-bold text-indigo-400">Görüntülü Arama</p>
+                                        <p className="text-[11px] opacity-70">Arama başlatıldı</p>
+                                    </div>
+                                </div>
                             ) : msg.content_type === 'image' || msg.content_type === 'locked_image' || msg.type === 'image' || msg.type === 'locked_image' ? (
                                 <div className="relative group/img">
                                     <img
@@ -545,7 +621,7 @@ const Chats = () => {
     }, [messages, selectedChat, user?.id]);
 
     return (
-        <div className="flex h-[calc(100vh-120px)] bg-slate-950/50 rounded-3xl overflow-hidden border border-white/5 m-4">
+        <div className="flex h-screen bg-slate-950/50 overflow-hidden">
             <div className="w-96 border-r border-white/5 flex flex-col bg-slate-900/50">
                 <div className="p-7 border-b border-white/5">
                     <h2 className="text-2xl font-black text-white">Sohbetler</h2>
@@ -639,90 +715,123 @@ const Chats = () => {
                             <div ref={messagesEndRef} />
                         </div>
 
-                        <form onSubmit={sendMessage} className="p-6 bg-slate-900/40 border-t border-white/5 flex gap-4 relative">
-                            <div className="relative flex-1">
+                        <form onSubmit={sendMessage} className="p-6 bg-slate-900/80 border-t border-white/10 flex items-center gap-4 relative">
+                            {/* Quick Messages */}
+                            <div className="relative shrink-0">
                                 <button
                                     type="button"
                                     onClick={() => setShowQuickMessages((open) => !open)}
                                     disabled={uploading}
-                                    title="Hazır mesajlar"
-                                    className="absolute left-3 top-1/2 z-10 -translate-y-1/2 rounded-full border border-fuchsia-400/30 bg-fuchsia-500/10 p-2 text-fuchsia-300 transition hover:bg-fuchsia-500/25 active:scale-95 disabled:opacity-50"
+                                    title="Hazır Mesajlar"
+                                    className="p-4 rounded-2xl border border-fuchsia-400/40 bg-fuchsia-500/15 text-fuchsia-300 hover:bg-fuchsia-500/30 active:scale-95 transition disabled:opacity-50 flex items-center justify-center shadow-lg shadow-fuchsia-500/10"
                                 >
-                                    <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 10h.01M12 10h.01M16 10h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-                                    </svg>
+                                    <span className="text-xl font-bold">⚡</span>
                                 </button>
                                 {showQuickMessages && (
-                                    <div className="absolute bottom-[calc(100%+12px)] left-0 z-30 w-72 rounded-2xl border border-fuchsia-400/30 bg-slate-900 p-2 shadow-2xl shadow-fuchsia-950/40">
-                                        <p className="px-3 py-2 text-[10px] font-black uppercase tracking-widest text-fuchsia-300">Hazır mesajlar</p>
+                                    <div className="absolute bottom-[calc(100%+14px)] left-0 z-30 w-84 rounded-2xl border border-fuchsia-400/30 bg-slate-900 p-3 shadow-2xl shadow-fuchsia-950/50">
+                                        <p className="px-3 py-2 text-xs font-black uppercase tracking-widest text-fuchsia-300 border-b border-white/5 mb-1">Hazır mesajlar</p>
                                         {['Merhaba, nasılsın?', 'Sana nasıl yardımcı olabilirim?', 'Mesajını aldım, hemen ilgileniyorum.', 'Güzel bir gün dilerim ✨'].map((message) => (
-                                            <button key={message} type="button" onClick={() => sendQuickMessage(message)} className="block w-full rounded-xl px-3 py-2 text-left text-sm font-medium text-slate-200 transition hover:bg-fuchsia-500/20 hover:text-white">
+                                            <button key={message} type="button" onClick={() => sendQuickMessage(message)} className="block w-full rounded-xl px-4 py-3 text-left text-sm font-medium text-slate-200 transition hover:bg-fuchsia-500/20 hover:text-white">
                                                 {message}
                                             </button>
                                         ))}
                                     </div>
                                 )}
-                                <input
-                                    type="file"
-                                    ref={fileInputRef}
-                                    className="hidden"
-                                    accept="image/*"
-                                    onChange={handleImageUpload}
-                                />
-                                <div className="flex flex-col items-center justify-center gap-1">
-                                    <div className="flex gap-2">
-                                        <button
-                                            type="button"
-                                            onClick={sendLocationMessage}
-                                            disabled={uploading}
-                                            title="Konum Gönder"
-                                            className="p-3 rounded-xl border border-white/10 transition-all hover:bg-white/5 active:scale-95 text-slate-400"
-                                        >
-                                            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-                                            </svg>
-                                        </button>
-                                        <button
-                                            type="button"
-                                            onClick={() => fileInputRef.current?.click()}
-                                            disabled={uploading}
-                                            title="Resim Gönder"
-                                            className={`p-3 rounded-xl border border-white/10 transition-all hover:bg-white/5 active:scale-95 ${uploading ? 'animate-pulse opacity-50' : ''} ${isLockedImage ? 'border-yellow-500/50 bg-yellow-500/10 text-yellow-500' : 'text-slate-400'}`}
-                                        >
-                                            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                                            </svg>
-                                        </button>
-                                    </div>
-                                    <div className="flex items-center gap-1">
-                                        <label className="flex items-center gap-1 cursor-pointer group">
-                                            <input 
-                                                type="checkbox" 
-                                                checked={isLockedImage}
-                                                onChange={(e) => setIsLockedImage(e.target.checked)}
-                                                className="w-3 h-3 rounded bg-slate-800 border-white/20 text-yellow-500 focus:ring-yellow-500/50 cursor-pointer"
-                                            />
-                                            <span className="text-[9px] font-black uppercase text-slate-500 group-hover:text-yellow-500 transition-colors">Ücretli</span>
-                                        </label>
-                                        {isLockedImage && (
-                                            <span className="text-[10px] font-black text-yellow-500 bg-yellow-500/10 border border-yellow-500/20 px-2 py-0.5 rounded ml-1">200 Coin</span>
-                                        )}
-                                    </div>
-                                </div>
-                                <input
-                                    type="text"
-                                    value={input}
-                                    onChange={handleTyping}
-                                    placeholder={uploading ? "Resim yükleniyor..." : "Mesajınızı yazın..."}
-                                    disabled={uploading}
-                                    className="w-full bg-slate-800/50 border border-white/10 rounded-xl px-4 pl-14 text-sm text-white focus:outline-none focus:border-fuchsia-500 transition-all font-medium disabled:opacity-50"
-                                />
                             </div>
+
+                            {/* Location Button */}
+                            <button
+                                type="button"
+                                onClick={sendLocationMessage}
+                                disabled={uploading}
+                                title="Konum Gönder"
+                                className="p-4 rounded-2xl border border-white/10 text-slate-300 hover:text-white hover:bg-white/10 active:scale-95 transition disabled:opacity-50 shrink-0 shadow-md"
+                            >
+                                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                                </svg>
+                            </button>
+
+                            {/* Voice Call Button */}
+                            <button
+                                type="button"
+                                onClick={sendVoiceCallMessage}
+                                disabled={uploading}
+                                title="Sesli Arama Gönder"
+                                className="p-4 rounded-2xl border border-white/10 text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10 active:scale-95 transition disabled:opacity-50 shrink-0 shadow-md"
+                            >
+                                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                                </svg>
+                            </button>
+
+                            {/* Video Call Button */}
+                            <button
+                                type="button"
+                                onClick={sendVideoCallMessage}
+                                disabled={uploading}
+                                title="Görüntülü Arama Gönder"
+                                className="p-4 rounded-2xl border border-white/10 text-indigo-400 hover:text-indigo-300 hover:bg-indigo-500/10 active:scale-95 transition disabled:opacity-50 shrink-0 shadow-md"
+                            >
+                                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                                </svg>
+                            </button>
+
+                            {/* Hidden Image Input */}
+                            <input
+                                type="file"
+                                ref={fileInputRef}
+                                className="hidden"
+                                accept="image/*"
+                                onChange={handleImageUpload}
+                            />
+
+                            {/* Image Upload Button */}
+                            <button
+                                type="button"
+                                onClick={() => fileInputRef.current?.click()}
+                                disabled={uploading}
+                                title={isLockedImage ? "Ücretli Resim Gönder" : "Resim Gönder"}
+                                className={`p-4 rounded-2xl border transition-all active:scale-95 shrink-0 flex items-center justify-center shadow-md ${
+                                    uploading ? 'animate-pulse opacity-50 border-white/10 text-slate-400' :
+                                    isLockedImage ? 'border-amber-500/60 bg-amber-500/20 text-amber-300' : 'border-white/10 text-slate-300 hover:text-white hover:bg-white/10'
+                                }`}
+                            >
+                                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                </svg>
+                            </button>
+
+                            {/* Locked Image Checkbox */}
+                            <label className="flex items-center gap-2 px-4 py-3.5 rounded-2xl bg-slate-800/90 border border-white/15 cursor-pointer select-none shrink-0 hover:border-amber-500/50 transition shadow-md">
+                                <input 
+                                    type="checkbox" 
+                                    checked={isLockedImage}
+                                    onChange={(e) => setIsLockedImage(e.target.checked)}
+                                    className="w-5 h-5 rounded bg-slate-900 border-white/30 text-amber-500 focus:ring-amber-500/50 cursor-pointer"
+                                />
+                                <span className={`text-sm font-bold flex items-center gap-1 ${isLockedImage ? 'text-amber-400' : 'text-slate-300'}`}>
+                                    🔒 Ücretli
+                                </span>
+                            </label>
+
+                            {/* Text Input */}
+                            <input
+                                type="text"
+                                value={input}
+                                onChange={handleTyping}
+                                placeholder={uploading ? "Resim yükleniyor..." : "Mesajınızı yazın..."}
+                                disabled={uploading}
+                                className="flex-1 bg-slate-800/70 border border-white/15 rounded-2xl px-6 py-4 text-base text-white placeholder:text-slate-400 focus:outline-none focus:border-fuchsia-500 focus:ring-2 focus:ring-fuchsia-500/20 transition-all font-medium disabled:opacity-50 shadow-inner"
+                            />
+
+                            {/* Send Button */}
                             <button
                                 type="submit"
                                 disabled={uploading || !input.trim()}
-                                className="bg-fuchsia-600 hover:bg-fuchsia-500 text-white px-6 py-3 rounded-xl font-black text-xs uppercase tracking-widest transition-all shadow-lg shadow-fuchsia-600/20 active:scale-95 disabled:opacity-50 disabled:hover:bg-fuchsia-600"
+                                className="bg-gradient-to-r from-fuchsia-600 to-purple-600 hover:from-fuchsia-500 hover:to-purple-500 text-white px-8 py-4 rounded-2xl font-black text-sm uppercase tracking-widest transition-all shadow-xl shadow-fuchsia-600/30 active:scale-95 disabled:opacity-50 shrink-0"
                             >
                                 Gönder
                             </button>
@@ -738,8 +847,8 @@ const Chats = () => {
                         <p className="font-black uppercase tracking-widest text-xs">Sohbet seçilmedi</p>
                     </div>
                 )}
-            </div >
-        </div >
+            </div>
+        </div>
     );
 };
 

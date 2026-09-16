@@ -1,5 +1,5 @@
 import React from 'react';
-import { BrowserRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, Outlet, useLocation } from 'react-router-dom';
 import Sidebar from './components/Sidebar';
 import Navbar from './components/Navbar';
 import { AuthProvider, useAuth } from './context/AuthContext';
@@ -72,26 +72,33 @@ const ProtectedRoute = ({ allowedRoles }) => {
     return <Outlet />;
 };
 
-const Layout = () => (
-    <div className="bg-[#020617] min-h-screen text-white flex relative overflow-hidden">
-        {/* Global Background Aurora Effect */}
-        <div className="fixed inset-0 pointer-events-none">
-            <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] bg-blue-600/10 blur-[150px] rounded-full animate-aurora" />
-            <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] bg-indigo-600/10 blur-[150px] rounded-full animate-aurora" style={{ animationDelay: '-5s' }} />
-        </div>
+const Layout = () => {
+    const location = useLocation();
+    const isChatsPage = location.pathname === '/chats' || location.pathname === '/formatted-chats';
 
-        <Sidebar />
-        <main className="flex-1 ml-64 min-h-screen flex flex-col relative z-10">
-            <Navbar />
-            <div className="flex-1 overflow-x-hidden">
-                <Outlet />
+    return (
+        <div className="bg-[#020617] min-h-screen text-white flex relative overflow-hidden">
+            {/* Global Background Aurora Effect */}
+            <div className="fixed inset-0 pointer-events-none">
+                <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] bg-blue-600/10 blur-[150px] rounded-full animate-aurora" />
+                <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] bg-indigo-600/10 blur-[150px] rounded-full animate-aurora" style={{ animationDelay: '-5s' }} />
             </div>
-            <footer className="p-10 text-center text-[11px] font-black uppercase tracking-[0.3em] text-slate-800 border-t border-white/5">
-                &copy; 2024 Falka Software Admin Dashboard • Premium Management Console
-            </footer>
-        </main>
-    </div>
-);
+
+            <Sidebar />
+            <main className="flex-1 ml-64 min-h-screen flex flex-col relative z-10">
+                {!isChatsPage && <Navbar />}
+                <div className="flex-1 overflow-x-hidden flex flex-col">
+                    <Outlet />
+                </div>
+                {!isChatsPage && (
+                    <footer className="p-10 text-center text-[11px] font-black uppercase tracking-[0.3em] text-slate-800 border-t border-white/5">
+                        &copy; 2024 Falka Software Admin Dashboard • Premium Management Console
+                    </footer>
+                )}
+            </main>
+        </div>
+    );
+};
 
 function App() {
     const [showSplash, setShowSplash] = React.useState(true);

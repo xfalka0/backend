@@ -315,7 +315,7 @@ export default function ShopScreen({ navigation, route }) {
                 const directRes = await PurchaseService.purchaseProductByIdentifier(pack.product.identifier);
                 if (directRes.success) {
                     success = true;
-                    transactionId = directRes.customerInfo?.originalAppUserId || transactionId;
+                    transactionId = directRes.transactionId || transactionId;
                 } else if (directRes.cancelled) {
                     return;
                 } else {
@@ -331,7 +331,7 @@ export default function ShopScreen({ navigation, route }) {
                 const result = await PurchaseService.purchasePackage(pack);
                 if (result.success) {
                     success = true;
-                    transactionId = result.customerInfo?.originalAppUserId || transactionId;
+                    transactionId = result.transactionId || transactionId;
                 } else if (result.pending) {
                     setAlertConfig({
                         visible: true,

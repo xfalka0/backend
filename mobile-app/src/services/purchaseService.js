@@ -68,7 +68,13 @@ export const PurchaseService = {
                 console.error('[META_ADS] Purchase tracking error:', trackErr);
             }
 
-            return { success: true, customerInfo };
+            let txId = null;
+            if (customerInfo && customerInfo.nonSubscriptionTransactions && customerInfo.nonSubscriptionTransactions.length > 0) {
+                const txs = customerInfo.nonSubscriptionTransactions;
+                txId = txs[txs.length - 1].transactionIdentifier;
+            }
+
+            return { success: true, customerInfo, transactionId: txId };
         } catch (e) {
             if (!e.userCancelled) {
                 console.log('[Purchases] Purchase Error Info:', e);

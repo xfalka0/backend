@@ -3226,6 +3226,19 @@ app.post('/api/purchase', authenticateToken, async (req, res) => {
     try {
         await db.query('BEGIN');
 
+        // Deduplicate transaction to prevent double-coins if webhook already processed it
+        if (transactionId && !transactionId.startsWith('test_') && !transactionId.startsWith('manual_')) {
+            const existingTx = await db.query('SELECT id FROM payments WHERE transaction_id = $1', [transactionId]);
+            if (existingTx.rows.length > 0) {
+                // Already processed by webhook (or previous request)
+                await db.query('ROLLBACK');
+                console.log(`[PURCHASE IGNORED] Transaction ${transactionId} already processed (likely by webhook).`);
+                
+                // Return success so the app can fetch the updated balance
+                return res.json({ success: true, message: 'Transaction already processed', balance: req.user.balance });
+            }
+        }
+
         // 1. Validate Package and Get Price/Coins from DB
         let price = 0;
         let coinsToAdd = 0;

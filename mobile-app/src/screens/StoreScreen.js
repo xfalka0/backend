@@ -468,220 +468,231 @@ export default function StoreScreen({ navigation, route }) {
                     </TouchableOpacity>
                 </View>
 
-                {/* Premium Golden Glass Wallet Balance Card */}
-                <View style={styles.balanceWrapper}>
-                    <LinearGradient
-                        colors={['rgba(246, 196, 83, 0.15)', 'rgba(255, 255, 255, 0.02)']}
-                        style={styles.balanceCard}
-                        start={{ x: 0, y: 0 }}
-                        end={{ x: 1, y: 1 }}
-                    >
-                        <View style={styles.balanceLeft}>
-                            <Animated.View style={{ transform: [{ translateY: floatAnim }], marginRight: 12 }}>
-                                <LinearGradient
-                                    colors={['#F6C453', '#F29C38']}
-                                    style={styles.coinIconCircle}
-                                >
-                                    <FontAwesome5 name="coins" size={16} color="#ffffff" />
-                                </LinearGradient>
-                            </Animated.View>
-                            <View>
-                                <Text style={styles.balanceLabel}>ALTIN CÜZDANIM</Text>
-                                <Text style={styles.balanceValue}>{balance.toLocaleString('tr-TR')}</Text>
-                            </View>
-                        </View>
-                        <TouchableOpacity
-                            style={styles.rechargeBtn}
-                            onPress={() => navigation.navigate('Shop')}
-                            activeOpacity={0.8}
-                        >
-                            <LinearGradient
-                                colors={['#F6C453', '#F29C38']}
-                                style={styles.rechargeGradient}
-                                start={{ x: 0, y: 0 }}
-                                end={{ x: 1, y: 1 }}
-                            >
-                                <Text style={styles.rechargeBtnText}>YÜKLE</Text>
-                            </LinearGradient>
-                        </TouchableOpacity>
-                    </LinearGradient>
-                </View>
-
-                {/* Coin & Premium Offers */}
-                <View style={styles.storeOffers}>
-
-                    {/* ✨ Animated Premium Banner */}
-                    <Animated.View style={[styles.premiumBannerWrap, { transform: [{ scale: bannerScale }] }]}>
+                <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 100 }}>
+                    {/* Premium Golden Glass Wallet Balance Card */}
+                    <View style={styles.balanceWrapper}>
                         <LinearGradient
-                            colors={['#6B0F2B', '#BE1A3D', '#FF4165', '#BE1A3D', '#6B0F2B']}
+                            colors={['rgba(246, 196, 83, 0.15)', 'rgba(255, 255, 255, 0.02)']}
+                            style={styles.balanceCard}
                             start={{ x: 0, y: 0 }}
                             end={{ x: 1, y: 1 }}
-                            style={styles.premiumBannerGradient}
                         >
-                            {/* Shimmer overlay */}
-                            <Animated.View
-                                style={[
-                                    styles.premiumBannerShimmer,
-                                    {
-                                        transform: [{
-                                            translateX: bannerShimmer.interpolate({
-                                                inputRange: [0, 1],
-                                                outputRange: [-width, width],
-                                            })
-                                        }]
-                                    }
-                                ]}
-                                pointerEvents="none"
-                            />
-
-                            {/* Glow top circle */}
-                            <Animated.View
-                                style={[styles.premiumBannerGlowCircle, {
-                                    opacity: bannerGlow.interpolate({
-                                        inputRange: [0, 1],
-                                        outputRange: [0.18, 0.42]
-                                    })
-                                }]}
-                                pointerEvents="none"
-                            />
-
-                            {/* Left icon cluster */}
-                            <View style={styles.premiumBannerLeft}>
-                                <Animated.View style={{ transform: [{ translateY: floatAnim }] }}>
-                                    <View style={styles.premiumBannerIconCircle}>
-                                        <LinearGradient
-                                            colors={['#FF6B8A', '#E8254A', '#9B1030']}
-                                            style={styles.premiumBannerIconGrad}
-                                            start={{ x: 0, y: 0 }}
-                                            end={{ x: 1, y: 1 }}
-                                        >
-                                            <Ionicons name="diamond" size={26} color="#fff" />
-                                        </LinearGradient>
-                                    </View>
-                                </Animated.View>
-                            </View>
-
-                            {/* Center text */}
-                            <View style={styles.premiumBannerCenter}>
-                                <View style={styles.premiumBannerBadge}>
-                                    <Ionicons name="sparkles" size={9} color="#FFE88A" style={{ marginRight: 4 }} />
-                                    <Text style={styles.premiumBannerBadgeText}>ÖZEL TEKLİF</Text>
-                                </View>
-                                <Text style={styles.premiumBannerTitle}>Premium Üyelik</Text>
-                                <Text style={styles.premiumBannerSubtitle}>
-                                    Eşsiz özelliklerle aşkı{'\n'}daha yakın hisset
-                                </Text>
-                            </View>
-
-                            {/* Right side — subtle icon stack */}
-                            <View style={styles.premiumBannerRight}>
-                                <Animated.View style={{ transform: [{ translateY: bannerGlow.interpolate({ inputRange: [0,1], outputRange: [0, -4] }) }] }}>
-                                    <View style={styles.premiumBannerRightIcon}>
-                                        <Ionicons name="heart" size={32} color="rgba(255,255,255,0.18)" />
-                                    </View>
-                                </Animated.View>
-                                <View style={styles.premiumBannerRightIconSmall}>
-                                    <Ionicons name="heart" size={16} color="rgba(255,255,255,0.10)" />
-                                </View>
-                            </View>
-                        </LinearGradient>
-                    </Animated.View>
-
-                    <Text style={styles.premiumSectionTitle}>PREMIUM ÜYELİK</Text>
-                    <Text style={styles.premiumSectionSubtitle}>Sana en uygun süreyi seç</Text>
-                    <View style={styles.premiumPlansRow}>
-                        {PREMIUM_PLANS.map((plan, index) => (
-                            <Animated.View key={plan.months} style={[styles.planAnimated, { transform: [{ translateY: floatAnim }] }]}>
-                                <TouchableOpacity
-                                    style={[styles.premiumOffer, index === 1 && styles.premiumOfferPopular, index === 2 && styles.premiumOfferBest]}
-                                    onPress={() => handlePremiumPurchase(plan)}
-                                    activeOpacity={0.86}
-                                >
+                            <View style={styles.balanceLeft}>
+                                <Animated.View style={{ transform: [{ translateY: floatAnim }], marginRight: 12 }}>
                                     <LinearGradient
-                                        colors={index === 2 ? ['#74152F', '#2A0D16'] : ['#3B1421', '#1E0B12']}
-                                        style={StyleSheet.absoluteFill}
-                                    />
-                                    <View style={[styles.offerIcon, index === 2 && styles.offerIconBest]}>
-                                        <Ionicons name="diamond" size={20} color="#FFB020" />
-                                    </View>
-                                    <View style={styles.offerTextWrap}>
-                                        <View style={styles.planTitleRow}>
-                                            <Text style={styles.offerTitle}>{plan.label}</Text>
-                                            <View style={[styles.planBadge, index === 2 && styles.planBadgeBest]}>
-                                                <Text style={styles.planBadgeText}>{plan.badge}</Text>
-                                            </View>
-                                        </View>
-                                        <Text style={styles.offerSubtitle}>{plan.subtitle}</Text>
-                                        <Text style={styles.planPrice}>{plan.price}</Text>
-                                        <View style={styles.planBenefits}>
-                                            {[
-                                                'Sesli ve görüntülü arama',
-                                                'Konum gönderme ve alma',
-                                                'Sınırsız beğeni',
-                                                'Keşfette paylaşım hakkı',
-                                                'Keşfette daha üstte görün',
-                                            ].map((benefit) => (
-                                                <View key={benefit} style={styles.planBenefitRow}>
-                                                    <Ionicons name="checkmark-circle" size={13} color="#FFB020" />
-                                                    <Text style={styles.planBenefitText}>{benefit}</Text>
-                                                </View>
-                                            ))}
-                                        </View>
-                                    </View>
-                                </TouchableOpacity>
-                            </Animated.View>
-                        ))}
-                    </View>
-                    
-                    {/* Coin Packages Section */}
-                    <View style={{ marginTop: 30, paddingBottom: 20 }}>
-                        <Text style={styles.premiumSectionTitle}>COIN PAKETLERİ</Text>
-                        <Text style={styles.premiumSectionSubtitle}>Daha fazla sohbet için coin satın al</Text>
-                        
-                        <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', paddingHorizontal: 15, marginTop: 15 }}>
-                            {[
-                                { coins: 100, price: '54,99 ₺', icon: 'star' },
-                                { coins: 250, price: '120,99 ₺', icon: 'flash' },
-                                { coins: 500, price: '219,99 ₺', icon: 'flash' },
-                                { coins: 1000, price: '395,99 ₺', icon: 'diamond' },
-                                { coins: 2500, price: '1299,99 ₺', icon: 'diamond' },
-                                { coins: 5000, price: '2399,99 ₺', icon: 'diamond' },
-                                { coins: 10000, price: '4599,99 ₺', icon: 'diamond' },
-                                { coins: 20000, price: '8799,99 ₺', icon: 'diamond' },
-                                { coins: 40000, price: '17399,99 ₺', icon: 'diamond' }
-                            ].map((pack, idx) => (
-                                <TouchableOpacity 
-                                    key={idx} 
-                                    style={{ 
-                                        width: '48%', 
-                                        backgroundColor: 'rgba(255,255,255,0.05)', 
-                                        borderRadius: 16, 
-                                        padding: 15, 
-                                        marginBottom: 15,
-                                        alignItems: 'center',
-                                        borderWidth: 1,
-                                        borderColor: 'rgba(255, 79, 163, 0.2)'
-                                    }}
-                                    onPress={() => navigation.navigate('Shop')}
+                                        colors={['#F6C453', '#F29C38']}
+                                        style={styles.coinIconCircle}
+                                    >
+                                        <FontAwesome5 name="coins" size={16} color="#ffffff" />
+                                    </LinearGradient>
+                                </Animated.View>
+                                <View>
+                                    <Text style={styles.balanceLabel}>ALTIN CÜZDANIM</Text>
+                                    <Text style={styles.balanceValue}>{balance.toLocaleString('tr-TR')}</Text>
+                                </View>
+                            </View>
+                            <TouchableOpacity
+                                style={styles.rechargeBtn}
+                                onPress={() => navigation.navigate('Shop')}
+                                activeOpacity={0.8}
+                            >
+                                <LinearGradient
+                                    colors={['#F6C453', '#F29C38']}
+                                    style={styles.rechargeGradient}
+                                    start={{ x: 0, y: 0 }}
+                                    end={{ x: 1, y: 1 }}
                                 >
-                                    <Ionicons name={pack.icon} size={28} color="#FFD700" style={{ marginBottom: 8 }} />
-                                    <Text style={{ color: '#fff', fontSize: 18, fontWeight: 'bold' }}>{pack.coins}</Text>
-                                    <Text style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12, marginBottom: 8 }}>Coin</Text>
-                                    <View style={{ backgroundColor: '#FF4FA3', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12 }}>
-                                        <Text style={{ color: '#fff', fontSize: 13, fontWeight: 'bold' }}>{pack.price}</Text>
-                                    </View>
-                                </TouchableOpacity>
-                            ))}
-                        </View>
-                        
-                        <TouchableOpacity 
-                            style={{ marginHorizontal: 20, marginTop: 10, padding: 16, backgroundColor: 'rgba(255, 79, 163, 0.1)', borderRadius: 12, alignItems: 'center', borderWidth: 1, borderColor: '#FF4FA3' }}
-                            onPress={() => navigation.navigate('Shop')}
-                        >
-                            <Text style={{ color: '#FF4FA3', fontWeight: 'bold', fontSize: 15 }}>TÜM COIN PAKETLERİNİ GÖR</Text>
-                        </TouchableOpacity>
+                                    <Text style={styles.rechargeBtnText}>YÜKLE</Text>
+                                </LinearGradient>
+                            </TouchableOpacity>
+                        </LinearGradient>
                     </View>
-                </View>
+
+                    {/* Coin & Premium Offers */}
+                    <View style={styles.storeOffers}>
+
+                        {/* ✨ Animated Premium Banner */}
+                        <Animated.View style={[styles.premiumBannerWrap, { transform: [{ scale: bannerScale }] }]}>
+                            <LinearGradient
+                                colors={['#6B0F2B', '#BE1A3D', '#FF4165', '#BE1A3D', '#6B0F2B']}
+                                start={{ x: 0, y: 0 }}
+                                end={{ x: 1, y: 1 }}
+                                style={styles.premiumBannerGradient}
+                            >
+                                {/* Shimmer overlay */}
+                                <Animated.View
+                                    style={[
+                                        styles.premiumBannerShimmer,
+                                        {
+                                            transform: [{
+                                                translateX: bannerShimmer.interpolate({
+                                                    inputRange: [0, 1],
+                                                    outputRange: [-width, width],
+                                                })
+                                            }]
+                                        }
+                                    ]}
+                                    pointerEvents="none"
+                                />
+
+                                {/* Glow top circle */}
+                                <Animated.View
+                                    style={[styles.premiumBannerGlowCircle, {
+                                        opacity: bannerGlow.interpolate({
+                                            inputRange: [0, 1],
+                                            outputRange: [0.18, 0.42]
+                                        })
+                                    }]}
+                                    pointerEvents="none"
+                                />
+
+                                {/* Left icon cluster */}
+                                <View style={styles.premiumBannerLeft}>
+                                    <Animated.View style={{ transform: [{ translateY: floatAnim }] }}>
+                                        <View style={styles.premiumBannerIconCircle}>
+                                            <LinearGradient
+                                                colors={['#FF6B8A', '#E8254A', '#9B1030']}
+                                                style={styles.premiumBannerIconGrad}
+                                                start={{ x: 0, y: 0 }}
+                                                end={{ x: 1, y: 1 }}
+                                            >
+                                                <Ionicons name="diamond" size={26} color="#fff" />
+                                            </LinearGradient>
+                                        </View>
+                                    </Animated.View>
+                                </View>
+
+                                {/* Center text */}
+                                <View style={styles.premiumBannerCenter}>
+                                    <View style={styles.premiumBannerBadge}>
+                                        <Ionicons name="sparkles" size={9} color="#FFE88A" style={{ marginRight: 4 }} />
+                                        <Text style={styles.premiumBannerBadgeText}>ÖZEL TEKLİF</Text>
+                                    </View>
+                                    <Text style={styles.premiumBannerTitle}>Premium Üyelik</Text>
+                                    <Text style={styles.premiumBannerSubtitle}>
+                                        Eşsiz özelliklerle aşkı{'\n'}daha yakın hisset
+                                    </Text>
+                                </View>
+
+                                {/* Right side — subtle icon stack */}
+                                <View style={styles.premiumBannerRight}>
+                                    <Animated.View style={{ transform: [{ translateY: bannerGlow.interpolate({ inputRange: [0,1], outputRange: [0, -4] }) }] }}>
+                                        <View style={styles.premiumBannerRightIcon}>
+                                            <Ionicons name="heart" size={32} color="rgba(255,255,255,0.18)" />
+                                        </View>
+                                    </Animated.View>
+                                    <View style={styles.premiumBannerRightIconSmall}>
+                                        <Ionicons name="heart" size={16} color="rgba(255,255,255,0.10)" />
+                                    </View>
+                                </View>
+                            </LinearGradient>
+                        </Animated.View>
+
+                        <Text style={styles.premiumSectionTitle}>PREMIUM ÜYELİK</Text>
+                        <Text style={styles.premiumSectionSubtitle}>Sana en uygun süreyi seç</Text>
+
+                        {/* Joined 3-Card Segmented Container */}
+                        <View style={styles.segmentedPlansWrapper}>
+                            {PREMIUM_PLANS.map((plan, index) => {
+                                const isPopular = index === 1;
+                                const isBest = index === 2;
+                                return (
+                                    <TouchableOpacity
+                                        key={plan.months}
+                                        style={[
+                                            styles.segmentedPlanCard,
+                                            isPopular && styles.segmentedPlanCardPopular,
+                                            isBest && styles.segmentedPlanCardBest,
+                                        ]}
+                                        onPress={() => handlePremiumPurchase(plan)}
+                                        activeOpacity={0.88}
+                                    >
+                                        <LinearGradient
+                                            colors={
+                                                isPopular
+                                                    ? ['#8A1538', '#3D0918']
+                                                    : isBest
+                                                    ? ['#5C1027', '#290610']
+                                                    : ['rgba(255, 255, 255, 0.05)', 'rgba(255, 255, 255, 0.02)']
+                                            }
+                                            style={StyleSheet.absoluteFill}
+                                        />
+
+                                        {/* Top Badge */}
+                                        <View style={[
+                                            styles.segmentedBadge,
+                                            isPopular && styles.segmentedBadgePopular,
+                                            isBest && styles.segmentedBadgeBest
+                                        ]}>
+                                            <Text style={[
+                                                styles.segmentedBadgeText,
+                                                isPopular && styles.segmentedBadgeTextPopular,
+                                                isBest && styles.segmentedBadgeTextBest
+                                            ]}>{plan.badge}</Text>
+                                        </View>
+
+                                        {/* Icon */}
+                                        <View style={[styles.segmentedIconCircle, isPopular && styles.segmentedIconCirclePopular]}>
+                                            <Ionicons name="diamond" size={18} color={isPopular ? "#FFD700" : isBest ? "#FF4FA3" : "#F6C453"} />
+                                        </View>
+
+                                        {/* Title */}
+                                        <Text style={styles.segmentedPlanTitle}>{plan.label}</Text>
+                                        <Text style={styles.segmentedPlanSub}>Premium</Text>
+
+                                        {/* Price */}
+                                        <Text style={[styles.segmentedPlanPrice, isPopular && { color: '#FFD700' }]}>{plan.price}</Text>
+
+                                        {/* Monthly Price Breakdown */}
+                                        <Text style={styles.segmentedMonthlyPrice}>
+                                            {plan.months === 1 ? '449,99 ₺/ay' : plan.months === 3 ? '323 ₺/ay' : '250 ₺/ay'}
+                                        </Text>
+
+                                        {/* Purchase Button */}
+                                        <View style={[styles.segmentedBuyBtn, isPopular && styles.segmentedBuyBtnPopular]}>
+                                            <LinearGradient
+                                                colors={isPopular ? ['#FFD700', '#F29C38'] : ['#FF4FA3', '#8B5CFF']}
+                                                style={styles.segmentedBuyGradient}
+                                                start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+                                            >
+                                                <Text style={[styles.segmentedBuyText, isPopular && { color: '#1A0008' }]}>SEÇ</Text>
+                                            </LinearGradient>
+                                        </View>
+                                    </TouchableOpacity>
+                                );
+                            })}
+                        </View>
+
+                        {/* Premium Benefits Glass Card */}
+                        <View style={styles.benefitsCard}>
+                            <LinearGradient
+                                colors={['rgba(255, 79, 163, 0.08)', 'rgba(139, 92, 255, 0.03)']}
+                                style={styles.benefitsCardGradient}
+                            >
+                                <View style={styles.benefitsHeader}>
+                                    <Ionicons name="sparkles" size={16} color="#FFB020" style={{ marginRight: 6 }} />
+                                    <Text style={styles.benefitsTitle}>Tüm Premium Ayrıcalıkları</Text>
+                                </View>
+                                <View style={styles.benefitsGrid}>
+                                    {[
+                                        { icon: 'call', text: 'Sesli ve görüntülü arama' },
+                                        { icon: 'location', text: 'Konum gönderme ve alma' },
+                                        { icon: 'heart', text: 'Sınırsız beğeni hakkı' },
+                                        { icon: 'megaphone', text: 'Keşfette paylaşım hakkı' },
+                                        { icon: 'trending-up', text: 'Keşfette daha üstte görün' },
+                                    ].map((b, i) => (
+                                        <View key={i} style={styles.benefitRow}>
+                                            <View style={styles.benefitIconWrap}>
+                                                <Ionicons name={b.icon} size={13} color="#FF4FA3" />
+                                            </View>
+                                            <Text style={styles.benefitRowText}>{b.text}</Text>
+                                        </View>
+                                    ))}
+                                </View>
+                            </LinearGradient>
+                        </View>
+                    </View>
+                </ScrollView>
 
                 {false && (<>
                     {/* Fixed Grid Category Tabs (No Scroll) */}

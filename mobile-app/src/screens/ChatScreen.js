@@ -235,18 +235,6 @@ export default function ChatScreen({ route, navigation }) {
 
     const handleSendLocation = async () => {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-        if (!isPremiumMember && !isOperator) {
-            showAlert({
-                title: 'Premium Gerekli 👑',
-                message: 'Konum göndermek için Premium üye olmanız gerekmektedir.',
-                type: 'info',
-                showCancel: true,
-                cancelText: 'Vazgeç',
-                confirmText: 'Premium Al',
-                onConfirm: () => navigation.navigate('Store')
-            });
-            return;
-        }
 
         if (!isFamilyChat && !socketRef.current?.connected) {
             showAlert({ title: 'Bağlantı Hatası', message: 'Sunucu ile bağlantı kurulamadı.', type: 'error' });
@@ -268,9 +256,12 @@ export default function ChatScreen({ route, navigation }) {
                 if (status === 'granted') {
                     let loc = await Location.getLastKnownPositionAsync({});
                     if (!loc) {
-                        loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Lowest });
+                        loc = await Promise.race([
+                            Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Lowest }),
+                            new Promise((resolve) => setTimeout(() => resolve(null), 2500))
+                        ]);
                     }
-                    if (loc) {
+                    if (loc && loc.coords) {
                         coords = { latitude: loc.coords.latitude, longitude: loc.coords.longitude };
                     }
                 }
@@ -804,9 +795,19 @@ export default function ChatScreen({ route, navigation }) {
     };
 
     const handleUnlockImage = async (msg) => {
-        const cost = msg.unlock_cost || 50;
+        console.log('[ChatScreen] handleUnlockImage triggered for msg:', msg?.id);
+        if (!msg || !msg.id) {
+            showAlert({ title: 'Hata', message: 'Geçersiz fotoğraf mesajı.', type: 'error' });
+            return;
+        }
+
+        const cost = Number(msg.unlock_cost) || 200;
+        console.log(`[ChatScreen] Unlock image check - balance: ${currentBalance}, cost: ${cost}`);
+
         if (currentBalance < cost) {
-            handleInsufficientCoins();
+            setTimeout(() => {
+                handleInsufficientCoins();
+            }, 300);
             return;
         }
 
@@ -816,22 +817,33 @@ export default function ChatScreen({ route, navigation }) {
                 headers: { Authorization: `Bearer ${token}` }
             });
 
-            if (res.data.success) {
-                setMessages(prev => prev.map(m => m.id === msg.id ? { ...m, is_unlocked: true } : m));
-                setCurrentBalance(prev => prev - cost);
+            console.log('[ChatScreen] Unlock API res:', res.data);
+
+            if (res.data && res.data.success) {
+                setMessages(prev => prev.map(m => 
+                    (m.id?.toString() === msg.id?.toString() || String(m.id) === String(msg.id))
+                        ? { ...m, is_unlocked: true }
+                        : m
+                ));
+                setCurrentBalance(prev => Math.max(0, prev - cost));
                 Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            } else {
+                showAlert({ title: 'Hata', message: res.data?.error || 'Fotoğraf açılamadı.', type: 'error' });
             }
         } catch (error) {
-            if (error.response?.data?.code === 'INSUFFICIENT_FUNDS') {
-                handleInsufficientCoins();
+            console.error('[ChatScreen] Unlock image error:', error.response?.data || error.message);
+            if (error.response?.data?.code === 'INSUFFICIENT_FUNDS' || error.response?.data?.insufficientFunds) {
+                setTimeout(() => {
+                    handleInsufficientCoins();
+                }, 300);
             } else {
-                showAlert({ title: 'Hata', message: 'Fotoğraf açılamadı.', type: 'error' });
+                showAlert({ title: 'Hata', message: error.response?.data?.error || 'Fotoğraf açılamadı.', type: 'error' });
             }
         }
     };
 
     const confirmUnlock = (msg) => {
-        const cost = msg.unlock_cost || 200;
+        const cost = Number(msg.unlock_cost) || 200;
         showAlert({
             title: "Kilitli Fotoğraf 🔒",
             message: `Bu fotoğrafı görmek için ${cost} Coin ödemek istiyor musunuz?`,
@@ -839,14 +851,18 @@ export default function ChatScreen({ route, navigation }) {
             showCancel: true,
             cancelText: "Vazgeç",
             confirmText: "Aç",
-            onConfirm: () => handleUnlockImage(msg)
+            onConfirm: () => {
+                setTimeout(() => {
+                    handleUnlockImage(msg);
+                }, 200);
+            }
         });
     };
 
     const sendMessage = (textOrEvent) => {
         const textToSend = typeof textOrEvent === 'string' ? textOrEvent : input;
         if (!textToSend || typeof textToSend !== 'string' || textToSend.trim() === '' || !chatId) return;
-        
+
         const now = Date.now();
         if (lastSentMessageRef.current.text === textToSend && (now - lastSentMessageRef.current.time) < 1000) {
             console.log('[ChatScreen] Prevented duplicate message send');

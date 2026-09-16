@@ -123,7 +123,7 @@ router.post('/:messageId/unlock', authenticateToken, async (req, res) => {
     const { messageId } = req.params;
     const userId = req.user.id;
     
-    const client = await db.connect();
+    const client = await db.pool.connect();
     try {
         await client.query('BEGIN');
 

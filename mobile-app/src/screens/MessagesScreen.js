@@ -108,41 +108,8 @@ export default function MessagesScreen({ navigation, route }) {
     };
 
     const fetchFamilyChat = async () => {
-        try {
-            const token = await AsyncStorage.getItem('token');
-            if (!token) return;
-
-            const familyRes = await axios.get(`${API_URL}/families/my`, {
-                headers: { Authorization: `Bearer ${token}` }
-            });
-
-            if (!familyRes.data?.family) {
-                setFamilyChat(null);
-                return;
-            }
-
-            const family = familyRes.data.family;
-            const chatRes = await axios.get(`${API_URL}/families/${family.id}/chat`, {
-                headers: { Authorization: `Bearer ${token}` }
-            }).catch(() => ({ data: [] }));
-            const last = chatRes.data?.[chatRes.data.length - 1];
-
-            setFamilyChat({
-                id: `family-${family.id}`,
-                is_family_chat: true,
-                family_id: family.id,
-                name: family.name,
-                avatar_url: family.badge_url,
-                last_message: last?.message || 'Aile sohbeti hazır',
-                last_message_at: last?.created_at || family.created_at,
-                unread_count: 0,
-                is_online: true,
-                vip_level: 0,
-                gender: 'family'
-            });
-        } catch (error) {
-            console.log('Error fetching family chat in MessagesScreen:', error.message);
-        }
+        // Aile sistemi deaktif edildi
+        setFamilyChat(null);
     };
 
     const handleAcceptInvitation = async (inviteId) => {

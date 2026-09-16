@@ -1332,6 +1332,18 @@ export default function ChatScreen({ route, navigation }) {
                 playsInSilentModeIOS: true,
             });
 
+            // Pre-check: verify URL returns audio (not HTML/404 page)
+            try {
+                const checkRes = await fetch(resolved, { method: 'HEAD' });
+                const contentType = checkRes.headers.get('content-type') || '';
+                if (contentType.includes('text/html')) {
+                    showAlert({ title: 'Ses Dosyası Bulunamadı', message: 'Bu ses dosyası artık sunucuda mevcut değil.', type: 'error' });
+                    return;
+                }
+            } catch (headErr) {
+                // HEAD request failed, try playback anyway
+            }
+
             const { sound: newSound } = await Audio.Sound.createAsync(
                 {
                     uri: resolved,

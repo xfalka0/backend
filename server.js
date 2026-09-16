@@ -5310,7 +5310,7 @@ io.on('connection', (socket) => {
     // Send Message
     socket.on('send_message', async (data) => {
         console.log('[SOCKET] send_message received:', JSON.stringify(data, null, 2));
-        const { chatId, content, type, giftId, tempId, unlockCost } = data;
+        const { chatId, content, type, giftId, tempId, unlockCost, duration } = data;
         const senderId = socket.user.id;
 
         console.log(`[DEBUG-SEND] chatId: ${chatId} (${typeof chatId}), senderId: ${senderId} (${typeof senderId}), type: ${type}`);
@@ -5505,8 +5505,8 @@ io.on('connection', (socket) => {
 
             // --- 3. SAVE MESSAGE ---
             const res = await client.query(
-                'INSERT INTO messages (chat_id, sender_id, content, content_type, gift_id, unlock_cost, is_unlocked) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *',
-                [chatId, finalSenderId, content, type || 'text', giftId || null, type === 'locked_image' ? (unlockCost || 200) : 0, type === 'locked_image' ? false : true]
+                'INSERT INTO messages (chat_id, sender_id, content, content_type, gift_id, unlock_cost, is_unlocked, duration) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *',
+                [chatId, finalSenderId, content, type || 'text', giftId || null, type === 'locked_image' ? (unlockCost || 200) : 0, type === 'locked_image' ? false : true, duration || null]
             );
             const savedMsg = res.rows[0];
 
@@ -5565,7 +5565,8 @@ io.on('connection', (socket) => {
                 type: savedMsg.content_type, // Alias for mobile app compatibility
                 sender_name: senderName,
                 sender_avatar: senderAvatar,
-                tempId 
+                tempId,
+                duration: savedMsg.duration || duration || null
             };
             // EMIT ASAP
             io.to(chatId.toString()).emit('receive_message', msgToEmit);

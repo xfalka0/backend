@@ -633,7 +633,7 @@ export default function ChatScreen({ route, navigation }) {
 
                 // Bind new active listeners
                 socket.on('receive_message', (msg) => {
-                    console.log('[SOCKET] receive_message on Mobile:', msg.id, 'for chatId:', msg.chat_id, 'Current chatId:', chatId);
+                    console.log('[SOCKET] receive_message on Mobile:', msg.id, 'for chatId:', msg.chat_id, 'type:', msg.type || msg.content_type, 'content:', (msg.content||'').substring(0,60), 'duration:', msg.duration, 'Current chatId:', chatId);
 
                     if (msg.chat_id && chatId && msg.chat_id.toString() !== chatId.toString()) {
                         console.warn('[SOCKET] Received message for different chat! Ignoring.');
@@ -1273,6 +1273,11 @@ export default function ChatScreen({ route, navigation }) {
         if (!url || typeof url !== 'string') return null;
         const trimmed = url.trim();
 
+        // Local device file (recorded audio on device) - pass through as-is
+        if (trimmed.startsWith('file://')) {
+            return trimmed;
+        }
+
         if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
             // Remap localhost/emulator to device-accessible address
             const isLocal =
@@ -1290,9 +1295,7 @@ export default function ChatScreen({ route, navigation }) {
             }
 
             // For Cloudinary audio/video URLs: add fl_attachment to force direct download
-            // without this, Cloudinary may stream HLS which ExoPlayer can't parse as m4a
             if (trimmed.includes('res.cloudinary.com') && trimmed.includes('/video/upload/')) {
-                // Insert fl_attachment transformation after /video/upload/
                 return trimmed.replace('/video/upload/', '/video/upload/fl_attachment/');
             }
 
@@ -1303,6 +1306,7 @@ export default function ChatScreen({ route, navigation }) {
         const baseUrl = API_URL.replace('/api', '');
         return baseUrl + (trimmed.startsWith('/') ? trimmed : '/' + trimmed);
     };
+
 
     const playAudio = async (uri) => {
         if (!uri || typeof uri !== 'string') return;

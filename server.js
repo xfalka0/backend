@@ -603,6 +603,11 @@ const initializeDatabase = async () => {
             await db.query('ALTER TABLE users ADD COLUMN zodiac VARCHAR(50)');
         }
 
+        if (!columnNames.includes('admin_notes')) {
+            console.log('[DB] Adding missing column: admin_notes');
+            await db.query("ALTER TABLE users ADD COLUMN admin_notes TEXT DEFAULT ''");
+        }
+
         // --- NEW MIGRATION: Make password_hash nullable for social login ---
         await db.query('ALTER TABLE users ALTER COLUMN password_hash DROP NOT NULL');
 
@@ -973,6 +978,13 @@ const initializeDatabase = async () => {
             id SERIAL PRIMARY KEY,
             title TEXT NOT NULL,
             content TEXT NOT NULL,
+            created_at TIMESTAMP DEFAULT NOW()
+        )`);
+
+        await runMigration('VoiceMessagesTable', `CREATE TABLE IF NOT EXISTS voice_messages (
+            id SERIAL PRIMARY KEY,
+            title VARCHAR(255) NOT NULL,
+            audio_url TEXT NOT NULL,
             created_at TIMESTAMP DEFAULT NOW()
         )`);
 
@@ -2670,6 +2682,54 @@ app.delete('/api/admin/quick-replies/:id', authenticateToken, authorizeRole('adm
     }
 });
 
+// VOICE MESSAGES API
+app.get('/api/admin/voice-messages', authenticateToken, authorizeRole('admin', 'super_admin', 'operator'), async (req, res) => {
+    try {
+        const result = await db.query('SELECT * FROM voice_messages ORDER BY created_at DESC');
+        res.json(result.rows);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.post('/api/admin/voice-messages', authenticateToken, authorizeRole('admin', 'super_admin'), upload.single('audio'), async (req, res) => {
+    try {
+        const { title } = req.body;
+        if (!req.file) return res.status(400).json({ error: 'Ses dosyası eksik.' });
+        if (!title) return res.status(400).json({ error: 'Başlık eksik.' });
+
+        let audioUrl = '';
+        if (process.env.CLOUDINARY_CLOUD_NAME) {
+            const cloudinary = require('cloudinary').v2;
+            const result = await cloudinary.uploader.upload(req.file.path, {
+                resource_type: 'video', // Cloudinary treats audio as video resource_type
+                folder: 'fivachat/voice_messages'
+            });
+            audioUrl = result.secure_url;
+        } else {
+            audioUrl = `/uploads/${req.file.filename}`;
+        }
+
+        const dbRes = await db.query(
+            'INSERT INTO voice_messages (title, audio_url) VALUES ($1, $2) RETURNING *',
+            [title, audioUrl]
+        );
+        res.status(201).json(dbRes.rows[0]);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.delete('/api/admin/voice-messages/:id', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
+    const { id } = req.params;
+    try {
+        await db.query('DELETE FROM voice_messages WHERE id = $1', [id]);
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // CREATE STAFF (Admin, Moderator, Operator, Staff)
 app.post('/api/admin/staff', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
     const { username, email, password, role } = req.body;
@@ -3483,10 +3543,15 @@ app.get('/api/chats/admin', authenticateToken, authorizeRole('admin', 'super_adm
                 u.age,
                 u.gender,
                 u.job,
+                u.interests as user_interests,
+                u.bio as user_bio,
+                u.admin_notes as user_notes,
                 COALESCE(op.display_name, op.username, 'Bilinmeyen Operatör') as operator_name, 
                 op.avatar_url as operator_avatar,
                 op.managed_by as managed_by_id, -- Who manages this profile
                 (SELECT content FROM messages WHERE chat_id = c.id ORDER BY created_at DESC LIMIT 1) as last_message,
+                (SELECT sender_id FROM messages WHERE chat_id = c.id ORDER BY created_at DESC LIMIT 1) as last_message_sender_id,
+                (SELECT created_at FROM messages WHERE chat_id = c.id ORDER BY created_at DESC LIMIT 1) as last_message_time,
                 (SELECT COUNT(*)::int FROM messages WHERE chat_id = c.id AND sender_id = c.user_id AND is_read = false) as unread_count
             FROM chats c
             LEFT JOIN users u ON c.user_id = u.id
@@ -3525,6 +3590,19 @@ app.get('/api/chats/admin', authenticateToken, authorizeRole('admin', 'super_adm
         res.json(sanitizedRows);
     } catch (err) {
         console.error('GET /api/chats/admin - ERROR:', err.message);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// SAVE USER ADMIN NOTES
+app.post('/api/admin/users/:userId/notes', authenticateToken, authorizeRole('admin', 'super_admin', 'operator', 'moderator', 'staff'), async (req, res) => {
+    try {
+        const { userId } = req.params;
+        const { notes } = req.body;
+        await db.query('UPDATE users SET admin_notes = $1 WHERE id = $2', [notes || '', userId]);
+        res.json({ success: true, notes: notes || '' });
+    } catch (err) {
+        console.error('POST /api/admin/users/:userId/notes ERROR:', err.message);
         res.status(500).json({ error: err.message });
     }
 });
@@ -5406,6 +5484,8 @@ io.on('connection', (socket) => {
                     }
                 } else if (type === 'image') {
                     cost = 50;
+                } else if (type === 'video') {
+                    cost = 100;
                 } else if (type === 'audio') {
                     cost = 30;
                 } else if (type === 'location') {
@@ -5514,6 +5594,8 @@ io.on('connection', (socket) => {
             if (type === 'gift') lastMsgPreview = '🎁 Hediye Gönderildi';
             else if (type === 'image') lastMsgPreview = '📷 Resim';
             else if (type === 'locked_image') lastMsgPreview = '🔒 Kilitli Resim';
+            else if (type === 'video') lastMsgPreview = '📹 Video';
+            else if (type === 'locked_video') lastMsgPreview = '🔒 Kilitli Video';
             else if (type === 'audio') lastMsgPreview = '🎤 Ses Kaydı';
 
             await client.query('UPDATE chats SET last_message_at = NOW(), last_message = $2 WHERE id = $1', [chatId, lastMsgPreview]);

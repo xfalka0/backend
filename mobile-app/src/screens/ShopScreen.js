@@ -14,6 +14,34 @@ import ModernAlert from '../components/ui/ModernAlert';
 
 const { width } = Dimensions.get('window');
 
+const getBalanceGlowStyle = (bal) => {
+    const numBal = Number(bal) || 0;
+    if (numBal >= 20000) {
+        return {
+            textShadowColor: 'rgba(255, 215, 0, 0.7)',
+            textShadowOffset: { width: 0, height: 1 },
+            textShadowRadius: 8,
+            color: '#FFF9E6'
+        };
+    } else if (numBal >= 10000) {
+        return {
+            textShadowColor: 'rgba(0, 255, 255, 0.7)',
+            textShadowOffset: { width: 0, height: 1 },
+            textShadowRadius: 6,
+            color: '#E0FFFF'
+        };
+    } else if (numBal >= 5000) {
+        return {
+            textShadowColor: 'rgba(255, 255, 255, 0.6)',
+            textShadowOffset: { width: 0, height: 1 },
+            textShadowRadius: 4,
+            color: '#FFFFFF'
+        };
+    }
+    return { color: '#FFFFFF' };
+};
+
+
 // Bonus & label config per coin amount
 const PACKAGE_CONFIG = {
     '100':   { bonus: 10,    label: null, labelColor: null },
@@ -134,6 +162,7 @@ export default function ShopScreen({ navigation, route }) {
     const shimmerAnim = useRef(new Animated.Value(-width)).current;
     const floatAnim = useRef(new Animated.Value(0)).current;
     const balanceScaleAnim = useRef(new Animated.Value(1)).current;
+    const continuousPulse = useRef(new Animated.Value(0)).current;
 
     useEffect(() => {
         // Discrete Shimmer (Super Elegant, Extra Slow Flow)
@@ -163,7 +192,14 @@ export default function ShopScreen({ navigation, route }) {
                 })
             ])
         ).start();
-    }, [shimmerAnim, floatAnim]);
+
+        Animated.loop(
+            Animated.sequence([
+                Animated.timing(continuousPulse, { toValue: 1, duration: 2500, useNativeDriver: true }),
+                Animated.timing(continuousPulse, { toValue: 0, duration: 2500, useNativeDriver: true })
+            ])
+        ).start();
+    }, [shimmerAnim, floatAnim, continuousPulse]);
 
     useFocusEffect(
         React.useCallback(() => {
@@ -474,9 +510,20 @@ export default function ShopScreen({ navigation, route }) {
                             <Text style={styles.balanceLabel}>Mevcut Bakiyen</Text>
                             <Animated.Text style={[
                                 styles.balanceValue,
-                                { color: 'white', transform: [{ scale: balanceScaleAnim }] }
+                                getBalanceGlowStyle(balance),
+                                { 
+                                    transform: [
+                                        { scale: balanceScaleAnim },
+                                        { 
+                                            scale: continuousPulse.interpolate({ 
+                                                inputRange: [0, 1], 
+                                                outputRange: balance >= 20000 ? [1, 1.08] : balance >= 10000 ? [1, 1.03] : [1, 1] 
+                                            })
+                                        }
+                                    ] 
+                                }
                             ]}>
-                                {balance}
+                                {Number(balance).toLocaleString('tr-TR')}
                             </Animated.Text>
                         </View>
 

@@ -9,7 +9,7 @@ import io from 'socket.io-client';
 import { Ionicons, MaterialCommunityIcons, FontAwesome5 } from '@expo/vector-icons';
 import axios from 'axios';
 import * as ImagePicker from 'expo-image-picker';
-import { Audio } from 'expo-av'; // Import Audio
+import { Audio, Video, ResizeMode } from 'expo-av'; // Import Audio and Video
 import { API_URL, SOCKET_URL } from '../config';
 import MessageBubble from '../components/animated/MessageBubble';
 import TypingIndicator from '../components/animated/TypingIndicator';
@@ -134,6 +134,7 @@ export default function ChatScreen({ route, navigation }) {
 
     const [isLoading, setIsLoading] = useState(true);
     const [selectedImage, setSelectedImage] = useState(null);
+    const [selectedVideo, setSelectedVideo] = useState(null);
     const [pendingAgencyInvite, setPendingAgencyInvite] = useState(null);
 
     useEffect(() => {
@@ -216,6 +217,7 @@ export default function ChatScreen({ route, navigation }) {
     const [recording, setRecording] = useState(null);
     const [sound, setSound] = useState(null);
     const [currentPlayingUri, setCurrentPlayingUri] = useState(null);
+    const [audioDurations, setAudioDurations] = useState({});
     const [activeGift, setActiveGift] = useState(null);
     const [isRecording, setIsRecording] = useState(false);
     const [recordTime, setRecordTime] = useState('0:00');
@@ -671,9 +673,9 @@ export default function ChatScreen({ route, navigation }) {
                         }
 
                         // Optimistic Reply Update: If the operator sent a message, mark the customer's last message as replied
-                        const isFromMe = msg.sender_id === user.id;
+                        const isFromMe = msg.sender_id == user.id;
                         if (isFromMe && isOperator) {
-                            const lastCustomerIndex = newMessages.findIndex(m => m.sender_id !== user.id && m.content_type !== 'gift');
+                            const lastCustomerIndex = newMessages.findIndex(m => m.sender_id != user.id && m.content_type !== 'gift');
                             if (lastCustomerIndex !== -1 && !newMessages[lastCustomerIndex].is_replied) {
                                 let potential = 43.5;
                                 if (msg.type === 'image' || msg.content_type === 'image') potential = 217.5;
@@ -1348,7 +1350,7 @@ export default function ChatScreen({ route, navigation }) {
                 // HEAD request failed, try playback anyway
             }
 
-            const { sound: newSound } = await Audio.Sound.createAsync(
+            const { sound: newSound, status } = await Audio.Sound.createAsync(
                 {
                     uri: resolved,
                     overrideFileExtensionAndroid: 'm4a',
@@ -1357,10 +1359,25 @@ export default function ChatScreen({ route, navigation }) {
                 { shouldPlay: true }
             );
 
+            if (status && status.durationMillis) {
+                const totalSec = Math.round(status.durationMillis / 1000);
+                const m = Math.floor(totalSec / 60);
+                const s = String(totalSec % 60).padStart(2, '0');
+                const formatted = `${m}:${s}`;
+                setAudioDurations((prev) => ({ ...prev, [uri]: formatted }));
+            }
+
             setSound(newSound);
             setCurrentPlayingUri(uri);
 
             newSound.setOnPlaybackStatusUpdate(async (status) => {
+                if (status.durationMillis) {
+                    const totalSec = Math.round(status.durationMillis / 1000);
+                    const m = Math.floor(totalSec / 60);
+                    const s = String(totalSec % 60).padStart(2, '0');
+                    const formatted = `${m}:${s}`;
+                    setAudioDurations((prev) => ({ ...prev, [uri]: formatted }));
+                }
                 if (status.didJustFinish) {
                     setCurrentPlayingUri(null);
                     await newSound.unloadAsync().catch(() => {});
@@ -1419,7 +1436,7 @@ export default function ChatScreen({ route, navigation }) {
     };
 
     const renderMessage = React.useCallback(({ item, index }) => {
-        const isUser = item.sender_id === user.id;
+        const isUser = item.sender_id == user.id;
 
         if (false && (item.type === 'agency_invite' || item.is_agency_invite)) {
             return (
@@ -1593,9 +1610,71 @@ export default function ChatScreen({ route, navigation }) {
                     </View>
                 </TouchableOpacity>
             );
+        } else if (item.content_type === 'video' || item.type === 'video' || item.content_type === 'locked_video' || item.type === 'locked_video') {
+            const isLocked = (item.content_type === 'locked_video' || item.type === 'locked_video') && !item.is_unlocked && !isUser;
+            content = (
+                <View style={{ position: 'relative' }}>
+                    {isLocked ? (
+                        <TouchableOpacity 
+                            activeOpacity={0.9} 
+                            onPress={() => confirmUnlock(item)}
+                        >
+                            <View style={{ width: 220, height: 220, borderRadius: 16, backgroundColor: '#0f172a', justifyContent: 'center', alignItems: 'center' }}>
+                                <Ionicons name="videocam" size={48} color="rgba(255,255,255,0.1)" />
+                                <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(15, 23, 42, 0.88)', borderRadius: 16 }}>
+                                    <LinearGradient
+                                        colors={['rgba(236, 72, 153, 0.9)', 'rgba(139, 92, 246, 0.95)']}
+                                        start={{ x: 0, y: 0 }}
+                                        end={{ x: 1, y: 1 }}
+                                        style={{ paddingHorizontal: 14, paddingVertical: 12, borderRadius: 20, alignItems: 'center', shadowColor: '#ec4899', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.35, shadowRadius: 10, elevation: 6, width: '85%' }}
+                                    >
+                                        <Ionicons name="lock-closed" size={24} color="#fff" style={{ marginBottom: 6 }} />
+                                        <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 11, textAlign: 'center', lineHeight: 15 }}>
+                                            Videoyu görmek için{"\n"}
+                                            <Text style={{ fontWeight: '900', fontSize: 13, color: '#fff' }}>{item.unlock_cost || 200} Coin</Text> ile açın
+                                        </Text>
+                                    </LinearGradient>
+                                </View>
+                            </View>
+                        </TouchableOpacity>
+                    ) : (
+                        <TouchableOpacity activeOpacity={0.9} onPress={() => setSelectedVideo(item.content)}>
+                            <View style={{ position: 'relative', width: 220, height: 220 }}>
+                                <Video
+                                    source={{ uri: resolveImageUrl(item.content) }}
+                                    style={{ width: '100%', height: '100%', borderRadius: 16, backgroundColor: '#0f172a' }}
+                                    useNativeControls={false}
+                                    resizeMode={ResizeMode.COVER}
+                                    shouldPlay={false}
+                                    isMuted={true}
+                                />
+                                <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.2)', borderRadius: 16 }}>
+                                    <View style={{ width: 54, height: 54, borderRadius: 27, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.3)' }}>
+                                        <Ionicons name="play" size={28} color="#fff" style={{ marginLeft: 4 }} />
+                                    </View>
+                                </View>
+                            </View>
+                        </TouchableOpacity>
+                    )}
+                </View>
+            );
         } else if (item.content_type === 'audio' || item.type === 'audio') {
             const isPlaying = currentPlayingUri === item.content;
-            const duration = item.duration || '0:05';
+            let rawDuration = audioDurations[item.content] || item.duration;
+            let duration = '0:00';
+
+            if (rawDuration && rawDuration !== '0:05' && rawDuration !== '0' && rawDuration !== 0) {
+                if (typeof rawDuration === 'number') {
+                    const m = Math.floor(rawDuration / 60);
+                    const s = String(Math.floor(rawDuration % 60)).padStart(2, '0');
+                    duration = `${m}:${s}`;
+                } else {
+                    duration = String(rawDuration);
+                }
+            } else if (audioDurations[item.content]) {
+                duration = audioDurations[item.content];
+            }
+
             const waveform = item.waveform || getStableWaveform(item.id || index);
 
             content = (
@@ -1765,7 +1844,7 @@ export default function ChatScreen({ route, navigation }) {
                 {content}
             </MessageBubble>
         );
-    }, [user.id, user.avatar_url, user.avatar, avatar_url, vip_level, pendingAgencyInvite, currentPlayingUri, playAudio, confirmUnlock, setSelectedImage, isOperator, socketRef, chatId, setMessages, theme, isFamilyChat]);
+    }, [user.id, user.avatar_url, user.avatar, avatar_url, vip_level, pendingAgencyInvite, currentPlayingUri, audioDurations, playAudio, confirmUnlock, setSelectedImage, isOperator, socketRef, chatId, setMessages, theme, isFamilyChat]);
 
     const renderMessageWithDate = React.useCallback(({ item, index }) => {
         const nextMessage = messages[index + 1];
@@ -2070,6 +2149,32 @@ export default function ChatScreen({ route, navigation }) {
                 imageUri={resolveImageUrl(selectedImage)}
                 onClose={() => setSelectedImage(null)}
             />
+
+            {/* VIDEO LIGHTBOX MODAL */}
+            <Modal
+                visible={!!selectedVideo}
+                transparent={true}
+                animationType="fade"
+                onRequestClose={() => setSelectedVideo(null)}
+            >
+                <View style={{ flex: 1, backgroundColor: 'black', justifyContent: 'center', alignItems: 'center' }}>
+                    <TouchableOpacity 
+                        style={{ position: 'absolute', top: Platform.OS === 'ios' ? 50 : 20, right: 20, zIndex: 10, padding: 10 }} 
+                        onPress={() => setSelectedVideo(null)}
+                    >
+                        <Ionicons name="close" size={32} color="white" />
+                    </TouchableOpacity>
+                    {selectedVideo && (
+                        <Video
+                            source={{ uri: resolveImageUrl(selectedVideo) }}
+                            style={{ width: '100%', height: '100%' }}
+                            useNativeControls={true}
+                            resizeMode={ResizeMode.CONTAIN}
+                            shouldPlay={true}
+                        />
+                    )}
+                </View>
+            </Modal>
 
             {/* REPORT MODAL */}
             <ReportModal

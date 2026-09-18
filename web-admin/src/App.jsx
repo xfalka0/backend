@@ -15,6 +15,7 @@ import VipPage from './pages/Vip';
 import ChatsPage from './pages/Chats';
 import ReportsPage from './pages/Reports';
 import QuickRepliesPage from './pages/QuickReplies';
+import VoiceMessagesPage from './pages/VoiceMessages';
 import SocialPage from './pages/Social';
 import AnalyticsPage from './pages/Analytics';
 import NotificationsPage from './pages/Notifications';
@@ -120,7 +121,9 @@ function App() {
                             {/* General Dashboard - Restricted to Staff */}
                             <Route element={<ProtectedRoute allowedRoles={['admin', 'super_admin', 'moderator', 'operator', 'staff', 'affiliater']} />}>
                                 <Route path="/" element={<Home />} />
+                                <Route path="/reports" element={<ReportsPage />} />
                                 <Route path="/quick-replies" element={<QuickRepliesPage />} />
+                                <Route path="/voice-messages" element={<VoiceMessagesPage />} />
                             </Route>
 
                             {/* Admin/Manager Only Routes */}

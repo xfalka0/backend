@@ -24,7 +24,8 @@ import {
     ChevronRight,
     TrendingUp,
     Building2,
-    PlusCircle
+    PlusCircle,
+    Mic
 } from 'lucide-react';
 
 export default function Sidebar() {
@@ -63,6 +64,7 @@ export default function Sidebar() {
                 { path: '/referrals', icon: <Users size={18} />, label: 'Referans Takibi', roles: ['admin', 'super_admin'] },
                 { path: '/operators', icon: <Shield size={18} />, label: 'Yetkililer', roles: ['admin', 'super_admin'] },
                 { path: '/quick-replies', icon: <MessageSquare size={18} />, label: 'Hızlı Cevaplar', roles: ['admin', 'super_admin', 'operator', 'staff'] },
+                { path: '/voice-messages', icon: <Mic size={18} />, label: 'Sesli Mesajlar', roles: ['admin', 'super_admin', 'operator', 'staff'] },
             ]
         },
         {

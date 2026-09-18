@@ -16,6 +16,34 @@ import { PurchaseService } from '../services/purchaseService';
 
 const { width } = Dimensions.get('window');
 
+const getBalanceGlowStyle = (bal) => {
+    const numBal = Number(bal) || 0;
+    if (numBal >= 20000) {
+        return {
+            textShadowColor: 'rgba(255, 215, 0, 0.7)',
+            textShadowOffset: { width: 0, height: 1 },
+            textShadowRadius: 8,
+            color: '#FFF9E6'
+        };
+    } else if (numBal >= 10000) {
+        return {
+            textShadowColor: 'rgba(0, 255, 255, 0.7)',
+            textShadowOffset: { width: 0, height: 1 },
+            textShadowRadius: 6,
+            color: '#E0FFFF'
+        };
+    } else if (numBal >= 5000) {
+        return {
+            textShadowColor: 'rgba(255, 255, 255, 0.6)',
+            textShadowOffset: { width: 0, height: 1 },
+            textShadowRadius: 4,
+            color: '#FFFFFF'
+        };
+    }
+    return { color: '#FFFFFF' };
+};
+
+
 const CATEGORIES = [
     { id: 'avatar_frame', label: 'Çerçeve', icon: 'person-circle-outline', desc: 'Profil fotoğrafınızın etrafında parlayan lüks çerçeveler.' },
     { id: 'entrance_effect', label: 'Giriş', icon: 'flash-outline', desc: 'Sohbet odalarına katılırken çalacak ihtişamlı efektler.' },
@@ -63,6 +91,7 @@ export default function StoreScreen({ navigation, route }) {
     // 3-Card Popular Pulse & Glow Animations
     const cardPulseAnim = useRef(new Animated.Value(1)).current;
     const cardGlowAnim = useRef(new Animated.Value(0.4)).current;
+    const continuousPulse = useRef(new Animated.Value(0)).current;
 
     useEffect(() => {
         Animated.loop(
@@ -108,7 +137,15 @@ export default function StoreScreen({ navigation, route }) {
                 Animated.timing(bannerGlow, { toValue: 0, duration: 1400, useNativeDriver: true }),
             ])
         ).start();
-    }, [floatAnim]);
+
+        // Continuous premium pulse
+        Animated.loop(
+            Animated.sequence([
+                Animated.timing(continuousPulse, { toValue: 1, duration: 2500, useNativeDriver: true }),
+                Animated.timing(continuousPulse, { toValue: 0, duration: 2500, useNativeDriver: true }),
+            ])
+        ).start();
+    }, [floatAnim, continuousPulse]);
 
     if (IS_MAINTENANCE_MODE) {
         return (
@@ -509,7 +546,20 @@ export default function StoreScreen({ navigation, route }) {
                                 </View>
                                 <View>
                                     <Text style={styles.balanceLabel}>ALTIN CÜZDANIM</Text>
-                                    <Text style={styles.balanceValue}>{balance.toLocaleString('tr-TR')}</Text>
+                                    <Animated.Text style={[
+                                        styles.balanceValue,
+                                        getBalanceGlowStyle(balance),
+                                        {
+                                            transform: [{
+                                                scale: continuousPulse.interpolate({
+                                                    inputRange: [0, 1],
+                                                    outputRange: balance >= 20000 ? [1, 1.08] : balance >= 10000 ? [1, 1.03] : [1, 1]
+                                                })
+                                            }]
+                                        }
+                                    ]}>
+                                        {Number(balance).toLocaleString('tr-TR')}
+                                    </Animated.Text>
                                 </View>
                             </View>
                             <TouchableOpacity

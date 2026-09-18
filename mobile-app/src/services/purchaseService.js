@@ -95,6 +95,15 @@ export const PurchaseService = {
             console.log(`[Purchases] Fetching product details for ${productIdentifier} (${purchaseType})...`);
 
             const products = await Purchases.getProducts([productIdentifier], purchaseType);
+
+            const extractTxId = (customerInfo) => {
+                if (customerInfo?.nonSubscriptionTransactions?.length > 0) {
+                    const txs = customerInfo.nonSubscriptionTransactions;
+                    return txs[txs.length - 1].transactionIdentifier || null;
+                }
+                return null;
+            };
+
             if (products && products.length > 0) {
                 const storeProduct = products[0];
                 console.log(`[Purchases] Found storeProduct: ${storeProduct.identifier}, defaultOption: ${storeProduct.defaultOption?.id || 'none'}`);
@@ -109,12 +118,14 @@ export const PurchaseService = {
                 } else {
                     purchaseResult = await Purchases.purchaseProduct(productIdentifier, null, purchaseType);
                 }
-                return { success: true, customerInfo: purchaseResult.customerInfo };
+                const txId = extractTxId(purchaseResult.customerInfo);
+                return { success: true, customerInfo: purchaseResult.customerInfo, transactionId: txId };
             }
 
             console.log(`[Purchases] getProducts returned empty list, using purchaseProduct fallback for ${productIdentifier}...`);
             const { customerInfo } = await Purchases.purchaseProduct(productIdentifier, null, purchaseType);
-            return { success: true, customerInfo };
+            const txId = extractTxId(customerInfo);
+            return { success: true, customerInfo, transactionId: txId };
         } catch (e) {
             if (!e.userCancelled) {
                 console.log('[Purchases] Direct Product Purchase Error:', e);

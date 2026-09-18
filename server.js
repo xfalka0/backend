@@ -3299,7 +3299,16 @@ app.post('/api/purchase', authenticateToken, async (req, res) => {
         await db.query('BEGIN');
 
         // Deduplicate transaction to prevent double-coins if webhook already processed it
-        if (transactionId && !transactionId.startsWith('test_') && !transactionId.startsWith('manual_')) {
+        if (transactionId && !transactionId.startsWith('manual_')) {
+            if (transactionId.startsWith('test_')) {
+                // No real RC transaction ID available — webhook likely already added coins.
+                // Just return the current balance without adding again.
+                await db.query('ROLLBACK');
+                const balRes = await db.query('SELECT balance FROM users WHERE id = $1', [userId]);
+                const currentBalance = balRes.rows[0]?.balance ?? 0;
+                console.log(`[PURCHASE SKIPPED] test_ transactionId for user ${userId}. Returning current balance: ${currentBalance}`);
+                return res.json({ success: true, message: 'Coins already added by webhook', balance: currentBalance });
+            }
             const existingTx = await db.query('SELECT id FROM payments WHERE transaction_id = $1', [transactionId]);
             if (existingTx.rows.length > 0) {
                 // Already processed by webhook (or previous request)

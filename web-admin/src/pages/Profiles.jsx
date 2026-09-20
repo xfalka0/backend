@@ -27,7 +27,8 @@ export default function ProfilesPage() {
         job: '',
         relationship: '',
         zodiac: '',
-        interests: '[]'
+        interests: '[]',
+        city: ''
     });
 
     const [hobbies, setHobbies] = useState([]);
@@ -151,7 +152,8 @@ export default function ProfilesPage() {
             vip_level: profile.vip_level || 0,
             relationship: profile.relationship || '',
             zodiac: profile.zodiac || '',
-            interests: ints // Store as stringified JSON in form
+            interests: ints, // Store as stringified JSON in form
+            city: profile.city || ''
         });
         setHobbies(profile.category ? [profile.category] : []);
         setShowAddForm(true);
@@ -197,7 +199,8 @@ export default function ProfilesPage() {
                 vip_level: 0,
                 relationship: '',
                 zodiac: '',
-                interests: '[]'
+                interests: '[]',
+                city: ''
             });
             setHobbies([]);
             fetchProfiles();
@@ -254,7 +257,7 @@ export default function ProfilesPage() {
                 <button
                     onClick={() => {
                         if (showAddForm) {
-                            setFormData({ name: '', job: '', category: 'Flirty', bio: '', avatar_url: '', gender: 'kadin', photos: [], age: 18, vip_level: 0, relationship: '', zodiac: '', interests: '[]' });
+                            setFormData({ name: '', job: '', category: 'Flirty', bio: '', avatar_url: '', gender: 'kadin', photos: [], age: 18, vip_level: 0, relationship: '', zodiac: '', interests: '[]', city: '' });
                             setHobbies([]);
                         }
                         setShowAddForm(!showAddForm);
@@ -365,6 +368,16 @@ export default function ProfilesPage() {
                                                     onChange={(e) => setFormData({ ...formData, job: e.target.value })}
                                                 />
                                             </div>
+                                        </div>
+                                        <div className="relative">
+                                            <p className="text-[10px] font-black uppercase text-slate-500 mb-1 ml-1 tracking-widest">Şehir</p>
+                                            <input
+                                                type="text"
+                                                className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 transition-all font-bold text-white"
+                                                placeholder="Örn: İstanbul"
+                                                value={formData.city || ''}
+                                                onChange={(e) => setFormData({ ...formData, city: e.target.value })}
+                                            />
                                         </div>
                                         <div className="relative">
                                             <p className="text-[10px] font-black uppercase text-slate-500 mb-1 ml-1 tracking-widest">Burç</p>

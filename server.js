@@ -1472,7 +1472,7 @@ app.get('/api/operators', async (req, res) => {
             SELECT 
                 u.id, 
                 COALESCE(u.display_name, u.username) as name, 
-                u.avatar_url, u.gender, u.age, u.vip_level, u.job, u.relationship, u.zodiac, u.interests, u.role, u.boy,
+                u.avatar_url, u.gender, u.age, u.vip_level, u.job, u.relationship, u.zodiac, u.interests, u.role, u.boy, u.city,
                 o.category, o.rating, o.is_online, 
                 COALESCE(o.bio, u.bio) as bio, o.photos,
                 EXISTS(SELECT 1 FROM stories s WHERE s.operator_id = u.id AND s.expires_at > NOW()) as has_active_story,
@@ -1595,6 +1595,7 @@ app.get('/api/discovery', authenticateToken, async (req, res) => {
                 u.interests,
                 u.role,
                 u.boy,
+                u.city,
                 o.category, 
                 o.rating, 
                 o.is_online, 
@@ -1997,7 +1998,7 @@ app.put('/api/users/:id', async (req, res) => {
 
 app.put('/api/users/:id/profile', async (req, res) => {
     const { id } = req.params;
-    const { display_name, name, bio, avatar_url, gender, interests, onboarding_completed, relationship, zodiac, age } = req.body;
+    const { display_name, name, bio, avatar_url, gender, interests, onboarding_completed, relationship, zodiac, age, city } = req.body;
 
     // STRICT MANDATORY GENDER ENFORCEMENT
     const normalizedGender = (gender || '').toString().trim().toLowerCase();
@@ -2059,8 +2060,9 @@ app.put('/api/users/:id/profile', async (req, res) => {
                 job = COALESCE($11, job),
                 edu = COALESCE($12, edu),
                 boy = COALESCE($13, boy),
-                kilo = COALESCE($14, kilo)
-             WHERE id = $15 RETURNING *`,
+                kilo = COALESCE($14, kilo),
+                city = COALESCE($15, city)
+             WHERE id = $16 RETURNING *`,
             [
                 req.body.display_name || null,
                 req.body.name || null,
@@ -2076,6 +2078,7 @@ app.put('/api/users/:id/profile', async (req, res) => {
                 req.body.edu || null,
                 req.body.boy || null,
                 req.body.kilo || null,
+                req.body.city || null,
                 id
             ]
         );
@@ -2981,7 +2984,7 @@ app.put('/api/admin/users/:id/role', authenticateToken, authorizeRole('admin', '
 
 // CREATE OPERATOR
 app.post('/api/operators', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
-    const { name, gender, bio, avatar_url, photos, age, category, job, relationship, zodiac, vip_level, interests } = req.body;
+    const { name, gender, bio, avatar_url, photos, age, category, job, relationship, zodiac, vip_level, interests, city } = req.body;
 
     try {
         await db.query('BEGIN');
@@ -2997,14 +3000,14 @@ app.post('/api/operators', authenticateToken, authorizeRole('admin', 'super_admi
                 username, email, password, password_hash, role, 
                 display_name, name, gender, age, avatar_url, 
                 job, relationship, zodiac, interests, vip_level,
-                account_status
-            ) VALUES ($1, $2, $3, $3, $4, $5, $5, $6, $7, $8, $9, $10, $11, $12, $13, 'active') 
+                account_status, city
+            ) VALUES ($1, $2, $3, $3, $4, $5, $5, $6, $7, $8, $9, $10, $11, $12, $13, 'active', $14) 
             RETURNING id`,
             [
                 username, email, dummyPassword, 'operator',
                 name, gender || 'kadin', parseInt(age) || 18, avatar_url,
                 job || null, relationship || null, zodiac || null,
-                interests || '[]', parseInt(vip_level) || 0
+                interests || '[]', parseInt(vip_level) || 0, city || null
             ]
         );
 
@@ -3031,7 +3034,7 @@ app.post('/api/operators', authenticateToken, authorizeRole('admin', 'super_admi
 // UPDATE OPERATOR
 app.put('/api/operators/:id', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
     const { id } = req.params; // Expecting user_id
-    const { name, gender, bio, avatar_url, photos, age, category, job, relationship, zodiac, vip_level, interests } = req.body;
+    const { name, gender, bio, avatar_url, photos, age, category, job, relationship, zodiac, vip_level, interests, city } = req.body;
 
     try {
         await db.query('BEGIN');
@@ -3048,10 +3051,12 @@ app.put('/api/operators/:id', authenticateToken, authorizeRole('admin', 'super_a
                 relationship = COALESCE($6, relationship),
                 zodiac = COALESCE($7, zodiac),
                 interests = COALESCE($8, interests),
-                vip_level = COALESCE($9, vip_level)
-             WHERE id = $10 RETURNING id`,
-            [name, gender, isNaN(parseInt(age)) ? null : parseInt(age), avatar_url, job, relationship, zodiac, interests, isNaN(parseInt(vip_level)) ? null : parseInt(vip_level), id]
+                vip_level = COALESCE($9, vip_level),
+                city = COALESCE($10, city)
+             WHERE id = $11 RETURNING id`,
+            [name, gender, isNaN(parseInt(age)) ? null : parseInt(age), avatar_url, job, relationship, zodiac, interests, isNaN(parseInt(vip_level)) ? null : parseInt(vip_level), city, id]
         );
+        console.log("UPDATE PARAMS:", [name, gender, isNaN(parseInt(age)) ? null : parseInt(age), avatar_url, job, relationship, zodiac, interests, isNaN(parseInt(vip_level)) ? null : parseInt(vip_level), city, id]);
 
         if (userUpdate.rows.length === 0) {
             await db.query('ROLLBACK');
@@ -3173,6 +3178,8 @@ app.put('/api/users/:id/profile', authenticateToken, async (req, res) => {
     }
 
     try {
+        console.log("Profile update req.body:", req.body);
+        console.log("Profile update params:", [name, bio, job, relationship, zodiac, interests, age, edu, boy, kilo, city, id]);
         const result = await db.query(
             `UPDATE users 
              SET display_name = COALESCE($1, display_name), 

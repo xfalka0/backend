@@ -556,13 +556,13 @@ export default function OperatorProfileScreen({ route, navigation }) {
                         <TouchableOpacity
                             style={[
                                 styles.bottomFollowButton,
-                                { borderWidth: 0, elevation: 10, shadowColor: isFavorited ? '#10b981' : '#8b5cf6', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.4, shadowRadius: 12 }
+                                { borderWidth: 0, elevation: 10, shadowColor: '#FF4FA3', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.4, shadowRadius: 12 }
                             ]}
                             activeOpacity={0.7}
                             onPress={handleFavorite}
                         >
                             <LinearGradient
-                                colors={isFavorited ? ['#10b981', '#059669'] : ['#8b5cf6', '#d946ef']}
+                                colors={isFavorited ? ['#FF4FA3', '#8B5CFF'] : ['#8B5CFF', '#FF4FA3']}
                                 start={{ x: 0, y: 0 }}
                                 end={{ x: 1, y: 0 }}
                                 style={styles.gradientFollowButton}
@@ -593,7 +593,7 @@ export default function OperatorProfileScreen({ route, navigation }) {
                             }}
                         >
                             <LinearGradient
-                                colors={['#8b5cf6', '#d946ef']}
+                                colors={['#FF4FA3', '#8B5CFF']}
                                 start={{ x: 0, y: 0 }}
                                 end={{ x: 1, y: 0 }}
                                 style={styles.gradientButton}
@@ -856,7 +856,7 @@ const styles = StyleSheet.create({
         borderRadius: 20,
         overflow: 'hidden',
         elevation: 10,
-        shadowColor: '#8b5cf6',
+        shadowColor: '#FF4FA3',
         shadowOffset: { width: 0, height: 6 },
         shadowOpacity: 0.4,
         shadowRadius: 12,

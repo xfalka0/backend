@@ -396,51 +396,42 @@ export default function ShopScreen({ navigation, route }) {
             }
 
             if (success) {
-                // Sync with backend
+                // Webhook already added coins to the balance — just fetch the updated balance.
                 const token = user?.token || await AsyncStorage.getItem('token');
-                const res = await axios.post(`${API_URL}/purchase`, {
-                    userId: currentUserId,
-                    productId: pack.product.identifier,
-                    transactionId: transactionId
-                }, {
-                    headers: { 'Authorization': `Bearer ${token}` }
-                });
+                let liveBalance = 0;
 
-                if (res.data.success || res.status === 200) {
-                    // Refetch the live balance from the dedicated endpoint
-                    const token = user?.token || await AsyncStorage.getItem('token');
-                    let liveBalance = res.data.balance; // Default from purchase response
+                // Wait briefly for webhook to process before fetching balance
+                await new Promise(resolve => setTimeout(resolve, 2000));
 
-                    try {
-                        const balRes = await axios.get(`${API_URL}/users/balance`, {
-                            headers: { 'Authorization': `Bearer ${token}` }
-                        });
-                        if (balRes.data && balRes.data.balance !== undefined) {
-                            liveBalance = balRes.data.balance;
-                        }
-                    } catch (syncError) {
-                        console.error('Balance sync error, using fallback:', syncError);
-                    }
-
-                    // Force update UI and storage
-                    setBalance(liveBalance || 0);
-
-                    // Update stored user object as well
-                    const storedUser = await AsyncStorage.getItem('user');
-                    if (storedUser) {
-                        const parsed = JSON.parse(storedUser);
-                        parsed.balance = liveBalance;
-                        parsed.hearts = liveBalance;
-                        await AsyncStorage.setItem('user', JSON.stringify(parsed));
-                    }
-
-                    setAlertConfig({
-                        visible: true,
-                        title: 'Tebrikler!',
-                        message: `Satın alım başarılı. \nYeni Bakiye: ${liveBalance}`,
-                        type: 'success'
+                try {
+                    const balRes = await axios.get(`${API_URL}/users/balance`, {
+                        headers: { 'Authorization': `Bearer ${token}` }
                     });
+                    if (balRes.data && balRes.data.balance !== undefined) {
+                        liveBalance = balRes.data.balance;
+                    }
+                } catch (syncError) {
+                    console.error('[SHOP] Balance fetch error after purchase:', syncError.message);
                 }
+
+                // Force update UI and storage
+                setBalance(liveBalance || 0);
+
+                // Update stored user object as well
+                const storedUser = await AsyncStorage.getItem('user');
+                if (storedUser) {
+                    const parsed = JSON.parse(storedUser);
+                    parsed.balance = liveBalance;
+                    parsed.hearts = liveBalance;
+                    await AsyncStorage.setItem('user', JSON.stringify(parsed));
+                }
+
+                setAlertConfig({
+                    visible: true,
+                    title: 'Tebrikler!',
+                    message: `Satın alım başarılı. \nYeni Bakiye: ${liveBalance}`,
+                    type: 'success'
+                });
             }
         } catch (error) {
             console.error('Purchase Error:', error);

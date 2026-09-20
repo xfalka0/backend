@@ -16,7 +16,7 @@ router.get('/', async (req, res) => {
 
         let query = `
             SELECT u.id, COALESCE(u.display_name, u.username) as name,
-                u.avatar_url, u.gender, u.age, u.vip_level, u.job, u.relationship, u.zodiac, u.interests, u.role, u.boy,
+                u.avatar_url, u.gender, u.age, u.vip_level, u.job, u.relationship, u.zodiac, u.interests, u.role, u.boy, u.city,
                 o.category, o.rating, o.is_online, COALESCE(o.bio, u.bio) as bio, o.photos,
                 EXISTS(SELECT 1 FROM stories s WHERE s.operator_id = u.id AND s.expires_at > NOW()) as has_active_story
             FROM users u
@@ -54,7 +54,12 @@ router.get('/', async (req, res) => {
 router.get('/:id', async (req, res) => {
     try {
         const { id } = req.params;
-        const result = await db.query('SELECT * FROM operators WHERE user_id = $1', [id]);
+        const result = await db.query(
+            `SELECT o.*, u.city, u.display_name, u.name, u.gender, u.age, u.vip_level, u.job, u.relationship, u.zodiac, u.interests
+             FROM operators o
+             JOIN users u ON u.id::text = o.user_id::text
+             WHERE o.user_id::text = $1`, [id]
+        );
         if (result.rows.length === 0) return res.json({ photos: [] });
         res.json(result.rows[0]);
     } catch (err) {
@@ -64,7 +69,7 @@ router.get('/:id', async (req, res) => {
 
 // CREATE OPERATOR (Admin)
 router.post('/', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
-    const { name, gender, bio, avatar_url, photos, age, category, job, relationship, zodiac, vip_level, interests } = req.body;
+    const { name, gender, bio, avatar_url, photos, age, category, job, relationship, zodiac, vip_level, interests, city } = req.body;
     try {
         await db.query('BEGIN');
         const uniqueId = Date.now() + '-' + Math.round(Math.random() * 1e9);
@@ -82,12 +87,13 @@ router.post('/', authenticateToken, authorizeRole('admin', 'super_admin'), async
         const randomBoy = (finalGender === 'kadin') ? String(Math.floor(Math.random() * (170 - 155 + 1)) + 155) : '175';
         const CITIES = ['İstanbul', 'Ankara', 'İzmir', 'Bursa', 'Antalya', 'Adana', 'Kocaeli', 'Gaziantep', 'Eskişehir', 'Muğla', 'Trabzon', 'Samsun', 'Aydın', 'Denizli', 'Balkesir', 'Mersin', 'Kayseri', 'Sakarya'];
         const randomCity = CITIES[Math.floor(Math.random() * CITIES.length)];
+        const finalCity = (city && city.trim()) ? city.trim() : randomCity;
 
         const userResult = await db.query(
             `INSERT INTO users (username, email, password, password_hash, role, display_name, name, gender, age, avatar_url, job, relationship, zodiac, interests, vip_level, boy, city, account_status)
              VALUES ($1, $2, $3, $3, $4, $5, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, 'active') RETURNING id`,
             [username, email, dummyPassword, 'operator', name, finalGender, parseInt(age) || 18, avatar_url,
-             job || null, relationship || null, zodiac || null, interests || '[]', parseInt(vip_level) || 0, randomBoy, randomCity]
+             job || null, relationship || null, zodiac || null, interests || '[]', parseInt(vip_level) || 0, randomBoy, finalCity]
         );
         const userId = userResult.rows[0].id;
         const opResult = await db.query(
@@ -95,7 +101,7 @@ router.post('/', authenticateToken, authorizeRole('admin', 'super_admin'), async
             [userId, category || 'Genel', bio || 'Merhaba!', photos || []]
         );
         await db.query('COMMIT');
-        res.status(201).json({ ...opResult.rows[0], id: userId, name });
+        res.status(201).json({ ...opResult.rows[0], id: userId, name, city: finalCity });
     } catch (err) {
         await db.query('ROLLBACK');
         res.status(500).json({ error: err.message });
@@ -105,15 +111,16 @@ router.post('/', authenticateToken, authorizeRole('admin', 'super_admin'), async
 // UPDATE OPERATOR (Admin)
 router.put('/:id', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
     const { id } = req.params;
-    const { name, gender, bio, avatar_url, photos, age, category, job, relationship, zodiac, vip_level, interests } = req.body;
+    const { name, gender, bio, avatar_url, photos, age, category, job, relationship, zodiac, vip_level, interests, city } = req.body;
     try {
         await db.query('BEGIN');
         const userUpdate = await db.query(
             `UPDATE users SET display_name = COALESCE($1, display_name), name = COALESCE($1, name), gender = COALESCE($2, gender),
              age = COALESCE($3, age), avatar_url = COALESCE($4, avatar_url), job = COALESCE($5, job),
-             relationship = COALESCE($6, relationship), zodiac = COALESCE($7, zodiac), interests = COALESCE($8, interests), vip_level = COALESCE($9, vip_level)
-             WHERE id = $10 RETURNING id`,
-            [name, gender, isNaN(parseInt(age)) ? null : parseInt(age), avatar_url, job, relationship, zodiac, interests, isNaN(parseInt(vip_level)) ? null : parseInt(vip_level), id]
+             relationship = COALESCE($6, relationship), zodiac = COALESCE($7, zodiac), interests = COALESCE($8, interests),
+             vip_level = COALESCE($9, vip_level), city = COALESCE($10, city)
+             WHERE id = $11 RETURNING id`,
+            [name, gender, isNaN(parseInt(age)) ? null : parseInt(age), avatar_url, job, relationship, zodiac, interests, isNaN(parseInt(vip_level)) ? null : parseInt(vip_level), city, id]
         );
         if (userUpdate.rows.length === 0) {
             await db.query('ROLLBACK');

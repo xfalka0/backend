@@ -11,6 +11,13 @@ const SOCKET_URL = (window.location.hostname === 'localhost' || window.location.
     ? 'http://localhost:5000'
     : window.location.origin;
 
+const formatGender = (gender) => {
+    if (!gender || gender === 'not_set') return 'Belirtilmedi';
+    if (gender === 'erkek') return 'Erkek';
+    if (gender === 'kadin' || gender === 'kadın') return 'Kadın';
+    return gender;
+};
+
 const formatTime = (dateStr) => {
     if (!dateStr) return '';
     try {
@@ -115,6 +122,9 @@ const Chats = () => {
     const [userNotes, setUserNotes] = useState('');
     const [savingNotes, setSavingNotes] = useState(false);
     const [notesSavedStatus, setNotesSavedStatus] = useState('');
+    const [operatorNotes, setOperatorNotes] = useState('');
+    const [savingOperatorNotes, setSavingOperatorNotes] = useState(false);
+    const [operatorNotesSavedStatus, setOperatorNotesSavedStatus] = useState('');
     const socketRef = useRef(null);
     const messagesEndRef = useRef(null);
     const typingTimeoutRef = useRef(null);
@@ -349,7 +359,9 @@ const Chats = () => {
             setSelectedChat(chat);
             selectedChatIdRef.current = chat.id;
             setUserNotes(chat.user_notes || '');
+            setOperatorNotes(chat.operator_notes || '');
             setNotesSavedStatus('');
+            setOperatorNotesSavedStatus('');
             setMessages([]); // Clear previous messages
             setIsTyping(false); // Reset typing status on switch
             if (socketRef.current) {
@@ -382,24 +394,40 @@ const Chats = () => {
         }
     };
 
-    const handleSaveNotes = async (userId, notesText) => {
-        if (!userId) return;
-        setSavingNotes(true);
-        setNotesSavedStatus('');
+    const handleSaveNotes = async (targetUserId, notesText, type = 'user') => {
+        if (!targetUserId) return;
+        if (type === 'user') {
+            setSavingNotes(true);
+            setNotesSavedStatus('');
+        } else {
+            setSavingOperatorNotes(true);
+            setOperatorNotesSavedStatus('');
+        }
+
         try {
             const localToken = localStorage.getItem('token') || token;
-            await axios.post(`${API_URL}/api/admin/users/${userId}/notes`, { notes: notesText }, {
+            await axios.post(`${API_URL}/api/admin/users/${targetUserId}/notes`, { notes: notesText }, {
                 headers: { Authorization: `Bearer ${localToken}` }
             });
-            setNotesSavedStatus('Kaydedildi ✓');
-            setSelectedChat(prev => prev ? { ...prev, user_notes: notesText } : prev);
-            setChats(prev => prev.map(c => c.user_id === userId ? { ...c, user_notes: notesText } : c));
-            setTimeout(() => setNotesSavedStatus(''), 3000);
+
+            if (type === 'user') {
+                setNotesSavedStatus('Kaydedildi ✓');
+                setSelectedChat(prev => prev ? { ...prev, user_notes: notesText } : prev);
+                setChats(prev => prev.map(c => c.user_id === targetUserId ? { ...c, user_notes: notesText } : c));
+                setTimeout(() => setNotesSavedStatus(''), 3000);
+            } else {
+                setOperatorNotesSavedStatus('Kaydedildi ✓');
+                setSelectedChat(prev => prev ? { ...prev, operator_notes: notesText } : prev);
+                setChats(prev => prev.map(c => c.operator_id === targetUserId ? { ...c, operator_notes: notesText } : c));
+                setTimeout(() => setOperatorNotesSavedStatus(''), 3000);
+            }
         } catch (err) {
             console.error('Error saving notes:', err);
-            setNotesSavedStatus('Hata ❌');
+            if (type === 'user') setNotesSavedStatus('Hata ❌');
+            else setOperatorNotesSavedStatus('Hata ❌');
         } finally {
-            setSavingNotes(false);
+            if (type === 'user') setSavingNotes(false);
+            else setSavingOperatorNotes(false);
         }
     };
 
@@ -1162,56 +1190,290 @@ const Chats = () => {
                 )}
             </div>
 
-            {/* Right Sidebar - User Notes */}
+            {/* Right Sidebar - User & Operator Details */}
             {selectedChat && (
-                <div className="w-96 border-l border-white/5 bg-slate-900/60 p-5 flex flex-col shrink-0">
+                <div className="w-[410px] border-l border-white/10 bg-slate-900/90 backdrop-blur-xl flex flex-col shrink-0 h-full overflow-hidden shadow-2xl">
                     {/* Header */}
-                    <div className="flex items-center justify-between pb-4 border-b border-white/10 mb-4">
-                        <div className="flex items-center gap-2">
-                            <span className="text-2xl">📝</span>
-                            <h4 className="text-lg font-black text-white">Notlar</h4>
-                        </div>
+                    <div className="p-4 border-b border-white/10 bg-slate-950/60 flex items-center justify-between">
+                        <h4 className="text-sm font-black uppercase tracking-wider text-slate-300 flex items-center gap-2">
+                            📊 Profil & Detaylar
+                        </h4>
                         {notesSavedStatus && (
-                            <span className="text-xs font-bold text-emerald-400 bg-emerald-500/15 border border-emerald-500/30 px-3 py-1 rounded-md animate-pulse">
+                            <span className="text-[11px] font-bold text-emerald-400 bg-emerald-500/15 border border-emerald-500/30 px-2.5 py-0.5 rounded animate-pulse">
                                 {notesSavedStatus}
                             </span>
                         )}
                     </div>
 
-                    {/* User Info Card */}
-                    <div className="mb-4 p-3.5 bg-slate-950/60 border border-white/10 rounded-md flex items-center gap-3">
-                        <div className="w-11 h-11 rounded-md bg-gradient-to-br from-fuchsia-600 to-purple-600 flex items-center justify-center text-white font-bold text-base shrink-0">
-                            {selectedChat.user_name?.charAt(0)?.toUpperCase()}
-                        </div>
-                        <div className="min-w-0 flex-1">
-                            <p className="text-base font-bold text-white truncate">{selectedChat.user_name}</p>
-                            <p className="text-xs text-slate-400 truncate">
-                                {selectedChat.age ? `${selectedChat.age} Yaş` : ''} {selectedChat.job ? `• ${selectedChat.job}` : ''}
-                            </p>
-                        </div>
-                    </div>
+                    {/* Scrollable Content Container (Both User and Operator visible directly) */}
+                    <div className="flex-1 overflow-y-auto p-4 space-y-6 scrollbar-thin scrollbar-thumb-slate-700 scrollbar-track-transparent">
+                        
+                        {/* ================= SECTION 1: KARŞI TARAF (MÜŞTERİ) ================= */}
+                        <div className="space-y-4">
+                            <div className="flex items-center justify-between border-b border-white/10 pb-2">
+                                <h5 className="text-xs font-black uppercase tracking-wider text-purple-400 flex items-center gap-2">
+                                    <span>👤</span>
+                                    <span>Karşı Taraf (Müşteri)</span>
+                                </h5>
+                                {selectedChat.vip_level > 0 && (
+                                    <span className="text-[10px] font-black text-amber-300 bg-amber-500/20 border border-amber-500/40 px-2 py-0.5 rounded-full shrink-0">
+                                        👑 VIP Lv.{selectedChat.vip_level}
+                                    </span>
+                                )}
+                            </div>
 
-                    {/* Notes Textarea */}
-                    <div className="flex-1 flex flex-col gap-2">
-                        <label className="text-xs font-bold uppercase tracking-wider text-slate-300">
-                            Kullanıcıya Özel Notlar
-                        </label>
-                        <textarea
-                            value={userNotes}
-                            onChange={(e) => setUserNotes(e.target.value)}
-                            placeholder="Örn: Bu kişi Ankara'da yaşıyor, yazılım mühendisi..."
-                            className="w-full flex-1 bg-slate-950 border border-white/15 rounded-md p-4 text-sm text-white placeholder:text-slate-500 focus:outline-none focus:border-fuchsia-500 focus:ring-1 focus:ring-fuchsia-500/30 transition-all resize-none font-medium leading-relaxed"
-                        />
-                    </div>
+                            {/* User Hero Card */}
+                            <div className="relative p-4 bg-gradient-to-br from-slate-950 via-slate-900 to-purple-950/40 border border-purple-500/20 rounded-2xl shadow-xl overflow-hidden group">
+                                <div className="absolute top-0 right-0 w-28 h-28 bg-purple-500/10 rounded-full blur-2xl pointer-events-none"></div>
 
-                    {/* Save Button */}
-                    <button
-                        onClick={() => handleSaveNotes(selectedChat.user_id, userNotes)}
-                        disabled={savingNotes}
-                        className="mt-4 w-full py-4 bg-gradient-to-r from-fuchsia-600 to-purple-600 hover:from-fuchsia-500 hover:to-purple-500 active:scale-95 text-white font-bold text-sm uppercase tracking-wider rounded-md shadow-lg shadow-fuchsia-600/20 transition-all disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer"
-                    >
-                        {savingNotes ? 'Kaydediliyor...' : '💾 Notu Kaydet'}
-                    </button>
+                                <div className="flex items-center gap-3.5 relative z-10">
+                                    <div className="relative shrink-0">
+                                        <div className="w-14 h-14 rounded-2xl overflow-hidden border-2 border-purple-500/40 shadow-xl bg-slate-800">
+                                            {selectedChat.user_avatar ? (
+                                                <img
+                                                    src={selectedChat.user_avatar}
+                                                    alt={selectedChat.user_name}
+                                                    className="w-full h-full object-cover"
+                                                    onError={(e) => {
+                                                        e.target.style.display = 'none';
+                                                        e.target.nextSibling.style.display = 'flex';
+                                                    }}
+                                                />
+                                            ) : null}
+                                            <div
+                                                className="w-full h-full bg-gradient-to-br from-purple-600 to-indigo-600 flex items-center justify-center"
+                                                style={{ display: selectedChat.user_avatar ? 'none' : 'flex' }}
+                                            >
+                                                <span className="text-white font-black text-xl">
+                                                    {selectedChat.user_name?.charAt(0)?.toUpperCase() || '?'}
+                                                </span>
+                                            </div>
+                                        </div>
+                                        <div className="absolute -bottom-1 -right-1 w-3.5 h-3.5 bg-green-500 rounded-full border-2 border-slate-900 shadow"></div>
+                                    </div>
+
+                                    <div className="min-w-0 flex-1 space-y-1">
+                                        <h3 className="text-base font-black text-white truncate uppercase tracking-tight">
+                                            {selectedChat.user_name}
+                                        </h3>
+
+                                        {/* Coin Balance Pill */}
+                                        <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 bg-amber-500/10 border border-amber-500/25 rounded-full">
+                                            <span className="text-xs">🪙</span>
+                                            <span className="text-amber-400 font-black text-xs">
+                                                {selectedChat.user_balance !== undefined && selectedChat.user_balance !== null
+                                                    ? Number(selectedChat.user_balance).toLocaleString()
+                                                    : '0'}
+                                            </span>
+                                            <span className="text-amber-500/80 text-[9px] font-bold uppercase">Coin</span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Grid Details */}
+                                <div className="grid grid-cols-2 gap-2 mt-3 pt-3 border-t border-white/10">
+                                    <div className="bg-slate-900/80 border border-white/5 p-2 rounded-xl">
+                                        <p className="text-[9px] font-bold text-slate-400 uppercase">📍 Şehir</p>
+                                        <p className="text-xs font-black text-white mt-0.5 truncate">
+                                            {selectedChat.user_city || selectedChat.city || 'Belirtilmedi'}
+                                        </p>
+                                    </div>
+                                    <div className="bg-slate-900/80 border border-white/5 p-2 rounded-xl">
+                                        <p className="text-[9px] font-bold text-slate-400 uppercase">🎂 Yaş</p>
+                                        <p className="text-xs font-black text-white mt-0.5 truncate">
+                                            {selectedChat.age ? `${selectedChat.age} Yaş` : 'Belirtilmedi'}
+                                        </p>
+                                    </div>
+                                    <div className="bg-slate-900/80 border border-white/5 p-2 rounded-xl">
+                                        <p className="text-[9px] font-bold text-slate-400 uppercase">💼 Meslek</p>
+                                        <p className="text-xs font-black text-white mt-0.5 truncate">
+                                            {selectedChat.job || 'Belirtilmedi'}
+                                        </p>
+                                    </div>
+                                    <div className="bg-slate-900/80 border border-white/5 p-2 rounded-xl">
+                                        <p className="text-[9px] font-bold text-slate-400 uppercase">👤 Cinsiyet</p>
+                                        <p className="text-xs font-black text-white mt-0.5 truncate">
+                                            {formatGender(selectedChat.gender)}
+                                        </p>
+                                    </div>
+                                </div>
+
+                                {/* Bio */}
+                                {selectedChat.user_bio && (
+                                    <div className="mt-2.5 bg-purple-950/30 border border-purple-500/20 p-2.5 rounded-xl text-xs text-purple-200 italic leading-relaxed">
+                                        "{selectedChat.user_bio}"
+                                    </div>
+                                )}
+
+                                {/* Interests */}
+                                {(selectedChat.user_interests || selectedChat.interests) && (
+                                    <div className="mt-2.5">
+                                        <p className="text-[9px] font-bold text-slate-400 uppercase mb-1">🎯 İlgi Alanları</p>
+                                        <div className="flex flex-wrap gap-1">
+                                            {(selectedChat.user_interests || selectedChat.interests).toString().split(',').map((interest, idx) => (
+                                                <span key={idx} className="bg-purple-500/15 border border-purple-500/30 text-purple-300 text-[10px] font-bold px-2 py-0.5 rounded-md">
+                                                    {interest.trim()}
+                                                </span>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* User Notes Area */}
+                            <div className="bg-slate-950/60 border border-white/10 p-3.5 rounded-2xl space-y-2.5">
+                                <div className="flex items-center justify-between">
+                                    <label className="text-xs font-black uppercase tracking-wider text-slate-300 flex items-center gap-1.5">
+                                        <span>📝</span>
+                                        <span>Kullanıcıya Özel Notlar</span>
+                                    </label>
+                                    {notesSavedStatus ? (
+                                        <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/15 border border-emerald-500/30 px-2 py-0.5 rounded animate-pulse">
+                                            {notesSavedStatus}
+                                        </span>
+                                    ) : (
+                                        <span className="text-[10px] text-slate-500 font-bold">Enter: Kaydet • Shift+Enter: Alt Satır</span>
+                                    )}
+                                </div>
+                                <textarea
+                                    value={userNotes}
+                                    onChange={(e) => setUserNotes(e.target.value)}
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Enter' && !e.shiftKey) {
+                                            e.preventDefault();
+                                            handleSaveNotes(selectedChat.user_id, userNotes, 'user');
+                                        }
+                                    }}
+                                    placeholder="Örn: Bu kişi Ankara'da yaşıyor, yazılım mühendisi..."
+                                    className="w-full h-56 min-h-[200px] bg-slate-900 border border-white/15 rounded-xl p-3 text-xs text-white placeholder:text-slate-500 focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500/20 transition-all resize-y font-medium leading-relaxed"
+                                />
+                                <button
+                                    onClick={() => handleSaveNotes(selectedChat.user_id, userNotes, 'user')}
+                                    disabled={savingNotes}
+                                    className="w-full py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 active:scale-95 text-white font-black text-xs uppercase tracking-wider rounded-xl shadow-lg shadow-purple-600/30 transition-all disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer"
+                                >
+                                    {savingNotes ? 'Kaydediliyor...' : '💾 Notu Kaydet (Enter)'}
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* ================= SECTION 2: OPERATÖR PROFİLİ (KADIN/SAHTE) ================= */}
+                        <div className="space-y-4 pt-2">
+                            <div className="flex items-center justify-between border-b border-white/10 pb-2">
+                                <h5 className="text-xs font-black uppercase tracking-wider text-fuchsia-400 flex items-center gap-2">
+                                    <span>🎭</span>
+                                    <span>Operatör Profili (Siz / Karakter)</span>
+                                </h5>
+                            </div>
+
+                            {/* Operator Hero Card */}
+                            <div className="relative p-4 bg-gradient-to-br from-slate-950 via-slate-900 to-fuchsia-950/40 border border-fuchsia-500/25 rounded-2xl shadow-xl overflow-hidden">
+                                <div className="absolute top-0 right-0 w-28 h-28 bg-fuchsia-500/10 rounded-full blur-2xl pointer-events-none"></div>
+
+                                <div className="flex items-center gap-3.5 relative z-10">
+                                    <div className="relative shrink-0">
+                                        <div className="w-14 h-14 rounded-2xl overflow-hidden border-2 border-fuchsia-500/50 shadow-xl shadow-fuchsia-500/20 bg-slate-800">
+                                            {selectedChat.operator_avatar ? (
+                                                <img
+                                                    src={selectedChat.operator_avatar}
+                                                    alt={selectedChat.operator_name}
+                                                    className="w-full h-full object-cover"
+                                                    onError={(e) => {
+                                                        e.target.style.display = 'none';
+                                                        e.target.nextSibling.style.display = 'flex';
+                                                    }}
+                                                />
+                                            ) : null}
+                                            <div
+                                                className="w-full h-full bg-gradient-to-br from-fuchsia-600 to-pink-600 flex items-center justify-center"
+                                                style={{ display: selectedChat.operator_avatar ? 'none' : 'flex' }}
+                                            >
+                                                <span className="text-white font-black text-xl">
+                                                    {selectedChat.operator_name?.charAt(0)?.toUpperCase() || 'O'}
+                                                </span>
+                                            </div>
+                                        </div>
+                                        <div className="absolute -bottom-1 -right-1 w-3.5 h-3.5 bg-fuchsia-500 rounded-full border-2 border-slate-900 shadow"></div>
+                                    </div>
+
+                                    <div className="min-w-0 flex-1 space-y-1">
+                                        <h3 className="text-base font-black text-white truncate uppercase tracking-tight">
+                                            {selectedChat.operator_name}
+                                        </h3>
+                                        <span className="inline-block text-[9px] font-black text-fuchsia-300 bg-fuchsia-500/20 border border-fuchsia-500/40 px-2 py-0.5 rounded-full uppercase">
+                                            🎭 Operatör / Sahte Profil
+                                        </span>
+                                    </div>
+                                </div>
+
+                                {/* Grid Details */}
+                                <div className="grid grid-cols-2 gap-2 mt-3 pt-3 border-t border-white/10">
+                                    <div className="bg-slate-900/80 border border-white/5 p-2 rounded-xl">
+                                        <p className="text-[9px] font-bold text-slate-400 uppercase">📍 Şehir</p>
+                                        <p className="text-xs font-black text-fuchsia-300 mt-0.5 truncate">
+                                            {selectedChat.operator_city || 'İstanbul'}
+                                        </p>
+                                    </div>
+                                    <div className="bg-slate-900/80 border border-white/5 p-2 rounded-xl">
+                                        <p className="text-[9px] font-bold text-slate-400 uppercase">🎂 Yaş</p>
+                                        <p className="text-xs font-black text-fuchsia-300 mt-0.5 truncate">
+                                            {selectedChat.operator_age ? `${selectedChat.operator_age} Yaş` : '24 Yaş'}
+                                        </p>
+                                    </div>
+                                    <div className="bg-slate-900/80 border border-white/5 p-2 rounded-xl">
+                                        <p className="text-[9px] font-bold text-slate-400 uppercase">💼 Meslek / Rol</p>
+                                        <p className="text-xs font-black text-fuchsia-300 mt-0.5 truncate">
+                                            {selectedChat.operator_job || 'Mimar / Tasarımcı'}
+                                        </p>
+                                    </div>
+                                    <div className="bg-slate-900/80 border border-white/5 p-2 rounded-xl">
+                                        <p className="text-[9px] font-bold text-slate-400 uppercase">👤 Cinsiyet</p>
+                                        <p className="text-xs font-black text-fuchsia-300 mt-0.5 truncate">
+                                            {formatGender(selectedChat.operator_gender || 'kadin')}
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Operator Notes Area */}
+                            <div className="bg-slate-950/60 border border-fuchsia-500/25 p-3.5 rounded-2xl space-y-2.5">
+                                <div className="flex items-center justify-between">
+                                    <label className="text-xs font-black uppercase tracking-wider text-fuchsia-300 flex items-center gap-1.5">
+                                        <span>📝</span>
+                                        <span>Operatöre Özel Notlar</span>
+                                    </label>
+                                    {operatorNotesSavedStatus ? (
+                                        <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/15 border border-emerald-500/30 px-2 py-0.5 rounded animate-pulse">
+                                            {operatorNotesSavedStatus}
+                                        </span>
+                                    ) : (
+                                        <span className="text-[10px] text-slate-500 font-bold">Enter: Kaydet • Shift+Enter: Alt Satır</span>
+                                    )}
+                                </div>
+                                <textarea
+                                    value={operatorNotes}
+                                    onChange={(e) => setOperatorNotes(e.target.value)}
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Enter' && !e.shiftKey) {
+                                            e.preventDefault();
+                                            handleSaveNotes(selectedChat.operator_id, operatorNotes, 'operator');
+                                        }
+                                    }}
+                                    placeholder="Örn: Bu operatör/kadın profili hakkında özel notlar, hikayesi, konuşma tarzı..."
+                                    className="w-full h-56 min-h-[200px] bg-slate-900 border border-white/15 rounded-xl p-3 text-xs text-white placeholder:text-slate-500 focus:outline-none focus:border-fuchsia-500 focus:ring-1 focus:ring-fuchsia-500/20 transition-all resize-y font-medium leading-relaxed"
+                                />
+                                <button
+                                    onClick={() => handleSaveNotes(selectedChat.operator_id, operatorNotes, 'operator')}
+                                    disabled={savingOperatorNotes}
+                                    className="w-full py-2.5 bg-gradient-to-r from-fuchsia-600 to-pink-600 hover:from-fuchsia-500 hover:to-pink-500 active:scale-95 text-white font-black text-xs uppercase tracking-wider rounded-xl shadow-lg shadow-fuchsia-600/30 transition-all disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer"
+                                >
+                                    {savingOperatorNotes ? 'Kaydediliyor...' : '💾 Operatör Notunu Kaydet (Enter)'}
+                                </button>
+                            </div>
+
+                        </div>
+
+                    </div>
                 </div>
             )}
         </div>

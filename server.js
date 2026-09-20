@@ -1429,7 +1429,7 @@ app.post('/api/auth/verify-otp', async (req, res) => {
                 if (parseInt(limitCheck.rows[0].count, 10) >= 2) return res.status(403).json({ error: 'Bu cihazdan en fazla 2 hesap oluşturulabilir.' });
             }
             const username = email ? email.split('@')[0] : `user_${Math.floor(1000 + Math.random() * 9000)}`;
-            const insertResult = await db.query("INSERT INTO users (username, email, role, balance, avatar_url, display_name, device_id) VALUES ($1, $2, 'user', 100, 'https://via.placeholder.com/150', $3, $4) RETURNING *", [username, email || null, username, deviceId || null]);
+            const insertResult = await db.query("INSERT INTO users (username, email, role, balance, avatar_url, display_name, device_id, status) VALUES ($1, $2, 'user', 100, 'https://via.placeholder.com/150', $3, $4, 'active') RETURNING *", [username, email || null, username, deviceId || null]);
             user = insertResult.rows[0];
             await logActivity(io, user.id, 'register', 'Yeni kullanıcı OTP ile kayıt oldu.');
             io.emit('new_user', sanitizeUser(user, req));
@@ -1437,8 +1437,9 @@ app.post('/api/auth/verify-otp', async (req, res) => {
             user = result.rows[0];
             logActivity(io, user.id, 'login', 'Kullanıcı OTP ile giriş yaptı.');
         }
-        if (user.account_status === 'deleted') return res.status(403).json({ error: 'Bu hesap silinmiş.' });
-        if (user.account_status !== 'active') return res.status(403).json({ error: 'Hesabınız askıya alınmış.' });
+        const userStatus = user.status || user.account_status || 'active';
+        if (userStatus === 'deleted') return res.status(403).json({ error: 'Bu hesap silinmiş.' });
+        if (userStatus === 'banned' || userStatus === 'suspended') return res.status(403).json({ error: 'Hesabınız askıya alınmış.' });
         const token = jwt.sign({ id: user.id, username: user.username, role: user.role, display_name: user.display_name, avatar_url: user.avatar_url }, SECRET_KEY, { expiresIn: '30d' });
         res.json({ user: sanitizeUser(user, req), token });
     } catch (err) {
@@ -2988,46 +2989,48 @@ app.post('/api/operators', authenticateToken, authorizeRole('admin', 'super_admi
 
     try {
         await db.query('BEGIN');
-
-        // 1. Create a dummy user for this operator
+        
+        // Ensure dummy username/email are unique
         const uniqueId = Date.now() + '-' + Math.round(Math.random() * 1e9);
         const username = `op_${name ? name.toLowerCase().replace(/\s+/g, '_') : 'unnamed'}_${uniqueId}`;
         const email = `${username}@fiva.admin`;
         const dummyPassword = await bcrypt.hash('op_pass_123!', 10);
 
-        const userResult = await db.query(
-            `INSERT INTO users (
-                username, email, password, password_hash, role, 
-                display_name, name, gender, age, avatar_url, 
-                job, relationship, zodiac, interests, vip_level,
-                account_status, city
-            ) VALUES ($1, $2, $3, $3, $4, $5, $5, $6, $7, $8, $9, $10, $11, $12, $13, 'active', $14) 
-            RETURNING id`,
-            [
-                username, email, dummyPassword, 'operator',
-                name, gender || 'kadin', parseInt(age) || 18, avatar_url,
-                job || null, relationship || null, zodiac || null,
-                interests || '[]', parseInt(vip_level) || 0, city || null
-            ]
-        );
+        // Name to Gender prediction if not set
+        let finalGender = gender;
+        if (!finalGender) {
+            const nameLower = (name || '').toLowerCase();
+            const MALE_NAMES_ARRAY = ['ahmet', 'mehmet', 'ali', 'can', 'burak', 'emre', 'mustafa', 'murat', 'hasan', 'huseyin'];
+            const isMale = MALE_NAMES_ARRAY.some(m => nameLower.includes(m));
+            finalGender = isMale ? 'erkek' : 'kadin';
+        }
 
+        const randomBoy = (finalGender === 'kadin') ? String(Math.floor(Math.random() * (170 - 155 + 1)) + 155) : '175';
+        
+        const CITIES = ['İstanbul', 'Ankara', 'İzmir', 'Bursa', 'Antalya', 'Adana', 'Kocaeli', 'Gaziantep', 'Eskişehir', 'Muğla', 'Trabzon', 'Samsun', 'Aydın', 'Denizli', 'Balkesir', 'Mersin', 'Kayseri', 'Sakarya'];
+        const randomCity = CITIES[Math.floor(Math.random() * CITIES.length)];
+
+        // 1. Create User Profile
+        const userResult = await db.query(
+            `INSERT INTO users (username, email, password, password_hash, role, display_name, name, gender, age, avatar_url, job, relationship, zodiac, interests, vip_level, boy, city, account_status)
+             VALUES ($1, $2, $3, $3, $4, $5, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, 'active') RETURNING id`,
+            [username, email, dummyPassword, 'operator', name, finalGender, parseInt(age) || 18, avatar_url, job || null, relationship || null, zodiac || null, interests || '[]', parseInt(vip_level) || 0, randomBoy, randomCity]
+        );
         const userId = userResult.rows[0].id;
 
-        // 2. Create the operator entry
+        // 2. Create Operator Profile
         const opResult = await db.query(
-            `INSERT INTO operators (user_id, category, bio, photos, is_online, rating) 
-             VALUES ($1, $2, $3, $4, true, 5.0) 
-             RETURNING *`,
+            `INSERT INTO operators (user_id, category, bio, photos, is_online, rating) VALUES ($1, $2, $3, $4, true, 5.0) RETURNING *`,
             [userId, category || 'Genel', bio || 'Merhaba!', photos || []]
         );
 
         await db.query('COMMIT');
-        console.log(`[ADMIN] Created operator ${name} (User: ${userId})`);
-        res.status(201).json({ ...opResult.rows[0], id: userId, name: name });
+        console.log(`[ADMIN] Created new operator profile: ${name} (User ID: ${userId})`);
+        res.status(201).json({ ...opResult.rows[0], id: userId, name });
     } catch (err) {
         await db.query('ROLLBACK');
-        console.error('[ADMIN] Create Operator Error:', err.message);
-        res.status(500).json({ error: 'Operatör oluşturulamadı.', details: err.message });
+        console.error("[ADMIN] Error creating operator profile:", err.message);
+        res.status(500).json({ error: err.message });
     }
 });
 
@@ -3078,8 +3081,8 @@ app.put('/api/operators/:id', authenticateToken, authorizeRole('admin', 'super_a
         res.json({ success: true, message: 'Profil güncellendi.' });
     } catch (err) {
         await db.query('ROLLBACK');
-        console.error('[ADMIN] Update Operator Error:', err.message);
-        res.status(500).json({ error: 'Profil güncellenemedi.', details: err.message });
+        console.error("[ADMIN] Error updating operator profile:", err.message);
+        res.status(500).json({ error: err.message });
     }
 });
 
@@ -3562,8 +3565,16 @@ app.get('/api/chats/admin', authenticateToken, authorizeRole('admin', 'super_adm
                 u.interests as user_interests,
                 u.bio as user_bio,
                 u.admin_notes as user_notes,
+                u.city as user_city,
                 COALESCE(op.display_name, op.username, 'Bilinmeyen Operatör') as operator_name, 
                 op.avatar_url as operator_avatar,
+                op.city as operator_city,
+                op.age as operator_age,
+                op.gender as operator_gender,
+                op.job as operator_job,
+                op.bio as operator_bio,
+                op.interests as operator_interests,
+                op.admin_notes as operator_notes,
                 op.managed_by as managed_by_id, -- Who manages this profile
                 (SELECT content FROM messages WHERE chat_id = c.id ORDER BY created_at DESC LIMIT 1) as last_message,
                 (SELECT sender_id FROM messages WHERE chat_id = c.id ORDER BY created_at DESC LIMIT 1) as last_message_sender_id,

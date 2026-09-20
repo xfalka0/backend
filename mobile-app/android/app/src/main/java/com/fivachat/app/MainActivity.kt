@@ -23,8 +23,10 @@ class MainActivity : ReactActivity() {
 
   private fun clearEditTextBackgrounds(view: View) {
     if (view is EditText) {
-      view.background = null
-      view.setBackgroundColor(Color.TRANSPARENT)
+      if (view.background != null) {
+        view.background = null
+        view.setBackgroundColor(Color.TRANSPARENT)
+      }
     }
     if (view is ViewGroup) {
       for (i in 0 until view.childCount) {
@@ -46,6 +48,22 @@ class MainActivity : ReactActivity() {
   override fun onDestroy() {
     super.onDestroy()
     window.decorView.viewTreeObserver.removeOnGlobalLayoutListener(layoutListener)
+  }
+
+  override fun onKeyDown(keyCode: Int, event: android.view.KeyEvent?): Boolean {
+    return try {
+      super.onKeyDown(keyCode, event)
+    } catch (e: Exception) {
+      false
+    }
+  }
+
+  override fun onKeyUp(keyCode: Int, event: android.view.KeyEvent?): Boolean {
+    return try {
+      super.onKeyUp(keyCode, event)
+    } catch (e: Exception) {
+      false
+    }
   }
 
   /**

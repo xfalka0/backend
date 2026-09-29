@@ -1701,6 +1701,11 @@ app.get('/api/diag-logs', authenticateToken, authorizeRole('admin', 'super_admin
         logs: global.payoutLogs || []
     });
 });
+// --- PING (KEEP-ALIVE) ENDPOINTS ---
+app.get('/api/ping', (req, res) => res.json({ status: 'ok', timestamp: new Date().toISOString() }));
+app.head('/api/ping', (req, res) => res.status(200).end());
+app.get('/ping', (req, res) => res.json({ status: 'ok', timestamp: new Date().toISOString() }));
+app.head('/ping', (req, res) => res.status(200).end());
 
 app.use('/api', socialRoutes);
 

@@ -8,7 +8,7 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS gender_change_count INTEGER DEFAULT 0
 -- 2. Cinsiyet değişiklik log tablosu
 CREATE TABLE IF NOT EXISTS gender_changes (
     id SERIAL PRIMARY KEY,
-    user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+    user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
     old_gender VARCHAR(30),
     new_gender VARCHAR(30),
     source VARCHAR(50), -- 'onboarding', 'confirm', 'admin'

@@ -2001,12 +2001,11 @@ app.put('/api/users/:id', async (req, res) => {
              SET display_name = COALESCE($1, display_name),
                  name = COALESCE($2, name),
                  age = COALESCE($3::INTEGER, age),
-                 gender = COALESCE($4, gender),
-                 bio = COALESCE($5, bio),
-                 job = COALESCE($6, job),
-                 edu = COALESCE($7, edu)
-             WHERE id = $8 RETURNING *`,
-            [finalDisplayName || null, finalName || null, age ? parseInt(age) : null, gender || null, bio || null, job || null, edu || null, id]
+                 bio = COALESCE($4, bio),
+                 job = COALESCE($5, job),
+                 edu = COALESCE($6, edu)
+             WHERE id = $7 RETURNING *`,
+            [finalDisplayName || null, finalName || null, age ? parseInt(age) : null, bio || null, job || null, edu || null, id]
         );
 
         if (result.rows.length === 0) return res.status(404).json({ error: 'User not found' });
@@ -2021,7 +2020,8 @@ app.put('/api/users/:id/gender-confirm', authenticateToken, async (req, res) => 
     const { id } = req.params;
     let { gender } = req.body;
     
-    if (req.user.id !== id && req.user.role !== 'admin' && req.user.role !== 'super_admin') {
+    if (String(req.user.id).toLowerCase() !== String(id).toLowerCase() && req.user.role !== 'admin' && req.user.role !== 'super_admin') {
+        console.warn(`[GENDER-CONFIRM] Auth failed. Token ID: ${req.user.id} (${typeof req.user.id}), Param ID: ${id} (${typeof id})`);
         return res.status(403).json({ error: 'Yetkisiz işlem.' });
     }
 
@@ -2034,6 +2034,10 @@ app.put('/api/users/:id/gender-confirm', authenticateToken, async (req, res) => 
         const userCheck = await db.query('SELECT gender, gender_confirmed_at FROM users WHERE id = $1', [id]);
         if (userCheck.rows.length === 0) return res.status(404).json({ error: 'Kullanıcı bulunamadı.' });
         
+        if (userCheck.rows[0].gender_confirmed_at) {
+            return res.status(400).json({ error: 'Cinsiyetinizi daha önce doğruladınız, tekrar değiştiremezsiniz.' });
+        }
+
         const oldGender = userCheck.rows[0].gender;
         const result = await db.query(`
             UPDATE users 
@@ -2111,9 +2115,14 @@ app.put('/api/users/:id/profile', async (req, res) => {
 
         if (currentUserCheck.rows.length > 0) {
             const currentData = currentUserCheck.rows[0];
-            
             // Eğer gender değişiyorsa kontrol et
             if (genderToUpdate && genderToUpdate !== currentData.gender) {
+                // If they are already 'erkek' or 'kadin', block the change via profile edit.
+                // They can only change it via gender-confirm modal if not yet confirmed.
+                if (currentData.gender === 'erkek' || currentData.gender === 'kadin') {
+                    return res.status(400).json({ error: 'Cinsiyetinizi daha önce belirlediğiniz için değiştiremezsiniz. Lütfen destek ekibine başvurun.' });
+                }
+
                 if (currentData.gender_change_count >= 1) {
                     return res.status(400).json({ error: 'Cinsiyet değişikliği hakkınız dolmuştur. Destek ekibine yazın.' });
                 } else {
@@ -2174,6 +2183,17 @@ app.put('/api/users/:id/profile', async (req, res) => {
         if (result.rows.length === 0) {
             console.error('[PROFILE_UPDATE] User not found during update');
             return res.status(404).json({ error: 'Kullanıcı bulunamadı.' });
+        }
+
+        if (req.body.onboarding_completed) {
+            try {
+                const confRes = await db.query('UPDATE users SET gender_confirmed_at = CURRENT_TIMESTAMP WHERE id = $1 RETURNING *', [id]);
+                if (confRes.rows.length > 0) {
+                    result.rows[0] = confRes.rows[0];
+                }
+            } catch (e) {
+                // ignore if column doesn't exist
+            }
         }
 
         try {

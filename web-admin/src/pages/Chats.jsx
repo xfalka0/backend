@@ -39,6 +39,14 @@ const formatTime = (dateStr) => {
         return '';
     }
 };
+const formatMessagePreview = (msg) => {
+    if (!msg) return 'Sohbeti başlattı ✨';
+    if (msg.includes('{"latitude"')) return '📍 Konum gönderildi';
+    if (msg.includes('{"assetId"')) return '📷 Fotoğraf gönderildi';
+    if (msg.includes('{"duration"')) return '🎤 Ses kaydı gönderildi';
+    if (msg.includes('{"type":"video"')) return '🎥 Video gönderildi';
+    return msg;
+};
 
 const getWaitingTime = (chat) => {
     if (!chat) return null;
@@ -751,7 +759,7 @@ const Chats = () => {
                                 </p>
                             )}
                             <p className={`text-sm truncate font-medium mt-1 ${chat.unread_count > 0 ? 'text-white opacity-90' : 'text-slate-400 opacity-60'}`}>
-                                {chat.last_message || 'Sohbeti başlattı ✨'}
+                                {formatMessagePreview(chat.last_message)}
                             </p>
                             {getWaitingTime(chat) && (
                                 <span className="text-[10px] font-bold text-amber-300 bg-amber-500/15 px-2 py-0.5 rounded border border-amber-500/30 mt-1 inline-block truncate">

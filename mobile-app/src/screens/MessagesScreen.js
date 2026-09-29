@@ -276,6 +276,11 @@ export default function MessagesScreen({ navigation, route }) {
         const formatLastMessage = (msg, type) => {
             if (!msg) return 'Sohbet Başladı 💬';
             
+            if (msg.includes('{"latitude"')) return '📍 Konum Gönderildi';
+            if (msg.includes('{"assetId"')) return '📷 Fotoğraf';
+            if (msg.includes('{"duration"')) return '🎤 Ses Mesajı';
+            if (msg.includes('{"type":"video"')) return '🎥 Video';
+
             // If it's a URL (Image or Audio)
             if (msg.startsWith('http')) {
                 if (msg.includes('image') || msg.includes('cloudinary') || msg.match(/\.(jpg|jpeg|png|webp|gif)/i)) {

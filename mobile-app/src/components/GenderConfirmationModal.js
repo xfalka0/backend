@@ -40,7 +40,21 @@ export default function GenderConfirmationModal({ visible, user, onConfirmed }) 
             onConfirmed(res.data);
         } catch (e) {
             console.error('Gender confirm error:', e.response?.data || e.message);
-            alert(e.response?.data?.error || 'Bir hata oluştu.');
+            const errMsg = e.response?.data?.error || 'Bir hata oluştu.';
+            
+            // Eğer zaten doğrulanmış hatası alırsak (bu cihazda eski kalmışsa), 
+            // lokal datayı güncelleyip modalı kapatalım ki kullanıcı sıkışmasın.
+            if (errMsg.includes('daha önce doğruladınız')) {
+                const userJson = await AsyncStorage.getItem('user');
+                if (userJson) {
+                    const userData = JSON.parse(userJson);
+                    userData.gender_confirmed_at = new Date().toISOString();
+                    await AsyncStorage.setItem('user', JSON.stringify(userData));
+                }
+                onConfirmed(user);
+            } else {
+                alert(errMsg);
+            }
         } finally {
             setLoading(false);
         }

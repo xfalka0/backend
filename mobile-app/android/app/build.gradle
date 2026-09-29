@@ -125,18 +125,10 @@ android {
             keyPassword 'android'
         }
         release {
-            if (project.hasProperty('MYAPP_RELEASE_STORE_FILE')) {
-                storeFile file(MYAPP_RELEASE_STORE_FILE)
-                storePassword MYAPP_RELEASE_STORE_PASSWORD
-                keyAlias MYAPP_RELEASE_KEY_ALIAS
-                keyPassword MYAPP_RELEASE_KEY_PASSWORD
-            } else {
-                // Fallback to direct values if properties not set
-                storeFile file('../../fiva-release.keystore')
-                storePassword 'fiva1234'
-                keyAlias 'fiva-key'
-                keyPassword 'fiva1234'
-            }
+            storeFile file('debug.keystore')
+            storePassword 'android'
+            keyAlias 'androiddebugkey'
+            keyPassword 'android'
         }
     }
     splits {

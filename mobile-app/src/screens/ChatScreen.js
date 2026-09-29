@@ -924,13 +924,13 @@ export default function ChatScreen({ route, navigation }) {
         }
         
         // SOCKET CHECK
-        if (!socketRef.current || !socketRef.current.connected) {
+        if (!socketRef.current) {
             showAlert({ 
                 title: 'Bağlantı Hatası', 
                 message: 'Sunucu ile bağlantı kurulamadı. Lütfen internetinizi kontrol edin veya birazdan tekrar deneyin.', 
                 type: 'error' 
             });
-            console.error('[ChatScreen] Socket is not connected!');
+            console.error('[ChatScreen] Socket is not initialized!');
             return;
         }
 
@@ -1240,7 +1240,7 @@ export default function ChatScreen({ route, navigation }) {
 
     const uploadAndSendAudio = async (uri, durationStr) => {
         if (!chatId) return;
-        if (!socketRef.current || !socketRef.current.connected) {
+        if (!socketRef.current) {
             showAlert({ title: 'Bağlantı Hatası', message: 'Sunucu bağlantısı yok.', type: 'error' });
             return;
         }

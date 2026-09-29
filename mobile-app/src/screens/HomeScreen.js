@@ -244,7 +244,6 @@ export default function HomeScreen({ navigation, route }) {
             clearTimeout(timeoutId);
             
             if (currentRequestId !== requestIdRef.current) return;
-            if (activeTab !== requestedTab) return;
 
             const data = res.data?.data || res.data || [];
             console.log('[DEBUG FETCH OPERATORS] Loaded length:', data.length);

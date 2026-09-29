@@ -11,6 +11,8 @@ import { useEffect, useState, useRef } from 'react';
 import { Motion } from '../components/motion/MotionSystem';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import ModernAlert from '../components/ui/ModernAlert';
+import { STORE_THEME } from '../constants/storeTheme';
+import { Modal } from 'react-native';
 
 const { width } = Dimensions.get('window');
 
@@ -44,95 +46,101 @@ const getBalanceGlowStyle = (bal) => {
 
 // Bonus & label config per coin amount
 const PACKAGE_CONFIG = {
-    '100':   { bonus: 10,    label: null, labelColor: null },
-    '200':   { bonus: 25,    label: null, labelColor: null },
-    '400':   { bonus: 60,    label: null, labelColor: null },
-    '700':   { bonus: 120,   label: null, labelColor: null },
-    '1200':  { bonus: 250,   label: null, labelColor: null },
-    '2500':  { bonus: 600,   label: null, labelColor: null },
-    '5000':  { bonus: 1500,  label: null, labelColor: null },
-    '10000': { bonus: 4000,  label: null, labelColor: null },
-    '20000': { bonus: 9000,  label: null, labelColor: null },
-    '40000': { bonus: 20000, label: null, labelColor: null },
+    '100':   { bonus: 10 },
+    '200':   { bonus: 25 },
+    '400':   { bonus: 60 },
+    '700':   { bonus: 120 },
+    '1200':  { bonus: 250 },
+    '2500':  { bonus: 600 },
+    '5000':  { bonus: 1500 },
+    '10000': { bonus: 4000 },
+    '20000': { bonus: 9000 },
+    '40000': { bonus: 20000 },
 };
 
-const CoinPackageCard = ({ pack, index, handlePurchase, theme, themeMode, baselineRate }) => {
+const CoinPackageCard = React.memo(({ pack, index, handlePurchaseIntent, isPopular, isCheapest }) => {
     const product = pack.product;
-    const coinAmount = product.title.split(' ')[0] || product.title;
-    const isBestValue = product.identifier.includes('popular') || coinAmount === '1200';
-    const config = PACKAGE_CONFIG[coinAmount] || { bonus: 0, label: null };
-    const coins = parseInt(coinAmount, 10) || 0;
-    const totalCoins = coins + (config.bonus || 0);
+    const coinAmountStr = product.title ? product.title.split(' ')[0] : (product.coins || '0');
+    const coinAmount = parseInt(coinAmountStr, 10) || 0;
+    const config = PACKAGE_CONFIG[coinAmount] || { bonus: 0 };
     const price = product.price;
 
-    let advantage = 0;
-    if (baselineRate && baselineRate > 0 && price && price > 0) {
-        const currentRate = totalCoins / price;
-        advantage = Math.round(((currentRate / baselineRate) - 1) * 100);
-    }
-
+    const rate = price > 0 ? (price / coinAmount).toFixed(2) : '0.00';
+    
+    // Icon scaling based on amount
+    let coinScale = 1;
+    if (coinAmount >= 10000) coinScale = 1.2;
+    else if (coinAmount >= 5000) coinScale = 1.1;
+    else if (coinAmount >= 1200) coinScale = 1.05;
+    
     return (
         <Motion.SlideUp delay={index * 50}>
             <TouchableOpacity
-                style={[styles.cardContainer, isBestValue && styles.bestValueContainer]}
-                onPress={() => handlePurchase(pack)}
+                style={styles.cardContainer}
+                onPress={() => handlePurchaseIntent(pack)}
                 activeOpacity={0.75}
+                accessibilityLabel={`${coinAmount} coin, ${product.priceString}`}
             >
-                <LinearGradient
-                    colors={isBestValue
-                        ? (themeMode === 'dark' ? ['#3b0764', '#4c1d95'] : ['#fef3c7', '#fffbeb'])
-                        : (themeMode === 'dark' ? ['rgba(255,255,255,0.09)', 'rgba(255,255,255,0.04)'] : ['#ffffff', '#f8fafc'])
-                    }
-                    style={[styles.card, isBestValue && styles.bestValueCard]}
-                >
-                    {/* Top Label Badge */}
-                    {config.label && config.labelColor && (
-                        <View style={styles.ribbonContainer}>
-                            <LinearGradient colors={config.labelColor} style={styles.ribbon}>
-                                <Text style={styles.ribbonText}>{config.label}</Text>
-                            </LinearGradient>
-                        </View>
-                    )}
+                {isPopular && (
+                    <View style={[StyleSheet.absoluteFill, { borderRadius: STORE_THEME.spacing.borderRadius, backgroundColor: STORE_THEME.colors.goldGlow, top: -4, bottom: -4, left: -4, right: -4 }]} pointerEvents="none" />
+                )}
+                <View style={[
+                    styles.card,
+                    { backgroundColor: STORE_THEME.colors.surfaceDark, borderColor: isPopular ? STORE_THEME.colors.accentGold : STORE_THEME.colors.surfaceDarkBorder },
+                ]}>
+                    {/* Top Badges */}
+                    <View style={styles.badgeRow}>
+                        {isPopular && (
+                            <View style={[styles.ribbon, { backgroundColor: STORE_THEME.colors.accentGold }]}>
+                                <Text style={[styles.ribbonText, { color: '#000' }]}>EN POPÜLER</Text>
+                            </View>
+                        )}
+                        {isCheapest && !isPopular && (
+                            <View style={[styles.ribbon, { backgroundColor: STORE_THEME.colors.primaryGradient[0] }]}>
+                                <Text style={styles.ribbonText}>EN AVANTAJLI</Text>
+                            </View>
+                        )}
+                    </View>
 
                     {/* Coin Image */}
                     <View style={styles.coinImageContainer}>
                         <Image
                             source={require('../../assets/gold_coin_3f.png')}
-                            style={styles.coinImage}
+                            style={[styles.coinImage, { transform: [{ scale: coinScale }] }]}
                             resizeMode="contain"
                         />
                     </View>
 
                     {/* Coin Count */}
                     <View style={styles.packageInfo}>
-                        <Text style={[styles.coinCount, { color: isBestValue ? '#fbbf24' : theme.colors.text }]}>
-                            {coinAmount}
+                        <Text style={[styles.coinCount, { color: isPopular ? STORE_THEME.colors.accentGold : STORE_THEME.colors.textWhite }]}>
+                            {coinAmount.toLocaleString('tr-TR')}
                         </Text>
-                        <Text style={[styles.coinLabel, { color: theme.colors.textSecondary }]}>
+                        <Text style={styles.coinLabel}>
                             COIN
                         </Text>
                     </View>
 
-                    {/* Advantage Badge */}
-                    {advantage > 0 && (
-                        <View style={styles.bonusBadge}>
-                            <Text style={styles.bonusBadgeText}>%{advantage} AVANTAJ</Text>
-                        </View>
-                    )}
+                    {/* Advantage Badges */}
+                    <View style={styles.bonusBadgeContainer}>
+                        {config.bonus > 0 && (
+                            <Text style={styles.bonusBadgeText}>+%{Math.round(config.bonus / coinAmount * 100)} bonus</Text>
+                        )}
+                    </View>
 
                     {/* Price Button */}
                     <LinearGradient
-                        colors={isBestValue ? ['#fbbf24', '#f59e0b'] : ['#ec4899', '#e11d48']}
+                        colors={isPopular ? ['#FFC53D', '#F59E0B'] : STORE_THEME.colors.primaryGradient}
                         start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
                         style={styles.priceButton}
                     >
-                        <Text style={styles.priceButtonText}>{product.priceString}</Text>
+                        <Text style={[styles.priceButtonText, isPopular && { color: '#000' }]}>{product.priceString}</Text>
                     </LinearGradient>
-                </LinearGradient>
+                </View>
             </TouchableOpacity>
         </Motion.SlideUp>
     );
-};
+});
 
 export default function ShopScreen({ navigation, route }) {
     const { theme, themeMode } = useTheme();
@@ -143,6 +151,10 @@ export default function ShopScreen({ navigation, route }) {
     const [loading, setLoading] = useState(true);
     const [dealer, setDealer] = useState(null);
     const [alertConfig, setAlertConfig] = useState({ visible: false, title: '', message: '', type: 'info' });
+
+    const handlePurchaseIntent = (pack) => {
+        handlePurchase(pack);
+    };
 
     // Load userId from AsyncStorage if missing
     useEffect(() => {
@@ -440,28 +452,26 @@ export default function ShopScreen({ navigation, route }) {
         }
     };
 
-    // Calculate baseline rate for advantage calculation (using 100 coin package as baseline)
-    const baselinePack = offerings.find(p => {
-        const coinAmount = parseInt(p.product.title.split(' ')[0], 10) || p.product.coins || 0;
-        return coinAmount === 100;
-    }) || offerings[0];
-
-    let baselineRate = 0;
-    if (baselinePack && baselinePack.product) {
-        const baselineCoins = parseInt(baselinePack.product.title.split(' ')[0], 10) || baselinePack.product.coins || 100;
-        const baselinePrice = baselinePack.product.price;
-        if (baselinePrice && baselinePrice > 0) {
-            const baselineConfig = PACKAGE_CONFIG[baselineCoins.toString()] || { bonus: 0 };
-            const baselineTotal = baselineCoins + (baselineConfig.bonus || 0);
-            baselineRate = baselineTotal / baselinePrice;
+    let cheapestPackId = null;
+    let minRate = Infinity;
+    offerings.forEach(pack => {
+        const coinAmountStr = pack.product.title ? pack.product.title.split(' ')[0] : (pack.product.coins || '0');
+        const coinAmount = parseInt(coinAmountStr, 10) || 0;
+        const price = pack.product.price;
+        if (coinAmount > 0 && price > 0) {
+            const rate = price / coinAmount;
+            if (rate < minRate) {
+                minRate = rate;
+                cheapestPackId = pack.product.identifier;
+            }
         }
-    }
+    });
 
     return (
         <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
             <StatusBar barStyle={themeMode === 'dark' ? "light-content" : "dark-content"} />
             <LinearGradient 
-                colors={themeMode === 'dark' ? ['#0f172a', '#1e1b4b', '#4c1d95'] : ['#fdf2f8', '#fae8ff', '#f3e8ff']} 
+                colors={themeMode === 'dark' ? ['#2D0B16', '#1A050B', '#140307'] : ['#fdf2f8', '#fae8ff', '#f3e8ff']} 
                 style={StyleSheet.absoluteFill} 
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 1 }}
@@ -478,12 +488,7 @@ export default function ShopScreen({ navigation, route }) {
 
                 <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
                     {/* Modern Animated Balance Card */}
-                    <LinearGradient
-                        colors={['#8b5cf6', '#d946ef']}
-                        start={{ x: 0, y: 0 }}
-                        end={{ x: 1, y: 1 }}
-                        style={styles.balanceCard}
-                    >
+                    <View style={[styles.balanceCard, { backgroundColor: 'rgba(255, 197, 61, 0.08)', borderColor: STORE_THEME.colors.accentGold, borderWidth: 1 }]}>
                         {/* Shimmer Effect Layer */}
                         <Animated.View style={[
                             styles.shimmerLayer,
@@ -501,7 +506,7 @@ export default function ShopScreen({ navigation, route }) {
                             <Text style={styles.balanceLabel}>Mevcut Bakiyen</Text>
                             <Animated.Text style={[
                                 styles.balanceValue,
-                                getBalanceGlowStyle(balance),
+                                { color: STORE_THEME.colors.accentGold },
                                 { 
                                     transform: [
                                         { scale: balanceScaleAnim },
@@ -528,62 +533,57 @@ export default function ShopScreen({ navigation, route }) {
                                 resizeMode="contain"
                             />
                         </Animated.View>
-                    </LinearGradient>
+                    </View>
 
-                    {/* Dealer Promotion */}
-                    <Motion.SlideUp delay={500}>
+                    {/* Dealer Promotion Moved to Top */}
+                    <Motion.SlideUp delay={200}>
                         <TouchableOpacity
                             onPress={handleDealerPress}
-                            style={styles.dealerPromoContainer}
+                            style={[styles.dealerPromoContainer, { marginBottom: 24 }]}
                         >
-                            <LinearGradient
-                                colors={themeMode === 'dark' ? ['rgba(139, 92, 246, 0.2)', 'rgba(217, 70, 239, 0.1)'] : ['#F5F3FF', '#FDF2F8']}
-                                style={styles.dealerPromo}
-                            >
+                            <View style={[styles.dealerPromo, { backgroundColor: STORE_THEME.colors.surfaceDark, borderColor: STORE_THEME.colors.surfaceDarkBorder, borderWidth: 1 }]}>
                                 <View style={styles.dealerPromoIcon}>
-                                    <Ionicons name="diamond" size={28} color="#d946ef" />
+                                    <Ionicons name="diamond" size={24} color={STORE_THEME.colors.primaryGradient[0]} />
                                 </View>
                                 <View style={styles.dealerPromoInfo}>
-                                    <Text style={[styles.dealerPromoTitle, { color: theme.colors.text }]}>Avantajlı Paketler?</Text>
-                                    <Text style={[styles.dealerPromoDesc, { color: theme.colors.textSecondary }]}>Resmi bayimizden coin alımı yapın.</Text>
+                                    <Text style={[styles.dealerPromoTitle, { color: STORE_THEME.colors.textWhite, fontSize: 14 }]}>Resmi Bayi</Text>
+                                    <Text style={[styles.dealerPromoDesc, { color: STORE_THEME.colors.textMuted, fontSize: 12 }]}>Alternatif ödeme yöntemleriyle bayi üzerinden coin alabilirsiniz.</Text>
                                 </View>
-                                <Ionicons name="chevron-forward" size={20} color={theme.colors.textSecondary} />
-                            </LinearGradient>
+                                <Ionicons name="chevron-forward" size={18} color={STORE_THEME.colors.textMuted} />
+                            </View>
                         </TouchableOpacity>
                     </Motion.SlideUp>
 
-                    <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>💰 Coin Paketleri</Text>
-                    <Text style={[styles.sectionSub, { color: theme.colors.textSecondary }]}>Daha fazla coin, daha fazla sohbet ve bağlantı! Bonus coinlerle avantajlı fırsatları kaçırma.</Text>
+                    <Text style={[styles.sectionTitle, { color: STORE_THEME.colors.textWhite }]}>Coin Paketleri</Text>
+                    <Text style={[styles.sectionSub, { color: STORE_THEME.colors.textMuted }]}>Coin ile mesaj gönder, hediye yolla, profilini öne çıkar.</Text>
 
                     <View style={styles.packagesGrid}>
                         {loading ? (
-                            <View style={{ py: 40, alignItems: 'center' }}>
-                                <Text style={{ color: theme.colors.textSecondary }}>Paketler yükleniyor...</Text>
+                            <View style={{ paddingVertical: 40, alignItems: 'center', width: '100%' }}>
+                                <Text style={{ color: STORE_THEME.colors.textMuted }}>Paketler yükleniyor...</Text>
                             </View>
                         ) : offerings.length > 0 ? (
-                            offerings.map((pack, index) => (
-                                <CoinPackageCard
-                                    key={pack.product.identifier}
-                                    pack={pack}
-                                    index={index}
-                                    handlePurchase={handlePurchase}
-                                    theme={theme}
-                                    themeMode={themeMode}
-                                    baselineRate={baselineRate}
-                                />
-                            ))
+                            offerings.map((pack, index) => {
+                                const cAmount = parseInt(pack.product.title ? pack.product.title.split(' ')[0] : (pack.product.coins || '0'), 10);
+                                return (
+                                    <CoinPackageCard
+                                        key={pack.product.identifier}
+                                        pack={pack}
+                                        index={index}
+                                        handlePurchaseIntent={handlePurchaseIntent}
+                                        isPopular={cAmount === 1200}
+                                        isCheapest={pack.product.identifier === cheapestPackId}
+                                    />
+                                );
+                            })
                         ) : (
-                            // Absolute Fallback if even API fails
                             [
                                 { coins: 100, price: '54,99 ₺', numPrice: 54.99, name: 'Küçük Paket' },
                                 { coins: 250, price: '120,99 ₺', numPrice: 120.99, name: 'Gümüş Paket' },
                                 { coins: 500, price: '219,99 ₺', numPrice: 219.99, name: 'Altın Paket' },
                                 { coins: 1000, price: '395,99 ₺', numPrice: 395.99, name: 'VIP Paket' },
                                 { coins: 2500, price: '1299,99 ₺', numPrice: 1299.99, name: 'Platin Paket' },
-                                { coins: 5000, price: '2399,99 ₺', numPrice: 2399.99, name: 'Efsane Paket' },
-                                { coins: 10000, price: '4599,99 ₺', numPrice: 4599.99, name: 'VIP Safir Paket' },
-                                { coins: 20000, price: '8799,99 ₺', numPrice: 8799.99, name: 'VIP Zümrüt Paket' },
-                                { coins: 40000, price: '17399,99 ₺', numPrice: 17399.99, name: 'VIP Titan Paket' }
+                                { coins: 5000, price: '2399,99 ₺', numPrice: 2399.99, name: 'Efsane Paket' }
                             ].map((p, i) => (
                                 <CoinPackageCard
                                     key={`fallback_${i}`}
@@ -599,10 +599,9 @@ export default function ShopScreen({ navigation, route }) {
                                         }
                                     }}
                                     index={i}
-                                    handlePurchase={handlePurchase}
-                                    theme={theme}
-                                    themeMode={themeMode}
-                                    baselineRate={baselineRate}
+                                    handlePurchaseIntent={handlePurchaseIntent}
+                                    isPopular={p.coins === 1200}
+                                    isCheapest={p.coins === 5000}
                                 />
                             ))
                         )}
@@ -655,11 +654,6 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         marginBottom: 16,
         overflow: 'hidden',
-        elevation: 10,
-        shadowColor: '#8b5cf6',
-        shadowOffset: { width: 0, height: 10 },
-        shadowOpacity: 0.3,
-        shadowRadius: 20,
     },
     balanceInfo: {
         zIndex: 2,
@@ -769,6 +763,7 @@ const styles = StyleSheet.create({
         fontWeight: '700',
         opacity: 0.6,
         letterSpacing: 1,
+        color: '#C5B3B8',
     },
     bonusBadge: {
         backgroundColor: '#16a34a',
@@ -834,4 +829,73 @@ const styles = StyleSheet.create({
         fontSize: 11,
         opacity: 0.7,
     },
+    modalOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0,0,0,0.6)',
+        justifyContent: 'flex-end',
+    },
+    modalContent: {
+        backgroundColor: '#1A050B',
+        borderTopLeftRadius: 24,
+        borderTopRightRadius: 24,
+        padding: 24,
+        paddingBottom: 40,
+        borderColor: 'rgba(255, 255, 255, 0.1)',
+        borderWidth: 1,
+        borderBottomWidth: 0,
+    },
+    modalTitle: {
+        fontSize: 20,
+        fontWeight: 'bold',
+        color: '#FFFFFF',
+        marginBottom: 8,
+    },
+    modalMessage: {
+        fontSize: 16,
+        color: '#C5B3B8',
+        marginBottom: 24,
+    },
+    modalButtons: {
+        flexDirection: 'row',
+        gap: 12,
+    },
+    modalCancelBtn: {
+        flex: 1,
+        paddingVertical: 14,
+        borderRadius: 12,
+        backgroundColor: 'rgba(255, 255, 255, 0.05)',
+        alignItems: 'center',
+        borderWidth: 1,
+        borderColor: 'rgba(255, 255, 255, 0.1)',
+    },
+    modalCancelText: {
+        color: '#FFFFFF',
+        fontSize: 16,
+        fontWeight: '600',
+    },
+    modalConfirmBtn: {
+        flex: 1,
+        paddingVertical: 14,
+        borderRadius: 12,
+        backgroundColor: '#FF3D6E',
+        alignItems: 'center',
+    },
+    modalConfirmText: {
+        color: '#fff',
+        fontSize: 16,
+        fontWeight: 'bold',
+    },
+    badgeRow: {
+        width: '100%',
+        alignItems: 'center',
+        position: 'absolute',
+        top: -8,
+        zIndex: 10,
+    },
+    bonusBadgeContainer: {
+        alignItems: 'center',
+        gap: 2,
+        marginVertical: 4,
+        minHeight: 16,
+    }
 });

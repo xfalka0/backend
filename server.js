@@ -1490,7 +1490,7 @@ app.get('/api/operators', async (req, res) => {
             LEFT JOIN nobility_titles nt ON un.title_id = nt.id
             LEFT JOIN agencies a ON u.agency_id::text = a.id::text
             WHERE u.account_status = 'active'
-              AND u.role NOT IN ('admin', 'super_admin', 'moderator', 'staff')
+              AND u.role = 'operator'
         `;
 
         let params = [];
@@ -1556,7 +1556,17 @@ app.get('/api/discovery', authenticateToken, async (req, res) => {
         // Default target gender MUST be strictly opposite gender
         let targetGender = userGender === 'kadin' ? 'erkek' : 'kadin';
         
-        const { page = 1, limit = 10, tab = 'Önerilen', gender: filterGender } = req.query;
+        const rawTab = req.query.tab || 'Önerilen';
+        const tabStr = String(rawTab).trim().toLowerCase();
+        let tab = 'Önerilen';
+        if (tabStr === 'yeni') tab = 'Yeni';
+        else if (tabStr === 'popüler' || tabStr === 'populer') tab = 'Popüler';
+        else if (tabStr === 'çevrimiçi' || tabStr === 'cevrimici') tab = 'Çevrimiçi';
+        else if (tabStr !== 'önerilen' && tabStr !== 'onerilen') {
+            console.log(`[DISCOVERY] Unknown tab received: "${rawTab}", defaulting to Önerilen`);
+        }
+
+        const { page = 1, limit = 10, gender: filterGender } = req.query;
         const pageNum = Math.max(1, parseInt(page) || 1);
         const limitNum = Math.max(1, parseInt(limit) || 10);
         const offset = (pageNum - 1) * limitNum;
@@ -1577,6 +1587,9 @@ app.get('/api/discovery', authenticateToken, async (req, res) => {
             orderByClause = 'ORDER BY u.created_at DESC, u.id DESC';
         } else if (tab === 'Popüler') {
             orderByClause = 'ORDER BY u.vip_level DESC, o.rating DESC NULLS LAST, u.created_at DESC, u.id DESC';
+        } else if (tab === 'Çevrimiçi') {
+            whereClause += ' AND o.is_online = TRUE';
+            orderByClause = 'ORDER BY o.last_active_at DESC NULLS LAST, u.vip_level DESC, u.created_at DESC, u.id DESC';
         } else {
             // "Önerilen" or Default: Online -> New User (3 Days) -> Boosted -> VIP levels
             orderByClause = 'ORDER BY o.is_online DESC NULLS LAST, (u.created_at >= NOW() - INTERVAL \'3 days\') DESC, COALESCE(active_boosts.val, FALSE) DESC, u.vip_level DESC, (coalesce(cardinality(o.photos), 0) > 0) DESC, u.created_at DESC, u.id DESC';
@@ -1631,7 +1644,13 @@ app.get('/api/discovery', authenticateToken, async (req, res) => {
         `;
 
         const queryParams = targetGender === 'all' ? [userId, limitNum, offset] : [targetGender, userId, limitNum, offset];
+        const startTime = Date.now();
         const result = await db.query(query, queryParams);
+        const duration = Date.now() - startTime;
+        
+        if (duration > 300) {
+            console.warn(`[PERFORMANCE WARNING] Discovery query for tab "${tab}" took ${duration}ms!`);
+        }
 
         const rows = result.rows.map(row => {
             return sanitizeUser(row, req);
@@ -1997,6 +2016,46 @@ app.put('/api/users/:id', async (req, res) => {
     }
 });
 
+// Gender confirmation endpoint
+app.put('/api/users/:id/gender-confirm', authenticateToken, async (req, res) => {
+    const { id } = req.params;
+    let { gender } = req.body;
+    
+    if (req.user.id !== id && req.user.role !== 'admin' && req.user.role !== 'super_admin') {
+        return res.status(403).json({ error: 'Yetkisiz işlem.' });
+    }
+
+    gender = (gender || '').toString().trim().toLowerCase();
+    if (gender !== 'erkek' && gender !== 'kadin') {
+        return res.status(400).json({ error: 'Sadece erkek veya kadın seçilebilir.' });
+    }
+
+    try {
+        const userCheck = await db.query('SELECT gender, gender_confirmed_at FROM users WHERE id = $1', [id]);
+        if (userCheck.rows.length === 0) return res.status(404).json({ error: 'Kullanıcı bulunamadı.' });
+        
+        const oldGender = userCheck.rows[0].gender;
+        const result = await db.query(`
+            UPDATE users 
+            SET gender = $1, gender_confirmed_at = CURRENT_TIMESTAMP
+            WHERE id = $2 
+            RETURNING *
+        `, [gender, id]);
+
+        if (oldGender !== gender) {
+            await db.query(`
+                INSERT INTO gender_changes (user_id, old_gender, new_gender, source)
+                VALUES ($1, $2, $3, 'confirm')
+            `, [id, oldGender, gender]);
+        }
+
+        res.json(sanitizeUser(result.rows[0], req));
+    } catch (err) {
+        console.error('Gender confirm error:', err);
+        res.status(500).json({ error: 'Sunucu hatası. (Migration uygulanmadıysa bu hata normaldir)' });
+    }
+});
+
 app.put('/api/users/:id/profile', async (req, res) => {
     const { id } = req.params;
     const { display_name, name, bio, avatar_url, gender, interests, onboarding_completed, relationship, zodiac, age, city } = req.body;
@@ -2046,6 +2105,32 @@ app.put('/api/users/:id/profile', async (req, res) => {
         console.log(`[PROFILE_UPDATE] Updating profile for user: ${id}`);
         console.log('[PROFILE_UPDATE] Body:', JSON.stringify(req.body, null, 2));
 
+        const currentUserCheck = await db.query('SELECT gender, gender_change_count FROM users WHERE id = $1', [id]);
+        let genderToUpdate = req.body.gender || null;
+        let updateChangeCount = false;
+
+        if (currentUserCheck.rows.length > 0) {
+            const currentData = currentUserCheck.rows[0];
+            
+            // Eğer gender değişiyorsa kontrol et
+            if (genderToUpdate && genderToUpdate !== currentData.gender) {
+                if (currentData.gender_change_count >= 1) {
+                    return res.status(400).json({ error: 'Cinsiyet değişikliği hakkınız dolmuştur. Destek ekibine yazın.' });
+                } else {
+                    updateChangeCount = true;
+                    // Log the change
+                    try {
+                        await db.query(`
+                            INSERT INTO gender_changes (user_id, old_gender, new_gender, source)
+                            VALUES ($1, $2, $3, 'profile_edit')
+                        `, [id, currentData.gender, genderToUpdate]);
+                    } catch (e) {
+                        // ignore if table doesnt exist yet
+                    }
+                }
+            }
+        }
+
         const result = await db.query(
             `UPDATE users SET 
                 display_name = COALESCE($1, display_name), 
@@ -2055,6 +2140,7 @@ app.put('/api/users/:id/profile', async (req, res) => {
                 gender = COALESCE($5, gender),
                 interests = COALESCE($6, interests),
                 onboarding_completed = COALESCE($7, onboarding_completed),
+                gender_change_count = CASE WHEN $17 = true THEN gender_change_count + 1 ELSE gender_change_count END,
                 age = COALESCE($8::INTEGER, age),
                 relationship = COALESCE($9, relationship),
                 zodiac = COALESCE($10, zodiac),
@@ -2080,7 +2166,8 @@ app.put('/api/users/:id/profile', async (req, res) => {
                 req.body.boy || null,
                 req.body.kilo || null,
                 req.body.city || null,
-                id
+                id,
+                updateChangeCount
             ]
         );
         console.log('[PROFILE_UPDATE] Query executed');
@@ -3556,6 +3643,7 @@ app.get('/api/chats/admin', authenticateToken, authorizeRole('admin', 'super_adm
             SELECT 
                 c.*, 
                 COALESCE(u.display_name, u.username, 'Bilinmeyen Kullanıcı') as user_name, 
+                u.email as user_email,
                 u.avatar_url as user_avatar,
                 u.balance as user_balance,
                 u.vip_level,
@@ -3884,14 +3972,70 @@ app.get('/api/admin/staff-activity', authenticateToken, authorizeRole('admin', '
     try {
         const stats = await db.query(`
             SELECT 
-                os.*,
-                u.username,
-                u.display_name,
-                u.avatar_url
-            FROM operator_stats os
-            JOIN users u ON os.operator_id = u.id
-            WHERE os.date >= CURRENT_DATE - INTERVAL '30 days'
-            ORDER BY os.date DESC, os.coins_earned DESC
+                u.id, 
+                u.username, 
+                u.display_name, 
+                u.avatar_url, 
+                u.role,
+                (
+                    SELECT COUNT(*)::int 
+                    FROM messages m 
+                    WHERE m.sender_id = u.id AND m.created_at >= CURRENT_DATE
+                ) as messages_today,
+                (
+                    SELECT COUNT(*)::int 
+                    FROM messages m 
+                    WHERE m.sender_id = u.id AND m.created_at >= NOW() - interval '7 days'
+                ) as messages_week,
+                (
+                    SELECT COALESCE(ROUND(AVG(
+                        cardinality(regexp_split_to_array(trim(m.content), '\\s+'))
+                    ), 1), 0)::float
+                    FROM messages m
+                    WHERE m.sender_id = u.id 
+                      AND m.content IS NOT NULL 
+                      AND trim(m.content) != ''
+                      AND (m.content_type = 'text' OR m.content_type IS NULL OR m.content_type = '')
+                ) as avg_word_count,
+                (
+                    SELECT COALESCE(ROUND(AVG(
+                        EXTRACT(EPOCH FROM (m.created_at - m_prev.prev_created_at))
+                    )), 0)::int
+                    FROM messages m
+                    JOIN LATERAL (
+                        SELECT created_at as prev_created_at
+                        FROM messages m2
+                        WHERE m2.chat_id = m.chat_id
+                          AND m2.created_at < m.created_at
+                          AND m2.sender_id != m.sender_id
+                        ORDER BY m2.created_at DESC
+                        LIMIT 1
+                    ) m_prev ON TRUE
+                    WHERE m.sender_id = u.id
+                      AND m.created_at >= NOW() - interval '30 days'
+                      AND EXTRACT(EPOCH FROM (m.created_at - m_prev.prev_created_at)) <= 86400
+                ) as avg_response_time_seconds,
+                COALESCE(os_today.messages_sent, 0) as messages_sent,
+                COALESCE(os_today.coins_earned, 0) as coins_earned,
+                COALESCE(os_today.text_earned, 0) as text_earned,
+                COALESCE(os_today.image_earned, 0) as image_earned,
+                COALESCE(os_today.audio_earned, 0) as audio_earned,
+                COALESCE(os_today.gift_earned, 0) as gift_earned,
+                CURRENT_DATE as date
+            FROM users u
+            LEFT JOIN LATERAL (
+                SELECT 
+                    SUM(messages_sent) as messages_sent,
+                    SUM(coins_earned) as coins_earned,
+                    SUM(text_earned) as text_earned,
+                    SUM(image_earned) as image_earned,
+                    SUM(audio_earned) as audio_earned,
+                    SUM(gift_earned) as gift_earned
+                FROM operator_stats
+                WHERE operator_id::text = u.id::text AND date = CURRENT_DATE
+            ) os_today ON TRUE
+            WHERE u.role IN ('operator', 'moderator', 'admin', 'super_admin', 'staff')
+            ORDER BY messages_today DESC, messages_week DESC
         `);
         res.json(stats.rows);
     } catch (err) {

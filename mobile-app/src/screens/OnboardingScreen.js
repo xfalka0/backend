@@ -46,7 +46,7 @@ const { width, height } = Dimensions.get('window');
 const STEPS = [
     { id: 'welcome', title: 'Hoş Geldin!', subtitle: 'Seni tanımaya başlayalım.' },
     { id: 'name', title: 'Sana nasıl hitap edelim?', subtitle: 'Bu isim profilinde ve sesli odalarda görünecek.' },
-    { id: 'gender', title: 'Cinsiyetin?', subtitle: 'Sana uygun eşleşmeler ve canlı odalar önerebilmemiz için.' },
+    { id: 'gender', title: 'Sen kimsin?', subtitle: 'Bu, profilinde görünür. Kadın hesapları erkekleri, erkek hesapları kadınları görür.' },
     { id: 'relationship', title: 'Ne Arıyorsun?', subtitle: 'İlgini çekenleri seç, sana uygun kişiler ve odalar önerelim.' },
     { id: 'details', title: 'Hakkında birkaç bilgi', subtitle: 'Profilini tamamlayalım ve sana daha uygun kişiler önerelim.' },
     { id: 'interests', title: 'İlgi Alanların?', subtitle: 'Sana benzer kişiler ve canlı odalar önerelim.' },
@@ -70,8 +70,8 @@ const isNameValid = (text) => {
 };
 
 const GENDER_OPTIONS = [
-    { id: 'kadin', label: 'Kadın', icon: 'woman' },
-    { id: 'erkek', label: 'Erkek', icon: 'man' },
+    { id: 'kadin', label: 'Kadınım', icon: 'woman' },
+    { id: 'erkek', label: 'Erkeğim', icon: 'man' },
 ];
 
 const RELATIONSHIP_OPTIONS = [
@@ -340,7 +340,7 @@ const GenderOptionCard = ({ opt, selected, onPress }) => {
                         start={{ x: 0, y: 0 }}
                         end={{ x: 1, y: 1 }}
                     >
-                        <Ionicons name={iconName} size={28} color={iconColor} />
+                        <Ionicons name={iconName} size={32} color={iconColor} />
                     </LinearGradient>
 
                     <Text style={[
@@ -350,13 +350,15 @@ const GenderOptionCard = ({ opt, selected, onPress }) => {
                         {opt.label}
                     </Text>
 
-                    {selected ? (
-                        <Animated.View entering={FadeIn.duration(200)} style={genderStyles.checkWrapper}>
-                            <Ionicons name="checkmark-circle" size={24} color="#ec4899" />
-                        </Animated.View>
-                    ) : (
-                        <View style={genderStyles.emptyCheck} />
-                    )}
+                    <View style={{ position: 'absolute', top: 12, right: 12 }}>
+                        {selected ? (
+                            <Animated.View entering={FadeIn.duration(200)} style={genderStyles.checkWrapper}>
+                                <Ionicons name="checkmark-circle" size={24} color="#ec4899" />
+                            </Animated.View>
+                        ) : (
+                            <View style={genderStyles.emptyCheck} />
+                        )}
+                    </View>
                 </View>
             </LinearGradient>
         </TouchableOpacity>
@@ -766,17 +768,29 @@ export default function OnboardingScreen({ navigation, route }) {
 
                 {step.id === 'gender' && (
                     <View style={{ width: '100%', marginTop: 10 }}>
-                        {GENDER_OPTIONS.map(opt => (
-                            <GenderOptionCard
-                                key={opt.id}
-                                opt={opt}
-                                selected={gender === opt.id}
-                                onPress={() => {
-                                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                                    setGender(opt.id);
-                                }}
-                            />
-                        ))}
+                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 10 }}>
+                            {GENDER_OPTIONS.map(opt => (
+                                <View key={opt.id} style={{ flex: 1 }}>
+                                    <GenderOptionCard
+                                        opt={opt}
+                                        selected={gender === opt.id}
+                                        onPress={() => {
+                                            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                                            setGender(opt.id);
+                                        }}
+                                    />
+                                </View>
+                            ))}
+                        </View>
+                        {gender && (
+                            <Animated.View entering={FadeInUp.duration(300)} style={{ marginTop: 20, padding: 15, backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: 12, borderWidth: 1, borderColor: gender === 'kadin' ? 'rgba(236, 72, 153, 0.3)' : 'rgba(59, 130, 246, 0.3)' }}>
+                                <Text style={{ color: 'white', textAlign: 'center', fontSize: 14, lineHeight: 20 }}>
+                                    {gender === 'kadin' 
+                                        ? 'Kadın olarak devam ediyorsun, keşfette erkek profilleri göreceksin.' 
+                                        : 'Erkek olarak devam ediyorsun, keşfette kadın profilleri göreceksin.'}
+                                </Text>
+                            </Animated.View>
+                        )}
                     </View>
                 )}
 
@@ -1478,7 +1492,7 @@ const relStyles = StyleSheet.create({
 const genderStyles = StyleSheet.create({
     touchableWrapper: {
         width: '100%',
-        height: 90,
+        height: 140,
         marginBottom: 16,
     },
     gradientBorder: {
@@ -1494,11 +1508,13 @@ const genderStyles = StyleSheet.create({
         elevation: 8,
     },
     cardContainer: {
-        flexDirection: 'row',
+        flexDirection: 'column',
         alignItems: 'center',
+        justifyContent: 'center',
         backgroundColor: '#030712',
         borderRadius: 18.5,
-        paddingHorizontal: 20,
+        paddingHorizontal: 10,
+        paddingVertical: 20,
         flex: 1,
     },
     unselectedCard: {
@@ -1514,10 +1530,9 @@ const genderStyles = StyleSheet.create({
         justifyContent: 'center',
     },
     cardLabel: {
-        flex: 1,
-        fontSize: 22,
+        fontSize: 18,
         fontWeight: '700',
-        marginLeft: 18,
+        marginTop: 12,
     },
     selectedLabel: {
         color: '#FFFFFF',

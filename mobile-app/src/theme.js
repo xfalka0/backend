@@ -58,6 +58,11 @@ export const LIGHT_THEME = {
 export const COLORS = DARK_THEME.colors;
 export const GRADIENTS = DARK_THEME.gradients;
 
+export const LAYOUT = {
+    tabBarHeight: 66,
+    tabBarBottomOffset: 25,
+};
+
 export const SHADOWS = {
     medium: {
         shadowColor: "#000",

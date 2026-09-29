@@ -46,7 +46,7 @@ const getWaitingTime = (chat) => {
     if (!msgTime) return null;
 
     const isUserSender = (chat.last_message_sender_id && chat.user_id && chat.last_message_sender_id.toString() === chat.user_id.toString()) || (chat.unread_count > 0);
-    
+
     if (!isUserSender) {
         return null;
     }
@@ -327,7 +327,7 @@ const Chats = () => {
             const res = await axios.get(`${API_URL}/api/chats/admin?limit=${limit}&offset=${offsetVal}`, {
                 headers: { Authorization: `Bearer ${token}` }
             });
-            
+
             if (isLoadMore) {
                 setChats(prev => {
                     const existingIds = new Set(prev.map(c => c.id));
@@ -502,6 +502,19 @@ const Chats = () => {
         sendTextMessage(input, autoJump);
     };
 
+    const handleKeyDown = (e) => {
+        if (e.key === 'Enter' && !e.isComposing) {
+            e.preventDefault();
+            if (e.shiftKey) {
+                // Shift + Enter: Send message and directly switch to next unread chat
+                sendTextMessage(input, true);
+            } else {
+                // Enter: Send message without switching chat
+                sendTextMessage(input, false);
+            }
+        }
+    };
+
     const sendLocationMessage = () => {
         if (!selectedChat) return;
         if (navigator.geolocation) {
@@ -644,7 +657,7 @@ const Chats = () => {
 
         try {
             const res = await axios.post(`${API_URL}/api/media-upload`, formData, {
-                headers: { 
+                headers: {
                     'Content-Type': 'multipart/form-data',
                     Authorization: `Bearer ${token}`
                 }
@@ -654,8 +667,8 @@ const Chats = () => {
             const tempId = Date.now().toString();
 
             const isVideo = file.type.startsWith('video/');
-            const msgType = isVideo 
-                ? (isLockedImage ? 'locked_video' : 'video') 
+            const msgType = isVideo
+                ? (isLockedImage ? 'locked_video' : 'video')
                 : (isLockedImage ? 'locked_image' : 'image');
 
             const msgData = {
@@ -732,6 +745,11 @@ const Chats = () => {
                             <h3 className={`font-black text-lg truncate transition-colors uppercase tracking-tight ${chat.unread_count > 0 ? 'text-fuchsia-400' : 'text-white group-hover:text-fuchsia-400'}`}>
                                 {chat.user_name}
                             </h3>
+                            {chat.user_email && (
+                                <p className="text-[11px] text-slate-400 font-medium truncate opacity-70 normal-case tracking-tight">
+                                    {chat.user_email}
+                                </p>
+                            )}
                             <p className={`text-sm truncate font-medium mt-1 ${chat.unread_count > 0 ? 'text-white opacity-90' : 'text-slate-400 opacity-60'}`}>
                                 {chat.last_message || 'Sohbeti başlattı ✨'}
                             </p>
@@ -882,10 +900,10 @@ const Chats = () => {
                 <div className="p-7 border-b border-white/5">
                     <h2 className="text-2xl font-black text-white">Sohbetler</h2>
                 </div>
-                <div 
+                <div
                     ref={chatListRef}
                     onScroll={handleChatListScroll}
-                    className="flex-1 overflow-y-auto" 
+                    className="flex-1 overflow-y-auto"
                     style={{ overflowAnchor: 'none' }}
                 >
                     {memoizedChatList}
@@ -900,59 +918,7 @@ const Chats = () => {
             <div className="flex-1 flex flex-col bg-slate-950/20">
                 {selectedChat ? (
                     <>
-                        <div className="p-6 border-b border-white/5 bg-slate-900/40 flex items-center justify-between">
-                            <div className="flex items-center gap-4">
-                                <div className="w-14 h-14 rounded-full overflow-hidden border-2 border-white/10">
-                                    {selectedChat.user_avatar ? (
-                                        <img
-                                            src={selectedChat.user_avatar}
-                                            className="w-full h-full object-cover"
-                                            alt={selectedChat.user_name}
-                                            onError={(e) => {
-                                                e.target.style.display = 'none';
-                                                e.target.nextSibling.style.display = 'flex';
-                                            }}
-                                        />
-                                    ) : null}
-                                    <div
-                                        className="w-full h-full bg-gradient-to-br from-fuchsia-600 to-purple-600 flex items-center justify-center"
-                                        style={{ display: selectedChat.user_avatar ? 'none' : 'flex' }}
-                                    >
-                                        <span className="text-white font-bold text-lg">
-                                            {selectedChat.user_name?.charAt(0)?.toUpperCase() || '?'}
-                                        </span>
-                                    </div>
-                                </div>
-                                <div>
-                                    <div className="flex items-center gap-3">
-                                        <h3 className="text-lg font-black text-white">
-                                            {selectedChat.user_name} - <span className="text-fuchsia-400 uppercase">{selectedChat.operator_name}</span>
-                                        </h3>
-                                        {/* User Coin Balance Badge */}
-                                        <div className="flex items-center gap-1.5 px-3 py-1 bg-gradient-to-r from-amber-500/20 to-orange-500/10 border border-amber-500/30 rounded-full">
-                                            <span className="text-sm">🪙</span>
-                                            <span className="text-amber-400 font-black text-xs">
-                                                {selectedChat.user_balance !== undefined && selectedChat.user_balance !== null
-                                                    ? Number(selectedChat.user_balance).toLocaleString()
-                                                    : '0'}
-                                            </span>
-                                            <span className="text-amber-600 text-[9px] font-black uppercase">coin</span>
-                                        </div>
-                                        {/* Wait Time Badge */}
-                                        {getWaitingTime(selectedChat) && (
-                                            <div className={`flex items-center gap-1.5 px-3 py-1 border rounded-md text-xs font-bold ${
-                                                getWaitingTime(selectedChat).includes('sa') || getWaitingTime(selectedChat).includes('gün')
-                                                    ? 'bg-rose-500/20 text-rose-300 border-rose-500/30 animate-pulse'
-                                                    : 'bg-amber-500/20 text-amber-300 border-amber-500/30'
-                                            }`}>
-                                                <span>{getWaitingTime(selectedChat)}</span>
-                                            </div>
-                                        )}
-                                    </div>
-                                    <p className="text-[10px] text-green-500 font-black uppercase tracking-widest">Çevrimiçi</p>
-                                </div>
-                            </div>
-                        </div>
+
 
                         <div className="flex-1 overflow-y-auto p-6 space-y-5 relative scrollbar-thin scrollbar-thumb-slate-700 scrollbar-track-transparent">
                             {/* Load More Button */}
@@ -983,199 +949,231 @@ const Chats = () => {
 
 
 
-                        <form ref={popupsContainerRef} onSubmit={sendMessage} className="p-6 bg-slate-900/80 border-t border-white/10 flex items-center gap-4 relative">
-                            {/* Quick Messages */}
-                            <div className="relative shrink-0">
-                                <button
-                                    type="button"
-                                    onClick={() => setShowQuickMessages((open) => !open)}
-                                    disabled={uploading}
-                                    title="Hazır Mesajlar"
-                                    className="p-4 rounded-2xl border border-fuchsia-400/40 bg-fuchsia-500/15 text-fuchsia-300 hover:bg-fuchsia-500/30 active:scale-95 transition disabled:opacity-50 flex items-center justify-center shadow-lg shadow-fuchsia-500/10"
-                                >
-                                    <span className="text-xl font-bold">⚡</span>
-                                </button>
-                                {showQuickMessages && (
-                                    <div className="absolute bottom-[calc(100%+14px)] left-0 z-30 w-84 rounded-2xl border border-fuchsia-400/30 bg-slate-900 p-3 shadow-2xl shadow-fuchsia-950/50">
-                                        <p className="px-3 py-2 text-xs font-black uppercase tracking-widest text-fuchsia-300 border-b border-white/5 mb-1">Hazır mesajlar</p>
-                                        {quickReplies.length > 0 ? quickReplies.map((qr) => (
-                                            <button key={qr.id} type="button" onClick={() => { setShowQuickMessages(false); sendQuickMessage(qr.content); }} className="block w-full rounded-xl px-4 py-3 text-left text-sm font-medium text-slate-200 transition hover:bg-fuchsia-500/20 hover:text-white">
-                                                {qr.content}
-                                            </button>
-                                        )) : (
-                                            <p className="px-3 py-2 text-xs text-slate-400">Henüz hazır mesaj yok.</p>
-                                        )}
-                                        
-                                        {(user?.role === 'admin' || user?.role === 'super_admin') && (
-                                            <div className="border-t border-white/10 mt-1 pt-1">
-                                                <Link to="/quick-replies" onClick={() => setShowQuickMessages(false)} className="block w-full rounded-xl px-4 py-3 text-center text-sm font-bold text-fuchsia-400 transition hover:bg-fuchsia-500/10">
-                                                    Mesajları Düzenle
-                                                </Link>
-                                            </div>
-                                        )}
-                                    </div>
-                                )}
-                            </div>
+                        <form ref={popupsContainerRef} onSubmit={(e) => { e.preventDefault(); }} className="p-6 bg-slate-900/80 border-t border-white/10 flex flex-col gap-2.5 relative">
+                            <div className="flex items-center gap-4 relative">
+                                {/* Quick Messages */}
+                                <div className="relative shrink-0">
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowQuickMessages((open) => !open)}
+                                        disabled={uploading}
+                                        title="Hazır Mesajlar"
+                                        className="p-4 rounded-2xl border border-fuchsia-400/40 bg-fuchsia-500/15 text-fuchsia-300 hover:bg-fuchsia-500/30 active:scale-95 transition disabled:opacity-50 flex items-center justify-center shadow-lg shadow-fuchsia-500/10"
+                                    >
+                                        <span className="text-xl font-bold">⚡</span>
+                                    </button>
+                                    {showQuickMessages && (
+                                        <div className="absolute bottom-[calc(100%+14px)] left-0 z-30 w-84 rounded-2xl border border-fuchsia-400/30 bg-slate-900 p-3 shadow-2xl shadow-fuchsia-950/50">
+                                            <p className="px-3 py-2 text-xs font-black uppercase tracking-widest text-fuchsia-300 border-b border-white/5 mb-1">Hazır mesajlar</p>
+                                            {quickReplies.length > 0 ? quickReplies.map((qr) => (
+                                                <button key={qr.id} type="button" onClick={() => { setShowQuickMessages(false); sendQuickMessage(qr.content); }} className="block w-full rounded-xl px-4 py-3 text-left text-sm font-medium text-slate-200 transition hover:bg-fuchsia-500/20 hover:text-white">
+                                                    {qr.content}
+                                                </button>
+                                            )) : (
+                                                <p className="px-3 py-2 text-xs text-slate-400">Henüz hazır mesaj yok.</p>
+                                            )}
 
-                            {/* Voice Messages */}
-                            <div className="relative shrink-0">
-                                <button
-                                    type="button"
-                                    onClick={() => {
-                                        if (!showVoiceMessages) {
-                                            fetchVoiceMessages();
-                                        }
-                                        setShowVoiceMessages(!showVoiceMessages);
-                                    }}
-                                    disabled={uploading}
-                                    title="Sesli Mesajlar"
-                                    className="p-4 rounded-2xl border border-indigo-400/40 bg-indigo-500/15 text-indigo-300 hover:bg-indigo-500/30 active:scale-95 transition disabled:opacity-50 flex items-center justify-center shadow-lg shadow-indigo-500/10"
-                                >
-                                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
-                                    </svg>
-                                </button>
-                                {showVoiceMessages && (
-                                    <div className="absolute bottom-[calc(100%+14px)] left-0 z-30 w-84 rounded-2xl border border-indigo-400/30 bg-slate-900 p-3 shadow-2xl shadow-indigo-950/50">
-                                        <p className="px-3 py-2 text-xs font-black uppercase tracking-widest text-indigo-300 border-b border-white/5 mb-1">Sesli mesajlar</p>
-                                        {voiceMessages.length > 0 ? voiceMessages.map((vm) => (
-                                            <div key={vm.id} className="flex flex-col gap-2 rounded-xl p-3 border border-white/5 mb-2 hover:bg-indigo-500/10 transition">
-                                                <p className="text-sm font-medium text-slate-200">{vm.title}</p>
-                                                <div className="flex items-center gap-3">
-                                                    <audio id={`voice-audio-${vm.id}`} src={vm.audio_url} controls className="h-8 max-w-[180px]" />
-                                                    <button 
-                                                        onClick={() => {
-                                                            const audioEl = document.getElementById(`voice-audio-${vm.id}`);
-                                                            const sec = audioEl ? audioEl.duration : 0;
-                                                            sendVoiceMessage(vm.audio_url, sec);
-                                                        }} 
-                                                        className="flex-1 rounded-lg bg-indigo-500 hover:bg-indigo-600 text-white py-1.5 text-xs font-bold transition"
-                                                    >
-                                                        Gönder
-                                                    </button>
+                                            {(user?.role === 'admin' || user?.role === 'super_admin') && (
+                                                <div className="border-t border-white/10 mt-1 pt-1">
+                                                    <Link to="/quick-replies" onClick={() => setShowQuickMessages(false)} className="block w-full rounded-xl px-4 py-3 text-center text-sm font-bold text-fuchsia-400 transition hover:bg-fuchsia-500/10">
+                                                        Mesajları Düzenle
+                                                    </Link>
                                                 </div>
-                                            </div>
-                                        )) : (
-                                            <p className="px-3 py-2 text-xs text-slate-400">Henüz sesli mesaj yok.</p>
-                                        )}
-                                        
-                                        {(user?.role === 'admin' || user?.role === 'super_admin') && (
-                                            <div className="border-t border-white/10 mt-1 pt-1">
-                                                <Link to="/voice-messages" onClick={() => setShowVoiceMessages(false)} className="block w-full rounded-xl px-4 py-3 text-center text-sm font-bold text-indigo-400 transition hover:bg-indigo-500/10">
-                                                    Sesleri Yönet
-                                                </Link>
-                                            </div>
-                                        )}
-                                    </div>
-                                )}
-                            </div>
+                                            )}
+                                        </div>
+                                    )}
+                                </div>
 
-                            {/* Attachment Menu Button */}
-                            <div className="relative shrink-0">
-                                <button
-                                    type="button"
-                                    onClick={() => setShowAttachmentMenu((open) => !open)}
-                                    disabled={uploading}
-                                    title="Eklentiler"
-                                    className={`p-4 rounded-2xl border transition-all active:scale-95 flex items-center justify-center shadow-md ${showAttachmentMenu ? 'bg-slate-700 text-white border-slate-600' : 'bg-slate-800/50 border-white/10 text-slate-300 hover:text-white hover:bg-white/10'} ${uploading ? 'animate-pulse opacity-50' : ''}`}
-                                >
-                                    <svg className={`w-6 h-6 transition-transform ${showAttachmentMenu ? 'rotate-45' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />
-                                    </svg>
-                                </button>
-                                
-                                {/* Hidden Image Input */}
+                                {/* Voice Messages */}
+                                <div className="relative shrink-0">
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            if (!showVoiceMessages) {
+                                                fetchVoiceMessages();
+                                            }
+                                            setShowVoiceMessages(!showVoiceMessages);
+                                        }}
+                                        disabled={uploading}
+                                        title="Sesli Mesajlar"
+                                        className="p-4 rounded-2xl border border-indigo-400/40 bg-indigo-500/15 text-indigo-300 hover:bg-indigo-500/30 active:scale-95 transition disabled:opacity-50 flex items-center justify-center shadow-lg shadow-indigo-500/10"
+                                    >
+                                        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+                                        </svg>
+                                    </button>
+                                    {showVoiceMessages && (
+                                        <div className="absolute bottom-[calc(100%+14px)] left-0 z-30 w-84 rounded-2xl border border-indigo-400/30 bg-slate-900 p-3 shadow-2xl shadow-indigo-950/50">
+                                            <p className="px-3 py-2 text-xs font-black uppercase tracking-widest text-indigo-300 border-b border-white/5 mb-1">Sesli mesajlar</p>
+                                            {voiceMessages.length > 0 ? voiceMessages.map((vm) => (
+                                                <div key={vm.id} className="flex flex-col gap-2 rounded-xl p-3 border border-white/5 mb-2 hover:bg-indigo-500/10 transition">
+                                                    <p className="text-sm font-medium text-slate-200">{vm.title}</p>
+                                                    <div className="flex items-center gap-3">
+                                                        <audio id={`voice-audio-${vm.id}`} src={vm.audio_url} controls className="h-8 max-w-[180px]" />
+                                                        <button
+                                                            onClick={() => {
+                                                                const audioEl = document.getElementById(`voice-audio-${vm.id}`);
+                                                                const sec = audioEl ? audioEl.duration : 0;
+                                                                sendVoiceMessage(vm.audio_url, sec);
+                                                            }}
+                                                            className="flex-1 rounded-lg bg-indigo-500 hover:bg-indigo-600 text-white py-1.5 text-xs font-bold transition"
+                                                        >
+                                                            Gönder
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            )) : (
+                                                <p className="px-3 py-2 text-xs text-slate-400">Henüz sesli mesaj yok.</p>
+                                            )}
+
+                                            {(user?.role === 'admin' || user?.role === 'super_admin') && (
+                                                <div className="border-t border-white/10 mt-1 pt-1">
+                                                    <Link to="/voice-messages" onClick={() => setShowVoiceMessages(false)} className="block w-full rounded-xl px-4 py-3 text-center text-sm font-bold text-indigo-400 transition hover:bg-indigo-500/10">
+                                                        Sesleri Yönet
+                                                    </Link>
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* Attachment Menu Button */}
+                                <div className="relative shrink-0">
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowAttachmentMenu((open) => !open)}
+                                        disabled={uploading}
+                                        title="Eklentiler"
+                                        className={`p-4 rounded-2xl border transition-all active:scale-95 flex items-center justify-center shadow-md ${showAttachmentMenu ? 'bg-slate-700 text-white border-slate-600' : 'bg-slate-800/50 border-white/10 text-slate-300 hover:text-white hover:bg-white/10'} ${uploading ? 'animate-pulse opacity-50' : ''}`}
+                                    >
+                                        <svg className={`w-6 h-6 transition-transform ${showAttachmentMenu ? 'rotate-45' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />
+                                        </svg>
+                                    </button>
+
+                                    {/* Hidden Image Input */}
+                                    <input
+                                        type="file"
+                                        ref={fileInputRef}
+                                        className="hidden"
+                                        accept="image/*,video/*"
+                                        onChange={handleImageUpload}
+                                    />
+
+                                    {showAttachmentMenu && (
+                                        <div className="absolute bottom-[calc(100%+14px)] left-0 z-30 w-60 rounded-2xl border border-white/10 bg-slate-900 p-2 shadow-2xl flex flex-col gap-1">
+                                            <button
+                                                type="button"
+                                                onClick={() => { setShowAttachmentMenu(false); sendLocationMessage(); }}
+                                                className="flex items-center gap-3 w-full rounded-xl px-4 py-3 text-left text-sm font-medium text-slate-200 transition hover:bg-slate-800"
+                                            >
+                                                <svg className="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                                                </svg>
+                                                Konum Gönder
+                                            </button>
+
+                                            <button
+                                                type="button"
+                                                onClick={() => { setShowAttachmentMenu(false); sendVoiceCallMessage(); }}
+                                                className="flex items-center gap-3 w-full rounded-xl px-4 py-3 text-left text-sm font-medium text-slate-200 transition hover:bg-emerald-500/10 hover:text-emerald-400"
+                                            >
+                                                <svg className="w-5 h-5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                                                </svg>
+                                                Sesli Arama
+                                            </button>
+
+                                            <button
+                                                type="button"
+                                                onClick={() => { setShowAttachmentMenu(false); sendVideoCallMessage(); }}
+                                                className="flex items-center gap-3 w-full rounded-xl px-4 py-3 text-left text-sm font-medium text-slate-200 transition hover:bg-indigo-500/10 hover:text-indigo-400"
+                                            >
+                                                <svg className="w-5 h-5 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                                                </svg>
+                                                Görüntülü Arama
+                                            </button>
+
+                                            <div className="h-px bg-white/10 my-1"></div>
+
+                                            <button
+                                                type="button"
+                                                onClick={() => { setShowAttachmentMenu(false); fileInputRef.current?.click(); }}
+                                                className="flex items-center gap-3 w-full rounded-xl px-4 py-3 text-left text-sm font-medium text-slate-200 transition hover:bg-slate-800"
+                                            >
+                                                <svg className="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                                </svg>
+                                                Medya Gönder
+                                            </button>
+
+                                            <label className="flex items-center gap-3 w-full rounded-xl px-4 py-3 text-left text-sm font-medium text-slate-200 transition hover:bg-amber-500/10 cursor-pointer select-none">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={isLockedImage}
+                                                    onChange={(e) => setIsLockedImage(e.target.checked)}
+                                                    className="w-4 h-4 rounded bg-slate-900 border-white/30 text-amber-500 focus:ring-amber-500/50 cursor-pointer"
+                                                />
+                                                <span className={`${isLockedImage ? 'text-amber-400 font-bold' : ''}`}>
+                                                    🔒 Medyayı Ücretli Yap
+                                                </span>
+                                            </label>
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* Text Input */}
                                 <input
-                                    type="file"
-                                    ref={fileInputRef}
-                                    className="hidden"
-                                    accept="image/*,video/*"
-                                    onChange={handleImageUpload}
+                                    type="text"
+                                    value={input}
+                                    onChange={handleTyping}
+                                    onKeyDown={handleKeyDown}
+                                    placeholder={uploading ? "Resim yükleniyor..." : "Mesajınızı yazın..."}
+                                    disabled={uploading}
+                                    className="flex-1 bg-slate-800/70 border border-white/15 rounded-2xl px-6 py-4 text-base text-white placeholder:text-slate-400 focus:outline-none focus:border-fuchsia-500 focus:ring-2 focus:ring-fuchsia-500/20 transition-all font-medium disabled:opacity-50 shadow-inner"
                                 />
 
-                                {showAttachmentMenu && (
-                                    <div className="absolute bottom-[calc(100%+14px)] left-0 z-30 w-60 rounded-2xl border border-white/10 bg-slate-900 p-2 shadow-2xl flex flex-col gap-1">
-                                        <button
-                                            type="button"
-                                            onClick={() => { setShowAttachmentMenu(false); sendLocationMessage(); }}
-                                            className="flex items-center gap-3 w-full rounded-xl px-4 py-3 text-left text-sm font-medium text-slate-200 transition hover:bg-slate-800"
-                                        >
-                                            <svg className="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-                                            </svg>
-                                            Konum Gönder
-                                        </button>
-                                        
-                                        <button
-                                            type="button"
-                                            onClick={() => { setShowAttachmentMenu(false); sendVoiceCallMessage(); }}
-                                            className="flex items-center gap-3 w-full rounded-xl px-4 py-3 text-left text-sm font-medium text-slate-200 transition hover:bg-emerald-500/10 hover:text-emerald-400"
-                                        >
-                                            <svg className="w-5 h-5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
-                                            </svg>
-                                            Sesli Arama
-                                        </button>
+                                {/* Buttons */}
+                                <div className="flex items-center gap-2 shrink-0">
+                                    <button
+                                        type="button"
+                                        onClick={() => sendTextMessage(input, false)}
+                                        disabled={uploading || input.trim().length < 10}
+                                        className="bg-slate-800 hover:bg-slate-700 text-slate-300 px-5 py-4 rounded-2xl font-bold text-xs uppercase tracking-wider transition-all border border-white/10 active:scale-95 disabled:opacity-50 cursor-pointer"
+                                        title="Sadece Gönder (Enter)"
+                                    >
+                                        Gönder
+                                    </button>
 
-                                        <button
-                                            type="button"
-                                            onClick={() => { setShowAttachmentMenu(false); sendVideoCallMessage(); }}
-                                            className="flex items-center gap-3 w-full rounded-xl px-4 py-3 text-left text-sm font-medium text-slate-200 transition hover:bg-indigo-500/10 hover:text-indigo-400"
-                                        >
-                                            <svg className="w-5 h-5 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                                            </svg>
-                                            Görüntülü Arama
-                                        </button>
-
-                                        <div className="h-px bg-white/10 my-1"></div>
-
-                                        <button
-                                            type="button"
-                                            onClick={() => { setShowAttachmentMenu(false); fileInputRef.current?.click(); }}
-                                            className="flex items-center gap-3 w-full rounded-xl px-4 py-3 text-left text-sm font-medium text-slate-200 transition hover:bg-slate-800"
-                                        >
-                                            <svg className="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                                            </svg>
-                                            Medya Gönder
-                                        </button>
-
-                                        <label className="flex items-center gap-3 w-full rounded-xl px-4 py-3 text-left text-sm font-medium text-slate-200 transition hover:bg-amber-500/10 cursor-pointer select-none">
-                                            <input 
-                                                type="checkbox" 
-                                                checked={isLockedImage}
-                                                onChange={(e) => setIsLockedImage(e.target.checked)}
-                                                className="w-4 h-4 rounded bg-slate-900 border-white/30 text-amber-500 focus:ring-amber-500/50 cursor-pointer"
-                                            />
-                                            <span className={`${isLockedImage ? 'text-amber-400 font-bold' : ''}`}>
-                                                🔒 Medyayı Ücretli Yap
-                                            </span>
-                                        </label>
-                                    </div>
-                                )}
+                                    <button
+                                        type="button"
+                                        onClick={() => sendTextMessage(input, true)}
+                                        disabled={uploading || input.trim().length < 10}
+                                        className="bg-gradient-to-r from-fuchsia-600 to-purple-600 hover:from-fuchsia-500 hover:to-purple-500 text-white px-6 py-4 rounded-2xl font-black text-xs uppercase tracking-wider transition-all shadow-xl shadow-fuchsia-600/30 active:scale-95 disabled:opacity-50 flex items-center gap-2 shrink-0 cursor-pointer"
+                                        title="Gönder & Sonraki Mesaja Geç (Shift + Enter)"
+                                    >
+                                        <span>Gönder & Sonraki</span>
+                                        <span>➔</span>
+                                    </button>
+                                </div>
                             </div>
 
-                            {/* Text Input */}
-                            <input
-                                type="text"
-                                value={input}
-                                onChange={handleTyping}
-                                placeholder={uploading ? "Resim yükleniyor..." : "Mesajınızı yazın..."}
-                                disabled={uploading}
-                                className="flex-1 bg-slate-800/70 border border-white/15 rounded-2xl px-6 py-4 text-base text-white placeholder:text-slate-400 focus:outline-none focus:border-fuchsia-500 focus:ring-2 focus:ring-fuchsia-500/20 transition-all font-medium disabled:opacity-50 shadow-inner"
-                            />
-
-                            {/* Send Button */}
-                            <button
-                                type="submit"
-                                disabled={uploading || input.trim().length < 10}
-                                className="bg-gradient-to-r from-fuchsia-600 to-purple-600 hover:from-fuchsia-500 hover:to-purple-500 text-white px-8 py-4 rounded-2xl font-black text-xs uppercase tracking-wider transition-all shadow-xl shadow-fuchsia-600/30 active:scale-95 disabled:opacity-50 flex items-center gap-2 shrink-0 cursor-pointer"
-                            >
-                                <span>Gönder & Sonraki Mesaja Geç</span>
-                                <span>➔</span>
-                            </button>
+                            {/* Informative Note Below Input */}
+                            <div className="flex items-center justify-between text-[11px] text-slate-400 font-medium px-2 pt-0.5 opacity-80">
+                                <div className="flex items-center gap-3">
+                                    <span className="flex items-center gap-1.5 bg-slate-800/80 px-2.5 py-1 rounded-lg border border-white/5 text-slate-300">
+                                        <span className="text-fuchsia-400 font-bold">⚡ Shift + Enter:</span> Gönder & Sonraki Mesaja Geç
+                                    </span>
+                                    <span className="flex items-center gap-1.5 bg-slate-800/80 px-2.5 py-1 rounded-lg border border-white/5 text-slate-400">
+                                        <span className="font-bold text-slate-300">↵ Enter:</span> Sadece Gönder
+                                    </span>
+                                </div>
+                                <span className={`text-[10px] font-bold ${input.trim().length >= 10 ? 'text-emerald-400' : 'text-slate-500'}`}>
+                                    {input.trim().length}/10 karakter min.
+                                </span>
+                            </div>
                         </form>
                     </>
                 ) : (
@@ -1193,27 +1191,16 @@ const Chats = () => {
             {/* Right Sidebar - User & Operator Details */}
             {selectedChat && (
                 <div className="w-[410px] border-l border-white/10 bg-slate-900/90 backdrop-blur-xl flex flex-col shrink-0 h-full overflow-hidden shadow-2xl">
-                    {/* Header */}
-                    <div className="p-4 border-b border-white/10 bg-slate-950/60 flex items-center justify-between">
-                        <h4 className="text-sm font-black uppercase tracking-wider text-slate-300 flex items-center gap-2">
-                            📊 Profil & Detaylar
-                        </h4>
-                        {notesSavedStatus && (
-                            <span className="text-[11px] font-bold text-emerald-400 bg-emerald-500/15 border border-emerald-500/30 px-2.5 py-0.5 rounded animate-pulse">
-                                {notesSavedStatus}
-                            </span>
-                        )}
-                    </div>
 
                     {/* Scrollable Content Container (Both User and Operator visible directly) */}
                     <div className="flex-1 overflow-y-auto p-4 space-y-6 scrollbar-thin scrollbar-thumb-slate-700 scrollbar-track-transparent">
-                        
+
                         {/* ================= SECTION 1: KARŞI TARAF (MÜŞTERİ) ================= */}
                         <div className="space-y-4">
                             <div className="flex items-center justify-between border-b border-white/10 pb-2">
                                 <h5 className="text-xs font-black uppercase tracking-wider text-purple-400 flex items-center gap-2">
                                     <span>👤</span>
-                                    <span>Karşı Taraf (Müşteri)</span>
+                                    <span>Karşı Taraf </span>
                                 </h5>
                                 {selectedChat.vip_level > 0 && (
                                     <span className="text-[10px] font-black text-amber-300 bg-amber-500/20 border border-amber-500/40 px-2 py-0.5 rounded-full shrink-0">
@@ -1256,6 +1243,11 @@ const Chats = () => {
                                         <h3 className="text-base font-black text-white truncate uppercase tracking-tight">
                                             {selectedChat.user_name}
                                         </h3>
+                                        {selectedChat.user_email && (
+                                            <p className="text-xs font-medium text-purple-300/80 truncate normal-case tracking-normal">
+                                                {selectedChat.user_email}
+                                            </p>
+                                        )}
 
                                         {/* Coin Balance Pill */}
                                         <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 bg-amber-500/10 border border-amber-500/25 rounded-full">
@@ -1362,7 +1354,7 @@ const Chats = () => {
                             <div className="flex items-center justify-between border-b border-white/10 pb-2">
                                 <h5 className="text-xs font-black uppercase tracking-wider text-fuchsia-400 flex items-center gap-2">
                                     <span>🎭</span>
-                                    <span>Operatör Profili (Siz / Karakter)</span>
+                                    <span>Operatör Profili</span>
                                 </h5>
                             </div>
 
@@ -1400,9 +1392,7 @@ const Chats = () => {
                                         <h3 className="text-base font-black text-white truncate uppercase tracking-tight">
                                             {selectedChat.operator_name}
                                         </h3>
-                                        <span className="inline-block text-[9px] font-black text-fuchsia-300 bg-fuchsia-500/20 border border-fuchsia-500/40 px-2 py-0.5 rounded-full uppercase">
-                                            🎭 Operatör / Sahte Profil
-                                        </span>
+
                                     </div>
                                 </div>
 

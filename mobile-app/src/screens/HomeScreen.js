@@ -24,6 +24,7 @@ import GradientText from '../components/ui/GradientText';
 import ActionCards from '../components/ui/ActionCards';
 import FilterModal from '../components/ui/FilterModal';
 import DestinyMatchModal from '../components/DestinyMatchModal';
+import GenderConfirmationModal from '../components/GenderConfirmationModal';
 
 const { width } = Dimensions.get('window');
 let lastProfileTap = 0;
@@ -164,11 +165,16 @@ export default function HomeScreen({ navigation, route }) {
     const [currentFilters, setCurrentFilters] = useState({ gender: 'all', ageGroup: 'all' });
     const [showFilterModal, setShowFilterModal] = useState(false);
     const [showMatchModal, setShowMatchModal] = useState(false);
+    const [showGenderConfirm, setShowGenderConfirm] = useState(false);
 
     // Pagination states
     const [page, setPage] = useState(1);
     const [hasMore, setHasMore] = useState(true);
     const [loadingMore, setLoadingMore] = useState(false);
+    const [timeoutError, setTimeoutError] = useState(false);
+
+    const abortControllerRef = useRef(null);
+    const requestIdRef = useRef(0);
 
     useFocusEffect(
         React.useCallback(() => {
@@ -179,6 +185,10 @@ export default function HomeScreen({ navigation, route }) {
                         const parsedUser = JSON.parse(storedUserStr);
                         setUser(parsedUser);
                         setBalance(parsedUser.balance || 0);
+                        
+                        if (parsedUser.id !== 'guest' && !parsedUser.gender_confirmed_at && !['admin', 'super_admin', 'operator', 'moderator', 'staff', 'coin_bayisi'].includes(parsedUser.role) && parsedUser.gender !== 'coin_bayisi') {
+                            setShowGenderConfirm(true);
+                        }
                     }
                 } catch (e) {
                     console.error('Error loading user in HomeScreen:', e);
@@ -189,30 +199,52 @@ export default function HomeScreen({ navigation, route }) {
     );
 
     useEffect(() => {
-        fetchOperators(1);
-    }, [activeTab, currentFilters]);
+        fetchOperators(1, false, activeTab);
+        
+        return () => {
+            if (abortControllerRef.current) abortControllerRef.current.abort();
+        };
+    }, [currentFilters]); // Initial load + Filter changes
 
-    const fetchOperators = async (pageNum = 1, isRefreshing = false) => {
+    const fetchOperators = async (pageNum = 1, isRefreshing = false, requestedTab = activeTab) => {
         if (isRefreshing) {
             setRefreshing(true);
         } else if (pageNum === 1) {
             setLoading(true);
+            setTimeoutError(false);
         } else {
             setLoadingMore(true);
         }
 
-        const requestedTab = activeTab; // Keep track of tab for race conditions
+        const currentRequestId = ++requestIdRef.current;
+
+        if (abortControllerRef.current) {
+            abortControllerRef.current.abort();
+        }
+        abortControllerRef.current = new AbortController();
+
+        // 8 second timeout
+        const timeoutId = setTimeout(() => {
+            if (currentRequestId === requestIdRef.current && abortControllerRef.current) {
+                abortControllerRef.current.abort('timeout');
+                setTimeoutError(true);
+                setLoading(false);
+                setRefreshing(false);
+                setLoadingMore(false);
+            }
+        }, 8000);
 
         try {
             const token = await AsyncStorage.getItem('token');
             const res = await axios.get(`${API_URL}/discovery?tab=${requestedTab}&page=${pageNum}&limit=50&gender=${currentFilters.gender}`, {
-                headers: token ? { Authorization: `Bearer ${token}` } : {}
+                headers: token ? { Authorization: `Bearer ${token}` } : {},
+                signal: abortControllerRef.current.signal
             });
             
-            // If the user has switched tabs while this request was loading, discard the stale result
-            if (activeTab !== requestedTab) {
-                return;
-            }
+            clearTimeout(timeoutId);
+            
+            if (currentRequestId !== requestIdRef.current) return;
+            if (activeTab !== requestedTab) return;
 
             const data = res.data?.data || res.data || [];
             console.log('[DEBUG FETCH OPERATORS] Loaded length:', data.length);
@@ -237,9 +269,21 @@ export default function HomeScreen({ navigation, route }) {
                 }
             }
         } catch (e) {
-            console.error('Fetch operators error:', e);
+            clearTimeout(timeoutId);
+            if (axios.isCancel(e)) {
+                if (e.message === 'timeout') {
+                    console.log('Request timed out');
+                } else {
+                    console.log('Request canceled by user tab switch');
+                }
+            } else {
+                console.error('Fetch operators error:', e);
+                if (currentRequestId === requestIdRef.current) {
+                    setTimeoutError(true);
+                }
+            }
         } finally {
-            if (activeTab === requestedTab) {
+            if (currentRequestId === requestIdRef.current) {
                 setLoading(false);
                 setRefreshing(false);
                 setLoadingMore(false);
@@ -248,7 +292,22 @@ export default function HomeScreen({ navigation, route }) {
     };
 
     const onRefresh = () => {
-        fetchOperators(1, true);
+        fetchOperators(1, true, activeTab);
+    };
+
+    const handleTabPress = (tab) => {
+        if (activeTab === tab) {
+            // Already active, refresh
+            fetchOperators(1, true, tab);
+        } else {
+            setActiveTab(tab);
+            setOperators([]);
+            setPage(1);
+            setHasMore(true);
+            setLoading(true);
+            setTimeoutError(false);
+            fetchOperators(1, false, tab);
+        }
     };
 
     const handleLoadMore = () => {
@@ -367,7 +426,7 @@ export default function HomeScreen({ navigation, route }) {
                         return (
                             <TouchableOpacity 
                                 key={tab} 
-                                onPress={() => setActiveTab(tab)} 
+                                onPress={() => handleTabPress(tab)} 
                                 style={styles.tab}
                                 activeOpacity={0.75}
                             >
@@ -455,7 +514,7 @@ export default function HomeScreen({ navigation, route }) {
 
     const renderItem = React.useCallback(({ item, index }) => (
         <Animated.View 
-            entering={FadeInDown.delay((index % 10) * 50).springify().damping(12)}
+            entering={FadeInDown.delay((index % 6) * 40).springify().damping(12)}
             layout={Layout.springify()}
         >
             <OperatorItem 
@@ -477,20 +536,28 @@ export default function HomeScreen({ navigation, route }) {
             <FlatList
                 data={filteredData}
                 keyExtractor={item => item.id.toString()}
+                key={activeTab} // Force complete re-render on tab change to drop stale animations
                 renderItem={renderItem}
                 ListHeaderComponent={headerComponent}
                 ListFooterComponent={renderFooter}
                 ListEmptyComponent={loading ? (
-                    <View style={{ padding: 20 }}>
-                        <SkeletonCard />
-                        <SkeletonCard />
-                        <SkeletonCard />
+                    <View style={{ padding: 40, alignItems: 'center', justifyContent: 'center' }}>
+                        <ActivityIndicator size="large" color="#ec4899" />
+                        <Text style={{ marginTop: 16, color: theme.colors.textSecondary }}>Yükleniyor...</Text>
+                    </View>
+                ) : timeoutError ? (
+                    <View style={styles.emptyContainer}>
+                        <Ionicons name="warning-outline" size={48} color={theme.colors.textSecondary} />
+                        <Text style={[styles.emptyText, { color: theme.colors.textSecondary }]}>Bağlantı zaman aşımına uğradı.</Text>
+                        <TouchableOpacity onPress={() => handleTabPress(activeTab)} style={{ marginTop: 16, padding: 10, backgroundColor: '#ec4899', borderRadius: 8 }}>
+                            <Text style={{ color: '#fff', fontWeight: 'bold' }}>Tekrar Dene</Text>
+                        </TouchableOpacity>
                     </View>
                 ) : (
                     <View style={styles.emptyContainer}>
                         <Ionicons name="search-outline" size={48} color={theme.colors.textSecondary} />
                         <Text style={[styles.emptyText, { color: theme.colors.textSecondary }]}>
-                            Sonuç bulunamadı.
+                            {activeTab === 'Çevrimiçi' ? 'Şu an kimse çevrimiçi değil.' : 'Sonuç bulunamadı.'}
                         </Text>
                     </View>
                 )}
@@ -500,9 +567,10 @@ export default function HomeScreen({ navigation, route }) {
                 onEndReached={handleLoadMore}
                 onEndReachedThreshold={0.4}
                 showsVerticalScrollIndicator={false}
-                removeClippedSubviews={false}
-                maxToRenderPerBatch={10}
-                windowSize={5}
+                removeClippedSubviews={Platform.OS === 'android'}
+                initialNumToRender={6}
+                maxToRenderPerBatch={6}
+                windowSize={7}
             />
 
             <FilterModal 
@@ -519,6 +587,17 @@ export default function HomeScreen({ navigation, route }) {
                 operators={filteredData.filter(op => getProfileGender(op) !== 'coin_bayisi')}
                 navigation={navigation}
                 user={user}
+            />
+
+            <GenderConfirmationModal 
+                visible={showGenderConfirm}
+                user={user}
+                onConfirmed={(updatedUser) => {
+                    setShowGenderConfirm(false);
+                    setUser(updatedUser.user || updatedUser);
+                    setOperators([]);
+                    fetchOperators(1, false, activeTab);
+                }}
             />
         </LinearGradient>
     );

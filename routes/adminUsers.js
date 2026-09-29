@@ -320,11 +320,47 @@ router.get('/staff-activity', authenticateToken, authorizeRole('admin', 'super_a
     try {
         const result = await db.query(`
             SELECT u.id, u.username, u.display_name, u.avatar_url, u.role,
-                (SELECT COUNT(*) FROM messages m JOIN chats c ON m.chat_id = c.id WHERE m.sender_id = u.id AND m.created_at >= CURRENT_DATE) as messages_today,
-                (SELECT COUNT(*) FROM messages m JOIN chats c ON m.chat_id = c.id WHERE m.sender_id = u.id AND m.created_at >= NOW() - interval '7 days') as messages_week
+                (
+                    SELECT COUNT(*)::int 
+                    FROM messages m 
+                    WHERE m.sender_id = u.id AND m.created_at >= CURRENT_DATE
+                ) as messages_today,
+                (
+                    SELECT COUNT(*)::int 
+                    FROM messages m 
+                    WHERE m.sender_id = u.id AND m.created_at >= NOW() - interval '7 days'
+                ) as messages_week,
+                (
+                    SELECT COALESCE(ROUND(AVG(
+                        cardinality(regexp_split_to_array(trim(m.content), '\\s+'))
+                    ), 1), 0)::float
+                    FROM messages m
+                    WHERE m.sender_id = u.id 
+                      AND m.content IS NOT NULL 
+                      AND trim(m.content) != ''
+                      AND (m.content_type = 'text' OR m.content_type IS NULL OR m.content_type = '')
+                ) as avg_word_count,
+                (
+                    SELECT COALESCE(ROUND(AVG(
+                        EXTRACT(EPOCH FROM (m.created_at - m_prev.prev_created_at))
+                    )), 0)::int
+                    FROM messages m
+                    JOIN LATERAL (
+                        SELECT created_at as prev_created_at
+                        FROM messages m2
+                        WHERE m2.chat_id = m.chat_id
+                          AND m2.created_at < m.created_at
+                          AND m2.sender_id != m.sender_id
+                        ORDER BY m2.created_at DESC
+                        LIMIT 1
+                    ) m_prev ON TRUE
+                    WHERE m.sender_id = u.id
+                      AND m.created_at >= NOW() - interval '30 days'
+                      AND EXTRACT(EPOCH FROM (m.created_at - m_prev.prev_created_at)) <= 86400
+                ) as avg_response_time_seconds
             FROM users u
             WHERE u.role IN ('operator', 'moderator', 'admin', 'super_admin', 'staff')
-            ORDER BY messages_today DESC
+            ORDER BY messages_today DESC, messages_week DESC
         `);
         res.json(result.rows);
     } catch (err) {

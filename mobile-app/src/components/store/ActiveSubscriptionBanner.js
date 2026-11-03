@@ -20,10 +20,14 @@ export default function ActiveSubscriptionBanner({ startDate, expireDate }) {
         if (!dateString) return null;
         try {
             const now = new Date();
+            now.setHours(0, 0, 0, 0); // Gün bazlı karşılaştırma için saatleri sıfırla
+
             const expire = new Date(dateString);
+            expire.setHours(0, 0, 0, 0);
+
             const diffMs = expire.getTime() - now.getTime();
             if (diffMs <= 0) return 0;
-            return Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+            return Math.round(diffMs / (1000 * 60 * 60 * 24));
         } catch (e) {
             return null;
         }

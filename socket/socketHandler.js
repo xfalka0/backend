@@ -647,7 +647,9 @@ function initializeSockets(io) {
                 
                 if (!isFreeSender) {
                     cost = 10; // Default text
-                    if (type === 'gift' && giftId) {
+                    if (type === 'call_stub' || type === 'call_audio' || type === 'call_video') {
+                        cost = 0;
+                    } else if (type === 'gift' && giftId) {
                         const giftRes = await client.query('SELECT * FROM gifts WHERE id = $1', [giftId]);
                         if (giftRes.rows.length > 0) {
                             giftDetails = giftRes.rows[0];
@@ -760,7 +762,20 @@ function initializeSockets(io) {
                 const savedMsg = res.rows[0];
 
                 let lastMsgPreview = content;
-                if (type === 'gift') lastMsgPreview = '🎁 Hediye Gönderildi';
+                if (type === 'call_audio' || type === 'call_video' || type === 'call_stub' || (typeof content === 'string' && content.includes('"callType"'))) {
+                    try {
+                        const parsed = typeof content === 'string' && content.startsWith('{') ? JSON.parse(content) : {};
+                        const isVideo = parsed.callType === 'video' || type === 'call_video';
+                        const icon = isVideo ? '📹' : '📞';
+                        if (parsed.status === 'rejected') lastMsgPreview = `${icon} Reddedilen Arama`;
+                        else if (parsed.status === 'missed') lastMsgPreview = `${icon} Cevapsız Arama`;
+                        else if (parsed.status === 'busy') lastMsgPreview = `${icon} Arama Meşgul`;
+                        else if (parsed.status === 'cancelled') lastMsgPreview = `${icon} İptal Edilen Arama`;
+                        else lastMsgPreview = `${icon} ${isVideo ? 'Görüntülü Arama' : 'Sesli Arama'}`;
+                    } catch (_) {
+                        lastMsgPreview = type === 'call_video' ? '📹 Görüntülü Arama' : '📞 Sesli Arama';
+                    }
+                } else if (type === 'gift') lastMsgPreview = '🎁 Hediye Gönderildi';
                 else if (type === 'image') lastMsgPreview = '📷 Resim';
                 else if (type === 'locked_image') lastMsgPreview = '🔒 Kilitli Resim';
                 else if (type === 'audio') lastMsgPreview = '🎤 Ses Kaydı';

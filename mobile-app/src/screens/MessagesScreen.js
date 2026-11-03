@@ -279,8 +279,22 @@ export default function MessagesScreen({ navigation, route }) {
             
             if (msg.includes('{"latitude"')) return '📍 Konum Gönderildi';
             if (msg.includes('{"assetId"')) return '📷 Fotoğraf';
-            if (msg.includes('{"duration"')) return '🎤 Ses Mesajı';
+            if (msg.includes('{"duration"') && !msg.includes('"callType"')) return '🎤 Ses Mesajı';
             if (msg.includes('{"type":"video"')) return '🎥 Video';
+            if (msg.includes('"callType"') || msg.includes('"status"') || type === 'call_audio' || type === 'call_video' || type === 'call_stub') {
+                try {
+                    const parsed = typeof msg === 'string' && msg.startsWith('{') ? JSON.parse(msg) : {};
+                    const isVideo = parsed.callType === 'video' || type === 'call_video';
+                    const icon = isVideo ? '📹' : '📞';
+                    if (parsed.status === 'rejected') return `${icon} Reddedilen Arama`;
+                    if (parsed.status === 'missed') return `${icon} Cevapsız Arama`;
+                    if (parsed.status === 'busy') return `${icon} Arama Meşgul`;
+                    if (parsed.status === 'cancelled') return `${icon} İptal Edilen Arama`;
+                    return `${icon} ${isVideo ? 'Görüntülü Arama' : 'Sesli Arama'}`;
+                } catch (e) {
+                    return type === 'call_video' ? '📹 Görüntülü Arama' : '📞 Sesli Arama';
+                }
+            }
 
             // If it's a URL (Image or Audio)
             if (msg.startsWith('http')) {

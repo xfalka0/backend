@@ -9,7 +9,8 @@ import io from 'socket.io-client';
 import { Ionicons, MaterialCommunityIcons, FontAwesome5 } from '@expo/vector-icons';
 import axios from 'axios';
 import * as ImagePicker from 'expo-image-picker';
-import { Audio, Video, ResizeMode } from 'expo-av'; // Import Audio and Video
+import { Audio, Video, ResizeMode } from 'expo-av';
+import { Asset } from 'expo-asset'; // Import Audio and Video
 import { API_URL, SOCKET_URL, AGENCY_SYSTEM_ENABLED } from '../config';
 import MessageBubble from '../components/animated/MessageBubble';
 import TypingIndicator from '../components/animated/TypingIndicator';
@@ -299,7 +300,11 @@ export default function ChatScreen({ route, navigation }) {
     const [showIcebreakers, setShowIcebreakers] = useState(false);
     const [showQuickActions, setShowQuickActions] = useState(false);
     const [fakeCall, setFakeCall] = useState(null);
+    const [fakeCallEndStatus, setFakeCallEndStatus] = useState(null);
     const fakeCallPulse = useRef(new Animated.Value(1)).current;
+    const ringtoneRef = useRef(null);
+    const callTimerRef = useRef(null);
+    const callDismissTimerRef = useRef(null);
 
     useEffect(() => {
         if (!fakeCall) return undefined;
@@ -313,6 +318,209 @@ export default function ChatScreen({ route, navigation }) {
         pulse.start();
         return () => pulse.stop();
     }, [fakeCall, fakeCallPulse]);
+
+    const startRingtone = async () => {
+        try {
+            if (ringtoneRef.current) {
+                await ringtoneRef.current.stopAsync().catch(() => {});
+                await ringtoneRef.current.unloadAsync().catch(() => {});
+                ringtoneRef.current = null;
+            }
+
+            await Audio.setAudioModeAsync({
+                allowsRecordingIOS: false,
+                playsInSilentModeIOS: true,
+                shouldDuckAndroid: false,
+                playThroughEarpieceAndroid: false,
+                staysActiveInBackground: false,
+            });
+
+            const assetModule = require('../../assets/sounds/calling.mp3');
+            let source = assetModule;
+            try {
+                const asset = Asset.fromModule(assetModule);
+                if (!asset.localUri) {
+                    await asset.downloadAsync();
+                }
+                if (asset.localUri || asset.uri) {
+                    source = { uri: asset.localUri || asset.uri };
+                    console.log('[Ringtone] Using resolved asset URI:', source.uri);
+                }
+            } catch (assetErr) {
+                console.log('[Ringtone] Asset resolve note:', assetErr.message);
+            }
+
+            const sound = new Audio.Sound();
+            await sound.loadAsync(
+                source,
+                { shouldPlay: true, isLooping: true, volume: 1.0 }
+            );
+
+            ringtoneRef.current = sound;
+            await sound.setVolumeAsync(1.0);
+            await sound.playAsync();
+            const status = await sound.getStatusAsync();
+            console.log('[Ringtone] Sound status after play:', status?.isLoaded, status?.isPlaying, status?.durationMillis);
+        } catch (err) {
+            console.warn('[Ringtone] Play error:', err?.message || err);
+        }
+    };
+
+    const stopRingtone = async () => {
+        try {
+            if (ringtoneRef.current) {
+                const s = ringtoneRef.current;
+                ringtoneRef.current = null;
+                await s.stopAsync().catch(() => {});
+                await s.unloadAsync().catch(() => {});
+                console.log('[Ringtone] Calling sound stopped.');
+            }
+        } catch (err) {
+            console.warn('[Ringtone] Stop error:', err?.message || err);
+        }
+    };
+
+    const handleHangupCall = (cancelledByUser = true) => {
+        try { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy); } catch (_) {}
+        if (callTimerRef.current) clearTimeout(callTimerRef.current);
+        if (callDismissTimerRef.current) clearTimeout(callDismissTimerRef.current);
+        stopRingtone();
+
+        if (cancelledByUser && fakeCall) {
+            const isVideo = fakeCall === 'video';
+            const tempId = `call-stub-${Date.now()}`;
+            const stubContent = JSON.stringify({
+                status: 'cancelled',
+                callType: fakeCall,
+                duration: '0:00'
+            });
+            const stubType = isVideo ? 'call_video' : 'call_audio';
+
+            const stubMsg = {
+                id: tempId,
+                tempId: tempId,
+                chatId: chatId,
+                chat_id: chatId,
+                sender_id: user.id,
+                content: stubContent,
+                type: stubType,
+                content_type: stubType,
+                created_at: new Date().toISOString()
+            };
+            setMessages(prev => [stubMsg, ...prev]);
+
+            if (socketRef.current) {
+                socketRef.current.emit('send_message', {
+                    chatId: chatId,
+                    senderId: user.id,
+                    content: stubContent,
+                    type: stubType,
+                    tempId: tempId
+                });
+            }
+        }
+
+        setFakeCall(null);
+        setFakeCallEndStatus(null);
+    };
+
+    const triggerRandomCallOutcome = (callType) => {
+        if (callTimerRef.current) clearTimeout(callTimerRef.current);
+        if (callDismissTimerRef.current) clearTimeout(callDismissTimerRef.current);
+        setFakeCallEndStatus(null);
+
+        const rand = Math.random();
+        let durationMs;
+        let endStatus;
+        let stubStatus;
+
+        if (rand < 0.60) {
+            // En yüksek ihtimal (%60): 14 - 16 saniye çalıp "Karşı tarafa ulaşılamadı"
+            durationMs = 14000 + Math.floor(Math.random() * 2000);
+            endStatus = {
+                status: 'Ulaşılamıyor',
+                note: 'Karşı tarafa ulaşılamadı',
+                color: '#F59E0B'
+            };
+            stubStatus = 'missed';
+        } else if (rand < 0.85) {
+            // %25 ihtimal: 4 - 8 saniye (ortalama 5-6 sn) çalıp "Arama Reddedildi"
+            durationMs = 4500 + Math.floor(Math.random() * 3500);
+            endStatus = {
+                status: 'Reddedildi',
+                note: 'Karşı taraf aramayı reddetti',
+                color: '#EF4444'
+            };
+            stubStatus = 'rejected';
+        } else {
+            // %15 ihtimal: 8 - 12 saniye çalıp "Kullanıcı Meşgul"
+            durationMs = 8000 + Math.floor(Math.random() * 4000);
+            endStatus = {
+                status: 'Meşgul',
+                note: 'Kullanıcı şu anda başka bir görüşmede',
+                color: '#EF4444'
+            };
+            stubStatus = 'busy';
+        }
+
+        callTimerRef.current = setTimeout(() => {
+            stopRingtone();
+            setFakeCallEndStatus(endStatus);
+            try {
+                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+            } catch (_) {}
+
+            const isVideo = callType === 'video';
+            const tempId = `call-stub-${Date.now()}`;
+            const stubContent = JSON.stringify({
+                status: stubStatus,
+                callType: callType,
+                duration: '0:00'
+            });
+            const stubType = isVideo ? 'call_video' : 'call_audio';
+
+            const stubMsg = {
+                id: tempId,
+                tempId: tempId,
+                chatId: chatId,
+                chat_id: chatId,
+                sender_id: user.id,
+                content: stubContent,
+                type: stubType,
+                content_type: stubType,
+                created_at: new Date().toISOString()
+            };
+            setMessages(prev => [stubMsg, ...prev]);
+
+            if (socketRef.current) {
+                socketRef.current.emit('send_message', {
+                    chatId: chatId,
+                    senderId: user.id,
+                    content: stubContent,
+                    type: stubType,
+                    tempId: tempId
+                });
+            }
+
+            // 2.5 saniye sonra arama modalını otomatik kapat
+            callDismissTimerRef.current = setTimeout(() => {
+                setFakeCall(null);
+                setFakeCallEndStatus(null);
+            }, 2500);
+        }, durationMs);
+    };
+
+    // Arama Zil Sesi Efekti
+    useEffect(() => {
+        if (fakeCall) {
+            startRingtone();
+        } else {
+            stopRingtone();
+        }
+        return () => {
+            stopRingtone();
+        };
+    }, [fakeCall]);
 
     useEffect(() => {
         return () => {
@@ -374,7 +582,8 @@ export default function ChatScreen({ route, navigation }) {
                     setCurrentBalance(prev => Math.max(0, prev - CALL_COST));
                 }
             } catch (err) {
-                console.error('[ChatScreen] Call coin deduction error:', err?.response?.data || err.message);
+                const errMsg = typeof err?.response?.data === 'string' ? (err.response?.status === 404 ? 'Servis güncelleniyor' : err.message) : (err?.response?.data?.error || err.message);
+                console.warn('[ChatScreen] Call coin deduction notice:', errMsg);
                 if (err?.response?.data?.error === 'Yetersiz bakiye') {
                     showAlert({
                         title: 'Coin Yetersiz 🪙',
@@ -392,6 +601,7 @@ export default function ChatScreen({ route, navigation }) {
         }
 
         setFakeCall(type);
+        triggerRandomCallOutcome(type);
     };
 
     const handleSendLocation = async () => {
@@ -1880,7 +2090,7 @@ export default function ChatScreen({ route, navigation }) {
             item.content_type === 'call_stub' || item.type === 'call_stub' ||
             item.content_type === 'call_audio' || item.type === 'call_audio' ||
             item.content_type === 'call_video' || item.type === 'call_video' ||
-            (typeof item.content === 'string' && (item.content.includes('Sesli Arama') || item.content.includes('Görüntülü Arama')))
+            (typeof item.content === 'string' && (item.content.includes('Sesli Arama') || item.content.includes('Görüntülü Arama') || item.content.includes('"callType"')))
         ) {
             let stubInfo = {};
             try {
@@ -1891,29 +2101,33 @@ export default function ChatScreen({ route, navigation }) {
 
             const isVideo = item.content_type === 'call_video' || item.type === 'call_video' || (typeof item.content === 'string' && item.content.includes('Görüntülü')) || stubInfo.callType === 'video';
             const status = stubInfo.status || stubInfo.reason || 'ended';
-            const isMissed = ['missed', 'rejected', 'cancelled', 'busy'].includes(status);
-            const durationText = stubInfo.duration && stubInfo.duration !== '0:00' ? stubInfo.duration : null;
 
-            let callTitle = isVideo ? 'Görüntülü Arama' : 'Sesli Arama';
+            const callMainTitle = isVideo ? 'Görüntülü Arama' : 'Sesli Arama';
+            let statusText = 'Arama Yapıldı';
             let iconName = isVideo ? 'videocam' : 'call';
-            let iconColor = '#22c55e'; // Green
+            let iconBg = 'rgba(34, 197, 94, 0.2)';
+            let iconColor = '#22C55E';
 
             if (status === 'missed') {
-                callTitle = isVideo ? 'Cevapsız Görüntülü Arama' : 'Cevapsız Sesli Arama';
+                statusText = 'Cevapsız Arama';
                 iconName = isVideo ? 'videocam-off' : 'call';
-                iconColor = '#ef4444';
+                iconBg = 'rgba(245, 158, 11, 0.2)';
+                iconColor = '#F59E0B';
             } else if (status === 'rejected') {
-                callTitle = isVideo ? 'Reddedilen Görüntülü Arama' : 'Reddedilen Sesli Arama';
-                iconName = 'close-circle';
-                iconColor = '#ef4444';
+                statusText = 'Arama Reddedildi';
+                iconName = 'close';
+                iconBg = 'rgba(239, 68, 68, 0.2)';
+                iconColor = '#EF4444';
             } else if (status === 'cancelled') {
-                callTitle = isVideo ? 'İptal Edilen Görüntülü Arama' : 'İptal Edilen Sesli Arama';
+                statusText = 'İptal Edildi';
                 iconName = 'ban';
-                iconColor = '#94a3b8';
+                iconBg = 'rgba(148, 163, 184, 0.2)';
+                iconColor = '#94A3B8';
             } else if (status === 'busy') {
-                callTitle = 'Arama Meşgul';
+                statusText = 'Hat Meşgul';
                 iconName = 'call';
-                iconColor = '#f59e0b';
+                iconBg = 'rgba(239, 68, 68, 0.2)';
+                iconColor = '#EF4444';
             }
 
             content = (
@@ -1925,20 +2139,21 @@ export default function ChatScreen({ route, navigation }) {
                     }}
                     activeOpacity={0.85}
                 >
-                    <View style={[styles.callStubIconCircle, { backgroundColor: iconColor + '30' }]}>
-                        <Ionicons name={iconName} size={18} color={iconColor} />
+                    <View style={[styles.callStubIconCircle, { backgroundColor: iconBg }]}>
+                        <Ionicons name={iconName} size={20} color={iconColor} />
                     </View>
 
-                    <View style={{ flex: 1, marginLeft: 10 }}>
-                        <Text style={styles.callStubTitle}>{callTitle}</Text>
-                        <Text style={styles.callStubSub}>
-                            {durationText ? `Süre: ${durationText}` : (isMissed ? 'Geri aramak için dokunun' : 'Arama yapıldı')}
+                    <View style={styles.callStubTextWrapper}>
+                        <Text style={styles.callStubTitle} numberOfLines={1}>
+                            {callMainTitle}
+                        </Text>
+                        <Text style={[styles.callStubSub, { color: iconColor }]} numberOfLines={1}>
+                            {statusText}
                         </Text>
                     </View>
 
                     <View style={styles.callBackBtn}>
-                        <Ionicons name={isVideo ? "videocam" : "call"} size={12} color="#fff" />
-                        <Text style={styles.callBackBtnText}>Geri Ara</Text>
+                        <Ionicons name={isVideo ? "videocam" : "call"} size={16} color="#fff" />
                     </View>
                 </TouchableOpacity>
             );
@@ -1990,7 +2205,7 @@ export default function ChatScreen({ route, navigation }) {
             <StatusBar style="light" translucent backgroundColor="transparent" />
             <ChatBackground themeMode={themeMode} />
 
-            <Modal visible={!!fakeCall} transparent={false} animationType="fade" onRequestClose={() => setFakeCall(null)}>
+            <Modal visible={!!fakeCall} transparent={false} animationType="fade" onRequestClose={() => handleHangupCall(true)}>
                 <View style={styles.fakeCallContainer}>
                     <StatusBar style="light" translucent backgroundColor="transparent" />
                     <LinearGradient
@@ -2006,14 +2221,18 @@ export default function ChatScreen({ route, navigation }) {
                                 {fakeCall === 'video' ? 'GÖRÜNTÜLÜ ARAMA' : 'SESLİ ARAMA'}
                             </Text>
                         </View>
-                        <Text style={styles.fakeCallStatusText}>Aranıyor...</Text>
+                        <Text style={[styles.fakeCallStatusText, fakeCallEndStatus && { color: fakeCallEndStatus.color, fontWeight: '700' }]}>
+                            {fakeCallEndStatus ? fakeCallEndStatus.status : 'Aranıyor...'}
+                        </Text>
                     </View>
 
                     {/* Orta Profil & Nabız Efekti */}
                     <View style={styles.fakeCallCenterSection}>
                         <View style={styles.fakeCallAvatarContainer}>
-                            <Animated.View style={[styles.fakeCallPulseRing, { transform: [{ scale: fakeCallPulse }] }]} />
-                            <View style={styles.fakeCallAvatarWrapper}>
+                            {!fakeCallEndStatus && (
+                                <Animated.View style={[styles.fakeCallPulseRing, { transform: [{ scale: fakeCallPulse }] }]} />
+                            )}
+                            <View style={[styles.fakeCallAvatarWrapper, fakeCallEndStatus && { borderColor: fakeCallEndStatus.color }]}>
                                 {partnerAvatar ? (
                                     <Image source={{ uri: partnerAvatar }} style={styles.fakeCallAvatarImg} />
                                 ) : (
@@ -2024,18 +2243,19 @@ export default function ChatScreen({ route, navigation }) {
                             </View>
                         </View>
                         <Text style={styles.fakeCallPartnerName}>{partnerName || name || 'Kullanıcı'}</Text>
-                        <Text style={styles.fakeCallRingingText}>Çalıyor...</Text>
-                        <Text style={styles.fakeCallSubNote}>Kullanıcının yanıt vermesi bekleniyor</Text>
+                        <Text style={[styles.fakeCallRingingText, fakeCallEndStatus && { color: fakeCallEndStatus.color, fontSize: 18, fontWeight: '800' }]}>
+                            {fakeCallEndStatus ? fakeCallEndStatus.status : 'Çalıyor...'}
+                        </Text>
+                        <Text style={[styles.fakeCallSubNote, fakeCallEndStatus && { color: 'rgba(255,255,255,0.75)', fontWeight: '600' }]}>
+                            {fakeCallEndStatus ? fakeCallEndStatus.note : 'Kullanıcının yanıt vermesi bekleniyor'}
+                        </Text>
                     </View>
 
                     {/* Alt Kapatma Butonu */}
                     <View style={styles.fakeCallBottomSection}>
                         <TouchableOpacity
                             style={styles.fakeCallHangupBtn}
-                            onPress={() => {
-                                try { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy); } catch (_) {}
-                                setFakeCall(null);
-                            }}
+                            onPress={() => handleHangupCall(true)}
                             activeOpacity={0.8}
                         >
                             <Ionicons name="call" size={32} color="#fff" style={{ transform: [{ rotate: '135deg' }] }} />
@@ -2860,42 +3080,47 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         paddingVertical: 10,
         paddingHorizontal: 12,
-        borderRadius: 16,
-        backgroundColor: 'rgba(255,255,255,0.08)',
+        borderRadius: 18,
+        backgroundColor: 'rgba(255, 255, 255, 0.08)',
         borderWidth: 1,
-        borderColor: 'rgba(255,255,255,0.15)',
-        minWidth: 220,
+        borderColor: 'rgba(255, 255, 255, 0.12)',
+        width: 250,
+        justifyContent: 'space-between',
     },
     callStubIconCircle: {
-        width: 38,
-        height: 38,
-        borderRadius: 19,
+        width: 40,
+        height: 40,
+        borderRadius: 20,
         alignItems: 'center',
+        justifyContent: 'center',
+    },
+    callStubTextWrapper: {
+        flex: 1,
+        marginHorizontal: 10,
         justifyContent: 'center',
     },
     callStubTitle: {
         color: '#ffffff',
-        fontSize: 14,
-        fontWeight: 'bold',
+        fontSize: 15,
+        fontWeight: '700',
+        letterSpacing: 0.2,
     },
     callStubSub: {
-        color: 'rgba(255,255,255,0.7)',
-        fontSize: 11,
+        fontSize: 12,
+        fontWeight: '600',
         marginTop: 2,
     },
     callBackBtn: {
-        flexDirection: 'row',
+        width: 38,
+        height: 38,
+        borderRadius: 19,
+        backgroundColor: '#EC4899',
         alignItems: 'center',
-        gap: 4,
-        backgroundColor: '#ec4899',
-        paddingHorizontal: 10,
-        paddingVertical: 6,
-        borderRadius: 12,
-        marginLeft: 8,
-    },
-    callBackBtnText: {
-        color: '#ffffff',
-        fontSize: 11,
-        fontWeight: 'bold',
+        justifyContent: 'center',
+        shadowColor: '#EC4899',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.35,
+        shadowRadius: 4,
+        elevation: 3,
     }
 });

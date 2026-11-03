@@ -1463,11 +1463,10 @@ app.post('/api/auth/verify-otp', authLimiter, async (req, res) => {
 
         let user;
         if (result.rows.length === 0) {
-            // Geçici olarak cihaz limiti devre dışı bırakıldı
-            // if (deviceId) {
-            //     const limitCheck = await db.query("SELECT count(*) FROM users WHERE device_id = $1 AND account_status != 'deleted'", [deviceId]);
-            //     if (parseInt(limitCheck.rows[0].count, 10) >= 2) return res.status(403).json({ error: 'Bu cihazdan en fazla 2 hesap oluşturulabilir.' });
-            // }
+            if (deviceId) {
+                const limitCheck = await db.query("SELECT count(*) FROM users WHERE device_id = $1 AND account_status != 'deleted'", [deviceId]);
+                if (parseInt(limitCheck.rows[0].count, 10) >= 2) return res.status(403).json({ error: 'Bu cihazdan en fazla 2 hesap oluşturulabilir.' });
+            }
             const username = (email ? email.split('@')[0] : `user`) + '_' + Math.floor(1000 + Math.random() * 9000);
             const insertResult = await db.query("INSERT INTO users (username, email, role, balance, avatar_url, display_name, device_id, account_status) VALUES ($1, $2, 'user', 50, 'https://via.placeholder.com/150', $3, $4, 'active') RETURNING *", [username, email ? email.trim().toLowerCase() : null, email ? email.split('@')[0] : username, deviceId || null]);
             user = insertResult.rows[0];
@@ -5849,7 +5848,9 @@ io.on('connection', (socket) => {
             
             if (!isFreeSender) {
                 cost = 10; // Default text
-                if (type === 'gift' && giftId) {
+                if (type === 'call_stub' || type === 'call_audio' || type === 'call_video') {
+                    cost = 0;
+                } else if (type === 'gift' && giftId) {
                     const giftRes = await client.query('SELECT * FROM gifts WHERE id = $1', [giftId]);
                     if (giftRes.rows.length > 0) {
                         giftDetails = giftRes.rows[0];
@@ -5966,7 +5967,20 @@ io.on('connection', (socket) => {
             const savedMsg = res.rows[0];
 
             let lastMsgPreview = content;
-            if (type === 'gift') lastMsgPreview = '🎁 Hediye Gönderildi';
+            if (type === 'call_audio' || type === 'call_video' || type === 'call_stub' || (typeof content === 'string' && content.includes('"callType"'))) {
+                try {
+                    const parsed = typeof content === 'string' && content.startsWith('{') ? JSON.parse(content) : {};
+                    const isVideo = parsed.callType === 'video' || type === 'call_video';
+                    const icon = isVideo ? '📹' : '📞';
+                    if (parsed.status === 'rejected') lastMsgPreview = `${icon} Reddedilen Arama`;
+                    else if (parsed.status === 'missed') lastMsgPreview = `${icon} Cevapsız Arama`;
+                    else if (parsed.status === 'busy') lastMsgPreview = `${icon} Arama Meşgul`;
+                    else if (parsed.status === 'cancelled') lastMsgPreview = `${icon} İptal Edilen Arama`;
+                    else lastMsgPreview = `${icon} ${isVideo ? 'Görüntülü Arama' : 'Sesli Arama'}`;
+                } catch (_) {
+                    lastMsgPreview = type === 'call_video' ? '📹 Görüntülü Arama' : '📞 Sesli Arama';
+                }
+            } else if (type === 'gift') lastMsgPreview = '🎁 Hediye Gönderildi';
             else if (type === 'image') lastMsgPreview = '📷 Resim';
             else if (type === 'locked_image') lastMsgPreview = '🔒 Kilitli Resim';
             else if (type === 'video') lastMsgPreview = '📹 Video';

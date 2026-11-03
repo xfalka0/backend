@@ -41,13 +41,12 @@ exports.googleAuth = async (req, res) => {
         let user;
 
         if (userResult.rows.length === 0) {
-            // Check device limit for NEW account (Geçici olarak devre dışı)
-            // if (deviceId) {
-            //     const limitCheck = await db.query('SELECT count(*) FROM users WHERE device_id = $1', [deviceId]);
-            //     if (parseInt(limitCheck.rows[0].count, 10) >= 2) {
-            //         return res.status(403).json({ error: 'Bu cihazdan en fazla 2 hesap oluşturulabilir veya kullanılabilir.' });
-            //     }
-            // }
+            if (deviceId) {
+                const limitCheck = await db.query('SELECT count(*) FROM users WHERE device_id = $1 AND account_status != \'deleted\'', [deviceId]);
+                if (parseInt(limitCheck.rows[0].count, 10) >= 2) {
+                    return res.status(403).json({ error: 'Bu cihazdan en fazla 2 hesap oluşturulabilir veya kullanılabilir.' });
+                }
+            }
 
             // Handle Referral Code
             let referredBy = null;
@@ -133,12 +132,12 @@ exports.googleAuth = async (req, res) => {
                 return res.status(403).json({ error: 'Hesabınız askıya alınmış.' });
             }
 
-            // Check device limit if switching to a new device (Geçici olarak devre dışı)
+            // Check device limit if switching to a new device
             if (deviceId && user.device_id !== deviceId) {
-                // const limitCheck = await db.query('SELECT count(*) FROM users WHERE device_id = $1 AND id != $2', [deviceId, user.id]);
-                // if (parseInt(limitCheck.rows[0].count, 10) >= 2) {
-                //     return res.status(403).json({ error: 'Bu cihazdan en fazla 2 hesap oluşturulabilir veya kullanılabilir.' });
-                // }
+                const limitCheck = await db.query('SELECT count(*) FROM users WHERE device_id = $1 AND id != $2 AND account_status != \'deleted\'', [deviceId, user.id]);
+                if (parseInt(limitCheck.rows[0].count, 10) >= 2) {
+                    return res.status(403).json({ error: 'Bu cihazdan en fazla 2 hesap oluşturulabilir veya kullanılabilir.' });
+                }
                 // Update device_id
                 await db.query('UPDATE users SET device_id = $1 WHERE id = $2', [deviceId, user.id]);
                 user.device_id = deviceId;
@@ -188,12 +187,12 @@ exports.registerEmail = async (req, res) => {
         if (phone) {
             await db.query("UPDATE users SET phone = NULL WHERE phone = $1 AND account_status = 'deleted'", [phone]);
         }
-        // if (deviceId) {
-        //     const limitCheck = await db.query('SELECT count(*) FROM users WHERE device_id = $1', [deviceId]);
-        //     if (parseInt(limitCheck.rows[0].count, 10) >= 2) {
-        //         return res.status(403).json({ error: 'Bu cihazdan en fazla 2 hesap oluşturulabilir veya kullanılabilir.' });
-        //     }
-        // }
+        if (deviceId) {
+            const limitCheck = await db.query('SELECT count(*) FROM users WHERE device_id = $1 AND account_status != \'deleted\'', [deviceId]);
+            if (parseInt(limitCheck.rows[0].count, 10) >= 2) {
+                return res.status(403).json({ error: 'Bu cihazdan en fazla 2 hesap oluşturulabilir veya kullanılabilir.' });
+            }
+        }
 
         let hashedPassword = null;
         if (password) {
@@ -274,10 +273,10 @@ exports.loginEmail = async (req, res) => {
         }
 
         if (deviceId && user.device_id !== deviceId) {
-            // const limitCheck = await db.query('SELECT count(*) FROM users WHERE device_id = $1 AND id != $2', [deviceId, user.id]);
-            // if (parseInt(limitCheck.rows[0].count, 10) >= 2) {
-            //     return res.status(403).json({ error: 'Bu cihazdan en fazla 2 hesap oluşturulabilir veya kullanılabilir.' });
-            // }
+            const limitCheck = await db.query('SELECT count(*) FROM users WHERE device_id = $1 AND id != $2 AND account_status != \'deleted\'', [deviceId, user.id]);
+            if (parseInt(limitCheck.rows[0].count, 10) >= 2) {
+                return res.status(403).json({ error: 'Bu cihazdan en fazla 2 hesap oluşturulabilir veya kullanılabilir.' });
+            }
             await db.query('UPDATE users SET device_id = $1 WHERE id = $2', [deviceId, user.id]);
             user.device_id = deviceId;
         }

@@ -11,6 +11,7 @@ import {
     ScrollView,
     Keyboard,
     ActivityIndicator,
+    Linking,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Application from 'expo-application';
@@ -42,6 +43,15 @@ import ModernAlert from '../components/ui/ModernAlert';
 
 const { width, height } = Dimensions.get('window');
 
+// =========================================================================
+// YASAL VE POLİTİKA BAĞLANTI ADRESLERİ (YER TUTUCULAR - DÜZENLENEBİLİR)
+// Dosya: backend/mobile-app/src/screens/AuthScreen.js
+// =========================================================================
+export const TERMS_OF_SERVICE_URL = 'https://fivachat.com/terms'; // [YER TUTUCU: Kullanım Koşulları URL'si]
+export const PRIVACY_POLICY_URL = 'https://fivachat.com/privacy'; // [YER TUTUCU: Gizlilik Politikası URL'si]
+export const KVKK_CONSENT_URL = 'https://fivachat.com/kvkk'; // [YER TUTUCU: Açık Rıza / KVKK Metni URL'si]
+// =========================================================================
+
 export default function AuthScreen({ navigation, route }) {
     const { refreshUser } = useChat();
     // Steps: 0: Method Selection, 1: Identifier Input, 2: OTP Entry
@@ -52,6 +62,20 @@ export default function AuthScreen({ navigation, route }) {
     const [otp, setOtp] = useState('');
     const [password, setPassword] = useState('');
     const [isRegisterMode, setIsRegisterMode] = useState(false);
+    const [consentChecked, setConsentChecked] = useState(false);
+
+    const handleActionWithConsent = (action) => {
+        if (!consentChecked) {
+            setAlert({
+                visible: true,
+                title: 'Onay Zorunludur ⚠️',
+                message: 'Devam edebilmek için lütfen Kullanım Şartları ve Gizlilik Politikasını okuyup onay kutusunu işaretleyiniz.',
+                type: 'warning'
+            });
+            return;
+        }
+        action();
+    };
     const [loading, setLoading] = useState(false);
     const [alert, setAlert] = useState({ visible: false, title: '', message: '', type: 'error' });
     const [resendCountdown, setResendCountdown] = useState(0);
@@ -611,5 +635,42 @@ const styles = StyleSheet.create({
         fontSize: 12,
         fontWeight: '600',
         fontFamily: 'Outfit_500Medium',
-    }
+    },
+    legalConsentContainer: {
+        flexDirection: 'row',
+        alignItems: 'flex-start',
+        marginTop: 18,
+        paddingHorizontal: 8,
+        gap: 10,
+    },
+    checkboxTouchable: {
+        paddingTop: 2,
+    },
+    checkboxBox: {
+        width: 22,
+        height: 22,
+        borderRadius: 6,
+        borderWidth: 1.5,
+        borderColor: 'rgba(255, 255, 255, 0.4)',
+        backgroundColor: 'rgba(255, 255, 255, 0.05)',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    checkboxBoxChecked: {
+        backgroundColor: '#a855f7',
+        borderColor: '#ec4899',
+    },
+    legalTextWrapper: {
+        flex: 1,
+    },
+    legalText: {
+        color: 'rgba(255, 255, 255, 0.7)',
+        fontSize: 12,
+        lineHeight: 18,
+    },
+    legalLink: {
+        color: '#ec4899',
+        fontWeight: '700',
+        textDecorationLine: 'underline',
+    },
 });

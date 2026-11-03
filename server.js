@@ -61,6 +61,8 @@ const vipRoutes = require('./routes/vip');
 const { sanitizeUser, logActivity } = require('./utils/helpers');
 const { sendPushNotification } = require('./utils/notificationUtils');
 const { checkProfileText, checkPhotoSecurity } = require('./utils/moderationFilter');
+const { resolveTab, VALID_TABS } = require('./constants/tabs');
+const { validateAge } = require('./utils/validation');
 const { handleRoomsSockets } = require('./socket/roomsSocket');
 const { handlePartyRoomSockets, startStaleSeatSweeper } = require('./socket/partyRoomSocket');
 
@@ -1405,7 +1407,7 @@ app.post('/api/auth/request-otp', authLimiter, async (req, res) => {
     }
 });
 
-app.post('/api/auth/verify-otp', async (req, res) => {
+app.post('/api/auth/verify-otp', authLimiter, async (req, res) => {
     const { email, phone, code, otp, deviceId } = req.body;
     const verifyCode = code || otp;
     const identifier = email || phone;
@@ -1462,12 +1464,30 @@ app.get('/api/me', authenticateToken, (req, res) => {
 
 app.get('/api/operators', async (req, res) => {
     try {
-        const { gender, page = 1, limit = 100, tab = 'Önerilen' } = req.query;
+        const { gender, page = 1, limit = 20, tab = 'Önerilen' } = req.query;
         const pageNum = Math.max(1, parseInt(page) || 1);
-        const limitNum = Math.max(1, parseInt(limit) || 10);
+        const limitNum = Math.min(30, Math.max(1, parseInt(limit) || 20));
         const offset = (pageNum - 1) * limitNum;
 
-        console.log(`[OPERATORS] Fetching. Gender: ${gender}, Tab: ${tab}, Page: ${pageNum}`);
+        let enforcedGender = null;
+        // If an authenticated user token is provided, enforce opposite gender rule strictly
+        const authHeader = req.headers['authorization'];
+        const token = authHeader && authHeader.split(' ')[1];
+        if (token) {
+            try {
+                const decoded = jwt.verify(token, SECRET_KEY);
+                const userGenderRaw = (decoded.gender || '').toString().toLowerCase().trim();
+                const userGender = ['kadin', 'kadın', 'female', 'woman'].includes(userGenderRaw) ? 'kadin' : 'erkek';
+                enforcedGender = userGender === 'kadin' ? 'erkek' : 'kadin';
+                if (gender) {
+                    console.warn(`[OPERATORS SECURITY] User ${decoded.id} (${userGender}) tried to send gender filter "${gender}". Overridden by opposite gender rule (${enforcedGender}).`);
+                }
+            } catch (e) {
+                // Invalid token, proceed
+            }
+        }
+
+        console.log(`[OPERATORS] Fetching. EnforcedGender: ${enforcedGender || gender || 'all'}, Tab: ${tab}, Page: ${pageNum}, Limit: ${limitNum}`);
 
         let query = `
             SELECT 
@@ -1496,9 +1516,13 @@ app.get('/api/operators', async (req, res) => {
         let params = [];
         let paramCount = 1;
 
-        if (gender === 'erkek' || gender === 'kadin' || gender === 'male' || gender === 'female') {
+        if (enforcedGender) {
+            query += ` AND (u.gender = ${paramCount} OR u.gender = 'coin_bayisi') `;
+            params.push(enforcedGender);
+            paramCount++;
+        } else if (gender === 'erkek' || gender === 'kadin' || gender === 'male' || gender === 'female') {
             const normalizedGender = (gender === 'male' || gender === 'erkek') ? 'erkek' : 'kadin';
-            query += ` AND (u.gender = $${paramCount} OR u.gender = 'coin_bayisi') `;
+            query += ` AND (u.gender = ${paramCount} OR u.gender = 'coin_bayisi') `;
             params.push(normalizedGender);
             paramCount++;
         }
@@ -1512,7 +1536,7 @@ app.get('/api/operators', async (req, res) => {
             orderByClause = 'ORDER BY o.is_online DESC NULLS LAST, (u.created_at >= NOW() - INTERVAL \'3 days\') DESC, (coalesce(cardinality(o.photos), 0) > 0) DESC, u.created_at DESC, u.id DESC';
         }
 
-        query += ` ${orderByClause} LIMIT $${paramCount} OFFSET $${paramCount + 1}`;
+        query += ` ${orderByClause} LIMIT ${paramCount} OFFSET ${paramCount + 1}`;
         params.push(limitNum, offset);
 
         const result = await db.query(query, params);
@@ -1553,34 +1577,37 @@ app.get('/api/discovery', authenticateToken, async (req, res) => {
         const userGenderRaw = (req.user.gender || '').toString().toLowerCase().trim();
         const userGender = ['kadin', 'kadın', 'female', 'woman'].includes(userGenderRaw) ? 'kadin' : 'erkek';
         
-        // Default target gender MUST be strictly opposite gender
-        let targetGender = userGender === 'kadin' ? 'erkek' : 'kadin';
+        // STRICT TARGET GENDER: Determined strictly by user's registered gender in token
+        // Men see women; Women see men. Coin dealers are handled as exception.
+        const targetGender = userGender === 'kadin' ? 'erkek' : 'kadin';
         
-        const rawTab = req.query.tab || 'Önerilen';
-        const tabStr = String(rawTab).trim().toLowerCase();
-        let tab = 'Önerilen';
-        if (tabStr === 'yeni') tab = 'Yeni';
-        else if (tabStr === 'popüler' || tabStr === 'populer') tab = 'Popüler';
-        else if (tabStr === 'çevrimiçi' || tabStr === 'cevrimici') tab = 'Çevrimiçi';
-        else if (tabStr !== 'önerilen' && tabStr !== 'onerilen') {
-            console.log(`[DISCOVERY] Unknown tab received: "${rawTab}", defaulting to Önerilen`);
+        const { page = 1, limit = 20, gender: filterGender, tab: rawTab } = req.query;
+
+        // Security check: Ignore and log any attempt to override targetGender via query parameter
+        if (filterGender) {
+            console.warn(`[DISCOVERY SECURITY] User ${req.user.id} (${userGender}) attempted to send gender filter "${filterGender}". Parameter IGNORED. Strict opposite gender (${targetGender}) enforced.`);
         }
 
-        const { page = 1, limit = 10, gender: filterGender } = req.query;
+        // Tab validation
+        const tab = resolveTab(rawTab);
+        if (!tab) {
+            console.warn(`[DISCOVERY] Invalid tab received: "${rawTab}" from User ${req.user.id}. Returning HTTP 400.`);
+            return res.status(400).json({
+                error: 'Geçersiz sekme parametresi.',
+                received: rawTab,
+                validTabs: VALID_TABS
+            });
+        }
+
         const pageNum = Math.max(1, parseInt(page) || 1);
-        const limitNum = Math.max(1, parseInt(limit) || 10);
+        const requestedLimit = parseInt(limit) || 20;
+        const limitNum = Math.min(30, Math.max(1, requestedLimit)); // Upper bounded at 30
         const offset = (pageNum - 1) * limitNum;
         const userId = req.user.id;
 
-        // Only override targetGender if an explicit gender ('erkek' or 'kadin') is filtered.
-        // If filterGender is 'all' or missing, default strictly to opposite gender for dating discovery.
-        if (filterGender === 'erkek' || filterGender === 'kadin') {
-            targetGender = filterGender;
-        }
+        console.log(`[DISCOVERY] User ${userId} (${userGender}) -> Target: ${targetGender}. Tab: ${tab}, Page: ${pageNum}, Limit: ${limitNum}`);
 
-        console.log(`[DISCOVERY] User ${userId} (Gender: ${userGender}) -> Filter Target: ${targetGender}. Tab: ${tab}, Page: ${pageNum}`);
-
-        let whereClause = `WHERE (LOWER(u.gender) = LOWER($1) OR u.gender = 'coin_bayisi' OR (LOWER($1) = 'kadin' AND LOWER(u.gender) IN ('kadin', 'kadın', 'female')) OR (LOWER($1) = 'erkek' AND LOWER(u.gender) IN ('erkek', 'male'))) AND u.role NOT IN ('admin', 'super_admin', 'moderator', 'staff') AND (u.gender_confirmed_at IS NOT NULL OR u.role = 'operator' OR u.gender = 'coin_bayisi')`;
+        let whereClause = `WHERE (LOWER(u.gender) = LOWER($1) OR u.gender = 'coin_bayisi' OR (LOWER($1) = 'kadin' AND LOWER(u.gender) IN ('kadin', 'kadın', 'female')) OR (LOWER($1) = 'erkek' AND LOWER(u.gender) IN ('erkek', 'male'))) AND u.role NOT IN ('admin', 'super_admin', 'moderator', 'staff') AND (u.gender_confirmed_at IS NOT NULL OR u.role = 'operator' OR u.gender = 'coin_bayisi') AND u.id NOT IN (SELECT blocked_id FROM blocks WHERE blocker_id = $2 UNION SELECT blocker_id FROM blocks WHERE blocked_id = $2)`;
 
         let orderByClause = '';
         if (tab === 'Yeni') {
@@ -1637,13 +1664,13 @@ app.get('/api/discovery', authenticateToken, async (req, res) => {
                 SELECT TRUE as val FROM stories s WHERE s.operator_id = u.id AND s.expires_at > NOW() LIMIT 1
             ) active_stories ON TRUE
             ${whereClause}
-              AND u.id != ${targetGender === 'all' ? '$1' : '$2'}
+              AND u.id != $2
               AND u.account_status = 'active'
             ${orderByClause}
-            LIMIT ${targetGender === 'all' ? '$2' : '$3'} OFFSET ${targetGender === 'all' ? '$3' : '$4'}
+            LIMIT $3 OFFSET $4
         `;
 
-        const queryParams = targetGender === 'all' ? [userId, limitNum, offset] : [targetGender, userId, limitNum, offset];
+        const queryParams = [targetGender, userId, limitNum, offset];
         const startTime = Date.now();
         const result = await db.query(query, queryParams);
         const duration = Date.now() - startTime;
@@ -1653,10 +1680,32 @@ app.get('/api/discovery', authenticateToken, async (req, res) => {
         }
 
         const rows = result.rows.map(row => {
-            return sanitizeUser(row, req);
+            let parsedPhotos = [];
+            if (row.photos) {
+                if (typeof row.photos === 'string') {
+                    try {
+                        parsedPhotos = JSON.parse(row.photos);
+                    } catch (e) {
+                        parsedPhotos = row.photos.replace(/[{}]/g, '').split(',').map(s => s.trim().replace(/"/g, ''));
+                    }
+                } else if (Array.isArray(row.photos)) {
+                    parsedPhotos = row.photos;
+                }
+            }
+            return {
+                ...row,
+                photos: parsedPhotos,
+                avatar_url: row.avatar_url || (parsedPhotos.length > 0 ? parsedPhotos[0] : null)
+            };
         });
 
-        res.json(rows);
+        const sanitizedRows = rows.map(r => sanitizeUser(r, req));
+        res.json({
+            data: sanitizedRows,
+            hasMore: sanitizedRows.length >= limitNum,
+            page: pageNum,
+            limit: limitNum
+        });
     } catch (err) {
         console.error("❌ [DISCOVERY ERROR]:", err);
         res.status(500).json({
@@ -1920,7 +1969,32 @@ app.get('/api/users/:id', async (req, res) => {
         userData.followers_count = parseInt(followers.rows[0].count);
         userData.following_count = parseInt(following.rows[0].count);
 
-        res.json(sanitizeUser(userData, req));
+        const sanitized = sanitizeUser(userData, req);
+        
+        // Check if requester is owner or admin (via optional token)
+        let isOwnerOrAdmin = false;
+        try {
+            const authHeader = req.headers['authorization'];
+            const token = authHeader && authHeader.split(' ')[1];
+            if (token) {
+                const decoded = jwt.verify(token, JWT_SECRET);
+                if (decoded && (decoded.id?.toString() === req.params.id.toString() || decoded.role === 'admin' || decoded.role === 'super_admin')) {
+                    isOwnerOrAdmin = true;
+                }
+            }
+        } catch (_) {}
+
+        if (!isOwnerOrAdmin) {
+            delete sanitized.email;
+            delete sanitized.phone;
+            delete sanitized.fcm_token;
+            delete sanitized.device_token;
+            delete sanitized.balance;
+            delete sanitized.coin_balance;
+            delete sanitized.diamond_balance;
+        }
+
+        res.json(sanitized);
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
@@ -1977,9 +2051,19 @@ app.get('/api/admin/sync-albums', async (req, res) => {
 });
 
 // UPDATE USER PROFILE
-app.put('/api/users/:id', async (req, res) => {
+app.put('/api/users/:id', authenticateToken, async (req, res) => {
     const { id } = req.params;
+
+    // Authorization check: User can update own profile, Admins can update any
+    if (req.user.id.toString() !== id.toString() && req.user.role !== 'admin' && req.user.role !== 'super_admin') {
+        return res.status(403).json({ error: 'Yetkisiz işlem. Başkasının profilini güncelleyemezsiniz.' });
+    }
     const { name, display_name, age, gender, bio, job, edu } = req.body;
+
+    if (age !== undefined && age !== null && age !== '') {
+        const ageCheck = validateAge(age);
+        if (!ageCheck.valid) return res.status(400).json({ error: ageCheck.error });
+    }
 
     // Check text for phone numbers / forbidden words
     const nameToCheck = name || display_name;
@@ -2065,9 +2149,19 @@ app.put('/api/users/:id/gender-confirm', authenticateToken, async (req, res) => 
     }
 });
 
-app.put('/api/users/:id/profile', async (req, res) => {
+app.put('/api/users/:id/profile', authenticateToken, async (req, res) => {
     const { id } = req.params;
+
+    // Authorization check: User can update own profile, Admins can update any
+    if (req.user.id.toString() !== id.toString() && req.user.role !== 'admin' && req.user.role !== 'super_admin') {
+        return res.status(403).json({ error: 'Yetkisiz işlem. Başkasının profilini güncelleyemezsiniz.' });
+    }
     const { display_name, name, bio, avatar_url, gender, interests, onboarding_completed, relationship, zodiac, age, city } = req.body;
+
+    if (age !== undefined && age !== null && age !== '') {
+        const ageCheck = validateAge(age);
+        if (!ageCheck.valid) return res.status(400).json({ error: ageCheck.error });
+    }
 
     // STRICT MANDATORY GENDER ENFORCEMENT
     const normalizedGender = (gender || '').toString().trim().toLowerCase();
@@ -3247,10 +3341,20 @@ app.delete('/api/users/:id', authenticateToken, async (req, res) => {
 
         console.log(`[SOFT_DELETE] Marking user ${id} as deleted`);
 
-        console.log(`[HARD_DELETE] Removing user ${id} from database`);
+        console.log(`[SOFT_DELETE] Anonymizing user ${id} and marking as deleted`);
 
         const result = await db.query(
-            "DELETE FROM users WHERE id = $1 RETURNING id",
+            `UPDATE users 
+             SET account_status = 'deleted', 
+                 is_active = FALSE,
+                 display_name = 'Silinmiş Hesap',
+                 name = 'Silinmiş Hesap',
+                 bio = NULL,
+                 email = NULL,
+                 phone = NULL,
+                 avatar_url = NULL,
+                 deleted_at = NOW()
+             WHERE id = $1 RETURNING id`,
             [id]
         );
 
@@ -3259,8 +3363,12 @@ app.delete('/api/users/:id', authenticateToken, async (req, res) => {
             return res.status(404).json({ error: 'Kullanıcı bulunamadı.' });
         }
 
+        // Clean up favorites and blocks to detach user gracefully
+        await db.query('DELETE FROM favorites WHERE user_id = $1 OR target_user_id = $1', [id]);
+        await db.query('DELETE FROM blocks WHERE blocker_id = $1 OR blocked_id = $1', [id]);
+
         await db.query('COMMIT');
-        console.log(`[SOFT_DELETE] User ${id} marked as deleted successfully.`);
+        console.log(`[SOFT_DELETE] User ${id} marked as deleted and anonymized successfully.`);
         res.json({ success: true, message: 'Hesap başarıyla silindi (Soft Delete).' });
     } catch (err) {
         await db.query('ROLLBACK');
@@ -3273,6 +3381,11 @@ app.delete('/api/users/:id', authenticateToken, async (req, res) => {
 app.put('/api/users/:id/profile', authenticateToken, async (req, res) => {
     const { id } = req.params;
     const { name, bio, job, relationship, zodiac, interests, age, edu, boy, kilo, city } = req.body;
+
+    if (age !== undefined && age !== null && age !== '') {
+        const ageCheck = validateAge(age);
+        if (!ageCheck.valid) return res.status(400).json({ error: ageCheck.error });
+    }
 
     // Authorization check: User can update own profile, Admins can update any
     if (req.user.id.toString() !== id.toString() && req.user.role !== 'admin' && req.user.role !== 'super_admin') {
@@ -3424,8 +3537,6 @@ app.post('/api/purchase', authenticateToken, async (req, res) => {
         // Deduplicate transaction to prevent double-coins if webhook already processed it
         if (transactionId && !transactionId.startsWith('manual_')) {
             if (transactionId.startsWith('test_')) {
-                // No real RC transaction ID available — webhook likely already added coins.
-                // Just return the current balance without adding again.
                 await db.query('ROLLBACK');
                 const balRes = await db.query('SELECT balance FROM users WHERE id = $1', [userId]);
                 const currentBalance = balRes.rows[0]?.balance ?? 0;
@@ -3434,13 +3545,20 @@ app.post('/api/purchase', authenticateToken, async (req, res) => {
             }
             const existingTx = await db.query('SELECT id FROM payments WHERE transaction_id = $1', [transactionId]);
             if (existingTx.rows.length > 0) {
-                // Already processed by webhook (or previous request)
                 await db.query('ROLLBACK');
-                console.log(`[PURCHASE IGNORED] Transaction ${transactionId} already processed (likely by webhook).`);
-                
-                // Return success so the app can fetch the updated balance
+                console.log(`[PURCHASE IGNORED] Transaction ${transactionId} already processed.`);
                 return res.json({ success: true, message: 'Transaction already processed', balance: req.user.balance });
             }
+        }
+
+        // Security verification: Client cannot directly credit unverified transactions
+        // Transactions must come from RevenueCat server webhook, or have admin role
+        if (!transactionId || (!transactionId.startsWith('manual_') && req.user.role !== 'admin' && req.user.role !== 'super_admin')) {
+            await db.query('ROLLBACK');
+            console.warn(`[PURCHASE BLOCKED] Unauthorized direct purchase attempt by user ${userId} with tx: ${transactionId}`);
+            return res.status(400).json({ 
+                error: 'Satın alma doğrulaması doğrudan RevenueCat sistemi üzerinden yapılmaktadır. Bakiyeniz onaylandığında otomatik yüklenecektir.' 
+            });
         }
 
         // 1. Validate Package and Get Price/Coins from DB
@@ -3605,7 +3723,12 @@ app.get('/api/users/:userId/chats', async (req, res) => {
                 true as is_online 
             FROM chats c
             LEFT JOIN users u ON u.id = CASE WHEN c.user_id = $1 THEN c.operator_id ELSE c.user_id END
-            WHERE c.user_id = $1 OR c.operator_id = $1
+            WHERE (c.user_id = $1 OR c.operator_id = $1)
+              AND CASE WHEN c.user_id = $1 THEN c.operator_id ELSE c.user_id END NOT IN (
+                  SELECT blocked_id FROM blocks WHERE blocker_id = $1
+                  UNION
+                  SELECT blocker_id FROM blocks WHERE blocked_id = $1
+              )
             ORDER BY COALESCE((SELECT MAX(created_at) FROM messages WHERE chat_id = c.id), c.last_message_at) DESC
         `;
 
@@ -6375,15 +6498,15 @@ app.get('/api/keep-alive', (req, res) => {
 // --- MISSING MOBILE ROUTES (404 FIXES) ---
 
 // 1. Hi Message Route (Optimized with Coin Deduction)
-app.post('/api/messages/send-hi', async (req, res) => {
-    const { userId, senderId, operatorId, receiverId, content, message } = req.body;
-    const finalSenderId = userId || senderId;
+app.post('/api/messages/send-hi', authenticateToken, async (req, res) => {
+    const { operatorId, receiverId, content, message } = req.body;
+    const finalSenderId = req.user.id; // Enforce sender from authenticated token
     const finalReceiverId = operatorId || receiverId;
     const finalContent = content || message || 'Merhaba 👋';
     const HI_COST = 10;
 
-    if (!finalSenderId || !finalReceiverId) {
-        return res.status(400).json({ error: 'Missing sender or receiver ID' });
+    if (!finalReceiverId) {
+        return res.status(400).json({ error: 'Missing receiver ID' });
     }
 
     try {
@@ -6399,7 +6522,7 @@ app.post('/api/messages/send-hi', async (req, res) => {
         const currentBalance = userRes.rows[0].balance;
         if (currentBalance < HI_COST) {
             await db.query('ROLLBACK');
-            return res.status(400).json({ error: 'Yetersiz bakiye. Hi mesajı göndermek için 50 Coin gereklidir.', insufficientFunds: true });
+            return res.status(400).json({ error: 'Yetersiz bakiye. Hi mesajı göndermek için 10 Coin gereklidir.', insufficientFunds: true });
         }
 
         // Find or create chat

@@ -86,6 +86,36 @@ export default function OperatorProfileScreen({ route, navigation }) {
         }
     };
 
+    const handleBlockUser = async () => {
+        Alert.alert(
+            'Kullanıcıyı Engelle',
+            'Bu kullanıcıyı engellemek istediğinize emin misiniz? Engelledikten sonra Keşfet ve Sohbetlerinizde bu profili görmeyeceksiniz.',
+            [
+                { text: 'Vazgeç', style: 'cancel' },
+                {
+                    text: 'Engelle',
+                    style: 'destructive',
+                    onPress: async () => {
+                        try {
+                            const token = await AsyncStorage.getItem('token');
+                            const targetId = operator.id || operator.user_id;
+                            await axios.post(`${API_URL}/blocks`, {
+                                blockedId: targetId
+                            }, {
+                                headers: token ? { Authorization: `Bearer ${token}` } : {}
+                            });
+                            Alert.alert('Engellendi', 'Kullanıcı başarıyla engellendi.', [
+                                { text: 'Tamam', onPress: () => navigation.goBack() }
+                            ]);
+                        } catch (e) {
+                            Alert.alert('Hata', 'Engelleme işlemi gerçekleştirilemedi.');
+                        }
+                    }
+                }
+            ]
+        );
+    };
+
     useEffect(() => {
         // Track Profile View
         if (user && operator) {
@@ -254,6 +284,16 @@ export default function OperatorProfileScreen({ route, navigation }) {
                     >
                         <View style={[styles.iconBlur, { backgroundColor: 'rgba(0,0,0,0.5)' }]}>
                             <Ionicons name="flag-outline" size={20} color="white" />
+                        </View>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                        onPress={handleBlockUser}
+                        style={styles.headerIconButton}
+                        accessibilityLabel="Kullanıcıyı Engelle"
+                    >
+                        <View style={[styles.iconBlur, { backgroundColor: 'rgba(0,0,0,0.5)' }]}>
+                            <Ionicons name="ban-outline" size={20} color="#f87171" />
                         </View>
                     </TouchableOpacity>
 

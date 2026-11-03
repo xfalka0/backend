@@ -1,3 +1,4 @@
+import { DISCOVERY_TABS, DEFAULT_TAB } from '../constants/tabs';
 import React, { useEffect, useState, useRef } from 'react';
 import { View, Text, FlatList, Image, TouchableOpacity, StyleSheet, Dimensions, ScrollView, Alert, TextInput, Modal, Pressable, ActivityIndicator, Linking, Platform, StatusBar } from 'react-native';
 import axios from 'axios';
@@ -164,7 +165,7 @@ export default function HomeScreen({ navigation, route }) {
     const [featuredOperators, setFeaturedOperators] = useState([]);
     const [loading, setLoading] = useState(true);
     const [balance, setBalance] = useState(user.balance || 0);
-    const [activeTab, setActiveTab] = useState('Önerilen');
+    const [activeTab, setActiveTab] = useState(DEFAULT_TAB);
     const [searchText, setSearchText] = useState('');
     const [showSearch, setShowSearch] = useState(false);
     const [refreshing, setRefreshing] = useState(false);
@@ -241,25 +242,30 @@ export default function HomeScreen({ navigation, route }) {
         }, 8000);
 
         try {
+            console.log(`[DISCOVERY_FETCH_START] RequestId: ${currentRequestId} | Tab: ${requestedTab} | Page: ${pageNum} | Limit: 20`);
             const token = await AsyncStorage.getItem('token');
-            const res = await axios.get(`${API_URL}/discovery?tab=${requestedTab}&page=${pageNum}&limit=50&gender=${currentFilters.gender}`, {
+            const res = await axios.get(`${API_URL}/discovery?tab=${requestedTab}&page=${pageNum}&limit=20`, {
                 headers: token ? { Authorization: `Bearer ${token}` } : {},
                 signal: abortControllerRef.current.signal
             });
             
             clearTimeout(timeoutId);
             
-            if (currentRequestId !== requestIdRef.current) return;
+            if (currentRequestId !== requestIdRef.current) {
+                console.log(`[DISCOVERY_FETCH_CANCEL] RequestId: ${currentRequestId} superseded by ${requestIdRef.current}`);
+                return;
+            }
 
-            const data = res.data?.data || res.data || [];
-            console.log('[DEBUG FETCH OPERATORS] Loaded length:', data.length);
+            const data = res.data?.data || (Array.isArray(res.data) ? res.data : []);
+            const serverHasMore = res.data?.hasMore !== undefined ? res.data.hasMore : (data.length >= 20);
+            console.log(`[DISCOVERY_FETCH_FINISH] RequestId: ${currentRequestId} | Tab: ${requestedTab} | Raw Loaded: ${data.length} | HasMore: ${serverHasMore} | Page: ${pageNum}`);
             
             if (pageNum === 1) {
                 setOperators(data);
                 const featured = data.filter(op => op.is_boosted || op.vip_level > 0).slice(0, 15);
                 setFeaturedOperators(featured);
                 setPage(1);
-                setHasMore(data.length >= 50);
+                setHasMore(serverHasMore);
             } else {
                 if (data.length > 0) {
                     setOperators(prev => {
@@ -268,7 +274,7 @@ export default function HomeScreen({ navigation, route }) {
                         return [...prev, ...uniqueNewData];
                     });
                     setPage(pageNum);
-                    setHasMore(data.length >= 50);
+                    setHasMore(serverHasMore);
                 } else {
                     setHasMore(false);
                 }
@@ -316,7 +322,7 @@ export default function HomeScreen({ navigation, route }) {
 
     const handleLoadMore = () => {
         if (loading || loadingMore || !hasMore) return;
-        fetchOperators(page + 1);
+        fetchOperators(page + 1, false, activeTab);
     };
 
     const renderFooter = () => {
@@ -425,12 +431,12 @@ export default function HomeScreen({ navigation, route }) {
             
             <View style={[styles.tabContainer, { justifyContent: 'space-between' }]}>
                 <View style={{ flexDirection: 'row', gap: 10, alignItems: 'center' }}>
-                    {['Önerilen', 'Çevrimiçi', 'Yeni', 'Popüler'].map(tab => {
-                        const isActive = activeTab === tab;
+                    {DISCOVERY_TABS.map(tab => {
+                        const isActive = activeTab === tab.id;
                         return (
                             <TouchableOpacity 
-                                key={tab} 
-                                onPress={() => handleTabPress(tab)} 
+                                key={tab.id} 
+                                onPress={() => handleTabPress(tab.id)} 
                                 style={styles.tab}
                                 activeOpacity={0.75}
                             >
@@ -441,7 +447,7 @@ export default function HomeScreen({ navigation, route }) {
                                         end={{ x: 1, y: 0 }}
                                         style={[styles.tabText, styles.activeTabText]}
                                     >
-                                        {tab}
+                                        {tab.label}
                                     </GradientText>
                                 ) : (
                                     <Text style={[
@@ -451,7 +457,7 @@ export default function HomeScreen({ navigation, route }) {
                                             color: theme.mode === 'dark' ? 'rgba(255, 255, 255, 0.4)' : '#64748B' 
                                         }
                                     ]}>
-                                        {tab}
+                                        {tab.label}
                                     </Text>
                                 )}
                                 {isActive && (
@@ -571,10 +577,10 @@ export default function HomeScreen({ navigation, route }) {
                 onEndReached={handleLoadMore}
                 onEndReachedThreshold={0.4}
                 showsVerticalScrollIndicator={false}
-                removeClippedSubviews={Platform.OS === 'android'}
-                initialNumToRender={6}
-                maxToRenderPerBatch={6}
-                windowSize={7}
+                removeClippedSubviews={false}
+                initialNumToRender={10}
+                maxToRenderPerBatch={10}
+                windowSize={11}
             />
 
             <FilterModal 

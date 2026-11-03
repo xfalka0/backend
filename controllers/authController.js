@@ -1,3 +1,4 @@
+const { validateAge } = require('../utils/validation');
 const db = require('../db');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
@@ -162,7 +163,12 @@ exports.googleAuth = async (req, res) => {
 
 // Register User (Phase 1)
 exports.registerEmail = async (req, res) => {
-    let { email, phone, password, username, displayName, display_name, gender, country, avatarUrl, avatar_url, bio, deviceId } = req.body;
+    let { email, phone, password, username, displayName, display_name, gender, country, avatarUrl, avatar_url, bio, deviceId, age } = req.body;
+
+    if (age !== undefined && age !== null && age !== '') {
+        const ageCheck = validateAge(age);
+        if (!ageCheck.valid) return res.status(400).json({ error: ageCheck.error });
+    }
     const io = req.app.get('io');
     
     if (!email && !phone) return res.status(400).json({ error: 'E-posta veya telefon numarası zorunludur.' });

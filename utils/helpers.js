@@ -70,6 +70,13 @@ const sanitizeUser = (user, req) => {
         newUser.photos = newUser.photos.map(p => rewrite(p));
     }
 
+    // Strip sensitive security & internal fields
+    delete newUser.password_hash;
+    delete newUser.password;
+    delete newUser.otp_code;
+    delete newUser.otp_expires;
+    delete newUser.device_token;
+
     return newUser;
 };
 

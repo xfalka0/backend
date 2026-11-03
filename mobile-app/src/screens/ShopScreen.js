@@ -66,6 +66,12 @@ const CoinPackageCard = React.memo(({ pack, index, handlePurchaseIntent, isPopul
     const price = product.price;
 
     const rate = price > 0 ? (price / coinAmount).toFixed(2) : '0.00';
+    // Dynamic real advantage calculation based on base unit price (100 coins = 0.3999 TL/coin)
+    const baseRate = 0.3999;
+    const currentRate = (price > 0 && coinAmount > 0) ? (price / coinAmount) : 0;
+    const realAdvantage = (currentRate > 0 && currentRate < baseRate && coinAmount > 100)
+        ? Math.round((1 - (currentRate / baseRate)) * 100)
+        : 0;
     
     // Icon scaling based on amount
     let coinScale = 1;
@@ -123,9 +129,9 @@ const CoinPackageCard = React.memo(({ pack, index, handlePurchaseIntent, isPopul
 
                     {/* Advantage Badges */}
                     <View style={styles.bonusBadgeContainer}>
-                        {config.bonus > 0 && (
-                            <Text style={styles.bonusBadgeText}>+%{Math.round(config.bonus / coinAmount * 100)} bonus</Text>
-                        )}
+                        {realAdvantage > 0 ? (
+                            <Text style={styles.bonusBadgeText}>+%{realAdvantage} Avantaj</Text>
+                        ) : null}
                     </View>
 
                     {/* Price Button */}

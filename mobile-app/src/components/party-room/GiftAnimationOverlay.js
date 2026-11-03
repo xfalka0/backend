@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useMemo } from 'react';
 import { StyleSheet, Animated, Text, Dimensions, View, Image } from 'react-native';
-import { Video, ResizeMode } from 'expo-av';
+
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRoomStore } from '../../store/useRoomStore';
 import { useAppStore } from '../../store/useAppStore';
@@ -12,13 +12,13 @@ const PREMIUM_ANIMATIONS = {
     6: {
         type: 'image',
         name: 'Yarış Arabası',
-        source: require('../../../assets/yarisarabasi.webp'),
+        source: require('../../assets/car.png'),
         icon: '🏎️'
     },
     7: {
         type: 'image',
         name: 'Şato',
-        source: require('../../../assets/sato.webp'),
+        source: require('../../assets/castle.png'),
         icon: '🏰'
     }
 };
@@ -118,23 +118,13 @@ export default function GiftAnimationOverlay({ giftEvent }) {
                 {/* Animation Overlay (Video or Transparent Image) */}
                 {performanceMode !== 'low' && (
                     <View style={styles.videoWrapper}>
-                        {premiumAnim.type === 'image' ? (
+                        {premiumAnim.source ? (
                             <Image
                                 source={premiumAnim.source}
                                 style={styles.videoPlayer}
                                 resizeMode="contain"
                             />
-                        ) : (
-                            <Video
-                                source={premiumAnim.source}
-                                rate={1.0}
-                                volume={1.0}
-                                isMuted={false}
-                                resizeMode={ResizeMode.CONTAIN}
-                                shouldPlay
-                                style={styles.videoPlayer}
-                            />
-                        )}
+                        ) : null}
                     </View>
                 )}
             </Animated.View>

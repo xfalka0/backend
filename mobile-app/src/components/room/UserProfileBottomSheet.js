@@ -1,10 +1,13 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
     Modal, View, Text, StyleSheet, TouchableOpacity,
     Dimensions, Animated, Image, Alert
 } from 'react-native';
 import { Ionicons, FontAwesome5 } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import axios from 'axios';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { API_URL } from '../../config';
 import VipFrame from '../ui/VipFrame';
 import AgencyBadge from '../ui/AgencyBadge';
 import { useGiftStore } from '../../store/useGiftStore';
@@ -86,10 +89,10 @@ function UserMiniProfileHeader({ user }) {
 }
 
 // ─── Sub-Component: UserStatsRow ──────────────────────────────────────────
-function UserStatsRow({ user }) {
-    const followers = user.follower_count !== undefined && user.follower_count !== null && user.follower_count !== '—' ? user.follower_count : 0;
-    const following = user.following_count !== undefined && user.following_count !== null && user.following_count !== '—' ? user.following_count : 0;
-    const gifts = user.gift_count !== undefined && user.gift_count !== null && user.gift_count !== '—' ? user.gift_count : 0;
+function UserStatsRow({ user, stats }) {
+    const followers = stats?.followers ?? user?.followers_count ?? user?.follower_count ?? 0;
+    const following = stats?.following ?? user?.following_count ?? 0;
+    const gifts = stats?.gifts ?? user?.gifts_count ?? user?.gift_count ?? 0;
 
     return (
         <View style={styles.statsRow}>
@@ -112,7 +115,7 @@ function UserStatsRow({ user }) {
 }
 
 // ─── Sub-Component: UserQuickActions ──────────────────────────────────────
-function UserQuickActions({ isMe, handleViewProfile, handleGift, handleMessage, handleFollow }) {
+function UserQuickActions({ isMe, isFavorited, handleViewProfile, handleGift, handleMessage, handleFollow }) {
     return (
         <View style={styles.actionRow}>
             <TouchableOpacity style={styles.actionBtn} onPress={handleViewProfile}>
@@ -122,9 +125,14 @@ function UserQuickActions({ isMe, handleViewProfile, handleGift, handleMessage, 
 
             {!isMe && (
                 <>
-                    <TouchableOpacity style={styles.actionBtn} onPress={handleFollow}>
-                        <Ionicons name="person-add-outline" size={18} color="#FFFFFF" />
-                        <Text style={styles.actionBtnText}>Takip Et</Text>
+                    <TouchableOpacity 
+                        style={[styles.actionBtn, isFavorited && { borderColor: '#EC4899', backgroundColor: 'rgba(236,72,153,0.15)' }]} 
+                        onPress={handleFollow}
+                    >
+                        <Ionicons name={isFavorited ? "heart" : "person-add-outline"} size={18} color={isFavorited ? "#EC4899" : "#FFFFFF"} />
+                        <Text style={[styles.actionBtnText, isFavorited && { color: '#EC4899' }]}>
+                            {isFavorited ? 'Takipte' : 'Takip Et'}
+                        </Text>
                     </TouchableOpacity>
 
                     <TouchableOpacity style={styles.actionBtn} onPress={handleMessage}>
@@ -171,6 +179,41 @@ function ModeratorActions({ isMuted, onMutePress, onKickPress, onBanPress }) {
 export default function RoomUserBottomSheet({ visible, user, seat, currentUser, isHost, onClose, onKick, onMute, onGift, navigation, onMessage }) {
     const slideAnim = useRef(new Animated.Value(height)).current;
     const { openGiftPicker } = useGiftStore();
+    const [isFavorited, setIsFavorited] = useState(false);
+    const [stats, setStats] = useState({
+        followers: user?.followers_count ?? user?.follower_count ?? 0,
+        following: user?.following_count ?? 0,
+        gifts: user?.gifts_count ?? user?.gift_count ?? 0
+    });
+
+    useEffect(() => {
+        if (!visible || !user) return;
+        const targetId = user.user_id || user.id;
+
+        setStats({
+            followers: user.followers_count ?? user.follower_count ?? 0,
+            following: user.following_count ?? 0,
+            gifts: user.gifts_count ?? user.gift_count ?? 0
+        });
+
+        if (targetId) {
+            axios.get(`${API_URL}/favorites/stats/${targetId}`).then(res => {
+                if (res.data) {
+                    setStats(prev => ({
+                        ...prev,
+                        followers: res.data.followers ?? prev.followers,
+                        following: res.data.following ?? prev.following
+                    }));
+                }
+            }).catch(() => {});
+
+            if (currentUser?.id) {
+                axios.get(`${API_URL}/favorites/check/${currentUser.id}/${targetId}`).then(res => {
+                    setIsFavorited(!!res.data?.isFavorited);
+                }).catch(() => {});
+            }
+        }
+    }, [visible, user?.id, currentUser?.id]);
 
     useEffect(() => {
         if (visible) {
@@ -223,8 +266,35 @@ export default function RoomUserBottomSheet({ visible, user, seat, currentUser, 
         }
     };
 
-    const handleFollow = () => {
-        Alert.alert('Başarılı', `${cleanUsername(user.display_name || user.username)} takip edildi!`);
+    const handleFollow = async () => {
+        if (!currentUser?.id || !user?.id) return;
+        const targetId = user.user_id || user.id;
+
+        try {
+            const token = await AsyncStorage.getItem('token');
+            const headers = token ? { Authorization: `Bearer ${token}` } : {};
+
+            if (isFavorited) {
+                await axios.delete(`${API_URL}/favorites/${targetId}`, {
+                    data: { userId: currentUser.id },
+                    headers
+                });
+                setIsFavorited(false);
+                setStats(prev => ({ ...prev, followers: Math.max(0, prev.followers - 1) }));
+                Alert.alert('Bilgi', `${cleanUsername(user.display_name || user.username)} takipten çıkarıldı.`);
+            } else {
+                await axios.post(`${API_URL}/favorites`, {
+                    userId: currentUser.id,
+                    targetUserId: targetId
+                }, { headers });
+                setIsFavorited(true);
+                setStats(prev => ({ ...prev, followers: prev.followers + 1 }));
+                Alert.alert('Başarılı', `${cleanUsername(user.display_name || user.username)} takip edildi!`);
+            }
+        } catch (err) {
+            console.error('Follow error:', err);
+            Alert.alert('Hata', 'İşlem gerçekleştirilemedi.');
+        }
     };
 
     const handleBan = () => {
@@ -252,11 +322,12 @@ export default function RoomUserBottomSheet({ visible, user, seat, currentUser, 
                 <UserMiniProfileHeader user={user} />
 
                 {/* Sub-Component: Stats Row */}
-                <UserStatsRow user={user} />
+                <UserStatsRow user={user} stats={stats} />
 
                 {/* Sub-Component: Quick Actions Row */}
                 <UserQuickActions
                     isMe={isMe}
+                    isFavorited={isFavorited}
                     handleViewProfile={handleViewProfile}
                     handleGift={handleGift}
                     handleMessage={handleMessage}

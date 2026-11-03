@@ -40,7 +40,7 @@ export default function OperatorProfileScreen({ route, navigation }) {
     const [followerStats, setFollowerStats] = useState({ followers: 0, following: 0 });
 
     useEffect(() => {
-        const targetId = initialOperator?.id || initialOperator?.user_id;
+        const targetId = initialOperator?.user_id || initialOperator?.id;
         if (!targetId) return;
 
         // Fetch complete user profile data from database
@@ -66,12 +66,12 @@ export default function OperatorProfileScreen({ route, navigation }) {
                 }
             })
             .catch(e => console.log('[OperatorProfileScreen] Fetch full user profile err:', e.message));
-    }, [initialOperator?.id || initialOperator?.user_id]);
+    }, [initialOperator?.user_id || initialOperator?.id]);
 
     const submitReport = async (reason) => {
         try {
             const token = await AsyncStorage.getItem('token');
-            const targetId = operator.id || operator.user_id;
+            const targetId = operator.user_id || operator.id;
             await axios.post(`${API_URL}/reports`, {
                 reportedUserId: targetId,
                 reason: reason,
@@ -98,7 +98,7 @@ export default function OperatorProfileScreen({ route, navigation }) {
                     onPress: async () => {
                         try {
                             const token = await AsyncStorage.getItem('token');
-                            const targetId = operator.id || operator.user_id;
+                            const targetId = operator.user_id || operator.id;
                             await axios.post(`${API_URL}/block`, {
                                 blockedId: targetId
                             }, {
@@ -121,27 +121,27 @@ export default function OperatorProfileScreen({ route, navigation }) {
         if (user && operator) {
             axios.post(`${API_URL}/views`, {
                 viewerId: user.id,
-                viewedUserId: operator.id || operator.user_id // Handle operator vs user objects
+                viewedUserId: operator.user_id || operator.id // Handle operator vs user objects
             }).catch(e => console.log('View track err', e));
         }
 
         // Check if favorited
-        if (user && operator) {
-            axios.get(`${API_URL}/favorites/check/${user.id}/${operator.id || operator.user_id}`)
+        const targetId = operator.user_id || operator.id;
+        if (user && targetId) {
+            axios.get(`${API_URL}/favorites/check/${user.id}/${targetId}`)
                 .then(res => setIsFavorited(res.data.isFavorited))
                 .catch(e => console.log('Fav check err', e));
         }
         // Fetch follower stats
         const fetchFollowerStats = async () => {
             try {
-                const targetId = operator.id || operator.user_id;
                 const res = await axios.get(`${API_URL}/favorites/stats/${targetId}`);
                 setFollowerStats(res.data);
             } catch (e) { console.log('Stat fetch err', e); }
         };
 
-        if (operator) fetchFollowerStats();
-    }, [user, operator?.id || operator?.user_id]);
+        if (targetId) fetchFollowerStats();
+    }, [user, operator?.user_id || operator?.id]);
 
     const handleFavorite = async () => {
         if (!user || !operator) {
@@ -150,16 +150,18 @@ export default function OperatorProfileScreen({ route, navigation }) {
         }
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
         try {
-            const targetId = operator.id || operator.user_id;
+            const targetId = operator.user_id || operator.id;
+            const token = await AsyncStorage.getItem('token');
+            const headers = token ? { Authorization: `Bearer ${token}` } : {};
             const url = isFavorited ? `${API_URL}/favorites/${targetId}` : `${API_URL}/favorites`;
             console.log(`[DEBUG] Follow Action: ${isFavorited ? 'DELETE' : 'POST'} to ${url}`, { userId: user.id, targetId });
             
             if (isFavorited) {
-                await axios.delete(url, { data: { userId: user.id } });
+                await axios.delete(url, { data: { userId: user.id }, headers });
                 setIsFavorited(false);
                 setFollowerStats(prev => ({ ...prev, followers: Math.max(0, prev.followers - 1) }));
             } else {
-                await axios.post(url, { userId: user.id, targetUserId: targetId });
+                await axios.post(url, { userId: user.id, targetUserId: targetId }, { headers });
                 setIsFavorited(true);
                 setFollowerStats(prev => ({ ...prev, followers: prev.followers + 1 }));
             }

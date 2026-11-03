@@ -1026,7 +1026,7 @@ export default function OnboardingScreen({ navigation, route }) {
                     {renderStepContent()}
                 </KeyboardAvoidingView>
 
-                <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 20) }]}>
+                <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom + 25, 48), marginBottom: Platform.OS === 'android' ? 12 : 0 }]}>
                     <GradientButton
                         title={currentStep === STEPS.length - 1 ? 'TAMAMLA' : 'DEVAM ET'}
                         onPress={nextStep}
@@ -1081,12 +1081,12 @@ const styles = StyleSheet.create({
         shadowRadius: 6,
         elevation: 6,
     },
-    content: { flex: 1, paddingHorizontal: 25, justifyContent: 'center' },
+    content: { flex: 1, paddingHorizontal: 25, justifyContent: 'center', marginTop: -35 },
     stepWrapper: { width: '100%', alignItems: 'center' },
-    textCenter: { alignItems: 'center', marginBottom: 50 },
+    textCenter: { alignItems: 'center', marginBottom: height < 750 ? 20 : 30 },
     title: { fontSize: 34, fontWeight: '900', color: 'white', marginBottom: 16, textAlign: 'center', letterSpacing: -1 },
     subtitle: { fontSize: 16, color: 'rgba(255,255,255,0.7)', textAlign: 'center', fontWeight: '500', lineHeight: 24, paddingHorizontal: 20 },
-    welcomeContainer: { alignItems: 'center', gap: 35 },
+    welcomeContainer: { alignItems: 'center', gap: height < 750 ? 15 : 22 },
     welcomeIconCircle: { width: 120, height: 120, borderRadius: 60, alignItems: 'center', justifyContent: 'center', elevation: 20, shadowColor: '#8b5cf6', shadowOffset: { width: 0, height: 15 }, shadowOpacity: 0.6, shadowRadius: 25 },
     welcomeInfo: { color: 'rgba(255,255,255,0.5)', fontSize: 18, textAlign: 'center', lineHeight: 26, paddingHorizontal: 15, fontWeight: '400' },
     inputStepContainer: { width: '100%', alignItems: 'center' },
@@ -1199,14 +1199,14 @@ const styles = StyleSheet.create({
     previewImage: { width: '100%', height: '100%' },
     photoPlaceholder: { alignItems: 'center', gap: 15 },
     photoPlaceholderText: { color: 'rgba(255,255,255,0.3)', fontSize: 17, fontWeight: '600' },
-    footer: { padding: 30, paddingBottom: Platform.OS === 'ios' ? 40 : 30 },
-    nextButton: { height: 68, borderRadius: 34, shadowColor: '#8b5cf6', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.4, shadowRadius: 15, elevation: 10 }
+    footer: { paddingHorizontal: 25, paddingTop: 10 },
+    nextButton: { height: 58, borderRadius: 29, shadowColor: '#8b5cf6', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.4, shadowRadius: 12, elevation: 8 }
 });
 
 const illStyles = StyleSheet.create({
     illContainer: {
         width: width * 0.9,
-        height: 230,
+        height: height < 750 ? 190 : 210,
         justifyContent: 'center',
         alignItems: 'center',
         marginVertical: 10,

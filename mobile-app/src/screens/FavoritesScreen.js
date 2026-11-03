@@ -31,7 +31,7 @@ export default function FavoritesScreen({ navigation, route }) {
     const { theme } = useTheme();
     const { user } = route.params || {};
     
-    const [activeTab, setActiveTab] = useState('whoFavoritedMe'); // 'whoFavoritedMe' or 'whoIForited'
+    const [activeTab, setActiveTab] = useState(route?.params?.initialTab || 'whoFavoritedMe'); // 'whoFavoritedMe' or 'whoIFavorited'
     const [favorites, setFavorites] = useState([]); // People I favorited
     const [fans, setFans] = useState(INITIAL_FAKE_FANS); // People who favorited me
     const [isVIP, setIsVIP] = useState(false);

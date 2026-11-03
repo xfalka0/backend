@@ -14,7 +14,8 @@ import {
     Alert,
     Modal,
     TextInput,
-    Linking
+    Linking,
+    RefreshControl
 } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -178,6 +179,7 @@ const ProfileScreen = ({ route }) => {
     const { showAlert } = useAlert();
     const [user, setUser] = useState(route?.params?.user || {});
     const [loading, setLoading] = useState(false);
+    const [refreshing, setRefreshing] = useState(false);
     const [balance, setBalance] = useState(user?.balance || user?.coins || user?.hearts || 0);
     const [userPhotos, setUserPhotos] = useState(user?.photos || []);
     const [pendingPhotos, setPendingPhotos] = useState([]);
@@ -286,34 +288,45 @@ const ProfileScreen = ({ route }) => {
     };
 
     // Sync user data on focus
-    useFocusEffect(
-        React.useCallback(() => {
-            const syncUserData = async () => {
-                try {
-                    const token = await AsyncStorage.getItem('token');
-                    if (!token) return;
+    const syncUserData = React.useCallback(async () => {
+        try {
+            const token = await AsyncStorage.getItem('token');
+            if (!token) return;
 
-                    let profileData = null;
-                    let balanceData = null;
+            let currentUserId = user?.id;
+            if (!currentUserId) {
+                const storedUserStr = await AsyncStorage.getItem('user');
+                if (storedUserStr) {
+                    try {
+                        const parsed = JSON.parse(storedUserStr);
+                        currentUserId = parsed.id;
+                        setUser(parsed);
+                    } catch (_) {}
+                }
+            }
+            if (!currentUserId) return;
 
-                    const [profileRes, balRes, pendingRes] = await Promise.all([
-                        axios.get(`${API_URL}/users/${user.id}`, { headers: { Authorization: `Bearer ${token}` } }),
-                        axios.get(`${API_URL}/users/${user.id}/balance`, { headers: { Authorization: `Bearer ${token}` } }),
-                        axios.get(`${API_URL}/users/${user.id}/pending-photos`, { headers: { Authorization: `Bearer ${token}` } }).catch(() => ({ data: [] }))
-                    ]);
+            let profileData = null;
+            let balanceData = null;
 
-                    profileData = profileRes.data;
-                    balanceData = balRes.data;
-                    const pendingData = pendingRes.data || [];
-                    setPendingPhotos(pendingData);
+            const [profileRes, balRes, pendingRes] = await Promise.all([
+                axios.get(`${API_URL}/users/${currentUserId}`, { headers: { Authorization: `Bearer ${token}` } }),
+                axios.get(`${API_URL}/users/${currentUserId}/balance`, { headers: { Authorization: `Bearer ${token}` } }),
+                axios.get(`${API_URL}/users/${currentUserId}/pending-photos`, { headers: { Authorization: `Bearer ${token}` } }).catch(() => ({ data: [] }))
+            ]);
 
-                    if (profileData) {
-                        const updatedUser = { ...user, ...profileData };
-                        setUser(updatedUser);
-                        if (profileData.photos) {
-                            setUserPhotos(profileData.photos);
-                        }
-                        await AsyncStorage.setItem('user', JSON.stringify(updatedUser));
+            profileData = profileRes.data;
+            balanceData = balRes.data;
+            const pendingData = pendingRes.data || [];
+            setPendingPhotos(pendingData);
+
+            if (profileData) {
+                const updatedUser = { ...user, ...profileData };
+                setUser(updatedUser);
+                if (profileData.photos) {
+                    setUserPhotos(profileData.photos);
+                }
+                await AsyncStorage.setItem('user', JSON.stringify(updatedUser));
 
                         const profileBalance = updatedUser.balance ?? updatedUser.coins ?? updatedUser.hearts;
                         if (profileBalance !== undefined) setBalance(profileBalance);
@@ -354,10 +367,19 @@ const ProfileScreen = ({ route }) => {
                 } catch (error) {
                     console.error('Sync error:', error);
                 }
-            };
+    }, [user?.id, balance]);
+
+    useFocusEffect(
+        React.useCallback(() => {
             syncUserData();
-        }, [])
+        }, [syncUserData])
     );
+
+    const onRefresh = async () => {
+        setRefreshing(true);
+        await syncUserData();
+        setRefreshing(false);
+    };
 
     const handleAcceptInvitation = async (inviteId) => {
         try {
@@ -728,9 +750,20 @@ const ProfileScreen = ({ route }) => {
     };
 
     const stats = [
-        { label: 'Takipçi', value: user?.followers_count || '0' },
-        { label: 'Takip', value: user?.following_count || '0' },
-        { label: 'Hediye', value: user?.gifts_count || '0' }
+        { 
+            label: 'Takipçi', 
+            value: user?.followers_count !== undefined && user?.followers_count !== null ? user.followers_count : '0',
+            onPress: () => navigation.navigate('Favorites', { user, initialTab: 'whoFavoritedMe' })
+        },
+        { 
+            label: 'Takip', 
+            value: user?.following_count !== undefined && user?.following_count !== null ? user.following_count : '0',
+            onPress: () => navigation.navigate('Favorites', { user, initialTab: 'whoIFavorited' })
+        },
+        { 
+            label: 'Hediye', 
+            value: user?.gifts_count !== undefined && user?.gifts_count !== null ? user.gifts_count : '0' 
+        }
     ];
 
     const isMale = (user?.gender || '').toLowerCase() === 'erkek';
@@ -748,6 +781,14 @@ const ProfileScreen = ({ route }) => {
             <Animated.ScrollView
                 showsVerticalScrollIndicator={false}
                 scrollEventThrottle={16}
+                refreshControl={
+                    <RefreshControl
+                        refreshing={refreshing}
+                        onRefresh={onRefresh}
+                        tintColor="#ec4899"
+                        colors={['#ec4899', '#8b5cf6']}
+                    />
+                }
                 onScroll={Animated.event(
                     [{ nativeEvent: { contentOffset: { y: scrollY } } }],
                     { useNativeDriver: true }
@@ -892,10 +933,15 @@ const ProfileScreen = ({ route }) => {
                     <View style={styles.statsContainerClean}>
                         {stats.map((stat, index) => (
                             <React.Fragment key={index}>
-                                <View style={styles.statPodClean}>
+                                <TouchableOpacity 
+                                    style={styles.statPodClean}
+                                    activeOpacity={stat.onPress ? 0.7 : 1}
+                                    onPress={stat.onPress}
+                                    disabled={!stat.onPress}
+                                >
                                     <Text style={styles.statValueClean}>{stat.value}</Text>
                                     <Text style={styles.statLabelClean}>{stat.label}</Text>
-                                </View>
+                                </TouchableOpacity>
                                 {index < stats.length - 1 && <View style={styles.statDividerVertical} />}
                             </React.Fragment>
                         ))}

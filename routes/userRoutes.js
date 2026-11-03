@@ -62,26 +62,61 @@ router.get('/:id', async (req, res) => {
         `, [targetUserId]);
         if (result.rows.length === 0) return res.status(404).json({ error: 'User not found' });
 
+        // Fetch follow and gift counts
+        const [followingRes, followersRes, giftsRes] = await Promise.all([
+            db.query('SELECT COUNT(*) FROM favorites WHERE user_id::text = $1::text', [targetUserId]).catch(() => ({ rows: [{ count: 0 }] })),
+            db.query('SELECT COUNT(*) FROM favorites WHERE target_user_id::text = $1::text', [targetUserId]).catch(() => ({ rows: [{ count: 0 }] })),
+            db.query(`
+                SELECT COUNT(*) FROM messages m 
+                JOIN chats c ON m.chat_id = c.id 
+                WHERE ((c.user_id::text = $1::text AND m.sender_id::text <> c.user_id::text) 
+                    OR (c.operator_id::text = $1::text AND m.sender_id::text <> c.operator_id::text)) 
+                  AND m.gift_id IS NOT NULL
+            `, [targetUserId]).catch(() => ({ rows: [{ count: 0 }] }))
+        ]);
+
+        let userData = result.rows[0];
+        userData.following_count = parseInt(followingRes.rows[0]?.count || 0, 10);
+        userData.followers_count = parseInt(followersRes.rows[0]?.count || 0, 10);
+        userData.gifts_count = parseInt(giftsRes.rows[0]?.count || 0, 10);
+
         // Push notification on profile view (non-blocking)
         const authHeader = req.headers['authorization'];
+        let isOwnerOrAdmin = false;
         if (authHeader) {
             try {
                 const jwt = require('jsonwebtoken');
                 const { SECRET_KEY } = require('../middleware/auth');
                 const token = authHeader.split(' ')[1];
                 const decoded = jwt.verify(token, SECRET_KEY);
-                if (decoded && decoded.id && decoded.id.toString() !== targetUserId.toString()) {
-                    const { sendPushNotification } = require('../utils/pushNotifications');
-                    sendPushNotification(targetUserId, {
-                        title: '👀 Profiline Bakan Biri Var!',
-                        body: 'Biri senin profilini inceledi. Hemen tıkla ve kim olduğuna bak!',
-                        data: { type: 'profile_view', viewerId: decoded.id }
-                    }).catch(() => {});
+                if (decoded) {
+                    if (decoded.id && decoded.id.toString() !== targetUserId.toString()) {
+                        const { sendPushNotification } = require('../utils/pushNotifications');
+                        sendPushNotification(targetUserId, {
+                            title: '👀 Profiline Bakan Biri Var!',
+                            body: 'Biri senin profilini inceledi. Hemen tıkla ve kim olduğuna bak!',
+                            data: { type: 'profile_view', viewerId: decoded.id }
+                        }).catch(() => {});
+                    }
+                    if (decoded.id?.toString() === targetUserId.toString() || decoded.role === 'admin' || decoded.role === 'super_admin') {
+                        isOwnerOrAdmin = true;
+                    }
                 }
             } catch (e) {}
         }
 
-        res.json(sanitizeUser(result.rows[0], req));
+        const sanitized = sanitizeUser(userData, req);
+        if (!isOwnerOrAdmin) {
+            delete sanitized.email;
+            delete sanitized.phone;
+            delete sanitized.fcm_token;
+            delete sanitized.device_token;
+            delete sanitized.balance;
+            delete sanitized.coin_balance;
+            delete sanitized.diamond_balance;
+        }
+
+        res.json(sanitized);
     } catch (err) {
         res.status(500).json({ error: err.message });
     }

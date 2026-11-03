@@ -1366,7 +1366,7 @@ const sendOtpEmail = async (email, otp) => {
     if (process.env.BREVO_API_KEY) {
         try {
             await axios.post('https://api.brevo.com/v3/smtp/email', {
-                sender: { name: 'Fiva', email: process.env.EMAIL_USER || 'fdnsmn00@gmail.com' },
+                sender: { name: 'Fiva', email: process.env.BREVO_SENDER || 'fdnsmn00@gmail.com' },
                 to: [{ email: email }],
                 subject: "Fiva'ya Hoş Geldin!",
                 htmlContent: htmlContent
@@ -1463,12 +1463,13 @@ app.post('/api/auth/verify-otp', authLimiter, async (req, res) => {
 
         let user;
         if (result.rows.length === 0) {
-            if (deviceId) {
-                const limitCheck = await db.query("SELECT count(*) FROM users WHERE device_id = $1 AND account_status != 'deleted'", [deviceId]);
-                if (parseInt(limitCheck.rows[0].count, 10) >= 2) return res.status(403).json({ error: 'Bu cihazdan en fazla 2 hesap oluşturulabilir.' });
-            }
+            // Geçici olarak cihaz limiti devre dışı bırakıldı
+            // if (deviceId) {
+            //     const limitCheck = await db.query("SELECT count(*) FROM users WHERE device_id = $1 AND account_status != 'deleted'", [deviceId]);
+            //     if (parseInt(limitCheck.rows[0].count, 10) >= 2) return res.status(403).json({ error: 'Bu cihazdan en fazla 2 hesap oluşturulabilir.' });
+            // }
             const username = (email ? email.split('@')[0] : `user`) + '_' + Math.floor(1000 + Math.random() * 9000);
-            const insertResult = await db.query("INSERT INTO users (username, email, role, balance, avatar_url, display_name, device_id, account_status) VALUES ($1, $2, 'user', 100, 'https://via.placeholder.com/150', $3, $4, 'active') RETURNING *", [username, email ? email.trim().toLowerCase() : null, email ? email.split('@')[0] : username, deviceId || null]);
+            const insertResult = await db.query("INSERT INTO users (username, email, role, balance, avatar_url, display_name, device_id, account_status) VALUES ($1, $2, 'user', 50, 'https://via.placeholder.com/150', $3, $4, 'active') RETURNING *", [username, email ? email.trim().toLowerCase() : null, email ? email.split('@')[0] : username, deviceId || null]);
             user = insertResult.rows[0];
             await logActivity(io, user.id, 'register', 'Yeni kullanıcı OTP ile kayıt oldu.');
             io.emit('new_user', sanitizeUser(user, req));
@@ -1995,16 +1996,26 @@ app.get('/admin/*', (req, res) => {
 // GET USER PROFILE
 app.get('/api/users/:id', async (req, res) => {
     try {
-        const result = await db.query('SELECT * FROM users WHERE id = $1', [req.params.id]);
+        const result = await db.query('SELECT * FROM users WHERE id::text = $1::text', [req.params.id]);
         if (result.rows.length === 0) return res.status(404).json({ error: 'User not found' });
         
-        // Fetch follower counts
-        const following = await db.query('SELECT COUNT(*) FROM favorites WHERE user_id::text = $1::text', [req.params.id]);
-        const followers = await db.query('SELECT COUNT(*) FROM favorites WHERE target_user_id::text = $1::text', [req.params.id]);
+        // Fetch follower counts and gifts
+        const [following, followers, gifts] = await Promise.all([
+            db.query('SELECT COUNT(*) FROM favorites WHERE user_id::text = $1::text', [req.params.id]),
+            db.query('SELECT COUNT(*) FROM favorites WHERE target_user_id::text = $1::text', [req.params.id]),
+            db.query(`
+                SELECT COUNT(*) FROM messages m 
+                JOIN chats c ON m.chat_id = c.id 
+                WHERE ((c.user_id::text = $1::text AND m.sender_id::text <> c.user_id::text) 
+                    OR (c.operator_id::text = $1::text AND m.sender_id::text <> c.operator_id::text)) 
+                  AND m.gift_id IS NOT NULL
+            `, [req.params.id]).catch(() => ({ rows: [{ count: 0 }] }))
+        ]);
         
         let userData = result.rows[0];
-        userData.followers_count = parseInt(followers.rows[0].count);
-        userData.following_count = parseInt(following.rows[0].count);
+        userData.followers_count = parseInt(followers.rows[0]?.count || 0, 10);
+        userData.following_count = parseInt(following.rows[0]?.count || 0, 10);
+        userData.gifts_count = parseInt(gifts.rows[0]?.count || 0, 10);
 
         const sanitized = sanitizeUser(userData, req);
         

@@ -4,12 +4,24 @@ const pool = require('../db');
 
 // Add a user to favorites
 router.post('/', async (req, res) => {
-    const { userId, targetUserId } = req.body;
+    let { userId, targetUserId } = req.body;
+
+    // Fallback to token if userId is missing in body
+    if (!userId && req.headers['authorization']) {
+        try {
+            const jwt = require('jsonwebtoken');
+            const { SECRET_KEY } = require('../middleware/auth');
+            const token = req.headers['authorization'].split(' ')[1];
+            const decoded = jwt.verify(token, SECRET_KEY);
+            if (decoded) userId = decoded.id;
+        } catch (_) {}
+    }
+
     try {
         if (!userId || !targetUserId) {
             return res.status(400).json({ error: 'Missing userId or targetUserId' });
         }
-        if (userId === targetUserId) {
+        if (userId.toString() === targetUserId.toString()) {
             return res.status(400).json({ error: 'Cannot favorite yourself' });
         }
 
@@ -22,6 +34,18 @@ router.post('/', async (req, res) => {
             return res.status(400).json({ error: 'Already favorited or action failed' });
         }
 
+        // Send push notification to target user (non-blocking)
+        try {
+            const { sendPushNotification } = require('../utils/pushNotifications');
+            const followerRes = await pool.query('SELECT username, display_name FROM users WHERE id::text = $1::text', [userId]);
+            const followerName = followerRes.rows[0]?.display_name || followerRes.rows[0]?.username || 'Biri';
+            sendPushNotification(targetUserId, {
+                title: '❤️ Yeni bir takipçin var!',
+                body: `${followerName} seni takip etmeye başladı.`,
+                data: { type: 'new_follower', followerId: userId }
+            }).catch(() => {});
+        } catch (_) {}
+
         res.status(201).json({ message: 'Added to favorites', favorite: newFav.rows[0] });
     } catch (err) {
         console.error('Add Favorite Error:', err);
@@ -32,7 +56,17 @@ router.post('/', async (req, res) => {
 // Remove a user from favorites
 router.delete('/:targetUserId', async (req, res) => {
     const { targetUserId } = req.params;
-    const uid = req.body.userId || req.query.userId;
+    let uid = req.body?.userId || req.query?.userId;
+
+    if (!uid && req.headers['authorization']) {
+        try {
+            const jwt = require('jsonwebtoken');
+            const { SECRET_KEY } = require('../middleware/auth');
+            const token = req.headers['authorization'].split(' ')[1];
+            const decoded = jwt.verify(token, SECRET_KEY);
+            if (decoded) uid = decoded.id;
+        } catch (_) {}
+    }
 
     try {
         if (!uid || !targetUserId) {

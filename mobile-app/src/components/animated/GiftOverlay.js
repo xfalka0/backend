@@ -15,36 +15,9 @@ import Animated, {
 } from 'react-native-reanimated';
 import LottieView from 'lottie-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Video, ResizeMode } from 'expo-av';
-
 const { width, height } = Dimensions.get('window');
 
 const CONFETTI_LOTTIE = require('../../assets/lottie/vip_confetti.json');
-
-// Premium Gifts - Supporting both transparent GIFs/WebPs and standard MP4 Videos
-// (To make your custom drifting car fully transparent, convert yarisarabasi.mp4 to transparent yarisarabasi.gif, save it, and set type to 'gif'!)
-const PREMIUM_VIDEOS = {
-    6: {
-        type: 'gif', // Change to 'gif' and change source file to yarisarabasi.gif for 100% transparency!
-        source: require('../../../assets/yarisarabasi.webp')
-    },
-    7: {
-        type: 'gif',
-        source: require('../../../assets/sato.webp')
-    },
-    8: {
-        type: 'video',
-        source: { uri: 'http://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerJoyrides.mp4' }
-    },
-    9: {
-        type: 'video',
-        source: { uri: 'http://commondatastorage.googleapis.com/gtv-videos-bucket/sample/SubaruOutbackOnStreetAndDirt.mp4' }
-    },
-    10: {
-        type: 'video',
-        source: { uri: 'http://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerJoyrides.mp4' }
-    }
-};
 
 // Particles Component for the standard "Wow" effect (non-premium gifts)
 const Particle = ({ delay, index }) => {
@@ -101,10 +74,6 @@ export default function GiftOverlay({ gift, receiver, onFinish }) {
     const textY = useSharedValue(50);
     const glowScale = useSharedValue(1);
 
-    const [videoLoading, setVideoLoading] = useState(true);
-
-    const isPremium = useMemo(() => gift && [6, 7, 8, 9, 10].includes(Number(gift.id)), [gift]);
-
     // Unconditional Top-Level Animated Styles Declarations (strict hook compliance)
     const backdropStyle = useAnimatedStyle(() => ({
         opacity: opacity.value
@@ -138,26 +107,15 @@ export default function GiftOverlay({ gift, receiver, onFinish }) {
             scale.value = withDelay(200, withSpring(1, { damping: 12, stiffness: 100 }));
             textY.value = withDelay(400, withSpring(0, { damping: 15 }));
 
-            // 3D spinning logo for normal gifts
-            if (!isPremium) {
-                rotateY.value = withDelay(300, withRepeat(withTiming(Math.PI * 2, { duration: 4000, easing: Easing.linear }), -1));
-                logoPulse.value = withDelay(800, withRepeat(withTiming(1.08, { duration: 1200 }), -1, true));
-                glowScale.value = withRepeat(withTiming(1.2, { duration: 2000 }), -1, true);
-            }
+            // 3D spinning logo and pulse animation
+            rotateY.value = withDelay(300, withRepeat(withTiming(Math.PI * 2, { duration: 4000, easing: Easing.linear }), -1));
+            logoPulse.value = withDelay(800, withRepeat(withTiming(1.08, { duration: 1200 }), -1, true));
+            glowScale.value = withRepeat(withTiming(1.2, { duration: 2000 }), -1, true);
 
             Vibration.vibrate(150);
 
-            // Auto Close Timer (Fallback close if loading hangs)
-            let duration = 4000;
-            if (gift) {
-                const giftId = Number(gift.id);
-                if (giftId === 6) duration = 6000;
-                else if (giftId === 7) duration = 5000;
-                else if (isPremium) duration = 12000;
-            }
-            if (performanceMode === 'low') {
-                duration = 3000;
-            }
+            // Auto Close Timer
+            const duration = performanceMode === 'low' ? 3000 : 4000;
             const timer = setTimeout(() => {
                 opacity.value = withTiming(0, { duration: 500 }, () => {
                     if (onFinish) runOnJS(onFinish)();
@@ -205,114 +163,6 @@ export default function GiftOverlay({ gift, receiver, onFinish }) {
         );
     }
 
-    // --- RENDER FOR PREMIUM VIRTUAL BOTTOM-OVERLAY VIDEOS ---
-    if (isPremium) {
-        const premiumAsset = PREMIUM_VIDEOS[Number(gift.id)];
-        const isGif = premiumAsset && premiumAsset.type === 'gif';
-
-        return (
-            <Animated.View style={[styles.container, backdropStyle]} pointerEvents="box-none">
-                {/* Fully transparent backdrop to overlay cleanly on top of the live chat screen */}
-                <View style={styles.backdrop} />
-
-                <View style={styles.premiumVideoWrapper}>
-                    {isGif ? (
-                        <Image
-                            source={premiumAsset.source}
-                            style={styles.premiumVideoPlayer}
-                            resizeMode="contain"
-                            onLoad={() => setVideoLoading(false)}
-                        />
-                    ) : (
-                        <Video
-                            source={
-                                typeof premiumAsset.source === 'number'
-                                    ? premiumAsset.source
-                                    : {
-                                        ...premiumAsset.source,
-                                        headers: {
-                                            'User-Agent': 'Mozilla/5.0 (Linux; Android 10; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/100.0.0.0 Mobile Safari/537.36'
-                                        }
-                                      }
-                            }
-                            rate={1.0}
-                            volume={1.0}
-                            isMuted={false}
-                            resizeMode={ResizeMode.COVER}
-                            shouldPlay
-                            style={styles.premiumVideoPlayer}
-                            onPlaybackStatusUpdate={(status) => {
-                                if (status.isLoaded) {
-                                    setVideoLoading(false);
-                                }
-                                if (status.didJustFinish) {
-                                    opacity.value = withTiming(0, { duration: 400 }, () => {
-                                        runOnJS(onFinish)();
-                                    });
-                                }
-                            }}
-                            onError={(error) => {
-                                console.log('[VIDEO ERROR]', error);
-                                setVideoLoading(false);
-                                opacity.value = withTiming(0, { duration: 400 }, () => {
-                                    runOnJS(onFinish)();
-                                });
-                            }}
-                        />
-                    )}
-
-                    {/* Edge Blending Gradients to achieve a "PNG/Alpha" look (only needed for black-background videos) */}
-                    {!isGif && (
-                        <>
-                            <LinearGradient
-                                colors={['#0f051a', 'transparent']}
-                                start={{ x: 0, y: 0 }}
-                                end={{ x: 0, y: 1 }}
-                                style={styles.topMask}
-                            />
-                            <LinearGradient
-                                colors={['transparent', '#0f051a']}
-                                start={{ x: 0, y: 0 }}
-                                end={{ x: 0, y: 1 }}
-                                style={styles.bottomMask}
-                            />
-                            <LinearGradient
-                                colors={['#0f051a', 'transparent']}
-                                start={{ x: 0, y: 0 }}
-                                end={{ x: 1, y: 0 }}
-                                style={styles.leftMask}
-                            />
-                            <LinearGradient
-                                colors={['transparent', '#0f051a']}
-                                start={{ x: 0, y: 0 }}
-                                end={{ x: 1, y: 0 }}
-                                style={styles.rightMask}
-                            />
-                        </>
-                    )}
-                </View>
-
-                {videoLoading && (
-                    <View style={styles.premiumLoadingContainer}>
-                        <ActivityIndicator size="large" color="#fbbf24" />
-                        <Text style={styles.loadingText}>Yükleniyor...</Text>
-                    </View>
-                )}
-
-                {/* Breathtaking overlay info styled compactly right below the bottom video banner */}
-                <Animated.View style={[styles.videoOverlay, textStyle]}>
-                    <View style={styles.receiverBadge}>
-                        <Text style={styles.receiverText}>{(receiver?.display_name || receiver?.username || 'KULLANICI').toUpperCase()}</Text>
-                    </View>
-                    <Text style={styles.videoHeaderText}>HEDİYE GÖNDERİLDİ!</Text>
-                    <View style={styles.videoGiftBadge}>
-                        <Text style={styles.videoGiftName}>{(gift?.name || 'HEDİYE').toUpperCase()}</Text>
-                    </View>
-                </Animated.View>
-            </Animated.View>
-        );
-    }
-
     // --- RENDER FOR STANDARD GIFTS (Particles & Glow Animations - Crash-Proof) ---
     return (
         <Animated.View style={[styles.container, backdropStyle]} pointerEvents="box-none">
@@ -352,7 +202,7 @@ const styles = StyleSheet.create({
     container: {
         ...StyleSheet.absoluteFillObject,
         zIndex: 99999,
-        justifyContent: 'flex-end', // Align premium contents towards the bottom
+        justifyContent: 'center',
         alignItems: 'center',
     },
     backdrop: {

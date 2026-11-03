@@ -5,6 +5,9 @@ import {
 } from 'react-native';
 import { Ionicons, FontAwesome5 } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import axios from 'axios';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { API_URL } from '../../config';
 import { useRoomStore } from '../../store/useRoomStore';
 import { resolveImageUrl } from '../../utils/imageUtils';
 
@@ -455,8 +458,24 @@ export default function RoomMembersPanel({ visible, roomId, currentUser, onClose
         }
     };
 
-    const handleFollow = (member) => {
-        Alert.alert('Başarılı', `${cleanUsername(member.display_name || member.username)} takip edildi!`);
+    const handleFollow = async (member) => {
+        if (!currentUser?.id || !member) return;
+        const targetId = member.user_id || member.id;
+        try {
+            const token = await AsyncStorage.getItem('token');
+            const headers = token ? { Authorization: `Bearer ${token}` } : {};
+            await axios.post(`${API_URL}/favorites`, {
+                userId: currentUser.id,
+                targetUserId: targetId
+            }, { headers });
+            Alert.alert('Başarılı', `${cleanUsername(member.display_name || member.username)} takip edildi!`);
+        } catch (err) {
+            if (err?.response?.status === 400 && (err?.response?.data?.error || '').toLowerCase().includes('already')) {
+                Alert.alert('Bilgi', 'Bu kullanıcıyı zaten takip ediyorsunuz.');
+            } else {
+                Alert.alert('Hata', 'Takip işlemi gerçekleştirilemedi.');
+            }
+        }
     };
 
     const handleReport = (member) => {

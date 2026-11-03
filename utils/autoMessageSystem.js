@@ -14,38 +14,49 @@ const activeUserSessions = new Map();
 
 // Gerçekçi, samimi ve doğal Türkçe mesaj havuzu
 const REALISTIC_FIRST_MESSAGES = [
-    "Selam! Yeni katıldın sanırım, hoş geldin :)",
-    "Profilin dikkatimi çekti, selam vermek istedim ✨",
-    "Selamlar, günün nasıl geçiyor?",
-    "Hey, buralarda yeni misin? 😊",
-    "Selam :) Fotoğrafın çok güzel, nerede çekildin acaba?",
-    "Enerjin fotoğraflarından bile çok tatlı duruyor, yazmadan duramadım 🌸",
-    "Merhaba! Buralarda mısın, biraz sohbet edelim mi?",
-    "Selam :) Profiline bakmadan geçemedim açıkçası.",
-    "Hey! Buraların yabancısı gibisin, eşlik etmemi ister misin?",
-    "Selamlar! Profilini gördüm ve kayıtsız kalamadım ✨",
-    "Merhaba, tarzını çok beğendim. Nerelisin?",
-    "İyi akşamlar :) Umarım günün güzel geçiyordur, tanışalım mı?",
-    "Selam, profiline denk geldim de çok tatlı duruyorsun :)"
+    "Selam yenisin sanırım",
+    "Profilin iyimiş bi selam vereyim dedim",
+    "Selam günün nası geçiyor",
+    "Buralarda yeni misin",
+    "Selam fotoğrafın çok güzel nerede çekildin acaba",
+    "Enerjin fotoğraflarından bile çok tatlı duruyor yazmadan duramadım",
+    "Merhaba buralarda mısın biraz sohbet edelimmi",
+    "Selam sende benim gibi sıcakladınmı",
+    "Nerde yaşıyosun",
+    "Sevgilin varmı",
+    "Nerelisin",
+    "Selam",
+    "Selamm nabeerr"
 ];
 
 const REALISTIC_ONGOING_MESSAGES = [
-    "Günün nasıl gidiyor? Biraz laflayalım mı? :)",
-    "Müzik dinliyorum öyle, sen neler yapıyorsun?",
-    "Burada senin gibi birine denk gelmek şaşırttı beni 🙈",
-    "Sohbetin de profilin kadar keyifli mi acaba? Merak ettim :)",
-    "Selam :) Hangi şehirdesin bu arada?",
-    "Bugün hava da modum da biraz durgun, bana iyi gelecek bir sohbet lazım :Yukarı",
-    "Hey, buralarda mısın hala? 😊",
-    "Profilinde burcun yazmıyordu sanırım, nedir burcun?",
-    "Selam! Kahvemi aldım oturdum, sen nelerle meşgulsün?",
-    "Tanışmak için iyi bir zaman gibi geldi bana, ne dersin? ✨",
-    "Gülüşün çok samimi geldi, enerjin hoşuma gitti doğrusu :)",
-    "Biraz buralarda takılayım dedim, seni görünce selam vereyim dedim 👋",
-    "Selamm, günün yorgunluğunu atmak için biraz sohbet? :)",
-    "Fotoğraflarına bakıyordum da cidden çok hoşsun 🌸",
-    "Sıkıldım biraz, konuşacak samimi birini arıyordum, tam denk geldin :)",
-    "Umarım günün harika geçiyordur, sana bir selam bırakayım dedim 💫"
+    "Naber nasıl gidiyor",
+    "Napıyosun neler yapıyosun",
+    "Sıkıldım biraz laflayalım mı",
+    "Hangi şehirdesin bu arada",
+    "Burcun ne senin",
+    "Müzik dinliyorum öyle sen napıyosun",
+    "Çok tatlı duruyosun yazayım dedim",
+    "Buralarda mısın hala",
+    "Uyumadın mı daha",
+    "Nelerle uğraşıyosun günün nasıl geçti",
+    "Senin gibi birine denk gelmek şaşırttı beni",
+    "Konuşacak kafa dengi birini arıyodum",
+    "Gözlerin çok güzelmiş bu arada",
+    "Yaş kaçtı senin",
+    "Kahve yaptım kendime sen napıyosun",
+    "Burda mısın sohbet edelim biraz",
+    "Tarzın çok hoşuma gitti",
+    "Bi selam vereyim dedim naber",
+    "Tanışalım mı ne dersin",
+    "Bugün çok yoruldum biraz kafa dağıtalım",
+    "Ne işle meşgulsün",
+    "Mesajımı görmedin mi",
+    "Dışarıdaydım yeni geldim sen napıyosun",
+    "Sohbetin sarar gibi duruyor",
+    "Boyun kaç merak ettim",
+    "Gece kuşu musun sende benim gibi",
+    "Sessiz buralar biraz konuşalım mı"
 ];
 
 /**
@@ -198,7 +209,7 @@ async function sendSingleAutoMessage(io, userId, isFirstRound = false) {
                 senderAvatar: selectedOp.avatar_url,
                 type: 'message'
             }
-        }).catch(() => {});
+        }).catch(() => { });
 
     } catch (err) {
         console.error('[AUTO-MSG ERROR]:', err.message);

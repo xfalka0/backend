@@ -66,7 +66,7 @@ const { resolveTab, VALID_TABS } = require('./constants/tabs');
 const { validateAge } = require('./utils/validation');
 const { handleRoomsSockets } = require('./socket/roomsSocket');
 const { handlePartyRoomSockets, startStaleSeatSweeper } = require('./socket/partyRoomSocket');
-const { startUserAutoEngagement, stopUserAutoEngagement } = require('./utils/autoMessageSystem');
+const { startUserAutoEngagement, stopUserAutoEngagement, onUserCompletedOnboarding } = require('./utils/autoMessageSystem');
 
 const app = express();
 const multer = require('multer');
@@ -2352,6 +2352,12 @@ app.put('/api/users/:id/profile', authenticateToken, async (req, res) => {
                 }
             } catch (e) {
                 // ignore if column doesn't exist
+            }
+            // Kullanıcı onboarding'i başarıyla tamamladığında doğal mesajlaşma sürecini başlat
+            try {
+                onUserCompletedOnboarding(io, id);
+            } catch (engErr) {
+                console.error('[AUTO-ENGAGEMENT ONBOARDING ERROR]:', engErr.message);
             }
         }
 

@@ -123,7 +123,6 @@ exports.googleAuth = async (req, res) => {
             }
 
             await assignFakeInteractions(user.id);
-            await triggerAutoEngagement(io, user.id);
             await logActivity(io, user.id, 'register', 'Kullanıcı Google ile kayıt oldu.');
             if (io) io.emit('new_user', sanitizeUser(user, req));
         } else {
@@ -210,7 +209,6 @@ exports.registerEmail = async (req, res) => {
         const user = result.rows[0];
 
         await assignFakeInteractions(user.id);
-        await triggerAutoEngagement(io, user.id);
 
         const token = jwt.sign(
             { id: user.id, username: user.username, role: user.role, display_name: user.display_name, avatar_url: user.avatar_url, gender: user.gender },

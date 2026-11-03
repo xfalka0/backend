@@ -3,16 +3,19 @@ const { sendPushNotification } = require('./notificationUtils');
 
 /**
  * Otomatik Bot / Operatör Mesajlaşma Sistemi
- * - Kullanıcı uygulamaya girdiğinde ilk 1 dakika içinde 2-3 gerçekçi mesaj gönderir.
- * - Uygulamada aktif kaldığı sürece her 5-8 dakikada bir 2-3 yeni mesaj gelmeye devam eder.
- * - Kullanıcı uygulamayı kapattığında (bağlantı koptuğunda) zamanlayıcılar durdurulur.
- * - Cinsiyete uygun ve doğal Türkçeyle yazılmış mesajlar kullanılır.
+ * 
+ * Kurallar:
+ * 1. Onboarding tamamlanmadan (onboarding_completed !== true) ASLA mesaj gitmez.
+ * 2. Profil tamamlandıktan sonra ilk mesaj 45-60 saniye sonra gelir (yavaş ve doğal).
+ * 3. Bir operatör bir kullanıcıya ASLA 2. kez otomatik mesaj atamaz; her mesaj kesinlikle farklı bir kişiden gelir.
+ * 4. Mesajlar doğal, emojisiz ve noktalama işaretsiz sade günlük konuşma dilindedir.
+ * 5. Kullanıcı uygulamadan çıkarsa (socket bağlantısı kesilirse) zamanlayıcılar anında durdurulur.
  */
 
 // Aktif kullanıcı oturumları: userId -> { socketIds: Set, timers: Set, intervalId: Timer, usedOpIds: Set }
 const activeUserSessions = new Map();
 
-// Gerçekçi, samimi ve doğal Türkçe mesaj havuzu
+// Doğal ilk tanışma mesajları (emojisiz, noktalama işaretsiz)
 const REALISTIC_FIRST_MESSAGES = [
     "Selam yenisin sanırım",
     "Profilin iyimiş bi selam vereyim dedim",
@@ -29,6 +32,7 @@ const REALISTIC_FIRST_MESSAGES = [
     "Selamm nabeerr"
 ];
 
+// Doğal devam mesajları (emojisiz, noktalama işaretsiz)
 const REALISTIC_ONGOING_MESSAGES = [
     "Naber nasıl gidiyor",
     "Napıyosun neler yapıyosun",
@@ -61,29 +65,39 @@ const REALISTIC_ONGOING_MESSAGES = [
 
 /**
  * Kullanıcıya tek bir otomatik bot/operatör mesajı gönderir
+ * Kural: Kesinlikle daha önce bu kullanıcıya mesaj atmamış FARKLI bir operatör seçilir.
  */
 async function sendSingleAutoMessage(io, userId, isFirstRound = false) {
     try {
-        const session = activeUserSessions.get(userId.toString());
+        const userIdStr = userId.toString();
+        const session = activeUserSessions.get(userIdStr);
         if (!session || session.socketIds.size === 0) {
-            return; // Kullanıcı artık bağlı değil
+            return; // Kullanıcı artık uygulamada değil
         }
 
-        // 1. Kullanıcının cinsiyet ve durumunu al
+        // 1. Kullanıcının durumunu ve onboarding kontrolünü yap
         const userRes = await db.query(
-            "SELECT id, username, display_name, gender, role FROM users WHERE id = $1 AND role = 'user' AND account_status = 'active'",
+            "SELECT id, username, display_name, gender, role, onboarding_completed, account_status FROM users WHERE id = $1",
             [userId]
         );
         if (userRes.rows.length === 0) return;
 
         const user = userRes.rows[0];
+        if (user.role !== 'user' || user.account_status !== 'active') return;
+
+        // KRİTİK: Kullanıcı onboarding'i tamamlamadıysa ("Sen kimsin?" vs. ekranındaysa) ASLA mesaj gönderme!
+        if (user.onboarding_completed !== true) {
+            console.log(`[AUTO-MSG] Kullanıcı ${userId} henüz onboarding'i bitirmedi, mesaj gönderimi iptal edildi.`);
+            return;
+        }
+
+        // Cinsiyet kontrolü
         const userGenderRaw = (user.gender || 'erkek').toLowerCase();
         const userGender = (userGenderRaw === 'male' || userGenderRaw === 'erkek') ? 'erkek' : 'kadin';
         const targetGender = userGender === 'kadin' ? 'erkek' : 'kadin';
 
-        // 2. Karşı cinsiyetten uygun operatör / bot seç
-        // Öncelik: Son 24 saatte bu kullanıcıya mesaj atmamış operatörler
-        let opQuery = `
+        // 2. KESİN KURAL: Bu kullanıcıya DAHA ÖNCE ASLA MESAJ ATMAMIŞ ve bu oturumda kullanılmamış operatör seç
+        const opQuery = `
             SELECT u.id, u.username, COALESCE(u.display_name, u.name, u.username) as display_name, 
                    u.avatar_url, u.gender, u.vip_level, u.is_verified
             FROM users u
@@ -96,54 +110,31 @@ async function sendSingleAutoMessage(io, userId, isFirstRound = false) {
                   SELECT sender_id FROM messages m
                   JOIN chats c ON m.chat_id = c.id
                   WHERE (c.user_id = $2 OR c.operator_id = $2)
-                    AND m.created_at > NOW() - INTERVAL '24 hours'
               )
             ORDER BY RANDOM()
-            LIMIT 5
+            LIMIT 10
         `;
 
-        let opsRes = await db.query(opQuery, [targetGender, userId]);
-
-        // Eğer 24 saat içinde hepsi mesaj atmışsa, son 2 saate düşür
-        if (opsRes.rows.length === 0) {
-            const fallbackQuery = `
-                SELECT u.id, u.username, COALESCE(u.display_name, u.name, u.username) as display_name, 
-                       u.avatar_url, u.gender, u.vip_level, u.is_verified
-                FROM users u
-                JOIN operators o ON u.id = o.user_id
-                WHERE u.account_status = 'active'
-                  AND u.role = 'operator'
-                  AND u.gender = $1
-                  AND u.gender != 'coin_bayisi'
-                ORDER BY RANDOM()
-                LIMIT 5
-            `;
-            opsRes = await db.query(fallbackQuery, [targetGender]);
-        }
+        const opsRes = await db.query(opQuery, [targetGender, userId]);
 
         if (opsRes.rows.length === 0) {
-            console.log(`[AUTO-MSG] Hedef cinsiyette (${targetGender}) uygun operatör bulunamadı.`);
+            console.log(`[AUTO-MSG] Kullanıcı ${userId} için daha önce mesaj atmamış uygun ${targetGender} operatör kalmadı.`);
             return;
         }
 
-        // Bu oturumda yakın zamanda kullanılmamış bir operatör seç
-        const availableOps = opsRes.rows.filter(op => !session.usedOpIds.has(op.id.toString()));
-        const selectedOp = availableOps.length > 0
-            ? availableOps[Math.floor(Math.random() * availableOps.length)]
-            : opsRes.rows[Math.floor(Math.random() * opsRes.rows.length)];
+        // Bu oturumda hafızada bekleyen veya yeni kullanılan operatörleri de filtrele
+        const unusedOps = opsRes.rows.filter(op => !session.usedOpIds.has(op.id.toString()));
+        const candidateOps = unusedOps.length > 0 ? unusedOps : opsRes.rows;
 
+        // Rastgele 1 operatör seç
+        const selectedOp = candidateOps[Math.floor(Math.random() * candidateOps.length)];
         session.usedOpIds.add(selectedOp.id.toString());
-        // Hafızada çok şişmemesi için son 15 operatörü tut
-        if (session.usedOpIds.size > 15) {
-            const firstAdded = session.usedOpIds.values().next().value;
-            session.usedOpIds.delete(firstAdded);
-        }
 
         // 3. Mesaj metnini seç
         const messagePool = isFirstRound ? REALISTIC_FIRST_MESSAGES : REALISTIC_ONGOING_MESSAGES;
         const msgText = messagePool[Math.floor(Math.random() * messagePool.length)];
 
-        // 4. Sohbeti kontrol et veya oluştur
+        // 4. Sohbet kaydı oluştur veya bul
         let chatRes = await db.query(
             'SELECT id FROM chats WHERE (user_id = $1 AND operator_id = $2) OR (user_id = $2 AND operator_id = $1)',
             [userId, selectedOp.id]
@@ -167,13 +158,13 @@ async function sendSingleAutoMessage(io, userId, isFirstRound = false) {
         );
         const savedMsg = msgResult.rows[0];
 
-        // 6. Sohbetin son mesajını ve zamanını güncelle
+        // 6. Sohbeti güncelle
         await db.query(
             'UPDATE chats SET last_message = $1, last_message_at = NOW() WHERE id = $2',
             [msgText, chatId]
         );
 
-        // 7. Socket.IO Gerçek Zamanlı Bildirimleri
+        // 7. Socket.IO Canlı Bildirimleri
         if (io) {
             const msgToEmit = {
                 ...savedMsg,
@@ -184,21 +175,21 @@ async function sendSingleAutoMessage(io, userId, isFirstRound = false) {
                 created_at: savedMsg.created_at || new Date().toISOString()
             };
 
-            // Sohbet odasındaysa mesajı göster
+            // Sohbet odasındaysa mesaj anında düşer
             io.to(chatId.toString()).emit('receive_message', msgToEmit);
 
-            // Kullanıcının kişisel odasına yeni mesaj uyarısı gönder (Sohbetler listesi anında güncellenir)
-            io.to(userId.toString()).emit('new_message', msgToEmit);
-            io.to(userId.toString()).emit('chat_updated', {
+            // Sohbetler listesindeyse konuşma en üste zıplar, okunmamış rozeti güncellenir
+            io.to(userIdStr).emit('new_message', msgToEmit);
+            io.to(userIdStr).emit('chat_updated', {
                 chatId: chatId.toString(),
                 last_message: msgText,
                 last_message_at: new Date()
             });
 
-            console.log(`[AUTO-MSG] Gönderildi: [${selectedOp.display_name}] -> Kullanıcı: ${user.username} (${userId}): "${msgText}"`);
+            console.log(`[AUTO-MSG] Gönderildi: [${selectedOp.display_name}] (${selectedOp.id}) -> Kullanıcı ${user.username} (${userId}): "${msgText}"`);
         }
 
-        // 8. Push Bildirimi Gönder (Kullanıcı uygulamada değilse veya arka plandaysa)
+        // 8. Push Bildirimi Gönder
         sendPushNotification(userId, {
             title: selectedOp.display_name,
             body: msgText,
@@ -209,7 +200,7 @@ async function sendSingleAutoMessage(io, userId, isFirstRound = false) {
                 senderAvatar: selectedOp.avatar_url,
                 type: 'message'
             }
-        }).catch(() => { });
+        }).catch(() => {});
 
     } catch (err) {
         console.error('[AUTO-MSG ERROR]:', err.message);
@@ -217,78 +208,97 @@ async function sendSingleAutoMessage(io, userId, isFirstRound = false) {
 }
 
 /**
- * Kullanıcı bağlandığında otomatik mesaj sürecini başlatır
+ * Kullanıcı ana uygulamadayken süreci başlatır
+ * Yalnızca onboarding tamamlandıysa ve kullanıcı gerçekten uygulamadaysa çalışır.
  */
-function startUserAutoEngagement(io, userId, socketId) {
+async function startUserAutoEngagement(io, userId, socketId) {
     if (!userId) return;
     const userIdStr = userId.toString();
 
-    let session = activeUserSessions.get(userIdStr);
-    if (!session) {
-        session = {
-            socketIds: new Set(),
-            timers: new Set(),
-            intervalId: null,
-            usedOpIds: new Set()
-        };
-        activeUserSessions.set(userIdStr, session);
-    }
+    try {
+        // Kullanıcının onboarding durumunu kontrol et
+        const check = await db.query('SELECT onboarding_completed, role FROM users WHERE id = $1', [userId]);
+        if (check.rows.length === 0) return;
+        if (check.rows[0].role !== 'user') return;
 
-    session.socketIds.add(socketId);
-
-    // Eğer zaten zamanlayıcılar çalışıyorsa (aynı kullanıcının 2. socket bağlantısı vs.) tekrar başlatma
-    if (session.timers.size > 0 || session.intervalId) {
-        return;
-    }
-
-    console.log(`[AUTO-ENGAGEMENT] Başlatıldı: Kullanıcı ID ${userIdStr}`);
-
-    // --- 1. AŞAMA: İLK GİRİŞTE (İLK 1 DAKİKA) 2-3 MESAJ ---
-    // Mesaj 1: 10 - 15 saniye sonra
-    // Mesaj 2: 30 - 45 saniye sonra
-    // Mesaj 3: 60 - 75 saniye sonra
-    const initialDelays = [
-        Math.floor(Math.random() * 5000) + 10000, // 10-15 sn
-        Math.floor(Math.random() * 15000) + 30000, // 30-45 sn
-        Math.floor(Math.random() * 15000) + 60000  // 60-75 sn
-    ];
-
-    initialDelays.forEach((delay, idx) => {
-        const timer = setTimeout(async () => {
-            session.timers.delete(timer);
-            if (activeUserSessions.has(userIdStr)) {
-                await sendSingleAutoMessage(io, userIdStr, true);
-            }
-        }, delay);
-        session.timers.add(timer);
-    });
-
-    // --- 2. AŞAMA: UYGULAMADA KALDIĞI SÜRECE (HER 5-8 DAKİKADA BİR 2-3 MESAJ) ---
-    // İlk 1 dakikadan sonra başlar
-    const ONGOING_INTERVAL = (Math.floor(Math.random() * 3) + 5) * 60 * 1000; // 5 - 7 dakika
-
-    session.intervalId = setInterval(async () => {
-        if (!activeUserSessions.has(userIdStr) || session.socketIds.size === 0) {
-            clearInterval(session.intervalId);
-            session.intervalId = null;
+        // Henüz profil açma adımlarındaysa başlatma!
+        if (check.rows[0].onboarding_completed !== true) {
+            console.log(`[AUTO-ENGAGEMENT] Kullanıcı ${userIdStr} onboarding tamamlamadığı için bekletiliyor.`);
             return;
         }
 
-        console.log(`[AUTO-ENGAGEMENT] Devam döngüsü tetiklendi: Kullanıcı ID ${userIdStr}`);
-
-        // Bu turda 2 veya 3 mesajı birkaç dakikaya yayarak planla
-        const batchCount = Math.random() > 0.3 ? 3 : 2;
-        for (let i = 0; i < batchCount; i++) {
-            const subDelay = (i * 40000) + Math.floor(Math.random() * 20000) + 5000; // 5s, 45-65s, 85-105s
-            const subTimer = setTimeout(async () => {
-                session.timers.delete(subTimer);
-                if (activeUserSessions.has(userIdStr) && session.socketIds.size > 0) {
-                    await sendSingleAutoMessage(io, userIdStr, false);
-                }
-            }, subDelay);
-            session.timers.add(subTimer);
+        let session = activeUserSessions.get(userIdStr);
+        if (!session) {
+            session = {
+                socketIds: new Set(),
+                timers: new Set(),
+                intervalId: null,
+                usedOpIds: new Set()
+            };
+            activeUserSessions.set(userIdStr, session);
         }
-    }, ONGOING_INTERVAL);
+
+        session.socketIds.add(socketId);
+
+        // Eğer zaten zamanlayıcılar çalışıyorsa tekrar başlatma
+        if (session.timers.size > 0 || session.intervalId) {
+            return;
+        }
+
+        console.log(`[AUTO-ENGAGEMENT] Başlatıldı (Doğal ve Yavaş Akış): Kullanıcı ID ${userIdStr}`);
+
+        // --- 1. AŞAMA: PROFİL AÇILDIKTAN / GİRDİKTEN SONRA YAVAŞ VE DOĞAL BAŞLANGIÇ ---
+        // 1. Mesaj: 45 - 60 saniye sonra (hemen ilk saniyede değil!)
+        // 2. Mesaj: ~2.5 - 3.5 dakika sonra (FARKLI bir kişiden)
+        // 3. Mesaj: ~5.5 - 7 dakika sonra (YİNE FARKLI bir kişiden)
+        const initialDelays = [
+            Math.floor(Math.random() * 15000) + 45000,   // 45 - 60 saniye
+            Math.floor(Math.random() * 60000) + 150000,  // 2.5 - 3.5 dakika
+            Math.floor(Math.random() * 90000) + 330000   // 5.5 - 7 dakika
+        ];
+
+        initialDelays.forEach((delay) => {
+            const timer = setTimeout(async () => {
+                session.timers.delete(timer);
+                if (activeUserSessions.has(userIdStr)) {
+                    await sendSingleAutoMessage(io, userIdStr, true);
+                }
+            }, delay);
+            session.timers.add(timer);
+        });
+
+        // --- 2. AŞAMA: UYGULAMADA KALDIĞI SÜRECE DEVAM EDEN YAVAŞ AKIŞ ---
+        // Her 8 - 12 dakikada bir, tek bir yeni ve farklı kişiden mesaj
+        const ONGOING_INTERVAL = (Math.floor(Math.random() * 4) + 8) * 60 * 1000; // 8 - 11 dakika
+
+        session.intervalId = setInterval(async () => {
+            if (!activeUserSessions.has(userIdStr) || session.socketIds.size === 0) {
+                clearInterval(session.intervalId);
+                session.intervalId = null;
+                return;
+            }
+
+            console.log(`[AUTO-ENGAGEMENT] Devam döngüsü tetiklendi: Kullanıcı ID ${userIdStr}`);
+            await sendSingleAutoMessage(io, userIdStr, false);
+
+        }, ONGOING_INTERVAL);
+
+    } catch (err) {
+        console.error('[AUTO-ENGAGEMENT START ERROR]:', err.message);
+    }
+}
+
+/**
+ * Kullanıcı onboarding'i bitirdiğinde (PUT /profile) tetiklenebilir
+ */
+function onUserCompletedOnboarding(io, userId) {
+    if (!userId) return;
+    const userIdStr = userId.toString();
+    const session = activeUserSessions.get(userIdStr);
+    // Eğer socket açıksa hemen zamanlayıcıları başlat
+    if (session && session.socketIds.size > 0) {
+        startUserAutoEngagement(io, userId, Array.from(session.socketIds)[0]);
+    }
 }
 
 /**
@@ -305,7 +315,6 @@ function stopUserAutoEngagement(userId, socketId) {
         session.socketIds.delete(socketId);
     }
 
-    // Kullanıcının başka açık socket'i kalmadıysa tüm zamanlayıcıları temizle
     if (session.socketIds.size === 0) {
         console.log(`[AUTO-ENGAGEMENT] Kullanıcı çevrimdışı, zamanlayıcılar durduruluyor: ${userIdStr}`);
 
@@ -324,5 +333,6 @@ function stopUserAutoEngagement(userId, socketId) {
 module.exports = {
     startUserAutoEngagement,
     stopUserAutoEngagement,
+    onUserCompletedOnboarding,
     sendSingleAutoMessage
 };

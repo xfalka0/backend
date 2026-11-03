@@ -603,7 +603,7 @@ export default function OperatorProfileScreen({ route, navigation }) {
                 <LinearGradient
                     colors={['transparent', themeMode === 'dark' ? 'rgba(15, 23, 42, 0.9)' : 'rgba(255, 255, 255, 0.9)', theme.colors.background]}
                     locations={[0, 0.3, 1]}
-                    style={styles.bottomBlur}
+                    style={[styles.bottomBlur, { paddingBottom: Math.max(Platform.OS === 'ios' ? 35 : 20, insets.bottom + 14) }]}
                 >
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
                         {/* Takip Et Butonu */}

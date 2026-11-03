@@ -68,8 +68,10 @@ const OperatorItem = React.memo(({ item, navigation, user, theme, onHiPress }) =
             <View style={styles.cardHeader}>
                 <View style={{ flexDirection: 'row', flex: 1, alignItems: 'center' }}>
                     <View style={styles.avatarContainer}>
-                        {item.vip_level > 0 ? (
-                            <VipFrame level={profileGender === 'coin_bayisi' ? 'dealer' : item.vip_level} avatar={item.avatar_url} size={65} isStatic={true} />
+                        {profileGender === 'coin_bayisi' ? (
+                            <VipFrame level="dealer" avatar={item.avatar_url} size={54} isStatic={true} />
+                        ) : item.vip_level > 0 ? (
+                            <VipFrame level={item.vip_level} avatar={item.avatar_url} size={65} isStatic={true} />
                         ) : (
                             <StoryRing hasNewStory={!!item.has_active_story} size={69}>
                                 <VipFrame level={0} avatar={item.avatar_url} size={65} isStatic={true} />
@@ -135,7 +137,7 @@ const OperatorItem = React.memo(({ item, navigation, user, theme, onHiPress }) =
                     />
                 </View>
             </View>
-            {item.bio && <Text style={[styles.bioText, { color: theme.colors.textSecondary }]} numberOfLines={2}>{maskContactInfo(item.bio)}</Text>}
+            {item.bio && <Text style={[styles.bioText, profileGender === 'coin_bayisi' && { marginTop: 14 }, { color: theme.colors.textSecondary }]} numberOfLines={2}>{maskContactInfo(item.bio)}</Text>}
             
             {item.photos && item.photos.length > 0 && (
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.albumScroll}>
@@ -454,7 +456,7 @@ export default function HomeScreen({ navigation, route }) {
             <PremiumCoinCard 
                 onCoinPress={() => navigation.navigate('PurchaseInfo', { user })}
                 onExplorePress={() => navigation.navigate('Keşfet')}
-                onResellerPress={() => navigation.navigate('PurchaseInfo', { user, reseller: true })}
+                onResellerPress={() => navigation.navigate('OperatorProfile', { operator: { id: 66, user_id: 66, name: 'FS Coin Bayi', display_name: 'FS Coin Bayi' }, user })}
             />
             <ActionCards 
                 onRewardsPress={() => navigation.navigate('Leaderboard')} 

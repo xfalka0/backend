@@ -510,7 +510,7 @@ export default function MessagesScreen({ navigation, route }) {
                             <PremiumCoinCard
                                 onCoinPress={() => navigation.navigate('Shop')}
                                 onExplorePress={() => navigation.navigate('Keşfet')}
-                                onResellerPress={() => navigation.navigate('PurchaseInfo', { user })}
+                                onResellerPress={() => navigation.navigate('OperatorProfile', { operator: { id: 66, user_id: 66, name: 'FS Coin Bayi', display_name: 'FS Coin Bayi' }, user })}
                             />
                             
                             <View style={[styles.headerContainer, { zIndex: 100 }]}>

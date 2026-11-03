@@ -1,5 +1,6 @@
 import React, { useEffect } from 'react';
 import { StyleSheet, View, Pressable, Dimensions, Text } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, {
     useSharedValue,
     useAnimatedStyle,
@@ -36,6 +37,7 @@ const GradientIcon = ({ name, size = 26, colors = ['#FFFFFF', '#E83E50'] }) => (
 );
 
 const AnimatedTab = ({ state, descriptors, navigation }) => {
+    const insets = useSafeAreaInsets();
     // Equal-width slots keep the rooms action exactly in the center.
     // Match the tab bar's inner width: total width minus horizontal padding.
     const tabWidth = (width - 48) / state.routes.length;
@@ -65,7 +67,7 @@ const AnimatedTab = ({ state, descriptors, navigation }) => {
     }));
 
     return (
-        <View style={styles.container} pointerEvents="box-none">
+        <View style={[styles.container, { bottom: Math.max(16, insets.bottom + 8) }]} pointerEvents="box-none">
             <GlassCard style={styles.tabBar} intensity={80} tint="dark" pointerEvents="auto">
                 {/* Sliding Indicator */}
                 <Animated.View style={[styles.indicatorWrapper, { width: tabWidth }, indicatorStyle]}>

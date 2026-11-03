@@ -137,7 +137,7 @@ export default function FavoritesScreen({ navigation, route }) {
                 onPress={() => {
                     if (isWhoFavorited && item.is_blurred) {
                         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-                        navigation.navigate('VipDetails', { user: currentUser });
+                        navigation.navigate('Vip', { user: currentUser });
                         return;
                     }
                         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -317,7 +317,7 @@ export default function FavoritesScreen({ navigation, route }) {
                                 style={styles.paywallBtn}
                                 onPress={() => {
                                     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                                    navigation.navigate('VipDetails', { user });
+                                    navigation.navigate('Vip', { user });
                                 }}
                                 activeOpacity={0.85}
                             >

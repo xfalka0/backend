@@ -15,7 +15,8 @@ import {
     Modal,
     TextInput,
     Linking,
-    RefreshControl
+    RefreshControl,
+    Keyboard
 } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -613,7 +614,20 @@ const ProfileScreen = ({ route }) => {
         setLoading(true);
         try {
             const token = await AsyncStorage.getItem('token');
-            const res = await axios.put(`${API_URL}/users/${user.id}/profile`, { [field]: value }, {
+            let currentUserId = user?.id;
+            if (!currentUserId) {
+                const stored = await AsyncStorage.getItem('user');
+                if (stored) {
+                    currentUserId = JSON.parse(stored)?.id;
+                }
+            }
+            if (!currentUserId) {
+                showAlert({ title: 'Hata', message: 'Kullanıcı bilgisi bulunamadı. Lütfen tekrar giriş yapın.', type: 'error' });
+                return false;
+            }
+
+            const payload = (typeof field === 'object' && field !== null) ? field : { [field]: value };
+            const res = await axios.put(`${API_URL}/users/${currentUserId}/profile`, payload, {
                 headers: { Authorization: `Bearer ${token}` }
             });
 
@@ -621,13 +635,37 @@ const ProfileScreen = ({ route }) => {
                 const updatedUser = { ...user, ...res.data };
                 setUser(updatedUser);
                 await AsyncStorage.setItem('user', JSON.stringify(updatedUser));
+                return true;
             }
         } catch (e) {
             console.error('Update profile error:', e);
             const errorMsg = e.response?.data?.error || e.response?.data?.message || 'Bilgiler güncellenirken bir sorun oluştu.';
             showAlert({ title: 'Hata', message: errorMsg, type: 'error' });
+            return false;
         } finally {
             setLoading(false);
+        }
+    };
+
+    const handleSaveAndClose = async () => {
+        Keyboard.dismiss();
+        const updates = {};
+        const trimmedName = tempName?.trim();
+        if (trimmedName && trimmedName !== (user?.name || user?.display_name)) {
+            updates.name = trimmedName;
+            updates.display_name = trimmedName;
+        }
+        if (tempBio !== (user?.bio || '')) {
+            updates.bio = tempBio;
+        }
+
+        if (Object.keys(updates).length > 0) {
+            const success = await handleUpdateProfile(updates);
+            if (success) {
+                setIsEditModalVisible(false);
+            }
+        } else {
+            setIsEditModalVisible(false);
         }
     };
 
@@ -778,6 +816,25 @@ const ProfileScreen = ({ route }) => {
         >
             <StatusBar barStyle="light-content" />
 
+            {/* Background Fiva Banner with Smooth Alpha Mask */}
+            <View style={styles.bgWrapper} pointerEvents="none">
+                <MaskedView
+                    style={StyleSheet.absoluteFill}
+                    maskElement={
+                        <LinearGradient
+                            colors={['rgba(0,0,0,1)', 'rgba(0,0,0,0.9)', 'rgba(0,0,0,0.45)', 'rgba(0,0,0,0.1)', 'transparent']}
+                            locations={[0, 0.3, 0.58, 0.85, 1]}
+                            style={StyleSheet.absoluteFill}
+                        />
+                    }
+                >
+                    <Image
+                        source={require('../../assets/fivabanner.png')}
+                        style={[styles.backgroundImage, { opacity: 0.75 }]}
+                    />
+                </MaskedView>
+            </View>
+
             <Animated.ScrollView
                 showsVerticalScrollIndicator={false}
                 scrollEventThrottle={16}
@@ -797,10 +854,7 @@ const ProfileScreen = ({ route }) => {
             >
                 {/* Top Navigation Bar */}
                 <View style={styles.topNavBar}>
-                    <TouchableOpacity style={styles.navIconBtn} activeOpacity={0.7} onPress={() => { }}>
-                        <Ionicons name="notifications-outline" size={18} color="#fff" />
-                        <View style={styles.badgeDot} />
-                    </TouchableOpacity>
+                    <View />
                     <TouchableOpacity style={styles.navIconBtn} activeOpacity={0.7} onPress={() => navigation.navigate('Settings', { user })}>
                         <Ionicons name="settings-outline" size={18} color="#fff" />
                     </TouchableOpacity>
@@ -1704,7 +1758,7 @@ const ProfileScreen = ({ route }) => {
                         <View style={styles.floatingSaveWrapper}>
                             <TouchableOpacity
                                 style={styles.floatingSaveBtn}
-                                onPress={() => setIsEditModalVisible(false)}
+                                onPress={handleSaveAndClose}
                                 activeOpacity={0.9}
                             >
                                 <LinearGradient
@@ -1789,8 +1843,11 @@ const styles = StyleSheet.create({
     },
     bgWrapper: {
         position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
         width: '100%',
-        height: 400,
+        height: 450,
     },
     backgroundImage: {
         width: '100%',

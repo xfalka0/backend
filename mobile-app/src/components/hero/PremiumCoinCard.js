@@ -34,9 +34,9 @@ const slides = [
     },
     {
         id: '3',
-        title: 'Kredi mi Yükleyemiyorsun?',
-        subtitle: 'Play Store kullanamıyorsan WhatsApp üzerinden anında yükle',
-        buttonText: 'WHATSAPP DESTEK',
+        title: 'Coin Bayisi ile İndirimli Paket Al!',
+        subtitle: 'Yetkili bayimizden indirimli ve bonuslu paketleri anında yükle',
+        buttonText: 'BAYİDEN İNDİRİMLİ AL',
         icon: 'logo-whatsapp',
         colors: ['#34d399', '#059669'],
         buttonColors: ['#34D399', '#10B981', '#059669'],
@@ -336,7 +336,7 @@ const PremiumCoinCard = ({ onCoinPress, onExplorePress, onResellerPress }) => {
             } else if (item.isHeart) {
                 onExplorePress?.();
             } else if (item.isReseller) {
-                onResellerPress?.();
+                if (onResellerPress) { onResellerPress(); } else { navigation.navigate('OperatorProfile', { operator: { id: 66, user_id: 66, name: 'FS Coin Bayi', display_name: 'FS Coin Bayi' } }); }
             } else if (item.isAgency) {
                 Linking.openURL('https://forms.gle/vsw1ay6J719NvmLD7');
             }

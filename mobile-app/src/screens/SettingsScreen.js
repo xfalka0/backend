@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Switch, Platform, Linking, ActivityIndicator, Image } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Switch, Platform, Linking, ActivityIndicator, Image, StatusBar } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
@@ -230,17 +230,29 @@ export default function SettingsScreen({ navigation, route }) {
     );
 
     return (
-        <View style={styles.container}>
-            {/* Background Image Layer identical to Profile Screen */}
-            <View style={styles.bgWrapper}>
-                <Image
-                    source={require('../../assets/fiva_profile_banner.png')}
-                    style={styles.backgroundImage}
-                />
-                <LinearGradient
-                    colors={['rgba(9, 2, 26, 0.15)', 'rgba(9, 2, 26, 0.8)', '#09021a']}
+        <LinearGradient
+            colors={theme.mode === 'dark' ? theme.gradients.dark : [theme.colors.background, theme.colors.backgroundSecondary]}
+            style={styles.container}
+        >
+            <StatusBar barStyle="light-content" />
+
+            {/* Background Fiva Banner with Smooth Alpha Mask identical to Profile Screen */}
+            <View style={styles.bgWrapper} pointerEvents="none">
+                <MaskedView
                     style={StyleSheet.absoluteFill}
-                />
+                    maskElement={
+                        <LinearGradient
+                            colors={['rgba(0,0,0,1)', 'rgba(0,0,0,0.9)', 'rgba(0,0,0,0.45)', 'rgba(0,0,0,0.1)', 'transparent']}
+                            locations={[0, 0.3, 0.58, 0.85, 1]}
+                            style={StyleSheet.absoluteFill}
+                        />
+                    }
+                >
+                    <Image
+                        source={require('../../assets/fivabanner.png')}
+                        style={[styles.backgroundImage, { opacity: 0.75 }]}
+                    />
+                </MaskedView>
             </View>
 
             <View style={[styles.header, { backgroundColor: 'transparent' }]}>
@@ -404,19 +416,22 @@ export default function SettingsScreen({ navigation, route }) {
                 onConfirm={alert.onConfirm}
                 onClose={() => setAlert({ ...alert, visible: false })}
             />
-        </View>
+        </LinearGradient>
     );
 }
 
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#09021a', // Dark base matching profile
+        backgroundColor: '#0F080A',
     },
     bgWrapper: {
         position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
         width: '100%',
-        height: 400,
+        height: 450,
     },
     backgroundImage: {
         width: '100%',

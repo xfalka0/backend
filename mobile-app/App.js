@@ -42,7 +42,6 @@ import OperatorProfileScreen from './src/screens/OperatorProfileScreen';
 import ChatScreen from './src/screens/ChatScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
 import VipScreen from './src/screens/VipScreen';
-import VipDetailsScreen from './src/screens/VipDetailsScreen';
 import ShopScreen from './src/screens/ShopScreen';
 import FavoritesScreen from './src/screens/FavoritesScreen';
 import ProfileVisitorsScreen from './src/screens/ProfileVisitorsScreen';
@@ -183,7 +182,7 @@ function AppContent() {
                     <Stack.Screen name="Chat" component={ChatScreen} />
                     <Stack.Screen name="Settings" component={SettingsScreen} />
                     <Stack.Screen name="Vip" component={VipScreen} />
-                    <Stack.Screen name="VipDetails" component={VipDetailsScreen} />
+                    <Stack.Screen name="VipDetails" component={VipScreen} />
                     <Stack.Screen name="Shop" component={ShopScreen} />
                     <Stack.Screen name="Store" component={StoreRedirect} />
                     <Stack.Screen name="Bag" component={BagScreen} />

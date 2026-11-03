@@ -87,9 +87,9 @@ const VIP_FRAME_CONFIGS = {
         asset: require('../../assets/vip_frames/coin_dealer_frame.png'),
         glow: 'rgba(0, 229, 255, 0.8)',
         innerScale: 0.81, // Smaller to ensure it fits the hole completely
-        frameScale: 1.9,
+        frameScale: 1.7,
         avatarOffset: { top: 0, left: 0 }, // Negative offset to pull UP and LEFT
-        frameOffset: { top: -7, left: 0 },
+        frameOffset: { top: -9, left: 0 },
         hasPulse: true
     }
 };

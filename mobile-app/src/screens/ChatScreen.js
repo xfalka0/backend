@@ -90,6 +90,22 @@ export default function ChatScreen({ route, navigation }) {
     const [messages, setMessages] = useState([]);
     const [isTyping, setIsTyping] = useState(false);
     const [input, setInput] = useState('');
+    const [isKeyboardVisible, setKeyboardVisible] = useState(false);
+
+    useEffect(() => {
+        const showSub = Keyboard.addListener(
+            Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
+            () => setKeyboardVisible(true)
+        );
+        const hideSub = Keyboard.addListener(
+            Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
+            () => setKeyboardVisible(false)
+        );
+        return () => {
+            showSub.remove();
+            hideSub.remove();
+        };
+    }, []);
 
     // Zustand Role & Locked Image Configuration States
     const [selectedImageUri, setSelectedImageUri] = useState(null);
@@ -757,7 +773,7 @@ export default function ChatScreen({ route, navigation }) {
                         )}
 
                         {vip_level > 0 && (
-                            <VipBadge level={vip_level} size={42} style={{ marginRight: 2 }} />
+                            <VipBadge level={gender === 'coin_bayisi' ? 'dealer' : vip_level} size={42} style={{ marginRight: 2 }} />
                         )}
 
                         <Ionicons name="checkmark-circle" size={14} color="#3b82f6" />
@@ -2165,7 +2181,7 @@ export default function ChatScreen({ route, navigation }) {
                 index={index}
                 isRead={item.is_read}
                 avatar={resolveImageUrl(isUser ? (user.avatar_url || user.avatar) : (isFamilyChat ? item.avatar_url : (partnerAvatar || avatar_url)))}
-                vipLevel={isFamilyChat ? 0 : (isUser ? user.vip_level : vip_level)}
+                vipLevel={isFamilyChat ? 0 : (isUser ? user.vip_level : (gender === 'coin_bayisi' ? 'dealer' : vip_level))}
                 onAvatarPress={!isUser && !isFamilyChat ? () => navigation.navigate('OperatorProfile', { operator: { id: operatorId, name: partnerName || name, avatar_url: partnerAvatar || avatar_url, is_online, vip_level }, user }) : undefined}
                 timestamp={item.created_at}
                 reaction={item.reaction}
@@ -2350,8 +2366,8 @@ export default function ChatScreen({ route, navigation }) {
             </Modal>
 
             <KeyboardAvoidingView
-                behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-                keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 20}
+                behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+                keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
                 style={{ flex: 1 }}
             >
                 <FlatList
@@ -2370,7 +2386,7 @@ export default function ChatScreen({ route, navigation }) {
 
                 {isTyping && <TypingIndicator />}
 
-                <View style={[styles.modernInputWrapper, { paddingBottom: Math.max(insets.bottom + 10, Platform.OS === 'ios' ? 20 : 15) }]}>
+                <View style={[styles.modernInputWrapper, { paddingBottom: isKeyboardVisible ? (Platform.OS === 'ios' ? 8 : 6) : Math.max(insets.bottom + 10, Platform.OS === 'ios' ? 20 : 14) }]}>
                     {/* renderIcebreakers() is now handled by QuickActionsModal */}
                     <GlassCard intensity={40} tint="dark" style={styles.glassInputContainer}>
                         <View style={styles.inputRow}>

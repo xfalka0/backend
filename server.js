@@ -1502,29 +1502,35 @@ app.get('/api/me', authenticateToken, (req, res) => {
 app.get('/api/operators', async (req, res) => {
     try {
         const { gender, page = 1, limit = 20, tab = 'Önerilen' } = req.query;
-        const pageNum = Math.max(1, parseInt(page) || 1);
-        const limitNum = Math.min(30, Math.max(1, parseInt(limit) || 20));
-        const offset = (pageNum - 1) * limitNum;
-
         let enforcedGender = null;
-        // If an authenticated user token is provided, enforce opposite gender rule strictly
+        let isAdmin = false;
+
+        // If an authenticated user token is provided, enforce opposite gender rule strictly (except for admins)
         const authHeader = req.headers['authorization'];
         const token = authHeader && authHeader.split(' ')[1];
         if (token) {
             try {
                 const decoded = jwt.verify(token, SECRET_KEY);
-                const userGenderRaw = (decoded.gender || '').toString().toLowerCase().trim();
-                const userGender = ['kadin', 'kadın', 'female', 'woman'].includes(userGenderRaw) ? 'kadin' : 'erkek';
-                enforcedGender = userGender === 'kadin' ? 'erkek' : 'kadin';
-                if (gender) {
-                    console.warn(`[OPERATORS SECURITY] User ${decoded.id} (${userGender}) tried to send gender filter "${gender}". Overridden by opposite gender rule (${enforcedGender}).`);
+                if (decoded.role === 'admin' || decoded.role === 'super_admin') {
+                    isAdmin = true;
+                } else {
+                    const userGenderRaw = (decoded.gender || '').toString().toLowerCase().trim();
+                    const userGender = ['kadin', 'kadın', 'female', 'woman'].includes(userGenderRaw) ? 'kadin' : 'erkek';
+                    enforcedGender = userGender === 'kadin' ? 'erkek' : 'kadin';
+                    if (gender) {
+                        console.warn(`[OPERATORS SECURITY] User ${decoded.id} (${userGender}) tried to send gender filter "${gender}". Overridden by opposite gender rule (${enforcedGender}).`);
+                    }
                 }
             } catch (e) {
                 // Invalid token, proceed
             }
         }
 
-        console.log(`[OPERATORS] Fetching. EnforcedGender: ${enforcedGender || gender || 'all'}, Tab: ${tab}, Page: ${pageNum}, Limit: ${limitNum}`);
+        const pageNum = Math.max(1, parseInt(page) || 1);
+        const limitNum = isAdmin ? Math.max(1, parseInt(limit) || 1000) : Math.min(30, Math.max(1, parseInt(limit) || 20));
+        const offset = (pageNum - 1) * limitNum;
+
+        console.log(`[OPERATORS] Fetching. EnforcedGender: ${enforcedGender || gender || 'all'}, Tab: ${tab}, Page: ${pageNum}, Limit: ${limitNum}, IsAdmin: ${isAdmin}`);
 
         let query = `
             SELECT 

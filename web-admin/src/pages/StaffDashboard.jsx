@@ -14,7 +14,7 @@ import {
 import axios from 'axios';
 import { useAuth } from '../context/AuthContext';
 
-const API_URL = 'https://backend-kj17.onrender.com/api';
+const API_URL = '/api';
 
 const StaffDashboard = () => {
     const { user, token } = useAuth();

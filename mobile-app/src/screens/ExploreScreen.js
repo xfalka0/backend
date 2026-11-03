@@ -455,24 +455,19 @@ export default function ExploreScreen({ navigation, route }) {
             
             lastFetchedUserId.current = currentUser?.id;
             
-            // Apply gender filtering to posts and stories (Relaxed for testing so all users are visible)
-            // const userGender = getProfileGender(currentUser) === 'kadin' ? 'kadin' : 'erkek';
-            // const targetGender = userGender === 'kadin' ? 'erkek' : 'kadin';
-            
-            const filteredPosts = exploreRes.data.posts;
-            const filteredStories = exploreRes.data.stories;
-
+            const filteredPosts = exploreRes.data?.posts || [];
+            const filteredStories = exploreRes.data?.stories || [];
             setPosts(filteredPosts);
             fetchPostCommentPreviews(filteredPosts);
             setStories(filteredStories);
-            setOperators(operatorsRes.data);
+            setOperators(operatorsRes.data || []);
         } catch (err) {
-            console.error('Fetch Explore Error:', err);
+            setStories([]);
+            setPosts([]);
         } finally {
             setLoading(false);
         }
     };
-
 
     const likePost = async (postId) => {
         if (!user?.id) return;

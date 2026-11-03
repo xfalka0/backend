@@ -6,7 +6,7 @@ import io from 'socket.io-client';
 const API_URL = '';
 
 const SOCKET_URL = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
-    ? 'https://backend-kj17.onrender.com'
+    ? 'http://localhost:5000'
     : window.location.origin;
 
 export default function UsersPage() {

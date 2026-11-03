@@ -855,6 +855,12 @@ const ProfileScreen = ({ route }) => {
                             {parseInt(user?.vip_level) > 0 && (
                                 <VipBadge level={parseInt(user?.vip_level)} size={38} />
                             )}
+                            {user?.is_vip && (
+                                <View style={{ backgroundColor: '#FACC1520', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 8, borderWidth: 1, borderColor: '#FACC15', flexDirection: 'row', alignItems: 'center', marginLeft: 4 }}>
+                                    <Ionicons name="diamond" size={10} color="#FACC15" style={{ marginRight: 2 }} />
+                                    <Text style={{ color: '#FACC15', fontSize: 10, fontWeight: 'bold' }}>PREMIUM</Text>
+                                </View>
+                            )}
                         </View>
                         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap', justifyContent: 'center' }}>
                             <View style={styles.idBadge}>

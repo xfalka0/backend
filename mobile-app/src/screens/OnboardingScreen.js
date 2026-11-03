@@ -306,11 +306,11 @@ const GenderOptionCard = ({ opt, selected, onPress }) => {
     let iconColor = '#FFFFFF';
     
     if (opt.id === 'kadin') {
-        iconName = 'female';
+        iconName = 'woman-outline';
         iconColors = ['rgba(244, 114, 182, 0.12)', 'rgba(236, 72, 153, 0.25)'];
         iconColor = '#ec4899';
     } else if (opt.id === 'erkek') {
-        iconName = 'male';
+        iconName = 'man-outline';
         iconColors = ['rgba(56, 189, 248, 0.12)', 'rgba(59, 130, 246, 0.25)'];
         iconColor = '#3b82f6';
     }

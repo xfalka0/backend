@@ -17,7 +17,7 @@ import { Ionicons } from '@expo/vector-icons';
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '../contexts/ThemeContext';
-import { API_URL } from '../config';
+import { API_URL, AGENCY_SYSTEM_ENABLED } from '../config';
 import VipFrame from '../components/ui/VipFrame';
 import VipBadge from '../components/ui/VipBadge';
 import AgencyBadge from '../components/ui/AgencyBadge';
@@ -93,6 +93,7 @@ export default function MessagesScreen({ navigation, route }) {
     }, [socket, user?.id]);
 
     const fetchInvitations = async () => {
+        if (!AGENCY_SYSTEM_ENABLED) return;
         try {
             const token = await AsyncStorage.getItem('token');
             if (!token) return;

@@ -47,6 +47,8 @@ const getProfileGender = (profile) => {
     return 'kadin';
 };
 
+
+
 const OperatorItem = React.memo(({ item, navigation, user, theme, onHiPress }) => {
     console.log('[DEBUG OPERATOR ITEM]', item.name, 'avatar:', item.avatar_url, 'photos:', item.photos);
     const profileGender = getProfileGender(item);
@@ -63,9 +65,13 @@ const OperatorItem = React.memo(({ item, navigation, user, theme, onHiPress }) =
             <View style={styles.cardHeader}>
                 <View style={{ flexDirection: 'row', flex: 1, alignItems: 'center' }}>
                     <View style={styles.avatarContainer}>
-                        <StoryRing hasNewStory={!!item.has_active_story} size={69}>
-                            <VipFrame level={profileGender === 'coin_bayisi' ? 'dealer' : (item.vip_level || 0)} avatar={item.avatar_url} size={65} isStatic={true} />
-                        </StoryRing>
+                        {item.vip_level > 0 ? (
+                            <VipFrame level={profileGender === 'coin_bayisi' ? 'dealer' : item.vip_level} avatar={item.avatar_url} size={65} isStatic={true} />
+                        ) : (
+                            <StoryRing hasNewStory={!!item.has_active_story} size={69}>
+                                <VipFrame level={0} avatar={item.avatar_url} size={65} isStatic={true} />
+                            </StoryRing>
+                        )}
                         {item.is_online && <View style={styles.onlineBadge} />}
                     </View>
                     <View style={styles.infoContainer}>
@@ -276,7 +282,6 @@ export default function HomeScreen({ navigation, route }) {
                     console.log('Request canceled by user tab switch');
                 }
             } else {
-                console.error('Fetch operators error:', e);
                 if (currentRequestId === requestIdRef.current) {
                     setTimeoutError(true);
                 }

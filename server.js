@@ -1846,7 +1846,7 @@ app.delete('/api/admin/packages/:id', authenticateToken, authorizeRole('admin', 
 });
 
 // CLOUDINARY UPLOAD ENDPOINT
-app.post('/api/media-upload-legacy', (req, res, next) => {
+app.post(['/api/media-upload-legacy', '/api/upload'], (req, res, next) => {
     upload.single('file')(req, res, (err) => {
         if (err instanceof multer.MulterError) {
             console.error('[MULTER ERROR]:', err);
@@ -2155,6 +2155,7 @@ app.put('/api/users/:id/profile', async (req, res) => {
                 interests = COALESCE($6, interests),
                 onboarding_completed = COALESCE($7, onboarding_completed),
                 gender_change_count = CASE WHEN $17 = true THEN gender_change_count + 1 ELSE gender_change_count END,
+                gender_confirmed_at = CASE WHEN $7 = true THEN NOW() ELSE gender_confirmed_at END,
                 age = COALESCE($8::INTEGER, age),
                 relationship = COALESCE($9, relationship),
                 zodiac = COALESCE($10, zodiac),

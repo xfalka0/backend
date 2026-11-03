@@ -10,7 +10,7 @@ import { Ionicons, MaterialCommunityIcons, FontAwesome5 } from '@expo/vector-ico
 import axios from 'axios';
 import * as ImagePicker from 'expo-image-picker';
 import { Audio, Video, ResizeMode } from 'expo-av'; // Import Audio and Video
-import { API_URL, SOCKET_URL } from '../config';
+import { API_URL, SOCKET_URL, AGENCY_SYSTEM_ENABLED } from '../config';
 import MessageBubble from '../components/animated/MessageBubble';
 import TypingIndicator from '../components/animated/TypingIndicator';
 import ChatBackground from '../components/animated/ChatBackground';
@@ -42,7 +42,7 @@ import QuickActionsModal from '../components/QuickActionsModal';
 export default function ChatScreen({ route, navigation }) {
     console.log("RENDER ChatScreen");
     const insets = useSafeAreaInsets();
-    const { fetchUnreadCount, setActiveChatId, socket } = useChat();
+    const { fetchUnreadCount, setActiveChatId, socket, user: contextUser } = useChat();
     const { showAlert } = useAlert();
     const role = useAppStore(state => state.role);
     const isOperator = role === 'operator';
@@ -80,9 +80,10 @@ export default function ChatScreen({ route, navigation }) {
     const isFamilyChat = chatType === 'family';
 
     // User Handling
-    const TEST_USER_ID = 'c917f7d6-cc44-4b04-8917-1dbbed0b1e9b';
-    const user = { ...routeUser, id: routeUser.id || TEST_USER_ID };
-    const isPremiumMember = user?.is_vip === true || user?.is_vip === 'true' || user?.is_vip === 1;
+    const globalUser = useAppStore(state => state.user) || {};
+    const effectiveUser = { ...(contextUser || {}), ...(globalUser || {}), ...(routeUser || {}) };
+    const user = effectiveUser;
+    const isPremiumMember = effectiveUser?.is_vip === true || effectiveUser?.is_vip === 'true' || effectiveUser?.is_vip === 1;
 
     const [messages, setMessages] = useState([]);
     const [isTyping, setIsTyping] = useState(false);
@@ -139,6 +140,7 @@ export default function ChatScreen({ route, navigation }) {
 
     useEffect(() => {
         const checkPendingInvitations = async () => {
+            if (!AGENCY_SYSTEM_ENABLED) return;
             try {
                 const token = await AsyncStorage.getItem('token');
                 if (!token) return;
@@ -157,7 +159,7 @@ export default function ChatScreen({ route, navigation }) {
                 console.log('[ChatScreen] Error checking pending invitations:', err.message);
             }
         };
-        if (operatorId) {
+        if (operatorId && AGENCY_SYSTEM_ENABLED) {
             checkPendingInvitations();
         }
     }, [operatorId]);
@@ -320,7 +322,7 @@ export default function ChatScreen({ route, navigation }) {
             return;
         }
 
-        if (!isOperator && currentBalance < 500 && (user.vip_level || 0) < 1) {
+        if (!isOperator && !isPremiumMember && currentBalance < 500 && (user.vip_level || 0) < 1) {
             handleInsufficientCoins();
             return;
         }
@@ -549,8 +551,17 @@ export default function ChatScreen({ route, navigation }) {
                 try {
                     const token = await AsyncStorage.getItem('token');
                     const authHeader = { headers: { Authorization: `Bearer ${token}` } };
+                    let activeUserId = user?.id;
+                    if (!activeUserId) {
+                        const localUserStr = await AsyncStorage.getItem('user');
+                        if (localUserStr) activeUserId = JSON.parse(localUserStr).id;
+                    }
+                    if (!activeUserId) {
+                        if (active) setIsLoading(false);
+                        return;
+                    }
                     const chatRes = await axios.post(`${API_URL}/chats`, {
-                        userId: user.id,
+                        userId: activeUserId,
                         operatorId: operatorId
                     }, authHeader);
                     const realId = chatRes.data.id;
@@ -577,16 +588,24 @@ export default function ChatScreen({ route, navigation }) {
                 const token = await AsyncStorage.getItem('token');
                 const authHeader = { headers: { Authorization: `Bearer ${token}` } };
 
+                let activeUserId = user?.id;
+                if (!activeUserId) {
+                    const localUserStr = await AsyncStorage.getItem('user');
+                    if (localUserStr) activeUserId = JSON.parse(localUserStr).id;
+                }
+
                 const [balanceRes, historyRes, readRes, inviteRes] = await Promise.all([
-                    axios.get(`${API_URL}/users/${user.id}`, authHeader),
+                    activeUserId ? axios.get(`${API_URL}/users/${activeUserId}`, authHeader).catch(() => ({ data: {} })) : Promise.resolve({ data: {} }),
                     axios.get(`${API_URL}/messages/${chatId}`, authHeader),
-                    axios.put(`${API_URL}/chats/${chatId}/read`, { userId: user.id }, authHeader),
-                    axios.get(`${API_URL}/agency/my-invitations`, authHeader).catch(e => ({ data: [] }))
+                    activeUserId ? axios.put(`${API_URL}/chats/${chatId}/read`, { userId: activeUserId }, authHeader).catch(() => ({ data: {} })) : Promise.resolve({ data: {} }),
+                    AGENCY_SYSTEM_ENABLED ? axios.get(`${API_URL}/agency/my-invitations`, authHeader).catch(() => ({ data: [] })) : Promise.resolve({ data: [] })
                 ]);
 
                 if (!active) return;
 
-                fetchUnreadCount(user.id);
+                if (activeUserId) {
+                    fetchUnreadCount(activeUserId);
+                }
 
                 if (balanceRes.data && balanceRes.data.balance !== undefined) {
                     setCurrentBalance(balanceRes.data.balance);
@@ -1042,8 +1061,8 @@ export default function ChatScreen({ route, navigation }) {
 
     // --- MEDIA SHARING LOGIC ---
     const handleSendImage = async () => {
-        // Enforce balance checking ONLY for male customers (non-operators)
-        if (!isOperator && currentBalance < 50 && (user.vip_level || 0) < 1) {
+        // Enforce balance checking ONLY for male customers (non-operators) who are not premium
+        if (!isOperator && !isPremiumMember && currentBalance < 50 && (user.vip_level || 0) < 1) {
             handleInsufficientCoins();
             return;
         }

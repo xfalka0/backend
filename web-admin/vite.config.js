@@ -8,8 +8,19 @@ export default defineConfig({
     plugins: [react()],
     server: {
         proxy: {
-            '/api': 'https://backend-kj17.onrender.com',
-            '/uploads': 'https://backend-kj17.onrender.com'
+            '/api': {
+                target: 'http://localhost:5000',
+                changeOrigin: true
+            },
+            '/uploads': {
+                target: 'http://localhost:5000',
+                changeOrigin: true
+            },
+            '/socket.io': {
+                target: 'http://localhost:5000',
+                ws: true,
+                changeOrigin: true
+            }
         }
     },
     build: {

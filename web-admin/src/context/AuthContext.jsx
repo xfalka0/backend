@@ -44,11 +44,20 @@ export const AuthProvider = ({ children }) => {
                 body: JSON.stringify({ email, password }),
             });
 
-            const data = await response.json();
-
             if (!response.ok) {
-                throw new Error(data.error || 'Giriş başarısız.');
+                let errorMsg = 'Giriş başarısız.';
+                try {
+                    const errorData = await response.json();
+                    errorMsg = errorData.error || errorMsg;
+                } catch {
+                    if (response.status === 504 || response.status === 502 || response.status === 500) {
+                        errorMsg = 'Backend sunucusuna bağlanılamadı (Port 5000 kapalı). Lütfen backend sunucusunu başlatın.';
+                    }
+                }
+                throw new Error(errorMsg);
             }
+
+            const data = await response.json();
 
             setToken(data.token);
             setUser(data.user);
@@ -57,7 +66,10 @@ export const AuthProvider = ({ children }) => {
             return { success: true };
         } catch (error) {
             console.error("Login Fail:", error);
-            return { success: false, error: error.message };
+            const userFriendlyMsg = error.message.includes('fetch') 
+                ? 'Backend sunucusuna bağlanılamadı (Port 5000 kapalı). Lütfen backend sunucusunu başlatın.'
+                : error.message;
+            return { success: false, error: userFriendlyMsg };
         }
     };
 

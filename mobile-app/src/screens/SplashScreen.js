@@ -80,6 +80,12 @@ export default function SplashScreen({ navigation }) {
                 }
 
                 if (token && userData) {
+                    if (token === 'mock-test-token-12345' || userData?.id === 9999) {
+                        console.log('[Splash] Clearing mock test user session');
+                        await AsyncStorage.multiRemove(['token', 'user']);
+                        triggerExit('Welcome');
+                        return;
+                    }
                     try {
                         console.log('[Splash] Validating token with server...');
                         const res = await axios.get(`${API_URL}/auth/me`, {

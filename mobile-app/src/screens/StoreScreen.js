@@ -16,6 +16,8 @@ import PremiumHero from '../components/store/PremiumHero';
 import FeatureGrid from '../components/store/FeatureGrid';
 import PlanList from '../components/store/PlanList';
 import StickyPurchaseBar from '../components/store/StickyPurchaseBar';
+import PremiumSuccessModal from '../components/store/PremiumSuccessModal';
+import { useAppStore } from '../store/useAppStore';
 
 const PREMIUM_PLANS = [
     { months: 1, badge: 'BAŞLANGIÇ', price: '449,99 ₺', productId: 'premium_1_month' },
@@ -36,6 +38,7 @@ export default function StoreScreen({ navigation, route }) {
     const defaultIndex = Math.max(0, PREMIUM_PLANS.findIndex(p => p.badge === 'POPÜLER'));
     const [selectedPlanIndex, setSelectedPlanIndex] = useState(defaultIndex);
     const [alertConfig, setAlertConfig] = useState({ visible: false, title: '', message: '', type: 'info' });
+    const [premiumSuccessVisible, setPremiumSuccessVisible] = useState(false);
 
     // Fetch user balance
     const fetchBalance = async () => {
@@ -78,12 +81,12 @@ export default function StoreScreen({ navigation, route }) {
                     headers: { Authorization: `Bearer ${token}` }
                 }).catch(err => console.log('Backend sync error:', err.message));
 
-                setAlertConfig({
-                    visible: true,
-                    title: 'Tebrikler!',
-                    message: `${plan.months} Aylık Premium paketiniz başarıyla aktifleştirildi. Tüm ayrıcalıkların tadını çıkarın!`,
-                    type: 'success'
-                });
+                const currentUser = useAppStore.getState().user;
+                if (currentUser) {
+                    useAppStore.getState().setUser({ ...currentUser, is_vip: true });
+                }
+
+                setPremiumSuccessVisible(true);
             } else if (!result.cancelled) {
                 console.warn('[STORE] Premium purchase failed:', result.error);
                 setAlertConfig({
@@ -154,13 +157,20 @@ export default function StoreScreen({ navigation, route }) {
                     planLabel={selectedPlan ? `${selectedPlan.months} Ay · ${selectedPlan.price}` : ''}
                 />
 
-                {/* Alert Modal */}
+                {/* Alert Modal for errors */}
                 <ModernAlert
                     visible={alertConfig.visible}
                     title={alertConfig.title}
                     message={alertConfig.message}
                     type={alertConfig.type}
                     onClose={() => setAlertConfig(prev => ({ ...prev, visible: false }))}
+                />
+
+                {/* Celebration Modal for Premium Success */}
+                <PremiumSuccessModal 
+                    visible={premiumSuccessVisible}
+                    planMonths={selectedPlan?.months || 1}
+                    onClose={() => setPremiumSuccessVisible(false)}
                 />
             </SafeAreaView>
         </View>

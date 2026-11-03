@@ -1505,8 +1505,8 @@ app.get('/api/operators', async (req, res) => {
                 nt.name_color as nobility_name_color,
                 a.name as agency_name
             FROM users u
-            JOIN operators o ON u.id = o.user_id
-            LEFT JOIN user_nobility un ON u.id = un.user_id AND un.is_active = TRUE AND un.expires_at > NOW()
+            JOIN operators o ON u.id::TEXT = o.user_id::TEXT
+            LEFT JOIN user_nobility un ON u.id::TEXT = un.user_id::TEXT AND un.is_active = TRUE AND un.expires_at > NOW()
             LEFT JOIN nobility_titles nt ON un.title_id = nt.id
             LEFT JOIN agencies a ON u.agency_id::text = a.id::text
             WHERE u.account_status = 'active'
@@ -1517,12 +1517,12 @@ app.get('/api/operators', async (req, res) => {
         let paramCount = 1;
 
         if (enforcedGender) {
-            query += ` AND (u.gender = ${paramCount} OR u.gender = 'coin_bayisi') `;
+            query += ` AND (u.gender = $${paramCount} OR u.gender = 'coin_bayisi') `;
             params.push(enforcedGender);
             paramCount++;
         } else if (gender === 'erkek' || gender === 'kadin' || gender === 'male' || gender === 'female') {
             const normalizedGender = (gender === 'male' || gender === 'erkek') ? 'erkek' : 'kadin';
-            query += ` AND (u.gender = ${paramCount} OR u.gender = 'coin_bayisi') `;
+            query += ` AND (u.gender = $${paramCount} OR u.gender = 'coin_bayisi') `;
             params.push(normalizedGender);
             paramCount++;
         }
@@ -1536,7 +1536,7 @@ app.get('/api/operators', async (req, res) => {
             orderByClause = 'ORDER BY o.is_online DESC NULLS LAST, (u.created_at >= NOW() - INTERVAL \'3 days\') DESC, (coalesce(cardinality(o.photos), 0) > 0) DESC, u.created_at DESC, u.id DESC';
         }
 
-        query += ` ${orderByClause} LIMIT ${paramCount} OFFSET ${paramCount + 1}`;
+        query += ` ${orderByClause} LIMIT $${paramCount} OFFSET $${paramCount + 1}`;
         params.push(limitNum, offset);
 
         const result = await db.query(query, params);
@@ -3714,6 +3714,7 @@ app.get('/api/users/:userId/chats', async (req, res) => {
                 c.user_id,
                 c.last_message_at,
                 (SELECT content FROM messages WHERE chat_id = c.id ORDER BY created_at DESC LIMIT 1) as last_message,
+                (SELECT content_type FROM messages WHERE chat_id = c.id ORDER BY created_at DESC LIMIT 1) as last_message_type,
                 (SELECT COUNT(*)::int FROM messages WHERE chat_id = c.id AND sender_id != $1 AND is_read = false) as unread_count,
                 COALESCE(u.display_name, u.username, 'Bilinmeyen Kullanıcı') as name, 
                 COALESCE(u.avatar_url, 'https://via.placeholder.com/150') as avatar_url,
@@ -3814,6 +3815,7 @@ app.get('/api/chats/admin', authenticateToken, authorizeRole('admin', 'super_adm
                 op.admin_notes as operator_notes,
                 op.managed_by as managed_by_id, -- Who manages this profile
                 (SELECT content FROM messages WHERE chat_id = c.id ORDER BY created_at DESC LIMIT 1) as last_message,
+                (SELECT content_type FROM messages WHERE chat_id = c.id ORDER BY created_at DESC LIMIT 1) as last_message_type,
                 (SELECT sender_id FROM messages WHERE chat_id = c.id ORDER BY created_at DESC LIMIT 1) as last_message_sender_id,
                 (SELECT created_at FROM messages WHERE chat_id = c.id ORDER BY created_at DESC LIMIT 1) as last_message_time,
                 (SELECT COUNT(*)::int FROM messages WHERE chat_id = c.id AND sender_id = c.user_id AND is_read = false) as unread_count
@@ -6552,7 +6554,7 @@ app.post('/api/messages/send-hi', authenticateToken, async (req, res) => {
         );
 
         // Update chat
-        await db.query('UPDATE chats SET last_message_at = NOW() WHERE id = $1', [chatId]);
+        await db.query('UPDATE chats SET last_message_at = NOW(), last_message = $2 WHERE id = $1', [chatId, finalContent]);
 
         await db.query('COMMIT');
 

@@ -57,6 +57,7 @@ const HiButton = memo(({ onPress, operatorId, onHiPress }) => {
     const scale = useSharedValue(1);
     const pulse = useSharedValue(1);
     const [particles, setParticles] = useState([]);
+    const [sending, setSending] = useState(false);
     
     // 1. Synchronous initialization! If it was pressed in this session, it starts as 'Chat' instantly.
     const [isChatMode, setIsChatMode] = useState(() => localChatCache.has(operatorId));
@@ -121,23 +122,43 @@ const HiButton = memo(({ onPress, operatorId, onHiPress }) => {
     }, []);
 
     const handlePress = async () => {
-        if (!isChatMode && !localChatCache.has(operatorId)) {
-            // Instantly lock it globally and locally
-            localChatCache.add(operatorId);
-            setIsChatMode(true);
-            
-            // Trigger Particle Burst
-            const newParticles = Array.from({ length: 6 }).map((_, i) => ({
-                id: Date.now() + i,
-                index: i
-            }));
-            setParticles(newParticles);
+        if (sending) return;
 
-            const now = Date.now();
-            AsyncStorage.setItem(`lastHi_${operatorId}`, now.toString()).catch(() => {});
-            
-            if (onHiPress) onHiPress();
-            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        if (!isChatMode && !localChatCache.has(operatorId)) {
+            setSending(true);
+            try {
+                if (onHiPress) {
+                    const success = await onHiPress();
+                    if (!success) {
+                        localChatCache.delete(operatorId);
+                        setIsChatMode(false);
+                        AsyncStorage.removeItem(`lastHi_${operatorId}`).catch(() => {});
+                        return;
+                    }
+                }
+
+                // Instantly lock it globally and locally
+                localChatCache.add(operatorId);
+                setIsChatMode(true);
+                
+                // Trigger Particle Burst
+                const newParticles = Array.from({ length: 6 }).map((_, i) => ({
+                    id: Date.now() + i,
+                    index: i
+                }));
+                setParticles(newParticles);
+
+                const now = Date.now();
+                AsyncStorage.setItem(`lastHi_${operatorId}`, now.toString()).catch(() => {});
+                
+                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            } catch (err) {
+                localChatCache.delete(operatorId);
+                setIsChatMode(false);
+                AsyncStorage.removeItem(`lastHi_${operatorId}`).catch(() => {});
+            } finally {
+                setSending(false);
+            }
         } else {
             if (onPress) onPress();
         }

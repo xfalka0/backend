@@ -26,6 +26,7 @@ import ActionCards from '../components/ui/ActionCards';
 import FilterModal from '../components/ui/FilterModal';
 import DestinyMatchModal from '../components/DestinyMatchModal';
 import GenderConfirmationModal from '../components/GenderConfirmationModal';
+import { useStarterPack } from '../contexts/StarterPackContext';
 
 const { width } = Dimensions.get('window');
 let lastProfileTap = 0;
@@ -53,8 +54,9 @@ const getProfileGender = (profile) => {
 const OperatorItem = React.memo(({ item, navigation, user, theme, onHiPress }) => {
     console.log('[DEBUG OPERATOR ITEM]', item.name, 'avatar:', item.avatar_url, 'photos:', item.photos);
     const profileGender = getProfileGender(item);
-    const handleLocalHiPress = React.useCallback(() => {
-        if (onHiPress) onHiPress(item);
+    const handleLocalHiPress = React.useCallback(async () => {
+        if (onHiPress) return await onHiPress(item);
+        return false;
     }, [onHiPress, item]);
 
     return (
@@ -158,6 +160,7 @@ import PromotedProfiles from '../components/home/PromotedProfiles';
 export default function HomeScreen({ navigation, route }) {
     const insets = useSafeAreaInsets();
     const { theme } = useTheme();
+    const { handleInsufficientCoins } = useStarterPack();
     const { user: routeUser } = route.params || {};
     const [user, setUser] = useState(routeUser || { id: 'guest', name: 'Misafir', balance: 0 });
     
@@ -182,6 +185,8 @@ export default function HomeScreen({ navigation, route }) {
 
     const abortControllerRef = useRef(null);
     const requestIdRef = useRef(0);
+    const isFetchingRef = useRef(false);
+    const pendingLoadMoreRef = useRef(false);
 
     useFocusEffect(
         React.useCallback(() => {
@@ -214,6 +219,11 @@ export default function HomeScreen({ navigation, route }) {
     }, [currentFilters]); // Initial load + Filter changes
 
     const fetchOperators = async (pageNum = 1, isRefreshing = false, requestedTab = activeTab) => {
+        if (isFetchingRef.current && !isRefreshing && pageNum > 1) {
+            return;
+        }
+        isFetchingRef.current = true;
+
         if (isRefreshing) {
             setRefreshing(true);
         } else if (pageNum === 1) {
@@ -225,10 +235,13 @@ export default function HomeScreen({ navigation, route }) {
 
         const currentRequestId = ++requestIdRef.current;
 
-        if (abortControllerRef.current) {
-            abortControllerRef.current.abort();
+        // Only abort previous requests when starting a fresh tab or refresh (pageNum === 1)
+        if (pageNum === 1) {
+            if (abortControllerRef.current) {
+                abortControllerRef.current.abort();
+            }
+            abortControllerRef.current = new AbortController();
         }
-        abortControllerRef.current = new AbortController();
 
         // 8 second timeout
         const timeoutId = setTimeout(() => {
@@ -242,11 +255,12 @@ export default function HomeScreen({ navigation, route }) {
         }, 8000);
 
         try {
-            console.log(`[DISCOVERY_FETCH_START] RequestId: ${currentRequestId} | Tab: ${requestedTab} | Page: ${pageNum} | Limit: 20`);
+            const encodedTab = encodeURIComponent(requestedTab);
+            console.log(`[DISCOVERY_FETCH_START] RequestId: ${currentRequestId} | Tab: ${requestedTab} | Page: ${pageNum} | Limit: 30`);
             const token = await AsyncStorage.getItem('token');
-            const res = await axios.get(`${API_URL}/discovery?tab=${requestedTab}&page=${pageNum}&limit=20`, {
+            const res = await axios.get(`${API_URL}/discovery?tab=${encodedTab}&page=${pageNum}&limit=30`, {
                 headers: token ? { Authorization: `Bearer ${token}` } : {},
-                signal: abortControllerRef.current.signal
+                signal: abortControllerRef.current?.signal
             });
             
             clearTimeout(timeoutId);
@@ -257,7 +271,7 @@ export default function HomeScreen({ navigation, route }) {
             }
 
             const data = res.data?.data || (Array.isArray(res.data) ? res.data : []);
-            const serverHasMore = res.data?.hasMore !== undefined ? res.data.hasMore : (data.length >= 20);
+            const serverHasMore = res.data?.hasMore !== undefined ? res.data.hasMore : (data.length >= 30);
             console.log(`[DISCOVERY_FETCH_FINISH] RequestId: ${currentRequestId} | Tab: ${requestedTab} | Raw Loaded: ${data.length} | HasMore: ${serverHasMore} | Page: ${pageNum}`);
             
             if (pageNum === 1) {
@@ -266,6 +280,14 @@ export default function HomeScreen({ navigation, route }) {
                 setFeaturedOperators(featured);
                 setPage(1);
                 setHasMore(serverHasMore);
+
+                // Auto-fulfill load more if user already swiped to bottom
+                if (pendingLoadMoreRef.current && serverHasMore) {
+                    pendingLoadMoreRef.current = false;
+                    setTimeout(() => {
+                        fetchOperators(2, false, requestedTab);
+                    }, 100);
+                }
             } else {
                 if (data.length > 0) {
                     setOperators(prev => {
@@ -293,11 +315,10 @@ export default function HomeScreen({ navigation, route }) {
                 }
             }
         } finally {
-            if (currentRequestId === requestIdRef.current) {
-                setLoading(false);
-                setRefreshing(false);
-                setLoadingMore(false);
-            }
+            isFetchingRef.current = false;
+            setLoading(false);
+            setRefreshing(false);
+            setLoadingMore(false);
         }
     };
 
@@ -310,6 +331,7 @@ export default function HomeScreen({ navigation, route }) {
             // Already active, refresh
             fetchOperators(1, true, tab);
         } else {
+            pendingLoadMoreRef.current = false;
             setActiveTab(tab);
             setOperators([]);
             setPage(1);
@@ -321,8 +343,21 @@ export default function HomeScreen({ navigation, route }) {
     };
 
     const handleLoadMore = () => {
-        if (loading || loadingMore || !hasMore) return;
+        if (!hasMore) return;
+        if (loading || isFetchingRef.current) {
+            pendingLoadMoreRef.current = true;
+            return;
+        }
+        if (loadingMore) return;
         fetchOperators(page + 1, false, activeTab);
+    };
+
+    const handleMomentumScrollEnd = (event) => {
+        const { layoutMeasurement, contentOffset, contentSize } = event.nativeEvent;
+        const paddingToBottom = 160;
+        if (layoutMeasurement.height + contentOffset.y >= contentSize.height - paddingToBottom) {
+            handleLoadMore();
+        }
     };
 
     const renderFooter = () => {
@@ -345,6 +380,12 @@ export default function HomeScreen({ navigation, route }) {
     };
 
     const handleHiPress = React.useCallback(async (operator) => {
+        const currentBal = Number(balance ?? user?.balance ?? 0);
+        if (currentBal < 10) {
+            handleInsufficientCoins();
+            return false;
+        }
+
         try {
             const token = await AsyncStorage.getItem('token');
             const res = await axios.post(`${API_URL}/messages/send-hi`, {
@@ -362,14 +403,18 @@ export default function HomeScreen({ navigation, route }) {
                     const updatedUser = { ...user, balance: res.data.newBalance };
                     await AsyncStorage.setItem('user', JSON.stringify(updatedUser));
                 }
+                return true;
             }
+            return false;
         } catch (error) {
-            console.error('Hi send error:', error);
-            if (error.response?.data?.insufficientFunds) {
-                navigation.navigate('PurchaseInfo', { user });
+            if (error.response?.data?.insufficientFunds || (error.response?.status === 400 && error.response?.data?.error?.includes('Yetersiz bakiye'))) {
+                handleInsufficientCoins();
+            } else {
+                console.error('Hi send error:', error);
             }
+            return false;
         }
-    }, [user, navigation]);
+    }, [user, balance, handleInsufficientCoins]);
 
     // Use useMemo for the header to prevent unnecessary re-renders of the entire list
     const headerComponent = React.useMemo(() => (
@@ -523,10 +568,7 @@ export default function HomeScreen({ navigation, route }) {
     }, [operators, searchText, currentFilters, userGender]);
 
     const renderItem = React.useCallback(({ item, index }) => (
-        <Animated.View 
-            entering={FadeInDown.delay((index % 6) * 40).springify().damping(12)}
-            layout={Layout.springify()}
-        >
+        <View style={{ minHeight: 120 }}>
             <OperatorItem 
                 item={item} 
                 navigation={navigation} 
@@ -534,7 +576,7 @@ export default function HomeScreen({ navigation, route }) {
                 theme={theme} 
                 onHiPress={handleHiPress}
             />
-        </Animated.View>
+        </View>
     ), [navigation, user, theme, handleHiPress]);
 
     return (
@@ -575,12 +617,13 @@ export default function HomeScreen({ navigation, route }) {
                 onRefresh={onRefresh}
                 refreshing={refreshing}
                 onEndReached={handleLoadMore}
-                onEndReachedThreshold={0.4}
+                onEndReachedThreshold={0.5}
+                onMomentumScrollEnd={handleMomentumScrollEnd}
                 showsVerticalScrollIndicator={false}
                 removeClippedSubviews={false}
-                initialNumToRender={10}
-                maxToRenderPerBatch={10}
-                windowSize={11}
+                initialNumToRender={15}
+                maxToRenderPerBatch={15}
+                windowSize={21}
             />
 
             <FilterModal 

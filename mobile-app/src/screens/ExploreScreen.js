@@ -20,6 +20,7 @@ import { API_URL } from '../config';
 import axios from 'axios';
 import { useFocusEffect } from '@react-navigation/native';
 import { useAlert } from '../contexts/AlertContext';
+import { useStarterPack } from '../contexts/StarterPackContext';
 
 const { height, width } = Dimensions.get('window');
 
@@ -131,6 +132,7 @@ const EXPLORE_TABS = [
 export default function ExploreScreen({ navigation, route }) {
     console.log("RENDER DiscoverScreen");
     const { showAlert } = useAlert();
+    const { handleInsufficientCoins } = useStarterPack();
     const { theme, themeMode } = useTheme();
     const [user, setUser] = useState(route?.params?.user || null);
     const [posts, setPosts] = useState([]);
@@ -338,9 +340,10 @@ export default function ExploreScreen({ navigation, route }) {
                 });
             }
         } catch (error) {
-            console.error('Error sending quick Hi:', error);
-            if (error.response?.data?.insufficientFunds) {
-                navigation.navigate('PurchaseInfo', { user });
+            if (error.response?.data?.insufficientFunds || (error.response?.status === 400 && error.response?.data?.error?.includes('Yetersiz bakiye'))) {
+                handleInsufficientCoins();
+            } else {
+                console.error('Error sending quick Hi:', error);
             }
         } finally {
             setIsSendingHi(false);
@@ -361,6 +364,11 @@ export default function ExploreScreen({ navigation, route }) {
                 user
             });
         } else {
+            const currentBal = Number(user?.balance ?? 0);
+            if (currentBal < 10) {
+                handleInsufficientCoins();
+                return;
+            }
             sendQuickHi(item);
         }
     };
@@ -449,8 +457,14 @@ export default function ExploreScreen({ navigation, route }) {
                 axios.get(`${API_URL}/social/explore`, {
                     params: { user_id: currentUser?.id },
                     headers: token ? { Authorization: `Bearer ${token}` } : {}
+                }).catch(err => {
+                    console.error('[Explore] explore fetch err:', err.message);
+                    return { data: { posts: [], stories: [] } };
                 }),
-                axios.get(`${API_URL}/operators?limit=100`)
+                axios.get(`${API_URL}/operators?limit=100`).catch(err => {
+                    console.error('[Explore] operators fetch err:', err.message);
+                    return { data: [] };
+                })
             ]);
             
             lastFetchedUserId.current = currentUser?.id;

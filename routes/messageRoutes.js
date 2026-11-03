@@ -79,7 +79,7 @@ router.post('/send-hi', async (req, res) => {
 
         await db.query('UPDATE users SET balance = balance - $1 WHERE id = $2', [HI_COST, finalSenderId]);
         const msgResult = await db.query('INSERT INTO messages (chat_id, sender_id, content, content_type) VALUES ($1, $2, $3, $4) RETURNING *', [chatId, finalSenderId, finalContent, 'text']);
-        await db.query('UPDATE chats SET last_message_at = NOW() WHERE id = $1', [chatId]);
+        await db.query('UPDATE chats SET last_message_at = NOW(), last_message = $2 WHERE id = $1', [chatId, finalContent]);
         await db.query('COMMIT');
 
         try {

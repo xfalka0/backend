@@ -10,7 +10,7 @@ const sanitizeUser = (user, req) => {
     let protocol = 'http';
     const hostHeader = req.get ? req.get('host') : null;
 
-    if (hostHeader && (hostHeader.includes('onrender.com') || req.headers['x-forwarded-proto'] === 'https')) {
+    if (hostHeader && (hostHeader.includes('onrender.com') || req?.headers?.['x-forwarded-proto'] === 'https')) {
         protocol = 'https';
     } else {
         protocol = req?.protocol || 'http';

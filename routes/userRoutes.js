@@ -216,7 +216,22 @@ router.get('/:userId/chats', async (req, res) => {
 
         const query = `
             SELECT c.id, c.operator_id, c.user_id, c.last_message_at,
-                c.last_message,
+                COALESCE(
+                    (SELECT 
+                        CASE 
+                            WHEN content_type = 'audio' THEN '🎤 Ses Mesajı'
+                            WHEN content_type = 'image' THEN '📷 Fotoğraf'
+                            WHEN content_type = 'locked_image' THEN '🔒 Kilitli Resim'
+                            WHEN content_type = 'video' THEN '🎥 Video'
+                            WHEN content_type = 'gift' THEN '🎁 Hediye'
+                            WHEN content_type = 'location' THEN '📍 Konum'
+                            ELSE content 
+                        END
+                     FROM messages WHERE chat_id = c.id ORDER BY created_at DESC LIMIT 1),
+                    c.last_message,
+                    'Sohbet Başladı 💬'
+                ) as last_message,
+                (SELECT content_type FROM messages WHERE chat_id = c.id ORDER BY created_at DESC LIMIT 1) as last_message_type,
                 (SELECT COUNT(*)::int FROM messages WHERE chat_id = c.id AND sender_id::text != $1::text AND is_read = false) as unread_count,
                 COALESCE(u.display_name, u.username, 'Bilinmeyen Kullanıcı') as name,
                 COALESCE(u.avatar_url, 'https://via.placeholder.com/150') as avatar_url,

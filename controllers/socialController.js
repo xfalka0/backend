@@ -21,15 +21,15 @@ exports.getExplore = async (req, res) => {
         try {
             const storiesRes = await db.query(`
                 SELECT s.*, u.display_name as name, u.avatar_url as avatar, u.vip_level as level,
-                EXISTS(SELECT 1 FROM stories s2 WHERE s2.operator_id = u.id AND s2.expires_at > NOW()) as "hasStory",
-                CASE WHEN $1::TEXT IS NOT NULL AND $1::TEXT <> '' AND EXISTS(SELECT 1 FROM story_likes WHERE story_id = s.id AND user_id = NULLIF($1, '')::${userIdType}) THEN true ELSE false END as "liked"
+                EXISTS(SELECT 1 FROM stories s2 WHERE s2.operator_id::TEXT = u.id::TEXT AND s2.expires_at > NOW()) as "hasStory",
+                CASE WHEN $1::TEXT IS NOT NULL AND $1::TEXT <> '' AND EXISTS(SELECT 1 FROM story_likes WHERE story_id::TEXT = s.id::TEXT AND user_id::TEXT = $1::TEXT) THEN true ELSE false END as "liked"
                 FROM stories s
-                JOIN users u ON s.operator_id = u.id
+                JOIN users u ON s.operator_id::TEXT = u.id::TEXT
                 WHERE s.expires_at > NOW()
                 AND ($1::TEXT IS NULL OR $1::TEXT = '' OR NOT EXISTS (
                     SELECT 1 FROM blocks 
-                    WHERE (blocker_id = NULLIF($1, '')::${userIdType} AND blocked_id = u.id)
-                       OR (blocker_id = u.id AND blocked_id = NULLIF($1, '')::${userIdType})
+                    WHERE (blocker_id::TEXT = $1::TEXT AND blocked_id::TEXT = u.id::TEXT)
+                       OR (blocker_id::TEXT = u.id::TEXT AND blocked_id::TEXT = $1::TEXT)
                 ))
                 ORDER BY s.created_at DESC
             `, [currentUserId]);
@@ -57,21 +57,21 @@ exports.getExplore = async (req, res) => {
                         FROM (
                             SELECT c.id, c.content, c.created_at, u2.display_name as "userName", u2.avatar_url as "avatar"
                             FROM post_comments c
-                            JOIN users u2 ON c.user_id = u2.id
+                            JOIN users u2 ON c.user_id::TEXT = u2.id::TEXT
                             WHERE c.post_id = p.id
                             ORDER BY c.created_at DESC
                             LIMIT 2
                         ) comment_row
                     ), '[]'::json) as "preview_comments",
-                    CASE WHEN $1::TEXT IS NOT NULL AND $1::TEXT <> '' AND EXISTS(SELECT 1 FROM post_likes WHERE post_id = p.id AND user_id = NULLIF($1, '')::${userIdType}) THEN true ELSE false END as "liked",
-                    EXISTS(SELECT 1 FROM stories s WHERE s.operator_id = u.id AND s.expires_at > NOW()) as "hasStory"
+                    CASE WHEN $1::TEXT IS NOT NULL AND $1::TEXT <> '' AND EXISTS(SELECT 1 FROM post_likes WHERE post_id::TEXT = p.id::TEXT AND user_id::TEXT = $1::TEXT) THEN true ELSE false END as "liked",
+                    EXISTS(SELECT 1 FROM stories s WHERE s.operator_id::TEXT = u.id::TEXT AND s.expires_at > NOW()) as "hasStory"
                 FROM posts p
-                JOIN users u ON p.operator_id = u.id
-                LEFT JOIN operators op ON u.id = op.user_id
+                JOIN users u ON p.operator_id::TEXT = u.id::TEXT
+                LEFT JOIN operators op ON u.id::TEXT = op.user_id::TEXT
                 WHERE ($1::TEXT IS NULL OR $1::TEXT = '' OR NOT EXISTS (
                     SELECT 1 FROM blocks 
-                    WHERE (blocker_id = NULLIF($1, '')::${userIdType} AND blocked_id = u.id)
-                       OR (blocker_id = u.id AND blocked_id = NULLIF($1, '')::${userIdType})
+                    WHERE (blocker_id::TEXT = $1::TEXT AND blocked_id::TEXT = u.id::TEXT)
+                       OR (blocker_id::TEXT = u.id::TEXT AND blocked_id::TEXT = $1::TEXT)
                 ))
                 ORDER BY p.created_at DESC
                 LIMIT 50

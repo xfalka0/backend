@@ -5864,7 +5864,7 @@ io.on('connection', (socket) => {
                 } else if (type === 'audio') {
                     cost = 30;
                 } else if (type === 'location') {
-                    cost = 500;
+                    cost = 400;
                 }
 
                 const userResult = await client.query('SELECT balance FROM users WHERE id = $1 FOR UPDATE', [senderId]);

@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { View, StyleSheet, ScrollView, SafeAreaView, StatusBar } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -17,6 +18,7 @@ import FeatureGrid from '../components/store/FeatureGrid';
 import PlanList from '../components/store/PlanList';
 import StickyPurchaseBar from '../components/store/StickyPurchaseBar';
 import PremiumSuccessModal from '../components/store/PremiumSuccessModal';
+import ActiveSubscriptionBanner from '../components/store/ActiveSubscriptionBanner';
 import { useAppStore } from '../store/useAppStore';
 
 const PREMIUM_PLANS = [
@@ -28,11 +30,12 @@ const PREMIUM_PLANS = [
 const WEEKLY_SOCIAL_PROOF = '2.340';
 
 export default function StoreScreen({ navigation, route }) {
-    const { user } = route.params || {};
+    const { user: initialUser } = route.params || {};
     const insets = useSafeAreaInsets();
     const tabOffset = LAYOUT.tabBarHeight + LAYOUT.tabBarBottomOffset;
 
-    const [balance, setBalance] = useState(user?.balance || 0);
+    const [currentUser, setCurrentUser] = useState(initialUser || null);
+    const [balance, setBalance] = useState(initialUser?.balance || 0);
     const [purchasing, setPurchasing] = useState(false);
     
     const defaultIndex = Math.max(0, PREMIUM_PLANS.findIndex(p => p.badge === 'POPÜLER'));
@@ -40,26 +43,54 @@ export default function StoreScreen({ navigation, route }) {
     const [alertConfig, setAlertConfig] = useState({ visible: false, title: '', message: '', type: 'info' });
     const [premiumSuccessVisible, setPremiumSuccessVisible] = useState(false);
 
-    // Fetch user balance
-    const fetchBalance = async () => {
+    const isPremium = Boolean(
+        currentUser?.is_vip && 
+        (!currentUser?.vip_expire_date || new Date(currentUser.vip_expire_date) > new Date())
+    );
+
+    // Fetch user profile and balance
+    const fetchUserData = async () => {
         try {
             const token = await AsyncStorage.getItem('token');
-            if (token) {
+            const storedUserStr = await AsyncStorage.getItem('user');
+            let parsedUser = null;
+            if (storedUserStr) {
+                parsedUser = JSON.parse(storedUserStr);
+                setCurrentUser(parsedUser);
+                if (parsedUser.balance !== undefined) setBalance(Number(parsedUser.balance));
+            }
+
+            const targetId = parsedUser?.id || initialUser?.id;
+            if (targetId && token) {
+                const res = await axios.get(`${API_URL}/users/${targetId}`, {
+                    headers: { Authorization: `Bearer ${token}` }
+                });
+                if (res.data) {
+                    const freshUser = res.data;
+                    setCurrentUser(freshUser);
+                    if (freshUser.balance !== undefined) {
+                        setBalance(Number(freshUser.balance));
+                    }
+                    await AsyncStorage.setItem('user', JSON.stringify(freshUser));
+                }
+            } else if (token) {
                 const balRes = await axios.get(`${API_URL}/users/balance`, {
                     headers: { Authorization: `Bearer ${token}` }
                 });
                 if (balRes.data && balRes.data.balance !== undefined) {
-                    setBalance(balRes.data.balance);
+                    setBalance(Number(balRes.data.balance));
                 }
             }
         } catch (err) {
-            console.log('[STORE] Balance fetch error:', err.message);
+            console.log('[STORE] User fetch error:', err.message);
         }
     };
 
-    useEffect(() => {
-        fetchBalance();
-    }, []);
+    useFocusEffect(
+        useCallback(() => {
+            fetchUserData();
+        }, [])
+    );
 
     // Handle purchasing selected plan
     const handlePurchaseCurrentPlan = async () => {
@@ -135,6 +166,14 @@ export default function StoreScreen({ navigation, route }) {
                     showsVerticalScrollIndicator={false}
                     contentContainerStyle={[styles.scrollContent, { paddingBottom: tabOffset + 140 + insets.bottom }]}
                 >
+                    {/* Active Subscription Banner for Premium Users */}
+                    {isPremium ? (
+                        <ActiveSubscriptionBanner
+                            startDate={currentUser?.vip_start_date || currentUser?.created_at}
+                            expireDate={currentUser?.vip_expire_date}
+                        />
+                    ) : null}
+
                     {/* 2. Hero Section */}
                     <PremiumHero />
 
@@ -154,6 +193,7 @@ export default function StoreScreen({ navigation, route }) {
                 <StickyPurchaseBar
                     onPress={handlePurchaseCurrentPlan}
                     loading={purchasing}
+                    buttonTitle={isPremium ? 'Aboneliği Uzat' : "Premium'a Geç"}
                     planLabel={selectedPlan ? `${selectedPlan.months} Ay · ${selectedPlan.price}` : ''}
                 />
 

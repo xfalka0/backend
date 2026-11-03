@@ -55,7 +55,7 @@ function UserMiniProfileHeader({ user }) {
                     <Text style={styles.profileName} numberOfLines={1}>
                         {cleanUsername(user.display_name || user.username)}
                     </Text>
-                    {user.vip_level > 0 && (
+                    {user.vip_level > 0 ? (
                         <LinearGradient
                             colors={['#FF9B3D', '#FF4D8D']}
                             style={styles.vipBadge}
@@ -64,7 +64,17 @@ function UserMiniProfileHeader({ user }) {
                         >
                             <Text style={styles.vipBadgeText}>VIP {user.vip_level}</Text>
                         </LinearGradient>
-                    )}
+                    ) : ((user.is_vip === true || user.is_vip === 'true' || user.is_vip === 1 || user.is_premium) && (
+                        <LinearGradient
+                            colors={['#FFDF00', '#F59E0B', '#D97706']}
+                            start={{ x: 0, y: 0 }}
+                            end={{ x: 1, y: 0 }}
+                            style={styles.premiumBadgePill}
+                        >
+                            <Ionicons name="diamond" size={9} color="#FFFFFF" style={{ marginRight: 2 }} />
+                            <Text style={styles.premiumBadgeText}>PREMIUM</Text>
+                        </LinearGradient>
+                    ))}
                     {(user.agency_name || user.agencyName) && (
                         <AgencyBadge agencyName={user.agency_name || user.agencyName} size={16} style={{ marginLeft: 4 }} />
                     )}
@@ -445,6 +455,25 @@ const styles = StyleSheet.create({
         color: '#FFFFFF',
         fontSize: 8.5,
         fontWeight: '900',
+    },
+    premiumBadgePill: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 7,
+        paddingVertical: 2,
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: 'rgba(255, 255, 255, 0.4)',
+        marginLeft: 4,
+    },
+    premiumBadgeText: {
+        color: '#FFFFFF',
+        fontSize: 9,
+        fontWeight: '900',
+        letterSpacing: 0.8,
+        textShadowColor: 'rgba(0, 0, 0, 0.35)',
+        textShadowOffset: { width: 0, height: 1 },
+        textShadowRadius: 2,
     },
     profileId: {
         fontSize: 11.5,

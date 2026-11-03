@@ -43,6 +43,46 @@ router.get('/:userId/balance', async (req, res) => {
     }
 });
 
+// DEDUCT COINS (FOR CALLS, LOCATION, ETC.)
+router.post('/deduct-coins', authenticateToken, async (req, res) => {
+    try {
+        const userId = req.user.id;
+        const { amount, reason } = req.body;
+        const deductAmount = parseInt(amount, 10);
+
+        if (!deductAmount || deductAmount <= 0) {
+            return res.status(400).json({ error: 'Geçersiz coin miktarı' });
+        }
+
+        const userRes = await db.query('SELECT balance FROM users WHERE id = $1 FOR UPDATE', [userId]);
+        if (userRes.rows.length === 0) {
+            return res.status(404).json({ error: 'Kullanıcı bulunamadı' });
+        }
+
+        const currentBalance = parseInt(userRes.rows[0].balance || 0, 10);
+        if (currentBalance < deductAmount) {
+            return res.status(400).json({
+                error: 'Yetersiz bakiye',
+                currentBalance,
+                required: deductAmount
+            });
+        }
+
+        const updateRes = await db.query(
+            'UPDATE users SET balance = balance - $1, total_spent = COALESCE(total_spent, 0) + $1 WHERE id = $2 RETURNING balance',
+            [deductAmount, userId]
+        );
+
+        const newBalance = parseInt(updateRes.rows[0].balance, 10);
+        console.log(`[DEDUCT-COINS] User ${userId} deducted ${deductAmount} coins for "${reason || 'işlem'}". New balance: ${newBalance}`);
+
+        res.json({ success: true, balance: newBalance });
+    } catch (err) {
+        console.error('[DEDUCT-COINS] Error:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // GET USER PROFILE
 router.get('/:id', async (req, res) => {
     try {

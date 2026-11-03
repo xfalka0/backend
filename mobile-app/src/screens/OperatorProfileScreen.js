@@ -365,6 +365,17 @@ export default function OperatorProfileScreen({ route, navigation }) {
                                             </View>
                                         )}
                                         <VipBadge level={operator.vip_level} style={{ marginLeft: 2 }} />
+                                        {(operator.is_vip === true || operator.is_vip === 'true' || operator.is_vip === 1 || operator.is_premium || parseInt(operator.vip_level || 0, 10) > 0) && (
+                                            <LinearGradient
+                                                colors={['#FFDF00', '#F59E0B', '#D97706']}
+                                                start={{ x: 0, y: 0 }}
+                                                end={{ x: 1, y: 0 }}
+                                                style={styles.premiumBadgePill}
+                                            >
+                                                <Ionicons name="diamond" size={9} color="#FFFFFF" style={{ marginRight: 2 }} />
+                                                <Text style={styles.premiumBadgeText}>PREMIUM</Text>
+                                            </LinearGradient>
+                                        )}
                                         {(operator.agency_name || operator.agencyName) && (
                                             <AgencyBadge agencyName={operator.agency_name || operator.agencyName} size={16} style={{ marginLeft: 4 }} />
                                         )}
@@ -749,6 +760,25 @@ const styles = StyleSheet.create({
     followButtonText: {
         fontSize: 15,
         fontWeight: '800',
+    },
+    premiumBadgePill: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 7,
+        paddingVertical: 2,
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: 'rgba(255, 255, 255, 0.4)',
+        marginLeft: 4,
+    },
+    premiumBadgeText: {
+        color: '#FFFFFF',
+        fontSize: 9,
+        fontWeight: '900',
+        letterSpacing: 0.8,
+        textShadowColor: 'rgba(0, 0, 0, 0.35)',
+        textShadowOffset: { width: 0, height: 1 },
+        textShadowRadius: 2,
     },
     contentCard: {
         marginHorizontal: 0,

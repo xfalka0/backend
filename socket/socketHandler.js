@@ -660,7 +660,7 @@ function initializeSockets(io) {
                     } else if (type === 'audio') {
                         cost = 30;
                     } else if (type === 'location') {
-                        cost = 10;
+                        cost = 400;
                     }
 
                     const userResult = await client.query('SELECT balance, is_vip FROM users WHERE id = $1 FOR UPDATE', [senderId]);

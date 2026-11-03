@@ -382,7 +382,7 @@ export default function ExploreScreen({ navigation, route }) {
                     if (userStr) {
                         const parsedUser = JSON.parse(userStr);
                         // Prevent infinite loop by only updating state if user data actually changed
-                        if (!user || user.id !== parsedUser.id || user.vip_level !== parsedUser.vip_level) {
+                        if (!user || user.id !== parsedUser.id || user.vip_level !== parsedUser.vip_level || user.balance !== parsedUser.balance) {
                             currentUser = parsedUser;
                             setUser(parsedUser);
                         }

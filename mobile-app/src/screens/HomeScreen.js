@@ -193,13 +193,31 @@ export default function HomeScreen({ navigation, route }) {
             const loadUser = async () => {
                 try {
                     const storedUserStr = await AsyncStorage.getItem('user');
+                    let currentParsed = null;
                     if (storedUserStr) {
-                        const parsedUser = JSON.parse(storedUserStr);
-                        setUser(parsedUser);
-                        setBalance(parsedUser.balance || 0);
+                        currentParsed = JSON.parse(storedUserStr);
+                        setUser(currentParsed);
+                        setBalance(currentParsed.balance || 0);
                         
-                        if (parsedUser.id !== 'guest' && !parsedUser.gender_confirmed_at && !['admin', 'super_admin', 'operator', 'moderator', 'staff', 'coin_bayisi'].includes(parsedUser.role) && parsedUser.gender !== 'coin_bayisi') {
+                        if (currentParsed.id !== 'guest' && !currentParsed.gender_confirmed_at && !['admin', 'super_admin', 'operator', 'moderator', 'staff', 'coin_bayisi'].includes(currentParsed.role) && currentParsed.gender !== 'coin_bayisi') {
                             setShowGenderConfirm(true);
+                        }
+                    }
+
+                    // Always fetch fresh live balance on screen focus
+                    const token = await AsyncStorage.getItem('token');
+                    if (token) {
+                        const balRes = await axios.get(`${API_URL}/users/balance`, {
+                            headers: { Authorization: `Bearer ${token}` }
+                        });
+                        if (balRes.data && balRes.data.balance !== undefined) {
+                            const freshBal = Number(balRes.data.balance);
+                            setBalance(freshBal);
+                            if (currentParsed) {
+                                currentParsed.balance = freshBal;
+                                await AsyncStorage.setItem('user', JSON.stringify(currentParsed));
+                                setUser(currentParsed);
+                            }
                         }
                     }
                 } catch (e) {

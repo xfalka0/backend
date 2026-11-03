@@ -113,9 +113,12 @@ router.post('/upgrade-direct', authenticateToken, async (req, res) => {
         
         const user = userRes.rows[0];
         let baseDate = new Date();
+        let startDate = user.vip_start_date || new Date();
         
         if (user.is_vip && user.vip_expire_date && new Date(user.vip_expire_date) > baseDate) {
             baseDate = new Date(user.vip_expire_date);
+        } else {
+            startDate = new Date();
         }
         
         // Add months
@@ -123,8 +126,8 @@ router.post('/upgrade-direct', authenticateToken, async (req, res) => {
         
         // Update user
         await db.query(
-            'UPDATE users SET is_vip = true, vip_expire_date = $1 WHERE id = $2',
-            [baseDate, userId]
+            'UPDATE users SET is_vip = true, vip_start_date = $1, vip_expire_date = $2 WHERE id = $3',
+            [startDate, baseDate, userId]
         );
         
         logActivity(userId, 'premium_upgrade', `${months} aylık premium satın aldı. (Tx: ${transactionId})`);

@@ -81,9 +81,10 @@ export default function ChatScreen({ route, navigation }) {
 
     // User Handling
     const globalUser = useAppStore(state => state.user) || {};
-    const effectiveUser = { ...(contextUser || {}), ...(globalUser || {}), ...(routeUser || {}) };
+    const [currentUser, setCurrentUser] = useState({ ...(contextUser || {}), ...(globalUser || {}), ...(routeUser || {}) });
+    const effectiveUser = currentUser;
     const user = effectiveUser;
-    const isPremiumMember = effectiveUser?.is_vip === true || effectiveUser?.is_vip === 'true' || effectiveUser?.is_vip === 1;
+    const isPremiumMember = Boolean(effectiveUser?.is_vip === true || effectiveUser?.is_vip === 'true' || effectiveUser?.is_vip === 1 || effectiveUser?.is_premium || parseInt(effectiveUser?.vip_level || 0, 10) > 0 || (effectiveUser?.vip_expire_date && new Date(effectiveUser.vip_expire_date) > new Date()));
 
     const [messages, setMessages] = useState([]);
     const [isTyping, setIsTyping] = useState(false);
@@ -121,6 +122,43 @@ export default function ChatScreen({ route, navigation }) {
         fetchPartner();
         return () => { active = false; };
     }, [operatorId, name, avatar_url]);
+
+    useEffect(() => {
+        let active = true;
+        const syncCurrentUser = async () => {
+            try {
+                const storedUserStr = await AsyncStorage.getItem('user');
+                let targetId = null;
+                if (storedUserStr) {
+                    const parsed = JSON.parse(storedUserStr);
+                    if (active) {
+                        setCurrentUser(prev => ({ ...prev, ...parsed }));
+                        if (parsed.balance !== undefined) setCurrentBalance(parsed.balance);
+                    }
+                    targetId = parsed.id;
+                }
+                const token = await AsyncStorage.getItem('token');
+                const uid = targetId || routeUser?.id || globalUser?.id || contextUser?.id;
+                if (uid && token) {
+                    const res = await axios.get(`${API_URL}/users/${uid}`, {
+                        headers: { Authorization: `Bearer ${token}` }
+                    });
+                    if (res.data && active) {
+                        setCurrentUser(res.data);
+                        if (res.data.balance !== undefined) setCurrentBalance(res.data.balance);
+                        await AsyncStorage.setItem('user', JSON.stringify(res.data));
+                        if (useAppStore.getState().setUser) {
+                            useAppStore.getState().setUser(res.data);
+                        }
+                    }
+                }
+            } catch (err) {
+                console.warn('[ChatScreen] syncCurrentUser error:', err.message);
+            }
+        };
+        syncCurrentUser();
+        return () => { active = false; };
+    }, []);
 
     const [chatId, setChatId] = useState(existingChatId || (isFamilyChat && familyId ? `family-${familyId}` : null));
 
@@ -284,7 +322,7 @@ export default function ChatScreen({ route, navigation }) {
         };
     }, [sound]);
 
-    const handleFakeCall = (type) => {
+    const handleFakeCall = async (type) => {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
         if (!isPremiumMember && !isOperator) {
             showAlert({
@@ -298,6 +336,61 @@ export default function ChatScreen({ route, navigation }) {
             });
             return;
         }
+
+        const CALL_COST = 200;
+        if (!isOperator) {
+            if (currentBalance < CALL_COST) {
+                showAlert({
+                    title: 'Coin Yetersiz 🪙',
+                    message: 'Sesli ve görüntülü arama yapmak için coin bakiyeniz yetersizdir.',
+                    type: 'warning',
+                    showCancel: true,
+                    cancelText: 'Vazgeç',
+                    confirmText: 'Coin Yükle',
+                    onConfirm: () => handleInsufficientCoins()
+                });
+                return;
+            }
+
+            // Bastığı an 200 coin düşülüyor
+            try {
+                const token = await AsyncStorage.getItem('token');
+                const res = await axios.post(`${API_URL}/users/deduct-coins`, {
+                    amount: CALL_COST,
+                    reason: `${type === 'video' ? 'Görüntülü' : 'Sesli'} arama`
+                }, {
+                    headers: { Authorization: `Bearer ${token}` }
+                });
+
+                if (res.data && res.data.success && typeof res.data.balance === 'number') {
+                    setCurrentBalance(res.data.balance);
+                    const storedUser = await AsyncStorage.getItem('user');
+                    if (storedUser) {
+                        const parsed = JSON.parse(storedUser);
+                        parsed.balance = res.data.balance;
+                        await AsyncStorage.setItem('user', JSON.stringify(parsed));
+                    }
+                } else {
+                    setCurrentBalance(prev => Math.max(0, prev - CALL_COST));
+                }
+            } catch (err) {
+                console.error('[ChatScreen] Call coin deduction error:', err?.response?.data || err.message);
+                if (err?.response?.data?.error === 'Yetersiz bakiye') {
+                    showAlert({
+                        title: 'Coin Yetersiz 🪙',
+                        message: 'Sesli ve görüntülü arama yapmak için coin bakiyeniz yetersizdir.',
+                        type: 'warning',
+                        showCancel: true,
+                        cancelText: 'Vazgeç',
+                        confirmText: 'Coin Yükle',
+                        onConfirm: () => handleInsufficientCoins()
+                    });
+                    return;
+                }
+                setCurrentBalance(prev => Math.max(0, prev - CALL_COST));
+            }
+        }
+
         setFakeCall(type);
     };
 
@@ -322,8 +415,17 @@ export default function ChatScreen({ route, navigation }) {
             return;
         }
 
-        if (!isOperator && !isPremiumMember && currentBalance < 500 && (user.vip_level || 0) < 1) {
-            handleInsufficientCoins();
+        const LOCATION_COST = 400;
+        if (!isOperator && currentBalance < LOCATION_COST) {
+            showAlert({
+                title: 'Coin Yetersiz 🪙',
+                message: 'Konum göndermek için coin bakiyeniz yetersizdir.',
+                type: 'warning',
+                showCancel: true,
+                cancelText: 'Vazgeç',
+                confirmText: 'Coin Yükle',
+                onConfirm: () => handleInsufficientCoins()
+            });
             return;
         }
 
@@ -366,8 +468,8 @@ export default function ChatScreen({ route, navigation }) {
 
             // Optimistic Balance Update
             if (!isFamilyChat) {
-                if (!isOperator && !isPremiumMember) {
-                    const nextBalance = Math.max(0, currentBalance - 10);
+                if (!isOperator) {
+                    const nextBalance = Math.max(0, currentBalance - 400);
                     setCurrentBalance(nextBalance);
 
                     if (nextBalance <= 0) {
@@ -1888,20 +1990,57 @@ export default function ChatScreen({ route, navigation }) {
             <StatusBar style="light" translucent backgroundColor="transparent" />
             <ChatBackground themeMode={themeMode} />
 
-            <Modal visible={!!fakeCall} transparent animationType="fade" onRequestClose={() => setFakeCall(null)}>
-                <View style={styles.fakeCallOverlay}>
-                    <View style={styles.fakeCallCard}>
-                        <Animated.View style={[styles.fakeCallPulse, { transform: [{ scale: fakeCallPulse }] }]}>
-                            <Ionicons name={fakeCall === 'video' ? 'videocam' : 'call'} size={34} color="#fff" />
-                        </Animated.View>
-                        <Text style={styles.fakeCallTitle}>{fakeCall === 'video' ? 'Görüntülü Aranıyor' : 'Aranıyor'}</Text>
-                        <Text style={styles.fakeCallName}>{name || 'Kullanıcı'}</Text>
-                        <Text style={styles.fakeCallSubtitle}>Çalıyor...</Text>
-                        <Text style={styles.fakeCallNote}>Arama bağlantısı bekleniyor</Text>
-                        <TouchableOpacity style={styles.fakeCallEndButton} onPress={() => setFakeCall(null)}>
-                            <Ionicons name="call" size={20} color="#fff" style={{ transform: [{ rotate: '135deg' }] }} />
-                            <Text style={styles.fakeCallEndText}>Aramayı Sonlandır</Text>
+            <Modal visible={!!fakeCall} transparent={false} animationType="fade" onRequestClose={() => setFakeCall(null)}>
+                <View style={styles.fakeCallContainer}>
+                    <StatusBar style="light" translucent backgroundColor="transparent" />
+                    <LinearGradient
+                        colors={['#1a0614', '#0d0309', '#050103']}
+                        style={StyleSheet.absoluteFill}
+                    />
+
+                    {/* Üst Bilgi */}
+                    <View style={styles.fakeCallTopSection}>
+                        <View style={styles.fakeCallTypeBadge}>
+                            <Ionicons name={fakeCall === 'video' ? 'videocam' : 'call'} size={14} color="#FFC53D" />
+                            <Text style={styles.fakeCallTypeBadgeText}>
+                                {fakeCall === 'video' ? 'GÖRÜNTÜLÜ ARAMA' : 'SESLİ ARAMA'}
+                            </Text>
+                        </View>
+                        <Text style={styles.fakeCallStatusText}>Aranıyor...</Text>
+                    </View>
+
+                    {/* Orta Profil & Nabız Efekti */}
+                    <View style={styles.fakeCallCenterSection}>
+                        <View style={styles.fakeCallAvatarContainer}>
+                            <Animated.View style={[styles.fakeCallPulseRing, { transform: [{ scale: fakeCallPulse }] }]} />
+                            <View style={styles.fakeCallAvatarWrapper}>
+                                {partnerAvatar ? (
+                                    <Image source={{ uri: partnerAvatar }} style={styles.fakeCallAvatarImg} />
+                                ) : (
+                                    <View style={[styles.fakeCallAvatarImg, styles.fakeCallAvatarPlaceholder]}>
+                                        <Ionicons name="person" size={54} color="rgba(255,255,255,0.7)" />
+                                    </View>
+                                )}
+                            </View>
+                        </View>
+                        <Text style={styles.fakeCallPartnerName}>{partnerName || name || 'Kullanıcı'}</Text>
+                        <Text style={styles.fakeCallRingingText}>Çalıyor...</Text>
+                        <Text style={styles.fakeCallSubNote}>Kullanıcının yanıt vermesi bekleniyor</Text>
+                    </View>
+
+                    {/* Alt Kapatma Butonu */}
+                    <View style={styles.fakeCallBottomSection}>
+                        <TouchableOpacity
+                            style={styles.fakeCallHangupBtn}
+                            onPress={() => {
+                                try { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy); } catch (_) {}
+                                setFakeCall(null);
+                            }}
+                            activeOpacity={0.8}
+                        >
+                            <Ionicons name="call" size={32} color="#fff" style={{ transform: [{ rotate: '135deg' }] }} />
                         </TouchableOpacity>
+                        <Text style={styles.fakeCallHangupLabel}>Aramayı Sonlandır</Text>
                     </View>
                 </View>
             </Modal>
@@ -2459,58 +2598,120 @@ const styles = StyleSheet.create({
         fontSize: 12,
         fontVariant: ['tabular-nums'],
     },
-    fakeCallModalContainer: {
+    fakeCallContainer: {
         flex: 1,
-        backgroundColor: 'rgba(0,0,0,0.85)',
-        justifyContent: 'center',
+        backgroundColor: '#0a0309',
+        justifyContent: 'space-between',
         alignItems: 'center',
+        paddingTop: Platform.OS === 'ios' ? 70 : 50,
+        paddingBottom: Platform.OS === 'ios' ? 60 : 40,
     },
-    fakeCallContent: {
+    fakeCallTopSection: {
         alignItems: 'center',
-        padding: 40,
+        marginTop: 10,
+    },
+    fakeCallTypeBadge: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
+        backgroundColor: 'rgba(255, 197, 61, 0.12)',
+        borderWidth: 1,
+        borderColor: 'rgba(255, 197, 61, 0.3)',
+        paddingHorizontal: 14,
+        paddingVertical: 6,
+        borderRadius: 20,
+        marginBottom: 8,
+    },
+    fakeCallTypeBadgeText: {
+        fontSize: 11,
+        fontWeight: '800',
+        color: '#FFC53D',
+        letterSpacing: 0.8,
+    },
+    fakeCallStatusText: {
+        fontSize: 15,
+        color: 'rgba(255, 255, 255, 0.65)',
+        fontWeight: '500',
+    },
+    fakeCallCenterSection: {
+        alignItems: 'center',
+        justifyContent: 'center',
+        width: '100%',
     },
     fakeCallAvatarContainer: {
-        marginBottom: 30,
+        width: 170,
+        height: 170,
         alignItems: 'center',
-    },
-    fakeCallAvatar: {
-        width: 120,
-        height: 120,
-        borderRadius: 60,
-        borderWidth: 3,
-        borderColor: '#22c55e',
-    },
-    fakeCallTitle: {
-        color: 'white',
-        fontSize: 24,
-        fontWeight: 'bold',
-        marginBottom: 10,
-    },
-    fakeCallStatus: {
-        color: '#22c55e',
-        fontSize: 16,
-        marginBottom: 40,
-    },
-    fakeCallActions: {
-        flexDirection: 'row',
-        gap: 40,
-    },
-    fakeCallEndBtn: {
-        alignItems: 'center',
-        gap: 10,
-    },
-    fakeCallEndIcon: {
-        width: 64,
-        height: 64,
-        borderRadius: 32,
-        backgroundColor: '#ef4444',
         justifyContent: 'center',
-        alignItems: 'center',
-        ...SHADOWS.medium
+        marginBottom: 24,
     },
-    fakeCallEndText: {
-        color: 'white',
+    fakeCallPulseRing: {
+        position: 'absolute',
+        width: 170,
+        height: 170,
+        borderRadius: 85,
+        backgroundColor: 'rgba(236, 72, 153, 0.12)',
+        borderWidth: 2,
+        borderColor: 'rgba(236, 72, 153, 0.3)',
+    },
+    fakeCallAvatarWrapper: {
+        width: 130,
+        height: 130,
+        borderRadius: 65,
+        borderWidth: 3,
+        borderColor: '#EC4899',
+        overflow: 'hidden',
+        backgroundColor: '#1A0C13',
+    },
+    fakeCallAvatarImg: {
+        width: '100%',
+        height: '100%',
+    },
+    fakeCallAvatarPlaceholder: {
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: '#2A1220',
+    },
+    fakeCallPartnerName: {
+        fontSize: 26,
+        fontWeight: '800',
+        color: '#FFFFFF',
+        marginBottom: 6,
+        textAlign: 'center',
+    },
+    fakeCallRingingText: {
+        fontSize: 16,
+        fontWeight: '600',
+        color: '#EC4899',
+        marginBottom: 6,
+    },
+    fakeCallSubNote: {
+        fontSize: 13,
+        color: 'rgba(255, 255, 255, 0.45)',
+        textAlign: 'center',
+    },
+    fakeCallBottomSection: {
+        alignItems: 'center',
+        gap: 12,
+        marginBottom: 20,
+    },
+    fakeCallHangupBtn: {
+        width: 72,
+        height: 72,
+        borderRadius: 36,
+        backgroundColor: '#EF4444',
+        alignItems: 'center',
+        justifyContent: 'center',
+        shadowColor: '#EF4444',
+        shadowOffset: { width: 0, height: 6 },
+        shadowOpacity: 0.5,
+        shadowRadius: 12,
+        elevation: 8,
+    },
+    fakeCallHangupLabel: {
         fontSize: 14,
+        fontWeight: '600',
+        color: 'rgba(255, 255, 255, 0.8)',
     },
     modalOverlay: {
         flex: 1,

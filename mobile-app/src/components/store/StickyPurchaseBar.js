@@ -6,7 +6,7 @@ import { STORE_THEME } from '../../constants/storeTheme';
 import { LAYOUT } from '../../theme';
 import Animated, { useSharedValue, useAnimatedStyle, withRepeat, withTiming, Easing, useReducedMotion, runOnJS, withSpring, FadeInUp } from 'react-native-reanimated';
 
-export default function StickyPurchaseBar({ onPress, loading = false, planLabel = '' }) {
+export default function StickyPurchaseBar({ onPress, loading = false, planLabel = '', buttonTitle = "Premium'a Geç" }) {
     const insets = useSafeAreaInsets();
     const tabOffset = LAYOUT.tabBarHeight + LAYOUT.tabBarBottomOffset;
     const reduceMotion = useReducedMotion();
@@ -90,7 +90,7 @@ export default function StickyPurchaseBar({ onPress, loading = false, planLabel 
                                 <ActivityIndicator color="#FFFFFF" size="small" />
                             ) : (
                                 <>
-                                    <Text style={styles.buttonText}>Premium'a Geç</Text>
+                                    <Text style={styles.buttonText}>{buttonTitle}</Text>
                                     {displayLabel ? (
                                         <Animated.Text style={[styles.planLabelInside, animatedLabelStyle]}>
                                             {displayLabel}

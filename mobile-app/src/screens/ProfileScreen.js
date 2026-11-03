@@ -896,10 +896,19 @@ const ProfileScreen = ({ route }) => {
                             {parseInt(user?.vip_level) > 0 && (
                                 <VipBadge level={parseInt(user?.vip_level)} size={38} />
                             )}
-                            {user?.is_vip && (
-                                <View style={{ backgroundColor: '#FACC1520', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 8, borderWidth: 1, borderColor: '#FACC15', flexDirection: 'row', alignItems: 'center', marginLeft: 4 }}>
-                                    <Ionicons name="diamond" size={10} color="#FACC15" style={{ marginRight: 2 }} />
-                                    <Text style={{ color: '#FACC15', fontSize: 10, fontWeight: 'bold' }}>PREMIUM</Text>
+                            {(user?.is_vip === true || user?.is_vip === 'true' || user?.is_vip === 1 || user?.is_premium || parseInt(user?.vip_level || 0, 10) > 0 || (user?.vip_expire_date && new Date(user.vip_expire_date) > new Date())) && (
+                                <View style={styles.premiumBadgeContainer}>
+                                    <LinearGradient
+                                        colors={['#FFDF00', '#F59E0B', '#D97706']}
+                                        start={{ x: 0, y: 0 }}
+                                        end={{ x: 1, y: 0 }}
+                                        style={styles.premiumBadgePill}
+                                    >
+                                        <View style={styles.premiumBadgeIconWrap}>
+                                            <Ionicons name="diamond" size={10} color="#FFFFFF" />
+                                        </View>
+                                        <Text style={styles.premiumBadgeText}>PREMIUM</Text>
+                                    </LinearGradient>
                                 </View>
                             )}
                         </View>
@@ -1344,7 +1353,7 @@ const ProfileScreen = ({ route }) => {
                     />
                     <BlurView intensity={95} tint="dark" style={styles.modalContent}>
                         <LinearGradient
-                            colors={['#0f0720', '#1a0b2e', '#2d0a31']}
+                            colors={theme.gradients.dark || ['#0F080A', '#1B0C11', '#281017']}
                             style={StyleSheet.absoluteFill}
                         />
                         <View style={styles.modalHeader}>
@@ -1367,7 +1376,7 @@ const ProfileScreen = ({ route }) => {
                                 <View style={styles.modernEditCard}>
                                     <View style={styles.cardHeaderSmall}>
                                         <View style={styles.cardIconBg}>
-                                            <Ionicons name="person" size={14} color="#a855f7" />
+                                            <Ionicons name="person" size={14} color={theme.colors.primary || '#E83E50'} />
                                         </View>
                                         <Text style={styles.cardTitleSmall}>İSİM</Text>
                                     </View>
@@ -1393,7 +1402,7 @@ const ProfileScreen = ({ route }) => {
                                 <View style={styles.modernEditCard}>
                                     <View style={styles.cardHeaderSmall}>
                                         <View style={styles.cardIconBg}>
-                                            <Ionicons name="document-text" size={14} color="#f59e0b" />
+                                            <Ionicons name="document-text" size={14} color="#FFB020" />
                                         </View>
                                         <Text style={styles.cardTitleSmall}>BİYOGRAFİ</Text>
                                     </View>
@@ -1420,7 +1429,7 @@ const ProfileScreen = ({ route }) => {
                                 <View style={styles.modernEditCard}>
                                     <View style={styles.cardHeaderSmall}>
                                         <View style={styles.cardIconBg}>
-                                            <Ionicons name="location" size={14} color="#06b6d4" />
+                                            <Ionicons name="location" size={14} color={theme.colors.primary || '#E83E50'} />
                                         </View>
                                         <Text style={styles.cardTitleSmall}>ŞEHİR</Text>
                                     </View>
@@ -1467,7 +1476,7 @@ const ProfileScreen = ({ route }) => {
                                                                 handleUpdateProfile('city', c);
                                                             }}
                                                         >
-                                                            <Ionicons name="location-outline" size={12} color="#06b6d4" style={{ marginRight: 6 }} />
+                                                            <Ionicons name="location-outline" size={12} color={theme.colors.primary || '#E83E50'} style={{ marginRight: 6 }} />
                                                             <Text style={styles.citySuggestionText}>{c}</Text>
                                                         </TouchableOpacity>
                                                     ))
@@ -1481,7 +1490,7 @@ const ProfileScreen = ({ route }) => {
                                 <View style={styles.modernEditCard}>
                                     <View style={styles.cardHeaderSmall}>
                                         <View style={styles.cardIconBg}>
-                                            <Ionicons name="briefcase" size={14} color="#ec4899" />
+                                            <Ionicons name="briefcase" size={14} color="#3B82F6" />
                                         </View>
                                         <Text style={styles.cardTitleSmall}>MESLEK</Text>
                                     </View>
@@ -1494,7 +1503,7 @@ const ProfileScreen = ({ route }) => {
                                             >
                                                 {user?.job === job && (
                                                     <LinearGradient
-                                                        colors={['#7c3aed', '#ec4899']}
+                                                        colors={theme.gradients.primary || ['#E83E50', '#991B4D']}
                                                         start={{ x: 0, y: 0 }}
                                                         end={{ x: 1, y: 1 }}
                                                         style={StyleSheet.absoluteFill}
@@ -1510,7 +1519,7 @@ const ProfileScreen = ({ route }) => {
                                 <View style={styles.modernEditCard}>
                                     <View style={styles.cardHeaderSmall}>
                                         <View style={styles.cardIconBg}>
-                                            <Ionicons name="school" size={14} color="#8b5cf6" />
+                                            <Ionicons name="school" size={14} color="#10B981" />
                                         </View>
                                         <Text style={styles.cardTitleSmall}>EĞİTİM</Text>
                                     </View>
@@ -1523,7 +1532,7 @@ const ProfileScreen = ({ route }) => {
                                             >
                                                 {user?.edu === edu && (
                                                     <LinearGradient
-                                                        colors={['#7c3aed', '#ec4899']}
+                                                        colors={theme.gradients.primary || ['#E83E50', '#991B4D']}
                                                         start={{ x: 0, y: 0 }}
                                                         end={{ x: 1, y: 1 }}
                                                         style={StyleSheet.absoluteFill}
@@ -1539,7 +1548,7 @@ const ProfileScreen = ({ route }) => {
                                 <View style={styles.modernEditCard}>
                                     <View style={styles.cardHeaderSmall}>
                                         <View style={styles.cardIconBg}>
-                                            <Ionicons name="moon" size={14} color="#f59e0b" />
+                                            <Ionicons name="moon" size={14} color="#FFB020" />
                                         </View>
                                         <Text style={styles.cardTitleSmall}>BURÇ</Text>
                                     </View>
@@ -1552,7 +1561,7 @@ const ProfileScreen = ({ route }) => {
                                             >
                                                 {user?.zodiac === z && (
                                                     <LinearGradient
-                                                        colors={['#7c3aed', '#ec4899']}
+                                                        colors={theme.gradients.primary || ['#E83E50', '#991B4D']}
                                                         start={{ x: 0, y: 0 }}
                                                         end={{ x: 1, y: 1 }}
                                                         style={StyleSheet.absoluteFill}
@@ -1568,7 +1577,7 @@ const ProfileScreen = ({ route }) => {
                                 <View style={styles.modernEditCard}>
                                     <View style={styles.cardHeaderSmall}>
                                         <View style={styles.cardIconBg}>
-                                            <Ionicons name="heart" size={14} color="#ef4444" />
+                                            <Ionicons name="heart" size={14} color={theme.colors.primary || '#E83E50'} />
                                         </View>
                                         <Text style={styles.cardTitleSmall}>İLİŞKİ DURUMU / AMAÇ</Text>
                                     </View>
@@ -1581,7 +1590,7 @@ const ProfileScreen = ({ route }) => {
                                             >
                                                 {user?.relationship === r && (
                                                     <LinearGradient
-                                                        colors={['#7c3aed', '#ec4899']}
+                                                        colors={theme.gradients.primary || ['#E83E50', '#991B4D']}
                                                         start={{ x: 0, y: 0 }}
                                                         end={{ x: 1, y: 1 }}
                                                         style={StyleSheet.absoluteFill}
@@ -1597,7 +1606,7 @@ const ProfileScreen = ({ route }) => {
                                 <View style={styles.modernEditCard}>
                                     <View style={styles.cardHeaderSmall}>
                                         <View style={styles.cardIconBg}>
-                                            <Ionicons name="resize" size={14} color="#3b82f6" />
+                                            <Ionicons name="resize" size={14} color="#8B5CF6" />
                                         </View>
                                         <Text style={styles.cardTitleSmall}>BOY (CM)</Text>
                                     </View>
@@ -1610,7 +1619,7 @@ const ProfileScreen = ({ route }) => {
                                             >
                                                 {user?.boy === String(h) && (
                                                     <LinearGradient
-                                                        colors={['#7c3aed', '#ec4899']}
+                                                        colors={theme.gradients.primary || ['#E83E50', '#991B4D']}
                                                         start={{ x: 0, y: 0 }}
                                                         end={{ x: 1, y: 1 }}
                                                         style={StyleSheet.absoluteFill}
@@ -1626,7 +1635,7 @@ const ProfileScreen = ({ route }) => {
                                 <View style={styles.modernEditCard}>
                                     <View style={styles.cardHeaderSmall}>
                                         <View style={styles.cardIconBg}>
-                                            <Ionicons name="speedometer" size={14} color="#10b981" />
+                                            <Ionicons name="speedometer" size={14} color="#10B981" />
                                         </View>
                                         <Text style={styles.cardTitleSmall}>KİLO (KG)</Text>
                                     </View>
@@ -1639,7 +1648,7 @@ const ProfileScreen = ({ route }) => {
                                             >
                                                 {user?.kilo === String(k) && (
                                                     <LinearGradient
-                                                        colors={['#7c3aed', '#ec4899']}
+                                                        colors={theme.gradients.primary || ['#E83E50', '#991B4D']}
                                                         start={{ x: 0, y: 0 }}
                                                         end={{ x: 1, y: 1 }}
                                                         style={StyleSheet.absoluteFill}
@@ -1654,7 +1663,7 @@ const ProfileScreen = ({ route }) => {
                                 <View style={styles.modernEditCard}>
                                     <View style={styles.cardHeaderSmall}>
                                         <View style={styles.cardIconBg}>
-                                            <Ionicons name="sparkles" size={14} color="#ec4899" />
+                                            <Ionicons name="sparkles" size={14} color={theme.colors.primary || '#E83E50'} />
                                         </View>
                                         <Text style={styles.cardTitleSmall}>İLGİ ALANLARI</Text>
                                     </View>
@@ -1676,7 +1685,7 @@ const ProfileScreen = ({ route }) => {
                                                 >
                                                     {isSelected && (
                                                         <LinearGradient
-                                                            colors={['#7c3aed', '#ec4899']}
+                                                            colors={theme.gradients.primary || ['#E83E50', '#991B4D']}
                                                             start={{ x: 0, y: 0 }}
                                                             end={{ x: 1, y: 1 }}
                                                             style={StyleSheet.absoluteFill}
@@ -1699,7 +1708,7 @@ const ProfileScreen = ({ route }) => {
                                 activeOpacity={0.9}
                             >
                                 <LinearGradient
-                                    colors={['#7c3aed', '#ec4899']}
+                                    colors={theme.gradients.primary || ['#E83E50', '#991B4D']}
                                     start={{ x: 0, y: 0 }}
                                     end={{ x: 1, y: 1 }}
                                     style={styles.floatingSaveGradient}
@@ -1857,6 +1866,36 @@ const styles = StyleSheet.create({
         paddingVertical: 2,
         borderRadius: 8,
         marginTop: 2,
+    },
+    premiumBadgeContainer: {
+        marginLeft: 6,
+        borderRadius: 14,
+        shadowColor: '#F59E0B',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.5,
+        shadowRadius: 5,
+        elevation: 4,
+    },
+    premiumBadgePill: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 8,
+        paddingVertical: 2.5,
+        borderRadius: 14,
+        borderWidth: 1,
+        borderColor: 'rgba(255, 255, 255, 0.4)',
+    },
+    premiumBadgeIconWrap: {
+        marginRight: 3,
+    },
+    premiumBadgeText: {
+        color: '#FFFFFF',
+        fontSize: 9.5,
+        fontWeight: '900',
+        letterSpacing: 0.8,
+        textShadowColor: 'rgba(0, 0, 0, 0.35)',
+        textShadowOffset: { width: 0, height: 1 },
+        textShadowRadius: 2,
     },
     idText: {
         color: '#8e85a6',
@@ -2168,14 +2207,17 @@ const styles = StyleSheet.create({
     },
     modalOverlay: {
         flex: 1,
-        backgroundColor: 'rgba(0,0,0,0.5)',
+        backgroundColor: 'rgba(0,0,0,0.7)',
         justifyContent: 'flex-end',
     },
     modalContent: {
-        borderTopLeftRadius: 36,
-        borderTopRightRadius: 36,
-        height: '85%',
+        borderTopLeftRadius: 32,
+        borderTopRightRadius: 32,
+        height: '86%',
         overflow: 'hidden',
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.08)',
+        borderBottomWidth: 0,
     },
     modalHeader: {
         padding: 24,
@@ -2192,7 +2234,7 @@ const styles = StyleSheet.create({
     },
     modalSubtitle: {
         fontSize: 13,
-        color: '#8e85a6',
+        color: '#C7A6A6',
         marginTop: 4,
         fontWeight: '500',
     },
@@ -2213,11 +2255,11 @@ const styles = StyleSheet.create({
     },
     modernEditCard: {
         backgroundColor: 'rgba(255,255,255,0.03)',
-        borderRadius: 28,
-        padding: 20,
-        marginBottom: 16,
+        borderRadius: 22,
+        padding: 18,
+        marginBottom: 14,
         borderWidth: 1,
-        borderColor: 'rgba(255,255,255,0.06)',
+        borderColor: 'rgba(255,255,255,0.08)',
     },
     cardHeaderSmall: {
         flexDirection: 'row',
@@ -2234,9 +2276,8 @@ const styles = StyleSheet.create({
     cardTitleSmall: {
         fontSize: 11,
         fontWeight: '900',
-        color: '#fff',
+        color: '#C7A6A6',
         letterSpacing: 1.5,
-        opacity: 0.9,
     },
     optionGrid: {
         flexDirection: 'row',
@@ -2244,24 +2285,24 @@ const styles = StyleSheet.create({
         gap: 8,
     },
     optionChip: {
-        backgroundColor: 'rgba(255,255,255,0.05)',
+        backgroundColor: 'rgba(255,255,255,0.04)',
         paddingHorizontal: 16,
         paddingVertical: 10,
-        borderRadius: 16,
+        borderRadius: 14,
         borderWidth: 1,
         borderColor: 'rgba(255,255,255,0.08)',
         overflow: 'hidden',
     },
     optionChipSelected: {
         borderColor: 'transparent',
-        shadowColor: '#ec4899',
+        shadowColor: '#E83E50',
         shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.3,
+        shadowOpacity: 0.35,
         shadowRadius: 8,
         elevation: 4,
     },
     optionText: {
-        color: '#8e85a6',
+        color: '#C7A6A6',
         fontSize: 13,
         fontWeight: '700',
     },
@@ -2580,9 +2621,9 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         backgroundColor: 'rgba(255, 255, 255, 0.04)',
-        borderWidth: 1.5,
+        borderWidth: 1,
         borderColor: 'rgba(255, 255, 255, 0.08)',
-        borderRadius: 18,
+        borderRadius: 16,
         paddingHorizontal: 16,
         paddingVertical: 12,
         marginTop: 8,
@@ -2599,7 +2640,7 @@ const styles = StyleSheet.create({
         padding: 4,
     },
     citySuggestionsList: {
-        backgroundColor: 'rgba(16, 7, 32, 0.95)',
+        backgroundColor: '#1B0C11',
         borderWidth: 1,
         borderColor: 'rgba(255, 255, 255, 0.1)',
         borderRadius: 16,
@@ -2630,9 +2671,9 @@ const styles = StyleSheet.create({
         width: '100%',
         height: 56,
         borderRadius: 28,
-        shadowColor: '#ec4899',
+        shadowColor: '#E83E50',
         shadowOffset: { width: 0, height: 8 },
-        shadowOpacity: 0.4,
+        shadowOpacity: 0.45,
         shadowRadius: 12,
         elevation: 8,
     },

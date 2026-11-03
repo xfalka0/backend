@@ -99,7 +99,7 @@ export default function OperatorProfileScreen({ route, navigation }) {
                         try {
                             const token = await AsyncStorage.getItem('token');
                             const targetId = operator.id || operator.user_id;
-                            await axios.post(`${API_URL}/blocks`, {
+                            await axios.post(`${API_URL}/block`, {
                                 blockedId: targetId
                             }, {
                                 headers: token ? { Authorization: `Bearer ${token}` } : {}

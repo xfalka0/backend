@@ -29,6 +29,7 @@ process.on('uncaughtException', (err) => {
 });
 
 const express = require('express');
+const nodemailer = require('nodemailer');
 const axios = require('axios');
 const http = require('http');
 const { Server } = require('socket.io');
@@ -1340,47 +1341,76 @@ const authLimiter = rateLimit({
 });
 
 const sendOtpEmail = async (email, otp) => {
-    if (!process.env.BREVO_API_KEY) {
-        console.error('[BREVO ERROR] API Key (BREVO_API_KEY) missing from environment variables.');
-        throw new Error('E-posta servisi yapılandırılmamış (BREVO_API_KEY eksik). Lütfen Render panelinden çevre değişkenini tanımlayın.');
-    }
-    try {
-        await axios.post('https://api.brevo.com/v3/smtp/email', {
-            sender: { name: 'Fiva', email: 'fdnsmn00@gmail.com' },
-            to: [{ email: email }],
-            subject: "Fiva'ya Hoş Geldin!",
-            htmlContent: `
-                <div style="background-color: #0b071e; padding: 40px 20px; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; text-align: center; color: #ffffff;">
-                    <div style="background-color: #161132; max-width: 500px; margin: 0 auto; padding: 40px 30px; border-radius: 24px; border: 1px solid rgba(255,255,255,0.05); box-shadow: 0 20px 40px rgba(0,0,0,0.5);">
-                        <div style="margin-bottom: 20px; font-size: 32px;">❤️</div>
-                        <h2 style="color: #ffffff; margin-bottom: 20px; font-weight: 800; font-size: 24px; letter-spacing: -0.5px;">Fiva'ya Hoş Geldin!</h2>
-                        <p style="color: #94a3b8; font-size: 14px; line-height: 1.6; margin-bottom: 30px;">
-                            Giriş yapmak veya hesap oluşturmak için kullanabileceğiniz tek kullanımlık doğrulama kodunuz aşağıdadır:
-                        </p>
-                        <div style="background-color: #0b071e; border: 2px solid #6366f1; padding: 18px; border-radius: 16px; font-size: 36px; font-weight: 800; letter-spacing: 6px; color: #ffffff; text-align: center; display: inline-block; min-width: 200px; margin-bottom: 30px; box-shadow: inset 0 2px 4px rgba(0,0,0,0.3);">
-                            ${otp}
-                        </div>
-                        <p style="color: #64748b; font-size: 12px; line-height: 1.6; margin-bottom: 0;">
-                            Bu kod 10 dakika boyunca geçerlidir. Eğer bu talebi siz yapmadıysanız bu e-postayı güvenle görmezden gelebilirsiniz.
-                        </p>
-                    </div>
-                    <div style="margin-top: 24px; color: #475569; font-size: 11px; font-weight: 600; letter-spacing: 0.5px;">
-                        Fiva Dating App • Tüm Hakları Saklıdır
-                    </div>
+    const htmlContent = `
+        <div style="background-color: #0b071e; padding: 40px 20px; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; text-align: center; color: #ffffff;">
+            <div style="background-color: #161132; max-width: 500px; margin: 0 auto; padding: 40px 30px; border-radius: 24px; border: 1px solid rgba(255,255,255,0.05); box-shadow: 0 20px 40px rgba(0,0,0,0.5);">
+                <div style="margin-bottom: 20px; font-size: 32px;">❤️</div>
+                <h2 style="color: #ffffff; margin-bottom: 20px; font-weight: 800; font-size: 24px; letter-spacing: -0.5px;">Fiva'ya Hoş Geldin!</h2>
+                <p style="color: #94a3b8; font-size: 14px; line-height: 1.6; margin-bottom: 30px;">
+                    Giriş yapmak veya hesap oluşturmak için kullanabileceğiniz tek kullanımlık doğrulama kodunuz aşağıdadır:
+                </p>
+                <div style="background-color: #0b071e; border: 2px solid #6366f1; padding: 18px; border-radius: 16px; font-size: 36px; font-weight: 800; letter-spacing: 6px; color: #ffffff; text-align: center; display: inline-block; min-width: 200px; margin-bottom: 30px; box-shadow: inset 0 2px 4px rgba(0,0,0,0.3);">
+                    ${otp}
                 </div>
-            `
-        }, {
-            headers: {
-                'api-key': process.env.BREVO_API_KEY,
-                'Content-Type': 'application/json'
-            }
-        });
-        console.log(`[BREVO] OTP email successfully sent to ${email}`);
-    } catch (error) {
-        const errorMsg = error.response?.data?.message || error.response?.data || error.message;
-        console.error('[BREVO ERROR] Failed to send OTP email:', errorMsg);
-        throw new Error(`E-posta gönderimi başarısız: ${typeof errorMsg === 'object' ? JSON.stringify(errorMsg) : errorMsg}`);
+                <p style="color: #64748b; font-size: 12px; line-height: 1.6; margin-bottom: 0;">
+                    Bu kod 10 dakika boyunca geçerlidir. Eğer bu talebi siz yapmadıysanız bu e-postayı güvenle görmezden gelebilirsiniz.
+                </p>
+            </div>
+            <div style="margin-top: 24px; color: #475569; font-size: 11px; font-weight: 600; letter-spacing: 0.5px;">
+                Fiva Dating App • Tüm Hakları Saklıdır
+            </div>
+        </div>
+    `;
+
+    // 1. Brevo Attempt (if API key provided)
+    if (process.env.BREVO_API_KEY) {
+        try {
+            await axios.post('https://api.brevo.com/v3/smtp/email', {
+                sender: { name: 'Fiva', email: process.env.EMAIL_USER || 'fdnsmn00@gmail.com' },
+                to: [{ email: email }],
+                subject: "Fiva'ya Hoş Geldin!",
+                htmlContent: htmlContent
+            }, {
+                headers: {
+                    'api-key': process.env.BREVO_API_KEY,
+                    'Content-Type': 'application/json'
+                },
+                timeout: 5000
+            });
+            console.log(`[BREVO] OTP email successfully sent to ${email}`);
+            return;
+        } catch (brevoErr) {
+            const errorMsg = brevoErr.response?.data?.message || brevoErr.message;
+            console.warn('[BREVO WARNING] Brevo delivery failed, attempting SMTP fallback:', errorMsg);
+        }
     }
+
+    // 2. Fallback to Gmail SMTP / Nodemailer
+    if (process.env.EMAIL_USER && process.env.EMAIL_PASS) {
+        try {
+            const transporter = nodemailer.createTransport({
+                service: 'gmail',
+                auth: {
+                    user: process.env.EMAIL_USER,
+                    pass: process.env.EMAIL_PASS
+                }
+            });
+
+            await transporter.sendMail({
+                from: `"Fiva" <${process.env.EMAIL_USER}>`,
+                to: email,
+                subject: "Fiva'ya Hoş Geldin!",
+                html: htmlContent
+            });
+            console.log(`[SMTP] OTP email successfully sent to ${email} via Gmail SMTP`);
+            return;
+        } catch (smtpErr) {
+            console.error('[SMTP ERROR] Nodemailer delivery failed:', smtpErr.message);
+            throw new Error(`E-posta gönderimi başarısız: ${smtpErr.message}`);
+        }
+    }
+
+    throw new Error('E-posta servisi yapılandırılmamış (BREVO_API_KEY veya EMAIL_USER/EMAIL_PASS eksik).');
 };
 
 
@@ -3501,11 +3531,16 @@ app.post('/api/users/push-token', authenticateToken, async (req, res) => {
 });
 
 // BLOCK USER
-app.post('/api/block', authenticateToken, async (req, res) => {
-    const { blockedId } = req.body;
+app.post(['/api/block', '/api/blocks'], authenticateToken, async (req, res) => {
+    const blockedId = req.body.blockedId || req.body.blocked_id;
     const blockerId = req.user.id;
+    if (!blockedId) return res.status(400).json({ error: 'blockedId gerekli.' });
     try {
-        await db.query('INSERT INTO blocks (blocker_id, blocked_id) VALUES ($1, $2)', [blockerId, blockedId]);
+        await db.query(`
+            INSERT INTO blocks (blocker_id, blocked_id) 
+            VALUES ($1, $2) 
+            ON CONFLICT DO NOTHING
+        `, [blockerId, blockedId]);
         res.json({ success: true, message: 'Kullanıcı engellendi.' });
     } catch (err) {
         res.status(500).json({ error: err.message });

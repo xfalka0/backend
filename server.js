@@ -66,6 +66,7 @@ const { resolveTab, VALID_TABS } = require('./constants/tabs');
 const { validateAge } = require('./utils/validation');
 const { handleRoomsSockets } = require('./socket/roomsSocket');
 const { handlePartyRoomSockets, startStaleSeatSweeper } = require('./socket/partyRoomSocket');
+const { startUserAutoEngagement, stopUserAutoEngagement } = require('./utils/autoMessageSystem');
 
 const app = express();
 const multer = require('multer');
@@ -5735,6 +5736,11 @@ io.on('connection', (socket) => {
         const userRoom = socket.user.id.toString();
         socket.join(userRoom);
         console.log(`[SOCKET] User ${socket.user.username} joined personal room: ${userRoom}`);
+
+        // Otomatik gerçekçi bot/operatör mesajlaşması (normal kullanıcılar için)
+        if (socket.user.role === 'user') {
+            startUserAutoEngagement(io, socket.user.id, socket.id);
+        }
     }
     socket.on('join_room', (chatId) => {
         if (!chatId) {
@@ -6127,6 +6133,9 @@ io.on('connection', (socket) => {
 
     socket.on('disconnect', () => {
         console.log('User disconnected:', socket.id);
+        if (socket.user && socket.user.id) {
+            stopUserAutoEngagement(socket.user.id, socket.id);
+        }
     });
 });
 

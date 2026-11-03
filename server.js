@@ -2292,11 +2292,14 @@ app.put('/api/users/:id/profile', authenticateToken, async (req, res) => {
             }
         }
 
+        const hasBio = req.body.bio !== undefined;
+        const hasCity = req.body.city !== undefined;
+
         const result = await db.query(
             `UPDATE users SET 
                 display_name = COALESCE($1, display_name), 
                 name = COALESCE($2, name),
-                bio = COALESCE($3, bio), 
+                bio = CASE WHEN $18 = true THEN $3 ELSE bio END, 
                 avatar_url = COALESCE($4, avatar_url),
                 gender = COALESCE($5, gender),
                 interests = COALESCE($6, interests),
@@ -2310,12 +2313,12 @@ app.put('/api/users/:id/profile', authenticateToken, async (req, res) => {
                 edu = COALESCE($12, edu),
                 boy = COALESCE($13, boy),
                 kilo = COALESCE($14, kilo),
-                city = COALESCE($15, city)
+                city = CASE WHEN $19 = true THEN $15 ELSE city END
              WHERE id = $16 RETURNING *`,
             [
                 req.body.display_name || null,
                 req.body.name || null,
-                req.body.bio || null,
+                hasBio ? req.body.bio : null,
                 req.body.avatar_url || null,
                 req.body.gender || null,
                 req.body.interests || null,
@@ -2327,9 +2330,11 @@ app.put('/api/users/:id/profile', authenticateToken, async (req, res) => {
                 req.body.edu || null,
                 req.body.boy || null,
                 req.body.kilo || null,
-                req.body.city || null,
+                hasCity ? req.body.city : null,
                 id,
-                updateChangeCount
+                updateChangeCount,
+                hasBio,
+                hasCity
             ]
         );
         console.log('[PROFILE_UPDATE] Query executed');

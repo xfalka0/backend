@@ -190,12 +190,35 @@ router.delete('/:id', authenticateToken, async (req, res) => {
     }
     try {
         await db.query('BEGIN');
-        const result = await db.query("DELETE FROM users WHERE id = $1 RETURNING id", [id]);
-        if (result.rowCount === 0) { await db.query('ROLLBACK'); return res.status(404).json({ error: 'Kullanıcı bulunamadı.' }); }
+        const result = await db.query(
+            `UPDATE users 
+             SET account_status = 'deleted', 
+                 username = 'deleted_' || id || '_' || EXTRACT(EPOCH FROM NOW())::bigint,
+                 display_name = 'Silinmiş Hesap',
+                 name = 'Silinmiş Hesap',
+                 bio = NULL,
+                 email = NULL,
+                 phone = NULL,
+                 avatar_url = NULL,
+                 device_id = NULL,
+                 push_token = NULL,
+                 deleted_at = NOW()
+             WHERE id = $1 RETURNING id`,
+            [id]
+        );
+        if (result.rowCount === 0) { 
+            await db.query('ROLLBACK'); 
+            return res.status(404).json({ error: 'Kullanıcı bulunamadı.' }); 
+        }
+
+        await db.query('DELETE FROM favorites WHERE user_id = $1 OR target_user_id = $1', [id]);
+        await db.query('DELETE FROM blocks WHERE blocker_id = $1 OR blocked_id = $1', [id]);
+
         await db.query('COMMIT');
         res.json({ success: true, message: 'Hesap başarıyla silindi.' });
     } catch (err) {
         await db.query('ROLLBACK');
+        console.error('Delete User Error in userRoutes:', err.message);
         res.status(500).json({ error: err.message });
     }
 });

@@ -34,7 +34,10 @@ exports.googleAuth = async (req, res) => {
         const { email, name, picture } = payload;
         const normalizedEmail = email ? email.trim().toLowerCase() : '';
 
-        let userResult = await db.query('SELECT * FROM users WHERE LOWER(email) = $1', [normalizedEmail]);
+        if (normalizedEmail) {
+            await db.query("UPDATE users SET email = NULL WHERE LOWER(email) = $1 AND account_status = 'deleted'", [normalizedEmail]);
+        }
+        let userResult = await db.query("SELECT * FROM users WHERE LOWER(email) = $1 AND account_status != 'deleted'", [normalizedEmail]);
         let user;
 
         if (userResult.rows.length === 0) {
@@ -179,6 +182,12 @@ exports.registerEmail = async (req, res) => {
     const finalAvatarUrl = avatarUrl || avatar_url || 'https://via.placeholder.com/150';
 
     try {
+        if (normalizedEmail) {
+            await db.query("UPDATE users SET email = NULL WHERE LOWER(email) = $1 AND account_status = 'deleted'", [normalizedEmail]);
+        }
+        if (phone) {
+            await db.query("UPDATE users SET phone = NULL WHERE phone = $1 AND account_status = 'deleted'", [phone]);
+        }
         if (deviceId) {
             const limitCheck = await db.query('SELECT count(*) FROM users WHERE device_id = $1', [deviceId]);
             if (parseInt(limitCheck.rows[0].count, 10) >= 2) {
@@ -231,9 +240,9 @@ exports.loginEmail = async (req, res) => {
         let result;
         if (email) {
             const normalizedEmail = email.trim().toLowerCase();
-            result = await db.query('SELECT * FROM users WHERE LOWER(email) = $1', [normalizedEmail]);
+            result = await db.query("SELECT * FROM users WHERE LOWER(email) = $1 AND account_status != 'deleted'", [normalizedEmail]);
         } else if (phone) {
-            result = await db.query('SELECT * FROM users WHERE phone = $1', [phone]);
+            result = await db.query("SELECT * FROM users WHERE phone = $1 AND account_status != 'deleted'", [phone]);
         } else {
             return res.status(400).json({ error: 'E-posta veya telefon girilmelidir.' });
         }

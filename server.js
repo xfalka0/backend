@@ -1452,16 +1452,23 @@ app.post('/api/auth/verify-otp', authLimiter, async (req, res) => {
         }
         // --- END BYPASS ---
         let result;
-        if (email) result = await db.query('SELECT * FROM users WHERE email = $1', [email]);
-        else result = await db.query('SELECT * FROM users WHERE phone = $1', [phone]);
+        if (email) {
+            const cleanEmail = email.trim().toLowerCase();
+            await db.query("UPDATE users SET email = NULL WHERE LOWER(email) = $1 AND account_status = 'deleted'", [cleanEmail]);
+            result = await db.query("SELECT * FROM users WHERE LOWER(email) = $1 AND account_status != 'deleted'", [cleanEmail]);
+        } else if (phone) {
+            await db.query("UPDATE users SET phone = NULL WHERE phone = $1 AND account_status = 'deleted'", [phone]);
+            result = await db.query("SELECT * FROM users WHERE phone = $1 AND account_status != 'deleted'", [phone]);
+        }
+
         let user;
         if (result.rows.length === 0) {
             if (deviceId) {
-                const limitCheck = await db.query('SELECT count(*) FROM users WHERE device_id = $1', [deviceId]);
+                const limitCheck = await db.query("SELECT count(*) FROM users WHERE device_id = $1 AND account_status != 'deleted'", [deviceId]);
                 if (parseInt(limitCheck.rows[0].count, 10) >= 2) return res.status(403).json({ error: 'Bu cihazdan en fazla 2 hesap oluşturulabilir.' });
             }
-            const username = email ? email.split('@')[0] : `user_${Math.floor(1000 + Math.random() * 9000)}`;
-            const insertResult = await db.query("INSERT INTO users (username, email, role, balance, avatar_url, display_name, device_id, status) VALUES ($1, $2, 'user', 100, 'https://via.placeholder.com/150', $3, $4, 'active') RETURNING *", [username, email || null, username, deviceId || null]);
+            const username = (email ? email.split('@')[0] : `user`) + '_' + Math.floor(1000 + Math.random() * 9000);
+            const insertResult = await db.query("INSERT INTO users (username, email, role, balance, avatar_url, display_name, device_id, account_status) VALUES ($1, $2, 'user', 100, 'https://via.placeholder.com/150', $3, $4, 'active') RETURNING *", [username, email ? email.trim().toLowerCase() : null, email ? email.split('@')[0] : username, deviceId || null]);
             user = insertResult.rows[0];
             await logActivity(io, user.id, 'register', 'Yeni kullanıcı OTP ile kayıt oldu.');
             io.emit('new_user', sanitizeUser(user, req));

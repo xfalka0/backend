@@ -760,7 +760,7 @@ const ProfileScreen = ({ route }) => {
                         <Ionicons name="notifications-outline" size={18} color="#fff" />
                         <View style={styles.badgeDot} />
                     </TouchableOpacity>
-                    <TouchableOpacity style={styles.navIconBtn} activeOpacity={0.7} onPress={() => navigation.navigate('Settings')}>
+                    <TouchableOpacity style={styles.navIconBtn} activeOpacity={0.7} onPress={() => navigation.navigate('Settings', { user })}>
                         <Ionicons name="settings-outline" size={18} color="#fff" />
                     </TouchableOpacity>
                 </View>

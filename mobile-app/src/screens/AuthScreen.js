@@ -194,6 +194,14 @@ export default function AuthScreen({ navigation, route }) {
                 setOtp('');
                 setStep(2);
                 setResendCountdown(60); // Start 1-minute countdown
+                if (step === 2) {
+                    setAlert({
+                        visible: true,
+                        title: 'Kod Gönderildi 📩',
+                        message: 'Yeni doğrulama kodunuz iletildi.',
+                        type: 'info'
+                    });
+                }
             }
         } catch (error) {
             setAlert({ visible: true, title: 'Hata', message: error.response?.data?.error || `${error.message} (${error.config?.url || 'URL Yok'})`, type: 'error' });
@@ -468,17 +476,23 @@ export default function AuthScreen({ navigation, route }) {
                 style={{ marginTop: 10 }}
             />
 
-            <TouchableOpacity 
-                style={[styles.resendButton, resendCountdown > 0 && { opacity: 0.5 }, { marginTop: 20 }]} 
-                onPress={handleRequestOtp}
-                disabled={resendCountdown > 0 || loading}
-            >
-                <Text style={styles.resendText}>
-                    {resendCountdown > 0 
-                        ? `Kodu tekrar gönder (${resendCountdown}s)` 
-                        : 'Kodu tekrar gönder'}
+            <View style={styles.resendContainer}>
+                <Text style={styles.resendNotice}>
+                    Kodu almanız 1 dakikaya kadar sürebilir.
                 </Text>
-            </TouchableOpacity>
+                <TouchableOpacity 
+                    style={[styles.resendButton, resendCountdown > 0 && styles.resendButtonDisabled]} 
+                    onPress={handleRequestOtp}
+                    disabled={resendCountdown > 0 || loading}
+                    activeOpacity={0.7}
+                >
+                    <Text style={[styles.resendText, resendCountdown === 0 ? styles.resendTextActive : styles.resendTextDisabled]}>
+                        {resendCountdown > 0 
+                            ? `Kodu tekrar gönder (${resendCountdown}s)` 
+                            : 'Kodu tekrar gönder'}
+                    </Text>
+                </TouchableOpacity>
+            </View>
         </Animated.View>
     );
 
@@ -600,14 +614,34 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'center',
     },
-    resendButton: {
-        marginTop: 20,
+    resendContainer: {
+        marginTop: 22,
         alignItems: 'center',
     },
+    resendNotice: {
+        color: 'rgba(255, 255, 255, 0.65)',
+        fontSize: 13,
+        marginBottom: 8,
+        textAlign: 'center',
+    },
+    resendButton: {
+        paddingVertical: 6,
+        paddingHorizontal: 12,
+        alignItems: 'center',
+    },
+    resendButtonDisabled: {
+        opacity: 0.7,
+    },
     resendText: {
-        color: 'rgba(255,255,255,0.5)',
         fontSize: 14,
         fontWeight: '600',
+    },
+    resendTextDisabled: {
+        color: 'rgba(255, 255, 255, 0.45)',
+    },
+    resendTextActive: {
+        color: '#ec4899',
+        fontWeight: '700',
         textDecorationLine: 'underline',
     },
     suggestionRow: {

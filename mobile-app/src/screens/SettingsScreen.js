@@ -31,7 +31,7 @@ const GradientIcon = ({ name, size = 22, colors = ['#FFFFFF', '#EC4899'] }) => (
 
 export default function SettingsScreen({ navigation, route }) {
     const { theme, themeMode } = useTheme();
-    const { user } = route.params || {};
+    const [currentUser, setCurrentUser] = useState(route.params?.user || null);
     const [loading, setLoading] = useState(false);
     const [alert, setAlert] = useState({
         visible: false,
@@ -43,8 +43,8 @@ export default function SettingsScreen({ navigation, route }) {
     });
 
     // Settings States
-    const [isProfileHidden, setIsProfileHidden] = useState(user?.is_hidden || false);
-    const [onlineStatus, setOnlineStatus] = useState(user?.show_online !== false);
+    const [isProfileHidden, setIsProfileHidden] = useState(currentUser?.is_hidden || false);
+    const [onlineStatus, setOnlineStatus] = useState(currentUser?.show_online !== false);
 
     // Detailed Notification Preferences
     const [notifications, setNotifications] = useState({
@@ -55,8 +55,25 @@ export default function SettingsScreen({ navigation, route }) {
     });
 
     useEffect(() => {
+        loadInitialUser();
         loadNotificationSettings();
     }, []);
+
+    const loadInitialUser = async () => {
+        try {
+            const saved = await AsyncStorage.getItem('user');
+            if (saved) {
+                const parsed = JSON.parse(saved);
+                setCurrentUser(prev => prev || parsed);
+                if (!currentUser) {
+                    setIsProfileHidden(parsed.is_hidden || false);
+                    setOnlineStatus(parsed.show_online !== false);
+                }
+            }
+        } catch (e) {
+            console.log('Load user error in Settings:', e);
+        }
+    };
 
     const loadNotificationSettings = async () => {
         try {
@@ -72,7 +89,9 @@ export default function SettingsScreen({ navigation, route }) {
     const updateSetting = async (key, value) => {
         try {
             const token = await AsyncStorage.getItem('token');
-            await axios.patch(`${API_URL}/users/${user.id}`, { [key]: value }, {
+            const targetId = currentUser?.id || (await AsyncStorage.getItem('user').then(u => u ? JSON.parse(u).id : null));
+            if (!targetId) return;
+            await axios.patch(`${API_URL}/users/${targetId}`, { [key]: value }, {
                 headers: { Authorization: `Bearer ${token}` }
             });
         } catch (err) {
@@ -123,8 +142,10 @@ export default function SettingsScreen({ navigation, route }) {
             visible: true,
             title: 'Çıkış Yap',
             message: 'Hesabınızdan çıkış yapmak istediğinize emin misiniz?',
+            type: 'info',
             showCancel: true,
-            confirmText: 'ÇIKIŞ YAP',
+            cancelText: 'Vazgeç',
+            confirmText: 'Çıkış Yap',
             onConfirm: async () => {
                 await AsyncStorage.clear();
                 navigation.replace('Welcome');
@@ -144,22 +165,34 @@ export default function SettingsScreen({ navigation, route }) {
         setAlert({
             visible: true,
             title: 'Hesabı Sil',
-            message: 'Tüm verileriniz kalıcı olarak silinecektir. Bu işlem geri alınamaz.',
+            message: 'Hesabınızı ve tüm verilerinizi kalıcı olarak silmek istediğinizden emin misiniz? Bu işlem geri alınamaz.',
+            type: 'warning',
             showCancel: true,
-            confirmText: 'SİL',
+            cancelText: 'Vazgeç',
+            confirmText: 'Evet, Sil',
             onConfirm: async () => {
                 try {
                     setLoading(true);
                     const token = await AsyncStorage.getItem('token');
-                    await axios.delete(`${API_URL}/users/${user.id}`, {
-                        headers: { Authorization: `Bearer ${token}` }
-                    });
+                    let targetId = currentUser?.id;
+                    if (!targetId) {
+                        const saved = await AsyncStorage.getItem('user');
+                        if (saved) targetId = JSON.parse(saved).id;
+                    }
+
+                    if (targetId) {
+                        await axios.delete(`${API_URL}/users/${targetId}`, {
+                            headers: { Authorization: `Bearer ${token}` }
+                        });
+                    }
+
                     setLoading(false);
                     await AsyncStorage.clear();
                     navigation.replace('Welcome');
                 } catch (err) {
+                    console.error('Delete account error:', err.response?.data || err.message);
                     setLoading(false);
-                    setAlert({ visible: true, title: 'Hata', message: 'Hesap silinirken bir hata oluştu.', type: 'error' });
+                    setAlert({ visible: true, title: 'Hata', message: err.response?.data?.error || 'Hesap silinirken bir hata oluştu.', type: 'error' });
                 }
             }
         });
@@ -366,7 +399,8 @@ export default function SettingsScreen({ navigation, route }) {
                 message={alert.message}
                 type={alert.type || 'info'}
                 showCancel={alert.showCancel}
-                confirmText={alert.confirmText}
+                cancelText={alert.cancelText || 'Vazgeç'}
+                confirmText={alert.confirmText || 'TAMAM'}
                 onConfirm={alert.onConfirm}
                 onClose={() => setAlert({ ...alert, visible: false })}
             />

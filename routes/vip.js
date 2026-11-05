@@ -45,9 +45,27 @@ router.post('/purchase-xp', authenticateToken, async (req, res) => {
 
         // Update user
         await db.query(
-            'UPDATE users SET balance = $1, vip_xp = $2 WHERE id = $3',
-            [newBalance, newVipXp, userId]
+            'UPDATE users SET balance = $1, vip_xp = $2, vip_level = GREATEST(COALESCE(vip_level, 0), $3), is_vip = true WHERE id = $4',
+            [newBalance, newVipXp, newVipLevel, userId]
         );
+
+        // Socket IO update
+        const io = req.app.get('io');
+        if (io) {
+            io.to(`user_${userId}`).emit('balance_update', {
+                balance: newBalance,
+                hearts: newBalance,
+                vip_level: newVipLevel,
+                vip_xp: newVipXp
+            });
+            if (leveledUp) {
+                io.to(`user_${userId}`).emit('vip_level_up', {
+                    vip_level: newVipLevel,
+                    old_vip_level: oldVipLevel,
+                    vip_xp: newVipXp
+                });
+            }
+        }
 
         // Log activity
         logActivity(userId, 'vip_xp_purchase', `${coins} coin harcayarak ${coins} VIP XP kazandı.`);
@@ -78,15 +96,24 @@ router.get('/progress', authenticateToken, async (req, res) => {
     const userId = req.user.id;
 
     try {
-        const userResult = await db.query('SELECT vip_xp FROM users WHERE id = $1', [userId]);
+        const userResult = await db.query('SELECT vip_xp, vip_level, is_vip FROM users WHERE id = $1', [userId]);
         if (userResult.rows.length === 0) {
             return res.status(404).json({ error: 'Kullanıcı bulunamadı.' });
         }
 
-        const vipXp = userResult.rows[0].vip_xp || 0;
+        const user = userResult.rows[0];
+        const vipXp = parseInt(user.vip_xp || 0, 10);
         const progress = getVipProgress(vipXp);
+        const dbVipLevel = parseInt(user.vip_level || 0, 10);
+        if (dbVipLevel > progress.currentLevel) {
+            progress.currentLevel = dbVipLevel;
+        }
 
-        res.json(progress);
+        res.json({
+            ...progress,
+            vip_level: progress.currentLevel,
+            is_vip: !!user.is_vip || progress.currentLevel > 0
+        });
 
     } catch (err) {
         console.error('VIP Progress Error:', err.message);

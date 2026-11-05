@@ -129,14 +129,41 @@ const VipScreen = ({ route, navigation }) => {
     // Fetch dynamic progress on focus
     useFocusEffect(
         React.useCallback(() => {
-            if (user?.id) {
-                axios.get(`${API_URL}/vip/progress`, {
-                    headers: { 'Authorization': `Bearer ${user.token}` }
-                })
-                    .then(res => setVipProgress(res.data))
-                    .catch(err => console.log('Fetch VIP progress error:', err));
-            }
-        }, [user?.id])
+            const fetchVIP = async () => {
+                try {
+                    const token = user?.token || await AsyncStorage.getItem('token');
+                    if (token) {
+                        const res = await axios.get(`${API_URL}/vip/progress`, {
+                            headers: { 'Authorization': `Bearer ${token}` }
+                        });
+                        if (res.data) {
+                            setVipProgress(res.data);
+                            const currentLvl = res.data.vip_level !== undefined ? res.data.vip_level : res.data.currentLevel;
+                            if (currentLvl !== undefined) {
+                                setUserVip(currentLvl);
+                                setSelectedLevel(currentLvl > 0 ? currentLvl : 1);
+                                
+                                // Sync user in storage
+                                const storedUserStr = await AsyncStorage.getItem('user');
+                                if (storedUserStr) {
+                                    const parsed = JSON.parse(storedUserStr);
+                                    if (parsed.vip_level !== currentLvl) {
+                                        parsed.vip_level = currentLvl;
+                                        parsed.vip_xp = res.data.currentXp;
+                                        parsed.is_vip = currentLvl > 0;
+                                        await AsyncStorage.setItem('user', JSON.stringify(parsed));
+                                        setUser(parsed);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } catch (err) {
+                    console.log('Fetch VIP progress error:', err);
+                }
+            };
+            fetchVIP();
+        }, [user?.id, user?.token])
     );
 
     // Reanimated Shared Values

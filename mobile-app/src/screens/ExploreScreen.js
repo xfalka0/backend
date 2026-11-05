@@ -382,7 +382,7 @@ export default function ExploreScreen({ navigation, route }) {
                     if (userStr) {
                         const parsedUser = JSON.parse(userStr);
                         // Prevent infinite loop by only updating state if user data actually changed
-                        if (!user || user.id !== parsedUser.id || user.vip_level !== parsedUser.vip_level || user.balance !== parsedUser.balance) {
+                        if (!user || user.id !== parsedUser.id || user.vip_level !== parsedUser.vip_level || user.balance !== parsedUser.balance || user.is_vip !== parsedUser.is_vip) {
                             currentUser = parsedUser;
                             setUser(parsedUser);
                         }
@@ -666,17 +666,25 @@ export default function ExploreScreen({ navigation, route }) {
         }
     };
 
-    const checkVipAccess = (actionType) => {
-        const userVipLevel = user?.vip_level || 0;
-        const isPremium = user?.is_premium;
+    const isUserPremiumOrVip = (u) => {
+        if (!u) return false;
+        const vipLevel = parseInt(u.vip_level || 0, 10);
+        const isVip = u.is_vip === true || u.is_vip === 'true' || u.is_vip === 1;
+        const isPremium = u.is_premium === true || u.is_premium === 'true' || u.is_premium === 1;
+        const hasActiveVipDate = u.vip_expire_date && new Date(u.vip_expire_date) > new Date();
+        const isAdminOrStaff = u.role === 'admin' || u.role === 'super_admin' || u.role === 'operator';
+        return vipLevel >= 1 || isVip || isPremium || hasActiveVipDate || isAdminOrStaff;
+    };
 
-        if (userVipLevel >= 2 || isPremium) {
+    const checkVipAccess = (targetUser, actionType) => {
+        const u = targetUser || user;
+        if (isUserPremiumOrVip(u)) {
             return true;
         }
 
         showAlert({
             title: "Premium Özellik 👑",
-            message: `${actionType === 'story' ? 'Hikaye' : 'Post'} paylaşmak için Premium üye olmalısın.`,
+            message: `${actionType === 'story' ? 'Hikaye' : 'Post'} paylaşmak için Premium veya VIP üye olmalısın.`,
             type: 'warning',
             showCancel: true,
             cancelText: "Vazgeç",
@@ -686,23 +694,47 @@ export default function ExploreScreen({ navigation, route }) {
         return false;
     };
 
-    const handleStoryCreation = () => {
-        const hasStory = !!user?.hasStory;
+    const handleStoryCreation = async () => {
+        let activeUser = user;
+        try {
+            const userStr = await AsyncStorage.getItem('user');
+            if (userStr) {
+                const parsed = JSON.parse(userStr);
+                activeUser = { ...activeUser, ...parsed };
+                if (user?.is_vip !== parsed.is_vip || user?.vip_level !== parsed.vip_level) {
+                    setUser(activeUser);
+                }
+            }
+        } catch (e) {}
+
+        const hasStory = !!activeUser?.hasStory;
 
         if (hasStory) {
             // Mevcut hikayeyi izle (kısıtlama yok)
-            navigation.navigate('Story', { story: { ...user, name: 'Sen', avatar: user.avatar_url || user.avatar, id: user.id, image_url: stories.find(s => s.operator_id === user.id)?.image_url } });
+            navigation.navigate('Story', { story: { ...activeUser, name: 'Sen', avatar: activeUser.avatar_url || activeUser.avatar, id: activeUser.id, image_url: stories.find(s => s.operator_id === activeUser.id)?.image_url } });
         } else {
             // Yeni hikaye ekle
-            if (checkVipAccess('story')) {
+            if (checkVipAccess(activeUser, 'story')) {
                 navigation.navigate('CreatePost', { isStory: true });
             }
         }
     };
 
-    const handlePostCreation = () => {
+    const handlePostCreation = async () => {
+        let activeUser = user;
+        try {
+            const userStr = await AsyncStorage.getItem('user');
+            if (userStr) {
+                const parsed = JSON.parse(userStr);
+                activeUser = { ...activeUser, ...parsed };
+                if (user?.is_vip !== parsed.is_vip || user?.vip_level !== parsed.vip_level) {
+                    setUser(activeUser);
+                }
+            }
+        } catch (e) {}
+
         // Yeni Post ekle
-        if (checkVipAccess('post')) {
+        if (checkVipAccess(activeUser, 'post')) {
             navigation.navigate('CreatePost', { isStory: false });
         }
     };

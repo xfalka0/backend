@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const db = require('../db');
 const { authenticateToken, authorizeRole } = require('../middleware/auth');
+const { getVipLevel } = require('../utils/vipUtils');
 
 // GET COIN PACKAGES (Admin)
 router.get('/', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
@@ -83,21 +84,28 @@ router.post('/purchase', authenticateToken, async (req, res) => {
         const packageId = pkgRes.rows[0].id;
 
         const updateRes = await db.query(
-            `UPDATE users SET total_spent = COALESCE(total_spent, 0) + $1, balance = COALESCE(balance, 0) + $2 WHERE id = $3 RETURNING balance, total_spent`,
+            `UPDATE users SET total_spent = COALESCE(total_spent, 0) + $1, balance = COALESCE(balance, 0) + $2, vip_xp = COALESCE(vip_xp, 0) + $2 WHERE id = $3 RETURNING balance, total_spent, vip_xp, vip_level`,
             [price, coinsToAdd, userId]
         );
         if (updateRes.rows.length === 0) { await db.query('ROLLBACK'); return res.status(404).json({ error: 'Kullanıcı güncellenemedi.' }); }
 
         const newBalance = updateRes.rows[0].balance;
         const newTotalSpent = parseFloat(updateRes.rows[0].total_spent);
-        let newVipLevel = 0;
-        if (newTotalSpent >= 5000) newVipLevel = 5;
-        else if (newTotalSpent >= 3500) newVipLevel = 4;
-        else if (newTotalSpent >= 2000) newVipLevel = 3;
-        else if (newTotalSpent >= 1000) newVipLevel = 2;
-        else if (newTotalSpent >= 500) newVipLevel = 1;
+        const newVipXp = parseInt(updateRes.rows[0].vip_xp || 0, 10);
+        const oldVipLevel = parseInt(updateRes.rows[0].vip_level || 0, 10);
 
-        await db.query('UPDATE users SET vip_level = $1 WHERE id = $2', [newVipLevel, userId]);
+        let newVipLevel = getVipLevel(newVipXp);
+        if (newTotalSpent >= 10000) newVipLevel = Math.max(newVipLevel, 6);
+        else if (newTotalSpent >= 5000) newVipLevel = Math.max(newVipLevel, 5);
+        else if (newTotalSpent >= 3500) newVipLevel = Math.max(newVipLevel, 4);
+        else if (newTotalSpent >= 2000) newVipLevel = Math.max(newVipLevel, 3);
+        else if (newTotalSpent >= 1000) newVipLevel = Math.max(newVipLevel, 2);
+        else if (newTotalSpent >= 500) newVipLevel = Math.max(newVipLevel, 1);
+
+        newVipLevel = Math.max(newVipLevel, oldVipLevel);
+        const isVip = newVipLevel > 0;
+
+        await db.query('UPDATE users SET vip_level = $1, is_vip = $2 WHERE id = $3', [newVipLevel, isVip, userId]);
         await db.query('INSERT INTO payments (user_id, package_id, transaction_id, amount, status) VALUES ($1, $2, $3, $4, $5)',
             [userId, packageId, transactionId || `manual_${Date.now()}`, price, 'completed']);
         await db.query('INSERT INTO transactions (user_id, amount, type, description) VALUES ($1, $2, $3, $4)',
@@ -105,6 +113,21 @@ router.post('/purchase', authenticateToken, async (req, res) => {
         await db.query('COMMIT');
 
         const io = req.app.get('io');
+        if (io) {
+            io.to(`user_${userId}`).emit('balance_update', {
+                balance: newBalance,
+                hearts: newBalance,
+                vip_level: newVipLevel,
+                vip_xp: newVipXp
+            });
+            if (newVipLevel > oldVipLevel) {
+                io.to(`user_${userId}`).emit('vip_level_up', {
+                    vip_level: newVipLevel,
+                    old_vip_level: oldVipLevel,
+                    vip_xp: newVipXp
+                });
+            }
+        }
 
         // REFERRAL RECHARGE REWARD LOGIC (First Purchase Only)
         try {

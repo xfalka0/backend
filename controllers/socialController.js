@@ -228,7 +228,7 @@ exports.adminCreateStory = async (req, res) => {
     if (!operator_id || !image_url) return res.status(400).json({ error: 'Operator ve görsel gerekli.' });
     try {
         const result = await db.query(
-            'INSERT INTO stories (operator_id, image_url) VALUES ($1, $2) RETURNING *',
+            "INSERT INTO stories (operator_id, image_url, expires_at) VALUES ($1, $2, NOW() + INTERVAL '24 hours') RETURNING *",
             [operator_id, image_url]
         );
         res.json(result.rows[0]);
@@ -247,12 +247,12 @@ exports.userCreatePost = async (req, res) => {
     try {
         const result = await db.query(
             'INSERT INTO posts (operator_id, image_url, content) VALUES ($1, $2, $3) RETURNING *',
-            [userId, image_url, content]
+            [userId, image_url, content || '']
         );
         res.json(result.rows[0]);
     } catch (err) {
         console.error('[SOCIAL] User Create Post Error:', err.message);
-        res.status(500).json({ error: 'Paylaşım yapılamadı.' });
+        res.status(500).json({ error: 'Paylaşım yapılamadı: ' + err.message });
     }
 };
 
@@ -265,13 +265,13 @@ exports.userCreateStory = async (req, res) => {
 
     try {
         const result = await db.query(
-            'INSERT INTO stories (operator_id, image_url) VALUES ($1, $2) RETURNING *',
+            "INSERT INTO stories (operator_id, image_url, expires_at) VALUES ($1, $2, NOW() + INTERVAL '24 hours') RETURNING *",
             [userId, image_url]
         );
         res.json(result.rows[0]);
     } catch (err) {
         console.error('[SOCIAL] User Create Story Error:', err.message);
-        res.status(500).json({ error: 'Hikaye paylaşılamadı.' });
+        res.status(500).json({ error: 'Hikaye paylaşılamadı: ' + err.message });
     }
 };
 

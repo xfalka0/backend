@@ -144,6 +144,22 @@ const VipProgressionScreen = ({ navigation, route }) => {
                 setNextThreshold(data.progress.nextThreshold);
                 setCoinAmount('');
 
+                // Sync storage
+                try {
+                    const storedUser = await AsyncStorage.getItem('user');
+                    if (storedUser) {
+                        const parsed = JSON.parse(storedUser);
+                        parsed.balance = data.newBalance;
+                        parsed.hearts = data.newBalance;
+                        parsed.vip_xp = data.newVipXp;
+                        parsed.vip_level = data.newVipLevel;
+                        parsed.is_vip = data.newVipLevel > 0;
+                        await AsyncStorage.setItem('user', JSON.stringify(parsed));
+                    }
+                } catch (sErr) {
+                    console.log('AsyncStorage sync error:', sErr);
+                }
+
                 // Show level up modal if leveled up
                 if (data.leveledUp) {
                     setAlert({

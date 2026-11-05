@@ -417,6 +417,8 @@ export default function ShopScreen({ navigation, route }) {
                 // Webhook already added coins to the balance — just fetch the updated balance.
                 const token = user?.token || await AsyncStorage.getItem('token');
                 let liveBalance = 0;
+                let liveVipLevel = undefined;
+                let liveVipXp = undefined;
 
                 // Wait briefly for webhook to process before fetching balance
                 await new Promise(resolve => setTimeout(resolve, 2000));
@@ -427,6 +429,8 @@ export default function ShopScreen({ navigation, route }) {
                     });
                     if (balRes.data && balRes.data.balance !== undefined) {
                         liveBalance = balRes.data.balance;
+                        liveVipLevel = balRes.data.vip_level;
+                        liveVipXp = balRes.data.vip_xp;
                     }
                 } catch (syncError) {
                     console.error('[SHOP] Balance fetch error after purchase:', syncError.message);
@@ -441,13 +445,16 @@ export default function ShopScreen({ navigation, route }) {
                     const parsed = JSON.parse(storedUser);
                     parsed.balance = liveBalance;
                     parsed.hearts = liveBalance;
+                    if (liveVipLevel !== undefined) parsed.vip_level = liveVipLevel;
+                    if (liveVipXp !== undefined) parsed.vip_xp = liveVipXp;
+                    if (liveVipLevel !== undefined) parsed.is_vip = liveVipLevel > 0;
                     await AsyncStorage.setItem('user', JSON.stringify(parsed));
                 }
 
                 setAlertConfig({
                     visible: true,
                     title: 'Tebrikler!',
-                    message: `Satın alım başarılı. \nYeni Bakiye: ${liveBalance}`,
+                    message: `Satın alım başarılı.${liveVipLevel ? `\nVIP Seviyesi: VIP ${liveVipLevel}` : ''}\nYeni Bakiye: ${liveBalance}`,
                     type: 'success'
                 });
             }

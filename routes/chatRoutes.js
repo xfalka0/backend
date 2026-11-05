@@ -24,15 +24,8 @@ router.get('/admin', authenticateToken, authorizeRole('admin', 'super_admin', 'o
             LEFT JOIN users op ON c.operator_id = op.id
         `;
         const params = [];
-        if (req.user.role !== 'admin' && req.user.role !== 'super_admin') {
-            query += ` WHERE op.managed_by = $1 `;
-            params.push(req.user.id);
-        } else {
-            // Admin/Super Admin should only see chats where the "operator_id" belongs to a management role
-            // to prevent private user-to-user chats from showing up in the panel.
-            query += ` WHERE EXISTS (SELECT 1 FROM messages m WHERE m.chat_id = c.id) 
-                       AND op.role IN ('operator', 'staff', 'moderator', 'admin', 'super_admin') `;
-        }
+        // All staff, operators, moderators and admins see all chats that have messages
+        query += ` WHERE EXISTS (SELECT 1 FROM messages m WHERE m.chat_id = c.id) `;
         query += ` ORDER BY c.last_message_at DESC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
         params.push(limit, offset);
 

@@ -1,14 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { 
     Wallet, 
-    TrendingUp, 
-    MessageSquare, 
-    Zap, 
-    ArrowUpRight, 
     Clock,
-    DollarSign,
     Trophy,
-    Target,
     Activity
 } from 'lucide-react';
 import axios from 'axios';
@@ -49,38 +43,6 @@ const StaffDashboard = () => {
             </div>
         );
     }
-
-    const StatCard = ({ title, value, tlValue, icon: Icon, color, subText, count }) => {
-        return (
-            <div className="bg-slate-900/50 backdrop-blur-3xl border border-white/5 p-6 rounded-[32px] relative overflow-hidden group hover:border-white/10 transition-all duration-500">
-                <div className={`absolute top-0 right-0 w-32 h-32 bg-${color}-600/10 blur-[60px] rounded-full -mr-16 -mt-16 group-hover:bg-${color}-600/20 transition-all duration-700`} />
-                
-                <div className="flex items-start justify-between relative z-10">
-                    <div className="flex-1">
-                        <p className="text-slate-500 text-[10px] font-black uppercase tracking-[0.2em] mb-3">{title}</p>
-                        <div className="flex flex-col gap-1">
-                            <h3 className="text-3xl font-black text-white tracking-tighter">
-                                {tlValue.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} <span className="text-sm font-bold text-slate-600 ml-1">TL</span>
-                            </h3>
-                            <div className="flex items-center gap-3">
-                                <span className="text-[10px] font-bold text-slate-500/60 uppercase">
-                                    {(parseFloat(value) || 0).toLocaleString('tr-TR', { minimumFractionDigits: 1 })} COIN
-                                </span>
-                                {count !== undefined && (
-                                    <span className="text-[10px] font-black text-blue-400 bg-blue-400/10 px-2 py-0.5 rounded-full uppercase tracking-tighter">
-                                        {count} ADET
-                                    </span>
-                                )}
-                            </div>
-                        </div>
-                    </div>
-                    <div className={`w-12 h-12 rounded-2xl bg-${color}-600/10 border border-${color}-500/20 flex items-center justify-center text-${color}-400 shadow-xl group-hover:scale-110 transition-transform duration-500`}>
-                        <Icon size={20} />
-                    </div>
-                </div>
-            </div>
-        );
-    };
 
     return (
         <div className="p-8 space-y-10 animate-in fade-in slide-in-from-bottom-4 duration-1000 max-w-7xl mx-auto">
@@ -131,50 +93,6 @@ const StaffDashboard = () => {
                             </div>
                         </div>
                     </div>
-                </div>
-            </div>
-
-            {/* Today's Detailed Section */}
-            <div className="space-y-6">
-                <div className="flex items-center gap-4">
-                    <div className="h-px flex-1 bg-white/5" />
-                    <h3 className="text-[11px] font-black text-slate-500 uppercase tracking-[0.4em]">Bugünkü Detaylı Kazanç</h3>
-                    <div className="h-px flex-1 bg-white/5" />
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                    <StatCard 
-                        title="Atılan Metin Mesajı" 
-                        value={parseFloat(stats?.text_earned_today || 0)}
-                        tlValue={parseFloat(stats?.text_earned_today || 0) * 0.5}
-                        count={stats?.text_count_today || 0}
-                        icon={MessageSquare} 
-                        color="blue"
-                    />
-                    <StatCard 
-                        title="Alınan Fotoğraflar" 
-                        value={parseFloat(stats?.image_earned_today || 0)}
-                        tlValue={parseFloat(stats?.image_earned_today || 0) * 0.5}
-                        count={stats?.image_count_today || 0}
-                        icon={ArrowUpRight} 
-                        color="purple"
-                    />
-                    <StatCard 
-                        title="Sesli Mesaj Kazancı" 
-                        value={parseFloat(stats?.audio_earned_today || 0)}
-                        tlValue={parseFloat(stats?.audio_earned_today || 0) * 0.5}
-                        count={stats?.audio_count_today || 0}
-                        icon={Zap} 
-                        color="amber"
-                    />
-                    <StatCard 
-                        title="Hediye Kazancı" 
-                        value={parseFloat(stats?.gift_earned_today || 0)}
-                        tlValue={parseFloat(stats?.gift_earned_today || 0) * 0.5}
-                        count={stats?.gift_count_today || 0}
-                        icon={Trophy} 
-                        color="rose"
-                    />
                 </div>
             </div>
 
@@ -233,39 +151,6 @@ const StaffDashboard = () => {
                             )}
                         </tbody>
                     </table>
-                </div>
-            </div>
-
-            {/* Earnings Guide Card */}
-            <div className="bg-slate-900/60 backdrop-blur-3xl border border-white/5 rounded-[48px] p-10">
-                <div className="mb-10">
-                    <h3 className="text-2xl font-black text-white mb-4">Kazanç Rehberiniz</h3>
-                    <p className="text-slate-500 text-sm font-medium leading-relaxed">
-                        Hakedişleriniz otomatik olarak hesaplanır. Her etkileşim türü için belirlenen TL tutarları aşağıdadır.
-                    </p>
-                </div>
-                
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                    <div className="bg-white/5 p-6 rounded-3xl border border-white/5 group hover:bg-blue-500/10 transition-all">
-                        <p className="text-blue-400 text-[10px] font-black uppercase tracking-widest mb-2">Metin Mesajı</p>
-                        <p className="text-2xl font-black text-white">1.15₺</p>
-                        <p className="text-[10px] text-slate-600 mt-2 font-bold uppercase">2.3 COIN / MESAJ</p>
-                    </div>
-                    <div className="bg-white/5 p-6 rounded-3xl border border-white/5 group hover:bg-purple-500/10 transition-all">
-                        <p className="text-purple-400 text-[10px] font-black uppercase tracking-widest mb-2">Fotoğraf</p>
-                        <p className="text-2xl font-black text-white">10.00₺</p>
-                        <p className="text-[10px] text-slate-600 mt-2 font-bold uppercase">20 COIN / FOTO</p>
-                    </div>
-                    <div className="bg-white/5 p-6 rounded-3xl border border-white/5 group hover:bg-amber-500/10 transition-all">
-                        <p className="text-amber-400 text-[10px] font-black uppercase tracking-widest mb-2">Ses Kaydı</p>
-                        <p className="text-2xl font-black text-white">5.00₺</p>
-                        <p className="text-[10px] text-slate-600 mt-2 font-bold uppercase">10 COIN / SES</p>
-                    </div>
-                    <div className="bg-white/5 p-6 rounded-3xl border border-white/5 group hover:bg-rose-500/10 transition-all">
-                        <p className="text-rose-400 text-[10px] font-black uppercase tracking-widest mb-2">Hediye</p>
-                        <p className="text-2xl font-black text-white">%25</p>
-                        <p className="text-[10px] text-slate-600 mt-2 font-bold uppercase">COIN TUTARI ÜZERİNDEN</p>
-                    </div>
                 </div>
             </div>
         </div>

@@ -3896,16 +3896,8 @@ app.get('/api/chats/admin', authenticateToken, authorizeRole('admin', 'super_adm
 
         const params = [];
 
-        // --- FILTERING LOGIC (Zimmetleme) ---
-        // If not admin/super_admin, only show chats for profiles managed by this user
-        if (req.user.role !== 'admin' && req.user.role !== 'super_admin') {
-            query += ` WHERE op.managed_by = $1 `;
-            params.push(req.user.id);
-            console.log(`[ADMIN] Restricting view to profiles managed by user ${req.user.id}`);
-        } else {
-            // Admin sees all chats that have messages
-            query += ` WHERE EXISTS (SELECT 1 FROM messages m WHERE m.chat_id = c.id) `;
-        }
+        // All staff, operators, moderators and admins see all chats that have messages
+        query += ` WHERE EXISTS (SELECT 1 FROM messages m WHERE m.chat_id = c.id) `;
 
         query += ` ORDER BY c.last_message_at DESC `;
         

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, TextInput, FlatList, StyleSheet, KeyboardAvoidingView, Platform, TouchableOpacity, Image, RefreshControl, Animated, ScrollView, Keyboard, PanResponder, Alert, Linking } from 'react-native';
+import { View, Text, TextInput, FlatList, StyleSheet, KeyboardAvoidingView, Platform, TouchableOpacity, Image, RefreshControl, Animated, ScrollView, Keyboard, PanResponder, Alert, Linking, BackHandler } from 'react-native';
 
 import * as Haptics from 'expo-haptics';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -106,6 +106,19 @@ export default function ChatScreen({ route, navigation }) {
             hideSub.remove();
         };
     }, []);
+
+    useEffect(() => {
+        const onBackPress = () => {
+            if (navigation.canGoBack()) {
+                navigation.goBack();
+            } else {
+                navigation.navigate('Main');
+            }
+            return true;
+        };
+        const backSub = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+        return () => backSub.remove();
+    }, [navigation]);
 
     // Zustand Role & Locked Image Configuration States
     const [selectedImageUri, setSelectedImageUri] = useState(null);
@@ -2366,7 +2379,7 @@ export default function ChatScreen({ route, navigation }) {
             </Modal>
 
             <KeyboardAvoidingView
-                behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+                behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
                 keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
                 style={{ flex: 1 }}
             >
@@ -2382,11 +2395,12 @@ export default function ChatScreen({ route, navigation }) {
                     maxToRenderPerBatch={10}
                     windowSize={10}
                     initialNumToRender={15}
+                    style={{ flex: 1 }}
                 />
 
                 {isTyping && <TypingIndicator />}
 
-                <View style={[styles.modernInputWrapper, { paddingBottom: isKeyboardVisible ? (Platform.OS === 'ios' ? 8 : 6) : Math.max(insets.bottom + 10, Platform.OS === 'ios' ? 20 : 14) }]}>
+                <View style={[styles.modernInputWrapper, { paddingBottom: isKeyboardVisible ? (Platform.OS === 'ios' ? 8 : 4) : Math.max(insets.bottom + 8, Platform.OS === 'ios' ? 20 : 14) }]}>
                     {/* renderIcebreakers() is now handled by QuickActionsModal */}
                     <GlassCard intensity={40} tint="dark" style={styles.glassInputContainer}>
                         <View style={styles.inputRow}>

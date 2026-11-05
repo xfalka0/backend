@@ -114,8 +114,8 @@ android {
         applicationId 'com.fivachat.app'
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 101
-        versionName "1.0.2"
+        versionCode 108
+        versionName "1.0.8"
     }
     signingConfigs {
         debug {
@@ -125,10 +125,10 @@ android {
             keyPassword 'android'
         }
         release {
-            storeFile file('debug.keystore')
-            storePassword 'android'
-            keyAlias 'androiddebugkey'
-            keyPassword 'android'
+            storeFile file('fiva-release.keystore')
+            storePassword 'fiva1234'
+            keyAlias 'fiva-key'
+            keyPassword 'fiva1234'
         }
     }
     splits {
@@ -145,8 +145,8 @@ android {
         }
         release {
             signingConfig signingConfigs.release
-            shrinkResources false
-            minifyEnabled false
+            shrinkResources true
+            minifyEnabled true
             proguardFiles getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro"
             crunchPngs (findProperty('android.enablePngCrunchInReleaseBuilds')?.toBoolean() ?: true)
         }

@@ -1,6 +1,6 @@
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import React, { useEffect } from 'react';
-import { View, StyleSheet, Dimensions, Platform, LogBox } from 'react-native';
+import { View, StyleSheet, Dimensions, Platform, LogBox, BackHandler } from 'react-native';
 
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
@@ -86,6 +86,7 @@ function MainTabs({ route }) {
         <Tab.Navigator
             tabBar={props => <AnimatedTabBar {...props} />}
             screenOptions={{ headerShown: false }}
+            backBehavior="firstRoute"
         >
             <Tab.Screen
                 name="Ana Sayfa"
@@ -163,6 +164,18 @@ function AppContent() {
             }
         });
         return () => subscription.remove();
+    }, []);
+
+    useEffect(() => {
+        const onHardwareBack = () => {
+            if (navigationRef.isReady() && navigationRef.canGoBack()) {
+                navigationRef.goBack();
+                return true;
+            }
+            return false;
+        };
+        const backSub = BackHandler.addEventListener('hardwareBackPress', onHardwareBack);
+        return () => backSub.remove();
     }, []);
 
     return (

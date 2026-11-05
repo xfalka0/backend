@@ -109,48 +109,8 @@ const logActivity = async (io, userId, actionType, description) => {
 
 // Add fake social interactions for new users (Favorites and Views)
 const assignFakeInteractions = async (newUserId) => {
-    try {
-        // Fetch user gender first
-        const userRes = await db.query('SELECT gender FROM users WHERE id = $1', [newUserId]);
-        if (userRes.rows.length === 0) return;
-        
-        const userGenderRaw = userRes.rows[0].gender || 'erkek';
-        const userGender = (userGenderRaw === 'male' || userGenderRaw === 'erkek') ? 'erkek' : 'kadin';
-        const targetGender = userGender === 'kadin' ? 'erkek' : 'kadin';
-
-        // Find random active users of OPPOSITE gender
-        const limitCount = Math.floor(Math.random() * 6) + 3;
-        const randomUsers = await db.query(
-            "SELECT id FROM users WHERE id != $1 AND account_status = 'active' AND gender = $2 AND role = 'user' ORDER BY RANDOM() LIMIT $3",
-            [newUserId, targetGender, limitCount]
-        );
-
-        if (randomUsers.rows.length === 0) return;
-
-        const fakeUsers = randomUsers.rows;
-
-        for (let i = 0; i < fakeUsers.length; i++) {
-            const actorId = fakeUsers[i].id;
-
-            if (Math.random() > 0.4) {
-                await db.query(
-                    'INSERT INTO favorites (user_id, target_user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING',
-                    [actorId, newUserId]
-                );
-            }
-
-            if (Math.random() > 0.2) {
-                const randomSeconds = Math.floor(Math.random() * 86400);
-                await db.query(
-                    `INSERT INTO profile_views (viewer_id, viewed_user_id, created_at) 
-                     VALUES ($1, $2, NOW() - INTERVAL '${randomSeconds} seconds')`,
-                    [actorId, newUserId]
-                );
-            }
-        }
-    } catch (err) {
-        console.error("Fake Interaction Error:", err.message);
-    }
+    // %100 dogal ve gercek: otomatik sahte takip/goruntuleme kaldirildi
+    return;
 };
 
 // Auto-Engagement functions moved to dedicated autoMessageSystem.js

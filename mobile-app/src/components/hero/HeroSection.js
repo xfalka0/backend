@@ -22,8 +22,16 @@ const HeroSection = ({
     return (
         <View style={styles.container}>
             <View style={[styles.headerWrapper, { paddingTop: insets.top }]}>
-                {/* Left Side: Empty */}
-                <View style={{ flex: 1 }} />
+                {/* Left Side: Brand Logo & Title */}
+                <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+                    <Image 
+                        source={require('../../../assets/icon.png')} 
+                        style={{ width: 34, height: 34, borderRadius: 10, marginRight: 8 }} 
+                    />
+                    <Text style={{ color: '#fff', fontSize: 20, fontWeight: '900', letterSpacing: 0.5 }}>
+                        Fiva
+                    </Text>
+                </View>
 
                 {/* Right Side: Notifications & Leaderboard */}
                 <View style={styles.rightHeader}>

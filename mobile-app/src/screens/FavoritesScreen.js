@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, Image, Dimensions, Platform } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, Image, Dimensions, Platform, StatusBar } from 'react-native';
 import Animated, { FadeInDown, Layout } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
 import { useFocusEffect } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
+import MaskedView from '@react-native-masked-view/masked-view';
 import { BlurView } from 'expo-blur';
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -17,15 +18,6 @@ import AnimatedEmptyState from '../components/ui/AnimatedEmptyState';
 
 const { width } = Dimensions.get('window');
 
-const INITIAL_FAKE_FANS = [
-    { id: 'fake1', name: 'Buse', username: 'Buse', avatar_url: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=150', created_at: new Date(Date.now() - 1000 * 60 * 12).toISOString(), is_blurred: true, vip_level: 0 },
-    { id: 'fake2', name: 'Merve', username: 'Merve', avatar_url: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150', created_at: new Date(Date.now() - 1000 * 60 * 38).toISOString(), is_blurred: true, vip_level: 2 },
-    { id: 'fake3', name: 'Ece', username: 'Ece', avatar_url: 'https://images.unsplash.com/photo-1524504388940-b1c1722653e1?w=150', created_at: new Date(Date.now() - 1000 * 3600 * 1.5).toISOString(), is_blurred: true, vip_level: 0 },
-    { id: 'fake4', name: 'Selin', username: 'Selin', avatar_url: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=150', created_at: new Date(Date.now() - 1000 * 3600 * 3).toISOString(), is_blurred: true, vip_level: 3 },
-    { id: 'fake5', name: 'Dilan', username: 'Dilan', avatar_url: 'https://images.unsplash.com/photo-1488426862026-3ee34a7d66df?w=150', created_at: new Date(Date.now() - 1000 * 3600 * 6).toISOString(), is_blurred: true, vip_level: 1 },
-    { id: 'fake6', name: 'Melisa', username: 'Melisa', avatar_url: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150', created_at: new Date(Date.now() - 1000 * 3600 * 12).toISOString(), is_blurred: true, vip_level: 0 },
-    { id: 'fake7', name: 'Hilal', username: 'Hilal', avatar_url: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150', created_at: new Date(Date.now() - 1000 * 3600 * 18).toISOString(), is_blurred: true, vip_level: 4 },
-];
 
 export default function FavoritesScreen({ navigation, route }) {
     const { theme } = useTheme();
@@ -33,7 +25,7 @@ export default function FavoritesScreen({ navigation, route }) {
     
     const [activeTab, setActiveTab] = useState(route?.params?.initialTab || 'whoFavoritedMe'); // 'whoFavoritedMe' or 'whoIFavorited'
     const [favorites, setFavorites] = useState([]); // People I favorited
-    const [fans, setFans] = useState(INITIAL_FAKE_FANS); // People who favorited me
+    const [fans, setFans] = useState([]); // People who favorited me
     const [isVIP, setIsVIP] = useState(false);
     const [loading, setLoading] = useState(true);
     const [currentUser, setCurrentUser] = useState(user || null);
@@ -79,12 +71,6 @@ export default function FavoritesScreen({ navigation, route }) {
                 const userVipLevel = parseInt(currentUser?.vip_level || 0, 10);
                 const isUserVIP = res.data.isVIP || userVipLevel >= 4;
                 
-                if (fetchedFans.length === 0) {
-                    fetchedFans = INITIAL_FAKE_FANS.map(f => ({
-                        ...f,
-                        is_blurred: !isUserVIP
-                    }));
-                }
                 setFans(fetchedFans);
             } else {
                 const res = await axios.get(`${API_URL}/favorites/${targetUserId}`, {
@@ -202,17 +188,29 @@ export default function FavoritesScreen({ navigation, route }) {
     const currentList = activeTab === 'whoFavoritedMe' ? fans : favorites;
 
     return (
-        <View style={styles.container}>
-            {/* Background Image Layer identical to Profile Screen */}
-            <View style={styles.bgWrapper}>
-                <Image 
-                    source={require('../../assets/fiva_profile_banner.png')} 
-                    style={styles.backgroundImage}
-                />
-                <LinearGradient
-                    colors={['rgba(9, 2, 26, 0.15)', 'rgba(9, 2, 26, 0.8)', '#09021a']}
+        <LinearGradient
+            colors={theme.mode === 'dark' ? theme.gradients.dark : [theme.colors.background, theme.colors.backgroundSecondary]}
+            style={styles.container}
+        >
+            <StatusBar barStyle="light-content" />
+
+            {/* Background Fiva Banner with Smooth Alpha Mask identical to Profile Screen */}
+            <View style={styles.bgWrapper} pointerEvents="none">
+                <MaskedView
                     style={StyleSheet.absoluteFill}
-                />
+                    maskElement={
+                        <LinearGradient
+                            colors={['rgba(0,0,0,1)', 'rgba(0,0,0,0.9)', 'rgba(0,0,0,0.45)', 'rgba(0,0,0,0.1)', 'transparent']}
+                            locations={[0, 0.3, 0.58, 0.85, 1]}
+                            style={StyleSheet.absoluteFill}
+                        />
+                    }
+                >
+                    <Image
+                        source={require('../../assets/fivabanner.png')}
+                        style={[styles.backgroundImage, { opacity: 0.75 }]}
+                    />
+                </MaskedView>
             </View>
 
             {/* Header */}
@@ -336,7 +334,7 @@ export default function FavoritesScreen({ navigation, route }) {
                     )}
                 </View>
             )}
-        </View>
+        </LinearGradient>
     );
 }
 
@@ -347,8 +345,11 @@ const styles = StyleSheet.create({
     },
     bgWrapper: {
         position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
         width: '100%',
-        height: 400,
+        height: 450,
     },
     backgroundImage: {
         width: '100%',

@@ -7,6 +7,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.view.ViewTreeObserver
 import android.widget.EditText
+import androidx.activity.OnBackPressedCallback
 
 import com.facebook.react.ReactActivity
 import com.facebook.react.ReactActivityDelegate
@@ -16,6 +17,8 @@ import com.facebook.react.defaults.DefaultReactActivityDelegate
 import expo.modules.ReactActivityDelegateWrapper
 
 class MainActivity : ReactActivity() {
+
+  private var customDelegate: ReactActivityDelegate? = null
 
   private val layoutListener = ViewTreeObserver.OnGlobalLayoutListener {
     clearEditTextBackgrounds(window.decorView)
@@ -43,6 +46,17 @@ class MainActivity : ReactActivity() {
     super.onCreate(null)
     // Clear native EditText backgrounds that cause a dark strip on focus/typing
     window.decorView.viewTreeObserver.addOnGlobalLayoutListener(layoutListener)
+
+    // Intercept hardware and gesture back presses on Android 13+ / 14+ / 15+ / 16+
+    onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
+      override fun handleOnBackPressed() {
+        if (customDelegate?.onBackPressed() != true) {
+          isEnabled = false
+          onBackPressedDispatcher.onBackPressed()
+          isEnabled = true
+        }
+      }
+    })
   }
 
   override fun onDestroy() {
@@ -77,7 +91,7 @@ class MainActivity : ReactActivity() {
    * which allows you to enable New Architecture with a single boolean flags [fabricEnabled]
    */
   override fun createReactActivityDelegate(): ReactActivityDelegate {
-    return ReactActivityDelegateWrapper(
+    val delegate = ReactActivityDelegateWrapper(
           this,
           BuildConfig.IS_NEW_ARCHITECTURE_ENABLED,
           object : DefaultReactActivityDelegate(
@@ -85,6 +99,8 @@ class MainActivity : ReactActivity() {
               mainComponentName,
               fabricEnabled
           ){})
+    customDelegate = delegate
+    return delegate
   }
 
   /**

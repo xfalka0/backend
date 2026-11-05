@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, Image, StyleSheet, TouchableOpacity, Dimensions, Pressable, Platform, InteractionManager, Alert } from 'react-native';
+import { View, Text, Image, StyleSheet, TouchableOpacity, Dimensions, Pressable, Platform, InteractionManager, Alert, BackHandler } from 'react-native';
 import axios from 'axios';
 import { API_URL } from '../config';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -38,6 +38,20 @@ export default function OperatorProfileScreen({ route, navigation }) {
     const [isImageViewerVisible, setIsImageViewerVisible] = useState(false);
     const [currentImageIndex, setCurrentImageIndex] = useState(0);
     const [followerStats, setFollowerStats] = useState({ followers: 0, following: 0 });
+
+    useEffect(() => {
+        const onBackPress = () => {
+            if (navigation.canGoBack()) {
+                navigation.goBack();
+            } else {
+                navigation.navigate('Main');
+            }
+            return true;
+        };
+
+        const backSub = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+        return () => backSub.remove();
+    }, [navigation]);
 
     useEffect(() => {
         const targetId = initialOperator?.user_id || initialOperator?.id;

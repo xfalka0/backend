@@ -5,27 +5,22 @@ import {
     StyleSheet,
     SafeAreaView,
     Dimensions,
-    TouchableOpacity,
     Platform,
-    ActivityIndicator,
     Alert,
+    Image,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import Animated, {
     FadeIn,
-    FadeOut,
     FadeInUp,
     useAnimatedStyle,
     useSharedValue,
     withRepeat,
     withTiming,
     withSequence,
-    interpolate,
     withSpring,
-    withDelay,
 } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
-import { BlurView } from 'expo-blur';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
@@ -33,13 +28,9 @@ import { GoogleSignin, statusCodes } from '@react-native-google-signin/google-si
 
 import FloatingProfiles from '../components/animated/FloatingProfiles';
 import WelcomeButton from '../components/ui/WelcomeButton';
-import { COLORS } from '../theme';
 import { API_URL } from '../config';
-import { useAppStore } from '../store/useAppStore';
 
 const { width, height } = Dimensions.get('window');
-
-const AnimatedBlurView = Animated.createAnimatedComponent(BlurView);
 
 const LoadingHeart = () => {
     const scale = useSharedValue(1);
@@ -77,10 +68,9 @@ export default function WelcomeScreen({ navigation }) {
     const [onlineCount, setOnlineCount] = useState(142);
 
     useEffect(() => {
-        console.log('--- WelcomeScreen Mounted ---');
         bubbleY.value = withRepeat(
             withSequence(
-                withSpring(-10, { damping: 10, stiffness: 100 }),
+                withSpring(-8, { damping: 10, stiffness: 100 }),
                 withSpring(0, { damping: 10, stiffness: 100 })
             ),
             -1,
@@ -88,7 +78,6 @@ export default function WelcomeScreen({ navigation }) {
         );
 
         try {
-            console.log('--- Configuring Google Sign-in ---');
             GoogleSignin.configure({
                 webClientId: '46669084263-drv76chuoahgvfitcdmctvvqm3cbudl7.apps.googleusercontent.com',
                 androidClientId: '46669084263-vk43fvjtff4f95ep61rr8cv5mvj4t1h6.apps.googleusercontent.com',
@@ -107,7 +96,6 @@ export default function WelcomeScreen({ navigation }) {
         }, 3000);
 
         return () => {
-            console.log('--- WelcomeScreen Unmounted ---');
             clearInterval(interval);
         };
     }, []);
@@ -117,7 +105,6 @@ export default function WelcomeScreen({ navigation }) {
     }));
 
     const handleGoogleLogin = async () => {
-        console.log('--- Google Login Clicked ---');
         if (loading) return;
         setLoading(true);
         try {
@@ -171,16 +158,22 @@ export default function WelcomeScreen({ navigation }) {
             </View>
 
             {/* 2. INTERACTIVE LAYER */}
-            <SafeAreaView style={[styles.safeArea, { paddingBottom: insets.bottom }]}>
+            <SafeAreaView style={[styles.safeArea, { paddingTop: Math.max(insets.top, 16), paddingBottom: Math.max(insets.bottom, 16) }]}>
                 <View style={styles.content}>
                     {/* Top Logo Section */}
-                    <Animated.View entering={FadeIn.delay(300).duration(1000)} style={styles.header}>
-                        <View style={styles.logoCircle}>
+                    <Animated.View entering={FadeIn.delay(200).duration(800)} style={styles.header}>
+                        <View style={styles.logoContainer}>
                             <LinearGradient
-                                colors={['#8b5cf6', '#ec4899']}
+                                colors={['#4a152e', '#230a17', '#12050c']}
+                                start={{ x: 0, y: 0 }}
+                                end={{ x: 1, y: 1 }}
                                 style={styles.logoGradient}
                             >
-                                <Ionicons name="heart" size={40} color="white" />
+                                <Image
+                                    source={require('../../assets/fiva_heart_clean.png')}
+                                    style={styles.logoImage}
+                                    resizeMode="contain"
+                                />
                             </LinearGradient>
                         </View>
                         <Animated.View style={[styles.onlineBubble, bubbleStyle]}>
@@ -192,77 +185,49 @@ export default function WelcomeScreen({ navigation }) {
 
                     {/* Middle Section (Vertically Centered Title & Subtitle) */}
                     <View style={styles.middleSection}>
-                        <Animated.View
-                            entering={FadeInUp.delay(500).springify()}
-                            style={{ width: '100%', alignItems: 'center' }}
-                        >
-                            <Text style={styles.title}>Yeni insanlarla tanış</Text>
-                        </Animated.View>
-
-                        <Animated.View
-                            entering={FadeInUp.delay(650).springify()}
-                            style={{ width: '100%', alignItems: 'center', marginTop: 10 }}
-                        >
-                            <Text style={styles.subtitle}>Sohbet et, bağlan, eğlen</Text>
+                        <Animated.View entering={FadeInUp.delay(400).duration(800)} style={styles.titleWrapper}>
+                            <Text style={styles.title}>Fiva</Text>
+                            <Text style={styles.subtitle}>Gerçek bağlantılar, samimi sohbetler.</Text>
                         </Animated.View>
                     </View>
 
-                    {/* Bottom Section (Buttons & Footer Links) */}
+                    {/* Bottom Section: Buttons & Footer */}
                     <View style={styles.bottomSection}>
                         <View style={styles.buttonContainer}>
-                            <Animated.View
-                                entering={FadeInUp.delay(800).springify()}
-                                style={{ width: '90%', alignItems: 'center', marginTop: 0 }}
-                            >
+                            <Animated.View entering={FadeInUp.delay(600).duration(800)} style={styles.buttonWrapper}>
                                 <WelcomeButton
-                                    title="Google ile devam et"
+                                    title="Google ile Devam Et"
                                     icon="logo-google"
                                     onPress={handleGoogleLogin}
                                     loading={loading}
                                     variant="gradient"
-                                    gradient={['#4285F4', '#34b356ff', '#34b356ff', '#4285F4']}
+                                    gradient={['#4285F4', '#34A853']}
                                 />
                             </Animated.View>
 
-                            <Animated.View
-                                entering={FadeInUp.delay(1000).springify()}
-                                style={{ width: '90%', alignItems: 'center', marginTop: 12 }}
-                            >
+                            <Animated.View entering={FadeInUp.delay(750).duration(800)} style={styles.buttonWrapper}>
                                 <WelcomeButton
-                                    title="E-posta ile devam et"
-                                    icon="mail"
+                                    title="E-posta ile Devam Et"
+                                    icon="mail-outline"
                                     onPress={() => navigation.navigate('Auth', { mode: 'email' })}
                                     loading={loading}
                                     variant="gradient"
                                     gradient={['#8b5cf6', '#ec4899']}
                                 />
                             </Animated.View>
-
                         </View>
 
-                        <Animated.View entering={FadeInUp.delay(1000).springify()} style={styles.footerLinks}>
+                        <Animated.View entering={FadeInUp.delay(900).duration(800)} style={styles.footerLinks}>
                             <Text style={styles.footerText}>
                                 Devam ederek{' '}
-                                <Text
-                                    style={styles.linkText}
-                                    onPress={() => {
-                                        console.log('--- Navigating to Terms ---');
-                                        navigation.navigate('Legal', { type: 'terms' });
-                                    }}
-                                >
-                                    Şartlar
+                                <Text style={styles.linkText} onPress={() => navigation.navigate('Legal', { type: 'terms' })}>
+                                    Kullanım Koşulları
                                 </Text>
-                                {' ve '}
-                                <Text
-                                    style={styles.linkText}
-                                    onPress={() => {
-                                        console.log('--- Navigating to Privacy ---');
-                                        navigation.navigate('Legal', { type: 'privacy' });
-                                    }}
-                                >
-                                    Gizlilik
+                                'nı ve{' '}
+                                <Text style={styles.linkText} onPress={() => navigation.navigate('Legal', { type: 'privacy' })}>
+                                    Gizlilik Politikası
                                 </Text>
-                                {' Politikasını kabul etmiş olursun.'}
+                                'nı kabul etmiş olursunuz.
                             </Text>
                         </Animated.View>
                     </View>
@@ -302,37 +267,55 @@ const styles = StyleSheet.create({
     },
     content: {
         flex: 1,
-        paddingHorizontal: 30,
+        paddingHorizontal: 28,
         justifyContent: 'space-between',
-        paddingBottom: 20, // Reduced base padding
-        paddingTop: 20,
+        paddingTop: Platform.OS === 'ios' ? 10 : 20,
+        paddingBottom: Platform.OS === 'ios' ? 24 : 32,
     },
     header: {
         alignItems: 'center',
+        paddingTop: Platform.OS === 'ios' ? 12 : 24,
     },
-    logoCircle: {
-        width: 100,
-        height: 100,
-        borderRadius: 50,
-        padding: 3,
-        backgroundColor: 'rgba(255,255,255,0.2)',
+    logoContainer: {
+        width: 86,
+        height: 86,
+        borderRadius: 24,
+        overflow: 'hidden',
+        borderWidth: 1.5,
+        borderColor: 'rgba(255, 255, 255, 0.16)',
+        backgroundColor: '#1b0c11',
+        ...Platform.select({
+            ios: {
+                shadowColor: '#ec4899',
+                shadowOffset: { width: 0, height: 6 },
+                shadowOpacity: 0.35,
+                shadowRadius: 12,
+            },
+            android: {
+                elevation: 8,
+            },
+        }),
     },
     logoGradient: {
         flex: 1,
-        borderRadius: 50,
         alignItems: 'center',
         justifyContent: 'center',
+        padding: 10,
+    },
+    logoImage: {
+        width: '100%',
+        height: '100%',
     },
     onlineBubble: {
-        marginTop: 20,
+        marginTop: 14,
         borderRadius: 20,
         overflow: 'hidden',
         borderWidth: 1,
-        borderColor: 'rgba(255,255,255,0.1)',
+        borderColor: 'rgba(255,255,255,0.12)',
     },
     bubbleBlur: {
-        paddingHorizontal: 16,
-        paddingVertical: 8,
+        paddingHorizontal: 14,
+        paddingVertical: 6,
         backgroundColor: 'rgba(255,255,255,0.1)',
     },
     bubbleText: {
@@ -346,11 +329,11 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         alignItems: 'center',
         width: '100%',
-        marginVertical: 20,
+        paddingVertical: 10,
     },
-    bottomSection: {
-        width: '100%',
+    titleWrapper: {
         alignItems: 'center',
+        width: '100%',
     },
     title: {
         fontSize: 34,
@@ -362,33 +345,43 @@ const styles = StyleSheet.create({
         letterSpacing: -0.5,
     },
     subtitle: {
-        fontSize: 18,
-        color: 'rgba(255,255,255,0.7)',
+        fontSize: 16,
+        color: 'rgba(255,255,255,0.75)',
         textAlign: 'center',
         fontFamily: 'Outfit_400Regular',
         fontWeight: '400',
+        lineHeight: 22,
+        paddingHorizontal: 16,
+    },
+    bottomSection: {
+        width: '100%',
+        alignItems: 'center',
+        marginBottom: Platform.OS === 'ios' ? 48 : 68,
     },
     buttonContainer: {
         width: '100%',
         alignItems: 'center',
         justifyContent: 'center',
-        transform: [{ translateY: -50 }],
+        marginBottom: 6,
+    },
+    buttonWrapper: {
+        width: '100%',
     },
     footerLinks: {
-        marginTop: 40,
+        marginTop: 30,
         width: '100%',
-        paddingHorizontal: 50, // Massive padding to force wrapping
+        paddingHorizontal: 16,
         alignItems: 'center',
         justifyContent: 'center',
     },
     footerText: {
-        color: 'rgba(255,255,255,0.4)',
+        color: 'rgba(255,255,255,0.45)',
         fontSize: 12,
         textAlign: 'center',
         lineHeight: 18,
     },
     linkText: {
-        color: 'rgba(255,255,255,0.6)',
+        color: 'rgba(255,255,255,0.75)',
         fontWeight: '600',
         textDecorationLine: 'underline',
     },
@@ -423,22 +416,5 @@ const styles = StyleSheet.create({
         fontFamily: 'Outfit_800ExtraBold',
         letterSpacing: 1,
         opacity: 0.8,
-    },
-    emailButton: {
-        paddingVertical: 14,
-        paddingHorizontal: 28,
-        borderRadius: 25,
-        backgroundColor: 'rgba(255, 255, 255, 0.05)',
-        borderWidth: 1.5,
-        borderColor: 'rgba(255, 255, 255, 0.1)',
-        width: '100%',
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
-    emailButtonText: {
-        color: 'rgba(255, 255, 255, 0.85)',
-        fontSize: 15,
-        fontWeight: '700',
-        letterSpacing: 0.2,
     },
 });

@@ -5,8 +5,6 @@ import Animated, {
     useAnimatedStyle,
     useSharedValue,
     withSpring,
-    withRepeat,
-    withTiming,
     FadeIn,
     FadeOut
 } from 'react-native-reanimated';
@@ -21,7 +19,8 @@ export default function WelcomeButton({
     variant = 'glass',
     gradient,
     loading = false,
-    disabled = false
+    disabled = false,
+    style,
 }) {
     const scale = useSharedValue(1);
 
@@ -55,7 +54,7 @@ export default function WelcomeButton({
                     exiting={FadeOut.duration(200)}
                     style={styles.innerContent}
                 >
-                    {icon && <Ionicons name={icon} size={24} color="white" style={styles.icon} />}
+                    {icon && <Ionicons name={icon} size={22} color="white" style={styles.icon} />}
                     <Text style={styles.text} numberOfLines={1} adjustsFontSizeToFit>
                         {title}
                     </Text>
@@ -64,15 +63,15 @@ export default function WelcomeButton({
         </View>
     );
 
-    if (variant === 'gradient') {
+    if (variant === 'gradient' || variant === 'primary') {
         return (
             <AnimatedTouchableOpacity
-                activeOpacity={0.7}
+                activeOpacity={0.8}
                 onPressIn={handlePressIn}
                 onPressOut={handlePressOut}
                 onPress={onPress}
                 disabled={loading || disabled}
-                style={[styles.button, animatedStyle]}
+                style={[styles.button, animatedStyle, style]}
             >
                 <LinearGradient
                     colors={gradient || ['#8b5cf6', '#ec4899']}
@@ -86,14 +85,29 @@ export default function WelcomeButton({
         );
     }
 
+    if (variant === 'outline') {
+        return (
+            <AnimatedTouchableOpacity
+                activeOpacity={0.8}
+                onPressIn={handlePressIn}
+                onPressOut={handlePressOut}
+                onPress={onPress}
+                disabled={loading || disabled}
+                style={[styles.button, styles.outlineButton, animatedStyle, style]}
+            >
+                {renderContent()}
+            </AnimatedTouchableOpacity>
+        );
+    }
+
     return (
         <AnimatedTouchableOpacity
-            activeOpacity={1}
+            activeOpacity={0.8}
             onPressIn={handlePressIn}
             onPressOut={handlePressOut}
             onPress={onPress}
             disabled={loading || disabled}
-            style={[styles.button, styles.glassButton, animatedStyle]}
+            style={[styles.button, styles.glassButton, animatedStyle, style]}
         >
             <View style={styles.glassInner}>
                 {renderContent()}
@@ -105,15 +119,15 @@ export default function WelcomeButton({
 const styles = StyleSheet.create({
     button: {
         width: '100%',
-        height: 60,
-        borderRadius: 30,
-        marginBottom: 16,
+        height: 52,
+        borderRadius: 26,
+        marginBottom: 12,
         overflow: 'hidden',
         ...Platform.select({
             ios: {
                 shadowColor: '#000',
                 shadowOffset: { width: 0, height: 4 },
-                shadowOpacity: 0.2,
+                shadowOpacity: 0.25,
                 shadowRadius: 8,
             },
             android: {
@@ -122,15 +136,24 @@ const styles = StyleSheet.create({
         }),
     },
     glassButton: {
-        backgroundColor: 'rgba(255, 255, 255, 0.1)',
+        backgroundColor: 'rgba(255, 255, 255, 0.08)',
         borderWidth: 1,
-        borderColor: 'rgba(255, 255, 255, 0.2)',
+        borderColor: 'rgba(255, 255, 255, 0.18)',
+    },
+    outlineButton: {
+        backgroundColor: 'transparent',
+        borderWidth: 1.5,
+        borderColor: 'rgba(255, 255, 255, 0.25)',
     },
     gradient: {
         flex: 1,
+        alignItems: 'center',
+        justifyContent: 'center',
     },
     glassInner: {
         flex: 1,
+        alignItems: 'center',
+        justifyContent: 'center',
     },
     contentContainer: {
         flex: 1,
@@ -148,13 +171,13 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
     },
     icon: {
-        marginRight: 12,
+        marginRight: 10,
     },
     text: {
         color: 'white',
-        fontSize: 18,
-        fontWeight: 'normal',
-        fontFamily: 'Outfit_400Regular',
-        letterSpacing: 0.5,
+        fontSize: 16,
+        fontWeight: '600',
+        fontFamily: 'Outfit_500Medium',
+        letterSpacing: 0.3,
     },
 });

@@ -727,7 +727,7 @@ function initializeSockets(io) {
                 }
 
                 console.log(`[SOCKET] Checking management status for role: ${socket.user.role}`);
-                // --- 2. SENDER MAPPING (Zimmetleme & Management Check) ---
+                // --- 2. SENDER MAPPING (Management Check) ---
                 let finalSenderId = senderId;
                 
                 // If sender is management, they should message AS the operator of this chat
@@ -738,17 +738,7 @@ function initializeSockets(io) {
                         
                         // ONLY message as the avatar if the sender is NOT the customer (user_id) of the chat!
                         if (chatUserId && chatUserId.toString() !== senderId.toString()) {
-                            // Zimmet Check: If it's a staff/moderator, check if they are allowed
-                            if (socket.user.role === 'staff' || socket.user.role === 'moderator') {
-                                const managerId = operatorManagedBy;
-                                
-                                if (managerId && managerId.toString() !== senderId.toString() && socket.user.role !== 'admin' && socket.user.role !== 'super_admin') {
-                                    console.warn(`[SOCKET] Blocked unauthorized message attempt by ${senderId} for avatar ${avatarId}`);
-                                    throw new Error('BU_PROFIL_SIZE_ZIMMETLI_DEGIL');
-                                }
-                            }
-                            
-                            // All management roles message AS the avatar to keep chat consistent
+                            // All management roles (admin, staff, operator, moderator) can reply as the avatar
                             finalSenderId = avatarId;
                         }
                     }

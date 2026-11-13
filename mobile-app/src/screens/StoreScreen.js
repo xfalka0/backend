@@ -45,8 +45,12 @@ export default function StoreScreen({ navigation, route }) {
 
     // Premium is the timed subscription that expires. VIP is permanent level progression.
     const premiumExpireDate = currentUser?.premium_expire_date || currentUser?.vip_expire_date;
-    const isPremium = Boolean(
+    const hasActiveExpire = Boolean(
         premiumExpireDate && new Date(premiumExpireDate) > new Date()
+    );
+    const isPremium = Boolean(
+        hasActiveExpire || 
+        (currentUser?.is_premium && (!premiumExpireDate || hasActiveExpire))
     );
 
     // Fetch user profile and balance
@@ -82,9 +86,69 @@ export default function StoreScreen({ navigation, route }) {
                     setBalance(Number(balRes.data.balance));
                 }
             }
+
+            // Sync active subscription from RevenueCat / Google Play if user already subscribed
+            try {
+                const info = await PurchaseService.getCustomerInfo();
+                await syncSubscriptionFromCustomerInfo(info);
+            } catch (rcErr) {
+                console.log('[STORE] RevenueCat customer info error:', rcErr.message);
+            }
         } catch (err) {
             console.log('[STORE] User fetch error:', err.message);
         }
+    };
+
+    const syncSubscriptionFromCustomerInfo = async (customerInfo) => {
+        if (!customerInfo) return false;
+
+        const activeSubs = customerInfo.activeSubscriptions || [];
+        const activeEntitlements = customerInfo.entitlements?.active || {};
+
+        const hasActive = activeSubs.length > 0 || Object.keys(activeEntitlements).length > 0;
+        if (!hasActive) return false;
+
+        const subId = activeSubs[0] || Object.keys(activeEntitlements)[0];
+        let months = 1;
+        if (subId?.includes('3_month') || subId?.includes('3_ay')) months = 3;
+        else if (subId?.includes('6_month') || subId?.includes('6_ay')) months = 6;
+        else if (subId?.includes('12_month') || subId?.includes('1_year')) months = 12;
+
+        let expireDate = customerInfo.allExpirationDates?.[subId] || 
+                         activeEntitlements[subId]?.expirationDate;
+        if (!expireDate) {
+            const d = new Date();
+            d.setMonth(d.getMonth() + months);
+            expireDate = d.toISOString();
+        }
+
+        const token = await AsyncStorage.getItem('token');
+        if (token) {
+            try {
+                await axios.post(`${API_URL}/vip/upgrade-direct`, {
+                    months: months,
+                    transactionId: customerInfo.originalAppUserId || `rc_sync_${Date.now()}`
+                }, {
+                    headers: { Authorization: `Bearer ${token}` }
+                });
+            } catch (e) {
+                console.log('[STORE] Subscription sync error:', e.message);
+            }
+        }
+
+        const storeUser = useAppStore.getState().user;
+        const updatedUser = {
+            ...(storeUser || currentUser || {}),
+            is_premium: true,
+            premium_expire_date: expireDate,
+            premium_start_date: storeUser?.premium_start_date || new Date().toISOString(),
+            vip_expire_date: expireDate,
+            vip_start_date: storeUser?.vip_start_date || new Date().toISOString()
+        };
+        useAppStore.getState().setUser(updatedUser);
+        setCurrentUser(updatedUser);
+        await AsyncStorage.setItem('user', JSON.stringify(updatedUser));
+        return true;
     };
 
     useFocusEffect(
@@ -143,6 +207,31 @@ export default function StoreScreen({ navigation, route }) {
                 setPremiumSuccessVisible(true);
             } else if (!result.cancelled) {
                 console.warn('[STORE] Premium purchase failed:', result.error);
+                const isAlreadyOwned = Boolean(result.error && (
+                    result.error.toLowerCase().includes('already') ||
+                    result.error.toLowerCase().includes('zaten') ||
+                    result.error.toLowerCase().includes('owned') ||
+                    result.error.includes('ITEM_ALREADY_OWNED')
+                ));
+
+                if (isAlreadyOwned) {
+                    try {
+                        const info = await PurchaseService.getCustomerInfo();
+                        const synced = await syncSubscriptionFromCustomerInfo(info);
+                        if (synced) {
+                            setAlertConfig({
+                                visible: true,
+                                title: 'Aboneliğiniz Aktif! 🎉',
+                                message: 'Google Play hesabınızdaki mevcut Premium aboneliğiniz doğrulandı ve hesabınıza tanımlandı.',
+                                type: 'success'
+                            });
+                            return;
+                        }
+                    } catch (syncErr) {
+                        console.log('[STORE] Already owned sync error:', syncErr.message);
+                    }
+                }
+
                 setAlertConfig({
                     visible: true,
                     title: 'Ödeme Başlatılamadı',
@@ -167,16 +256,14 @@ export default function StoreScreen({ navigation, route }) {
         setPurchasing(true);
         try {
             const customerInfo = await PurchaseService.restorePurchases();
-            const activeEntitlements = customerInfo?.entitlements?.active || {};
-            const isRestored = Object.keys(activeEntitlements).length > 0;
+            const isRestored = await syncSubscriptionFromCustomerInfo(customerInfo);
             if (isRestored) {
                 setAlertConfig({
                     visible: true,
                     title: 'Başarılı! 🎉',
-                    message: 'Satın alımlarınız ve abonelikleriniz başarıyla geri yüklendi.',
+                    message: 'Satın alımlarınız ve Premium aboneliğiniz başarıyla geri yüklendi.',
                     type: 'success'
                 });
-                await loadCurrentUser();
             } else {
                 setAlertConfig({
                     visible: true,
@@ -226,8 +313,8 @@ export default function StoreScreen({ navigation, route }) {
                     {/* Active Subscription Banner for Premium Users */}
                     {isPremium ? (
                         <ActiveSubscriptionBanner
-                            startDate={currentUser?.vip_start_date || currentUser?.created_at}
-                            expireDate={currentUser?.vip_expire_date}
+                            startDate={currentUser?.premium_start_date || currentUser?.vip_start_date || currentUser?.created_at}
+                            expireDate={premiumExpireDate || new Date(Date.now() + 30 * 24 * 3600 * 1000).toISOString()}
                         />
                     ) : null}
 

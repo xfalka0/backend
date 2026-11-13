@@ -1133,6 +1133,29 @@ const initializeDatabase = async () => {
         await db.query("ALTER TABLE users ALTER COLUMN gender SET DEFAULT 'not_set'").catch(() => {});
         console.log('[DB] Gender schema column default verified (DEFAULT \'not_set\')');
 
+        // Webhook idempotency and subscription schema verification
+        try {
+            await db.query(`
+                CREATE TABLE IF NOT EXISTS processed_webhook_events (
+                    id SERIAL PRIMARY KEY,
+                    event_id VARCHAR(255) UNIQUE NOT NULL,
+                    app_user_id VARCHAR(255),
+                    event_type VARCHAR(100),
+                    product_id VARCHAR(100),
+                    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+                );
+                CREATE INDEX IF NOT EXISTS idx_processed_webhook_events_event_id ON processed_webhook_events(event_id);
+            `);
+            await db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS is_premium BOOLEAN DEFAULT FALSE`);
+            await db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS premium_start_date TIMESTAMPTZ`);
+            await db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS premium_expire_date TIMESTAMPTZ`);
+            await db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS vip_xp INTEGER DEFAULT 0`);
+            await db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS vip_level INTEGER DEFAULT 0`);
+            console.log('[DB] processed_webhook_events table and premium columns verified');
+        } catch (mErr) {
+            console.error('[DB] Error verifying webhook table / columns:', mErr.message);
+        }
+
         console.log('[DB] SCHEMA VERIFICATION COMPLETE');
         if (!app.get('db_status')) app.set('db_status', 'ready');
     } catch (err) {

@@ -283,6 +283,40 @@ export default function App() {
                 // Initialize RevenueCat
                 await PurchaseService.init(appUserID);
 
+                // Auto-sync active Google Play / RevenueCat subscription if present
+                try {
+                    const info = await PurchaseService.getCustomerInfo();
+                    const activeSubs = info?.activeSubscriptions || [];
+                    const activeEntitlements = info?.entitlements?.active || {};
+                    if (activeSubs.length > 0 || Object.keys(activeEntitlements).length > 0) {
+                        const subId = activeSubs[0] || Object.keys(activeEntitlements)[0];
+                        let months = 1;
+                        if (subId?.includes('3_month') || subId?.includes('3_ay')) months = 3;
+                        else if (subId?.includes('6_month') || subId?.includes('6_ay')) months = 6;
+                        else if (subId?.includes('12_month') || subId?.includes('1_year')) months = 12;
+
+                        let expireDate = info?.allExpirationDates?.[subId] || activeEntitlements[subId]?.expirationDate;
+                        if (!expireDate) {
+                            const d = new Date();
+                            d.setMonth(d.getMonth() + months);
+                            expireDate = d.toISOString();
+                        }
+                        const curUser = useAppStore.getState().user;
+                        if (curUser) {
+                            const updated = {
+                                ...curUser,
+                                is_premium: true,
+                                premium_expire_date: expireDate,
+                                vip_expire_date: expireDate
+                            };
+                            useAppStore.getState().setUser(updated);
+                            await AsyncStorage.setItem('user', JSON.stringify(updated));
+                        }
+                    }
+                } catch (subErr) {
+                    console.log('[App] Auto subscription check error:', subErr.message);
+                }
+
                 // 3. Initialize Performance Mode
                 try {
                     await useAppStore.getState().initializePerformanceMode();

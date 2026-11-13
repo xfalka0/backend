@@ -77,6 +77,25 @@ export default function ChatScreen({ route, navigation }) {
     useFocusEffect(
         React.useCallback(() => {
             ensureSocketConnected?.();
+            const syncMe = async () => {
+                try {
+                    const token = await AsyncStorage.getItem('token');
+                    if (!token) return;
+                    const res = await axios.get(`${API_URL}/auth/me`, {
+                        headers: { Authorization: `Bearer ${token}` }
+                    });
+                    if (res.data) {
+                        useAppStore.getState().setUser(res.data);
+                        setCurrentUser(prev => ({ ...prev, ...res.data }));
+                        if (typeof res.data.balance === 'number') {
+                            setCurrentBalance(res.data.balance);
+                        }
+                    }
+                } catch (e) {
+                    console.log('[ChatScreen] Refresh user error:', e.message);
+                }
+            };
+            syncMe();
         }, [ensureSocketConnected])
     );
     const { showAlert } = useAlert();
@@ -118,11 +137,22 @@ export default function ChatScreen({ route, navigation }) {
     // User Handling
     const globalUser = useAppStore(state => state.user) || {};
     const [currentUser, setCurrentUser] = useState({ ...(contextUser || {}), ...(globalUser || {}), ...(routeUser || {}) });
-    const effectiveUser = currentUser;
+    const effectiveUser = { ...(currentUser || {}), ...(contextUser || {}), ...(globalUser || {}), ...(routeUser || {}) };
     const user = effectiveUser;
-    const premiumExpireStr = effectiveUser?.premium_expire_date || effectiveUser?.vip_expire_date;
+    const hasActiveExpire = Boolean(
+        (effectiveUser?.premium_expire_date && new Date(effectiveUser.premium_expire_date) > new Date()) ||
+        (effectiveUser?.vip_expire_date && new Date(effectiveUser.vip_expire_date) > new Date())
+    );
     const isPremiumMember = Boolean(
-        premiumExpireStr && new Date(premiumExpireStr) > new Date()
+        effectiveUser?.is_premium === true ||
+        effectiveUser?.is_premium === 'true' ||
+        effectiveUser?.is_premium === 1 ||
+        hasActiveExpire ||
+        effectiveUser?.is_vip === true ||
+        effectiveUser?.is_vip === 'true' ||
+        effectiveUser?.is_vip === 1 ||
+        parseInt(effectiveUser?.vip_level || 0, 10) > 0 ||
+        isOperator
     );
     const isVipMember = Boolean(
         parseInt(effectiveUser?.vip_level || 0, 10) > 0 || effectiveUser?.is_vip

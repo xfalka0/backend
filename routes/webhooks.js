@@ -68,8 +68,29 @@ router.post('/revenuecat', async (req, res) => {
             return res.json({ success: true, duplicate: true, message: 'Event already processed' });
         }
     } catch (checkErr) {
-        console.error('[WEBHOOK ERROR] Idempotency check failed:', checkErr.message);
-        return res.status(500).json({ error: 'Database error during idempotency check' });
+        // Self-healing: If table does not exist yet on database, create it automatically on the fly
+        if (checkErr.message && (checkErr.message.includes('does not exist') || checkErr.code === '42P01')) {
+            try {
+                await db.query(`
+                    CREATE TABLE IF NOT EXISTS processed_webhook_events (
+                        id SERIAL PRIMARY KEY,
+                        event_id VARCHAR(255) UNIQUE NOT NULL,
+                        app_user_id VARCHAR(255),
+                        event_type VARCHAR(100),
+                        product_id VARCHAR(100),
+                        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+                    );
+                    CREATE INDEX IF NOT EXISTS idx_processed_webhook_events_event_id ON processed_webhook_events(event_id);
+                `);
+                console.log('[WEBHOOK] Auto-created processed_webhook_events table on the fly');
+            } catch (createErr) {
+                console.error('[WEBHOOK ERROR] Auto-create table failed:', createErr.message);
+                return res.status(500).json({ error: 'Database error during idempotency check' });
+            }
+        } else {
+            console.error('[WEBHOOK ERROR] Idempotency check failed:', checkErr.message);
+            return res.status(500).json({ error: 'Database error during idempotency check' });
+        }
     }
 
     // 4. PROCESS EVENT TYPE

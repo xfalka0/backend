@@ -1,15 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, FlatList, Image, TouchableOpacity, ActivityIndicator, TextInput, Alert } from 'react-native';
-import Animated, {
-    FadeInDown,
-    Layout,
-    useSharedValue,
-    useAnimatedStyle,
-    withRepeat,
-    withSequence,
-    withTiming,
-    Easing
-} from 'react-native-reanimated';
+import Animated, { FadeInDown, Layout } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
 import { useFocusEffect } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -39,7 +30,7 @@ const OnlinePulse = ({ themeMode, theme }) => {
 import { useChat } from '../contexts/ChatContext';
 
 export default function MessagesScreen({ navigation, route }) {
-    const { fetchUnreadCount, balance, fetchBalance, user: contextUser, socket } = useChat();
+    const { fetchUnreadCount, balance, fetchBalance, user: contextUser, socket, ensureSocketConnected } = useChat();
     const user = contextUser || route.params?.user || {};
 
     const insets = useSafeAreaInsets();
@@ -53,9 +44,13 @@ export default function MessagesScreen({ navigation, route }) {
     const [hasMore, setHasMore] = useState(true);
     const [pendingInvitations, setPendingInvitations] = useState([]);
     const [familyChat, setFamilyChat] = useState(null);
+    const isFocusedRef = useRef(false);
+    const realtimeRefreshTimerRef = useRef(null);
 
     useFocusEffect(
         React.useCallback(() => {
+            isFocusedRef.current = true;
+            ensureSocketConnected?.();
             if (user?.id) {
                 fetchChats(0, true);
                 fetchUnreadCount(user.id);
@@ -65,7 +60,14 @@ export default function MessagesScreen({ navigation, route }) {
             } else {
                 setLoading(false);
             }
-        }, [user?.id])
+            return () => {
+                isFocusedRef.current = false;
+                if (realtimeRefreshTimerRef.current) {
+                    clearTimeout(realtimeRefreshTimerRef.current);
+                    realtimeRefreshTimerRef.current = null;
+                }
+            };
+        }, [user?.id, ensureSocketConnected])
     );
 
     // Instant real-time socket listener for incoming/outgoing messages
@@ -73,10 +75,20 @@ export default function MessagesScreen({ navigation, route }) {
         if (!socket || !user?.id) return;
 
         const handleRealtimeUpdate = (data) => {
-            console.log('[MessagesScreen] Realtime socket update:', data);
-            fetchChats(0, true);
-            fetchUnreadCount(user.id);
-            fetchFamilyChat();
+            // Skip redundant list reloads while MessagesScreen is blurred behind ChatScreen;
+            // useFocusEffect refreshes when returning. Coalesce bursts while focused.
+            if (!isFocusedRef.current) return;
+            if (realtimeRefreshTimerRef.current) {
+                clearTimeout(realtimeRefreshTimerRef.current);
+            }
+            realtimeRefreshTimerRef.current = setTimeout(() => {
+                realtimeRefreshTimerRef.current = null;
+                if (!isFocusedRef.current) return;
+                console.log('[MessagesScreen] Realtime socket update:', data);
+                fetchChats(0, true);
+                fetchUnreadCount(user.id);
+                fetchFamilyChat();
+            }, 250);
         };
 
         socket.on('new_message', handleRealtimeUpdate);
@@ -85,6 +97,10 @@ export default function MessagesScreen({ navigation, route }) {
         socket.on('message_sent', handleRealtimeUpdate);
 
         return () => {
+            if (realtimeRefreshTimerRef.current) {
+                clearTimeout(realtimeRefreshTimerRef.current);
+                realtimeRefreshTimerRef.current = null;
+            }
             socket.off('new_message', handleRealtimeUpdate);
             socket.off('receive_message', handleRealtimeUpdate);
             socket.off('chat_updated', handleRealtimeUpdate);

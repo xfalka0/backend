@@ -1,5 +1,6 @@
 import React, { useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { useIsFocused } from '@react-navigation/native';
 import Animated, {
     useSharedValue,
     useAnimatedStyle,
@@ -7,66 +8,52 @@ import Animated, {
     withTiming,
     withSequence,
     withSpring,
-    withDelay,
+    cancelAnimation,
+    useReducedMotion,
     Easing,
-    interpolate
 } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
-import * as Haptics from 'expo-haptics';
 import { useTheme } from '../../contexts/ThemeContext';
+import { useAppStore } from '../../store/useAppStore';
+import { PERFORMANCE } from '../../config';
 import GlassCard from '../ui/GlassCard';
 
 const BoostPromoCard = ({ onPress }) => {
     const { theme } = useTheme();
+    const isFocused = useIsFocused();
+    const reducedMotion = useReducedMotion();
+    const performanceMode = useAppStore(state => state.performanceMode);
+    const animationsDisabled = PERFORMANCE.reduceMotion || performanceMode === 'low' || reducedMotion || !isFocused;
 
-    // Animations
-    const shineX = useSharedValue(-100);
     const rocketScale = useSharedValue(1);
-    const rocketRotate = useSharedValue(0);
     const cardScale = useSharedValue(1);
 
     useEffect(() => {
-        // Periodic Shine Sweep
-        shineX.value = withRepeat(
-            withSequence(
-                withTiming(1000, { duration: 4000, easing: Easing.bezier(0.4, 0, 0.2, 1) }),
-                withDelay(1000, withTiming(-400, { duration: 0 }))
-            ),
-            -1,
-            false
-        );
+        if (animationsDisabled) {
+            cancelAnimation(rocketScale);
+            rocketScale.value = 1;
+            return;
+        }
 
-        // Rocket Pulse
+        // Single gentle pulse loop only in normal focused mode
         rocketScale.value = withRepeat(
             withSequence(
-                withTiming(1.15, { duration: 1000, easing: Easing.inOut(Easing.sin) }),
-                withTiming(1, { duration: 1000, easing: Easing.inOut(Easing.sin) })
+                withTiming(1.12, { duration: 1200, easing: Easing.inOut(Easing.sin) }),
+                withTiming(1, { duration: 1200, easing: Easing.inOut(Easing.sin) })
             ),
             -1,
             true
         );
 
-        // Rocket Subtle Vibration
-        rocketRotate.value = withRepeat(
-            withSequence(
-                withTiming(-2, { duration: 100 }),
-                withTiming(2, { duration: 100 })
-            ),
-            -1,
-            true
-        );
-    }, []);
-
-    const shineStyle = useAnimatedStyle(() => ({
-        transform: [{ translateX: shineX.value }, { skewX: '-25deg' }]
-    }));
+        return () => {
+            cancelAnimation(rocketScale);
+            rocketScale.value = 1;
+        };
+    }, [animationsDisabled]);
 
     const rocketStyle = useAnimatedStyle(() => ({
-        transform: [
-            { scale: rocketScale.value },
-            { rotate: `${rocketRotate.value}deg` }
-        ]
+        transform: [{ scale: rocketScale.value }]
     }));
 
     const cardAnimatedStyle = useAnimatedStyle(() => ({
@@ -96,16 +83,6 @@ const BoostPromoCard = ({ onPress }) => {
                         end={{ x: 1, y: 1 }}
                         style={styles.gradient}
                     >
-                        {/* Shine Effect Overlay */}
-                        <Animated.View style={[styles.shineContainer, shineStyle]}>
-                            <LinearGradient
-                                colors={['transparent', 'rgba(255, 255, 255, 0)', 'rgba(255, 255, 255, 0.3)', 'rgba(255, 255, 255, 0)', 'transparent']}
-                                start={{ x: 0, y: 0 }}
-                                end={{ x: 1, y: 0 }}
-                                style={StyleSheet.absoluteFill}
-                            />
-                        </Animated.View>
-
                         <View style={styles.content}>
                             <Animated.View style={[styles.iconContainer, rocketStyle]}>
                                 <LinearGradient

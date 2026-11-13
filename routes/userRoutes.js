@@ -3,7 +3,7 @@ const router = express.Router();
 const db = require('../db');
 const { authenticateToken, authorizeRole } = require('../middleware/auth');
 const { sanitizeUser, logActivity } = require('../utils/helpers');
-const { validateProfileText, validateImageUrl } = require('../utils/moderationFilter');
+const { checkProfileText, checkPhotoSecurity } = require('../utils/moderationFilter');
 
 const normalizeGenderValue = (gender) => {
     const raw = (gender || '').toString().trim().toLowerCase();
@@ -37,10 +37,14 @@ router.get('/balance', authenticateToken, async (req, res) => {
 });
 
 // GET USER BALANCE BY ID
-router.get('/:userId/balance', async (req, res) => {
+router.get('/:userId/balance', authenticateToken, async (req, res) => {
     const { userId } = req.params;
+    // Authorization check: User can only read their own balance, Admin/super_admin can read any
+    if (req.user.id.toString() !== userId.toString() && req.user.role !== 'admin' && req.user.role !== 'super_admin') {
+        return res.status(403).json({ error: 'Yetkisiz işlem. Başka bir kullanıcının bakiyesini görüntüleyemezsiniz.' });
+    }
     try {
-        const result = await db.query('SELECT balance FROM users WHERE id = $1', [userId]);
+        const result = await db.query('SELECT balance FROM users WHERE id::text = $1::text', [userId]);
         if (result.rows.length === 0) return res.status(404).json({ error: 'User not found' });
         res.json({ balance: result.rows[0].balance || 0 });
     } catch (err) {
@@ -74,9 +78,16 @@ router.post('/deduct-coins', authenticateToken, async (req, res) => {
         }
 
         const updateRes = await db.query(
-            'UPDATE users SET balance = balance - $1, total_spent = COALESCE(total_spent, 0) + $1 WHERE id = $2 RETURNING balance',
+            'UPDATE users SET balance = balance - $1, total_spent = COALESCE(total_spent, 0) + $1 WHERE id = $2 AND balance >= $1 RETURNING balance',
             [deductAmount, userId]
         );
+
+        if (updateRes.rows.length === 0) {
+            return res.status(400).json({
+                error: 'Yetersiz bakiye',
+                insufficientFunds: true
+            });
+        }
 
         const newBalance = parseInt(updateRes.rows[0].balance, 10);
         console.log(`[DEDUCT-COINS] User ${userId} deducted ${deductAmount} coins for "${reason || 'işlem'}". New balance: ${newBalance}`);
@@ -182,18 +193,29 @@ router.get('/:id/album', async (req, res) => {
 });
 
 // UPDATE USER PROFILE (Simple)
-router.put('/:id', async (req, res) => {
+router.put('/:id', authenticateToken, async (req, res) => {
     const { id } = req.params;
+
+    // Authorization check
+    if (req.user.id.toString() !== id.toString() && req.user.role !== 'admin' && req.user.role !== 'super_admin') {
+        return res.status(403).json({ error: 'Yetkisiz işlem. Başkasının profilini güncelleyemezsiniz.' });
+    }
+
     const { name, display_name, age, gender, bio, job, edu } = req.body;
 
     // Security & Moderation Check (Phone / Link / Prohibited Content)
-    const bioCheck = validateProfileText(bio);
-    if (!bioCheck.isClean) {
-        return res.status(400).json({ error: bioCheck.reason });
+    if (bio) {
+        const bioCheck = checkProfileText(bio);
+        if (!bioCheck.safe) {
+            return res.status(400).json({ error: bioCheck.reason });
+        }
     }
-    const nameCheck = validateProfileText(display_name || name);
-    if (!nameCheck.isClean) {
-        return res.status(400).json({ error: nameCheck.reason });
+    const nameToCheck = display_name || name;
+    if (nameToCheck) {
+        const nameCheck = checkProfileText(nameToCheck);
+        if (!nameCheck.safe) {
+            return res.status(400).json({ error: `Adınızda uygunsuz içerik tespit edildi: ${nameCheck.reason}` });
+        }
     }
 
     const normalizedGender = normalizeGenderValue(gender);

@@ -5,8 +5,8 @@ import Animated, {
     useSharedValue,
     useAnimatedStyle,
     withSpring,
-    withSequence,
     withTiming,
+    cancelAnimation,
     Easing,
 } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -14,6 +14,7 @@ import { Ionicons } from '@expo/vector-icons';
 import MaskedView from '@react-native-masked-view/masked-view';
 import GlassCard from '../ui/GlassCard';
 import * as Haptics from 'expo-haptics';
+import { useMotionPreferences } from '../../utils/useScreenActive';
 
 const { width } = Dimensions.get('window');
 
@@ -38,25 +39,36 @@ const GradientIcon = ({ name, size = 26, colors = ['#FFFFFF', '#E83E50'] }) => (
 
 const AnimatedTab = ({ state, descriptors, navigation }) => {
     const insets = useSafeAreaInsets();
+    const { isLowPerf, reducedMotion } = useMotionPreferences();
+    const disableMotion = isLowPerf || reducedMotion;
     // Equal-width slots keep the rooms action exactly in the center.
     // Match the tab bar's inner width: total width minus horizontal padding.
     const tabWidth = (width - 48) / state.routes.length;
 
-    const indicatorPos = useSharedValue(0);
+    const indicatorPos = useSharedValue(state.index * tabWidth);
     const indicatorOpacity = useSharedValue(1);
 
     useEffect(() => {
-        indicatorPos.value = withSpring(state.index * tabWidth, {
-            damping: 14,
-            stiffness: 120,
-        });
-
-        // Find if the currently focused route is the center button
         const centerIndex = state.routes.findIndex(
             route => descriptors[route.key].options.tabBarCenterButton === true
         );
-        indicatorOpacity.value = withTiming(state.index === centerIndex ? 0 : 1, { duration: 180 });
-    }, [state.index]);
+        const targetOpacity = state.index === centerIndex ? 0 : 1;
+        const targetPos = state.index * tabWidth;
+
+        if (disableMotion) {
+            cancelAnimation(indicatorPos);
+            cancelAnimation(indicatorOpacity);
+            indicatorPos.value = targetPos;
+            indicatorOpacity.value = targetOpacity;
+            return;
+        }
+
+        indicatorPos.value = withSpring(targetPos, {
+            damping: 14,
+            stiffness: 120,
+        });
+        indicatorOpacity.value = withTiming(targetOpacity, { duration: 180 });
+    }, [state.index, tabWidth, disableMotion]);
 
     const indicatorStyle = useAnimatedStyle(() => ({
         transform: [
@@ -91,7 +103,9 @@ const AnimatedTab = ({ state, descriptors, navigation }) => {
                         });
 
                         if (!isFocused && !event.defaultPrevented) {
-                            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                            if (!disableMotion) {
+                                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                            }
                             navigation.navigate(route.name);
                         }
                     };
@@ -103,6 +117,7 @@ const AnimatedTab = ({ state, descriptors, navigation }) => {
                             onPress={onPress}
                             icon={options.tabBarIconName || 'home'}
                             isCenter={options.tabBarCenterButton === true}
+                            disableMotion={disableMotion}
                         />
                     );
                 })}
@@ -113,20 +128,26 @@ const AnimatedTab = ({ state, descriptors, navigation }) => {
 
 import { useChat } from '../../contexts/ChatContext';
 
-const TabItem = ({ isFocused, onPress, icon, isCenter = false }) => {
-    const scale = useSharedValue(1);
-    const translateY = useSharedValue(0);
+const TabItem = ({ isFocused, onPress, icon, isCenter = false, disableMotion = false }) => {
+    const scale = useSharedValue(isFocused ? 1.15 : 1);
+    const translateY = useSharedValue(isFocused ? -4 : 0);
     const { unreadCount } = useChat();
 
     useEffect(() => {
-        if (isFocused) {
-            scale.value = withSpring(1.15, { damping: 14, stiffness: 160 });
-            translateY.value = withTiming(-4, { duration: 160, easing: Easing.out(Easing.ease) });
-        } else {
-            scale.value = withSpring(1, { damping: 14, stiffness: 160 });
-            translateY.value = withTiming(0, { duration: 160, easing: Easing.out(Easing.ease) });
+        const targetScale = isFocused ? 1.15 : 1;
+        const targetY = isFocused ? -4 : 0;
+
+        if (disableMotion) {
+            cancelAnimation(scale);
+            cancelAnimation(translateY);
+            scale.value = targetScale;
+            translateY.value = targetY;
+            return;
         }
-    }, [isFocused]);
+
+        scale.value = withSpring(targetScale, { damping: 14, stiffness: 160 });
+        translateY.value = withTiming(targetY, { duration: 160, easing: Easing.out(Easing.ease) });
+    }, [isFocused, disableMotion]);
 
     const animatedStyle = useAnimatedStyle(() => ({
         transform: [

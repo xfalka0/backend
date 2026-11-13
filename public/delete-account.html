@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FivaChat - Hesap Silme Talebi</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background: #0f0a14;
+            color: #f3f4f6;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }
+        .container {
+            background: #1c1424;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 16px;
+            padding: 32px;
+            max-width: 480px;
+            width: 100%;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
+        }
+        h1 {
+            color: #ec4899;
+            font-size: 24px;
+            margin-top: 0;
+            margin-bottom: 8px;
+            text-align: center;
+        }
+        p.subtitle {
+            color: #9ca3af;
+            font-size: 14px;
+            margin-bottom: 24px;
+            text-align: center;
+            line-height: 1.5;
+        }
+        .info-box {
+            background: rgba(236, 72, 153, 0.08);
+            border: 1px solid rgba(236, 72, 153, 0.2);
+            border-radius: 8px;
+            padding: 12px 16px;
+            font-size: 13px;
+            color: #fbcfe8;
+            margin-bottom: 20px;
+            line-height: 1.4;
+        }
+        .form-group {
+            margin-bottom: 16px;
+        }
+        label {
+            display: block;
+            font-size: 13px;
+            font-weight: 500;
+            color: #d1d5db;
+            margin-bottom: 6px;
+        }
+        input, select, textarea {
+            width: 100%;
+            box-sizing: border-box;
+            background: #2a1f36;
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            border-radius: 8px;
+            padding: 10px 14px;
+            color: #fff;
+            font-size: 14px;
+        }
+        input:focus, select:focus, textarea:focus {
+            outline: none;
+            border-color: #ec4899;
+        }
+        .checkbox-group {
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+            margin-top: 18px;
+            margin-bottom: 24px;
+        }
+        .checkbox-group input {
+            width: auto;
+            margin-top: 3px;
+        }
+        .checkbox-group label {
+            font-size: 12px;
+            color: #9ca3af;
+            line-height: 1.4;
+            cursor: pointer;
+        }
+        button {
+            width: 100%;
+            background: linear-gradient(135deg, #a855f7, #ec4899);
+            color: #fff;
+            border: none;
+            padding: 14px;
+            border-radius: 8px;
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: opacity 0.2s;
+        }
+        button:hover {
+            opacity: 0.9;
+        }
+        #resultMessage {
+            display: none;
+            margin-top: 16px;
+            padding: 12px;
+            border-radius: 8px;
+            font-size: 14px;
+            text-align: center;
+        }
+        .success { background: rgba(34, 197, 94, 0.15); color: #86efac; border: 1px solid rgba(34, 197, 94, 0.3); }
+        .error { background: rgba(239, 68, 68, 0.15); color: #fca5a5; border: 1px solid rgba(239, 68, 68, 0.3); }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>FivaChat Hesap Silme</h1>
+        <p class="subtitle">Google Play Veri Güvenliği Politikası uyarınca, hesabınızı ve ilişkili verilerinizi web üzerinden de kalıcı olarak silebilirsiniz.</p>
+
+        <div class="info-box">
+            ⚠️ <strong>Önemli Bilgilendirme:</strong> Hesap silme işlemi onaylandıktan sonra profiliniz, yüklediğiniz fotoğraflar ve kişisel bilgileriniz kalıcı olarak silinir veya anonimleştirilir. Kalan Coin bakiyeniz veya aktif aboneliğiniz iade edilmez.
+        </div>
+
+        <form id="deletionForm">
+            <div class="form-group">
+                <label for="identifier">Kayıtlı E-posta veya Telefon Numarası *</label>
+                <input type="text" id="identifier" name="identifier" placeholder="ornek@email.com veya 05xxxxxxxxx" required>
+            </div>
+
+            <div class="form-group">
+                <label for="reason">Hesap Silme Sebebi (İsteğe bağlı)</label>
+                <select id="reason" name="reason">
+                    <option value="not_using">Artık uygulamayı kullanmıyorum</option>
+                    <option value="privacy">Gizlilik endişeleri</option>
+                    <option value="found_match">Aradığım kişiyi buldum</option>
+                    <option value="technical">Teknik bir sorun yaşadım</option>
+                    <option value="other">Diğer</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label for="details">Ek Açıklama (İsteğe bağlı)</label>
+                <textarea id="details" name="details" rows="3" placeholder="Bize iletmek istediğiniz detaylar..."></textarea>
+            </div>
+
+            <div class="checkbox-group">
+                <input type="checkbox" id="confirm" required>
+                <label for="confirm">Hesabımın ve tüm verilerimin kalıcı olarak silinmesini, bu işlemin geri alınamaz olduğunu kabul ediyorum.</label>
+            </div>
+
+            <button type="submit" id="submitBtn">Hesap Silme Talebini Gönder</button>
+        </form>
+
+        <div id="resultMessage"></div>
+    </div>
+
+    <script>
+        document.getElementById('deletionForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const btn = document.getElementById('submitBtn');
+            const msg = document.getElementById('resultMessage');
+            const identifier = document.getElementById('identifier').value.trim();
+            const reason = document.getElementById('reason').value;
+            const details = document.getElementById('details').value.trim();
+
+            btn.disabled = true;
+            btn.innerText = 'Gönderiliyor...';
+            msg.style.display = 'none';
+
+            try {
+                const res = await fetch('/api/account-deletion-requests', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ identifier, reason, details })
+                });
+                const data = await res.json();
+                if (res.ok) {
+                    msg.className = 'success';
+                    msg.innerText = 'Hesap silme talebiniz başarıyla alındı. Talebiniz güvenlik ekibimiz tarafından en geç 48 saat içerisinde işlenecektir. Takip ID: ' + (data.requestId || 'TR-' + Date.now());
+                    msg.style.display = 'block';
+                    document.getElementById('deletionForm').reset();
+                } else {
+                    throw new Error(data.error || 'İşlem başarısız');
+                }
+            } catch (err) {
+                msg.className = 'error';
+                msg.innerText = 'Talep iletilemedi: ' + err.message;
+                msg.style.display = 'block';
+            } finally {
+                btn.disabled = false;
+                btn.innerText = 'Hesap Silme Talebini Gönder';
+            }
+        });
+    </script>
+</body>
+</html>

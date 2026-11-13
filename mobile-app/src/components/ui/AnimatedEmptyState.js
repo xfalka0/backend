@@ -6,12 +6,13 @@ import Animated, {
     withRepeat,
     withSequence,
     withTiming,
-    withSpring,
+    cancelAnimation,
     Easing,
     FadeInDown
 } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useScreenActive } from '../../utils/useScreenActive';
 
 export default function AnimatedEmptyState({
     icon = 'file-tray-outline',
@@ -19,11 +20,20 @@ export default function AnimatedEmptyState({
     description = 'Burası biraz fazla sessiz...',
     colors = ['#8b5cf6', '#ec4899']
 }) {
+    const { shouldAnimate } = useScreenActive();
     const scale = useSharedValue(1);
     const rotation = useSharedValue(0);
 
     useEffect(() => {
-        // Continuous smooth floating and pulsing animation
+        if (!shouldAnimate) {
+            cancelAnimation(scale);
+            cancelAnimation(rotation);
+            scale.value = 1;
+            rotation.value = 0;
+            return;
+        }
+
+        // Smooth floating/pulsing animation only while screen is focused and active
         scale.value = withRepeat(
             withSequence(
                 withTiming(1.05, { duration: 1500, easing: Easing.inOut(Easing.ease) }),
@@ -42,7 +52,14 @@ export default function AnimatedEmptyState({
             -1,
             true
         );
-    }, []);
+
+        return () => {
+            cancelAnimation(scale);
+            cancelAnimation(rotation);
+            scale.value = 1;
+            rotation.value = 0;
+        };
+    }, [shouldAnimate]);
 
     const animatedIconStyle = useAnimatedStyle(() => ({
         transform: [

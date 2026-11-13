@@ -2,72 +2,51 @@ import React, { useEffect } from 'react';
 import { View, Text, StyleSheet, Dimensions, StatusBar } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LinearGradient } from 'expo-linear-gradient';
-import Animated, {
-    useSharedValue,
-    useAnimatedStyle,
-    withTiming,
-    withSequence,
-    withSpring,
-    withDelay,
-    withRepeat,
-    Easing
-} from 'react-native-reanimated';
 import axios from 'axios';
 import { API_URL } from '../config';
 import { useAppStore } from '../store/useAppStore';
+import { resetTo } from '../services/navigationRef';
 
 const { width, height } = Dimensions.get('window');
 
+const AUTH_ME_BOOT_WAIT_MS = 2000;
+
+const applyFreshUser = async (token, freshUser, navigateOnInvalidOnboarding = false) => {
+    const currentToken = await AsyncStorage.getItem('token');
+    if (!currentToken || currentToken !== token) return false;
+    if (!freshUser) return false;
+    await AsyncStorage.setItem('user', JSON.stringify(freshUser));
+    const store = useAppStore.getState();
+    store.setUser(freshUser);
+    store.setServerAuthSync(true);
+    store.setSessionStatus('verified');
+    if (navigateOnInvalidOnboarding && freshUser.onboarding_completed === false) {
+        resetTo('Onboarding', { userId: freshUser.id, token });
+    }
+    return true;
+};
+
+const clearInvalidSessionAndGoAuth = async (token, navigationRefOrNull) => {
+    const currentToken = await AsyncStorage.getItem('token');
+    if (currentToken && currentToken !== token) return;
+    await AsyncStorage.multiRemove(['token', 'user']);
+    await useAppStore.getState().logout();
+    if (navigationRefOrNull) {
+        navigationRefOrNull.replace('Auth');
+    } else {
+        resetTo('Auth');
+    }
+};
+
 export default function SplashScreen({ navigation }) {
-    // Animation Values
-    const scale = useSharedValue(0.95);
-    const textOpacity = useSharedValue(0);
-    const textTranslateY = useSharedValue(20);
-
-    // Background Animation Value (0 -> 1 -> 0)
-    const gradientOpacity = useSharedValue(0);
-
     useEffect(() => {
-        // Background Animation (0 -> 1 -> 0)
-        gradientOpacity.value = withRepeat(
-            withTiming(1, { duration: 3000, easing: Easing.inOut(Easing.quad) }),
-            -1,
-            true
-        );
-
-        // Text Entrance & Continuous Pulse (Even more subtle and slow)
-        textTranslateY.value = withTiming(0, { duration: 2500, easing: Easing.out(Easing.ease) });
-        textOpacity.value = withTiming(1, { duration: 2500 });
-        scale.value = withSequence(
-            withTiming(1, { duration: 2500, easing: Easing.out(Easing.ease) }),
-            withRepeat(
-                withSequence(
-                    withTiming(1.04, { duration: 2000, easing: Easing.inOut(Easing.ease) }),
-                    withTiming(1, { duration: 2000, easing: Easing.inOut(Easing.ease) })
-                ),
-                -1,
-                true
-            )
-        );
-
-        const triggerExit = (routeName, params) => {
-            // Exit Transition: Very subtle scale-up & snap fade out
-            scale.value = withTiming(1.5, { duration: 400, easing: Easing.out(Easing.ease) });
-            textOpacity.value = withTiming(0, { duration: 300 });
-            gradientOpacity.value = withTiming(0, { duration: 300 });
-
-            setTimeout(() => {
-                navigation.replace(routeName, params);
-            }, 300);
-        };
+        let isCancelled = false;
 
         const checkSession = async () => {
             try {
-                // Log start
-                console.log('[Splash] Checking session...');
-
-                const token = await AsyncStorage.getItem('token');
-                const userJson = await AsyncStorage.getItem('user');
+                useAppStore.getState().setSessionStatus('pending');
+                const [[, token], [, userJson]] = await AsyncStorage.multiGet(['token', 'user']);
+                if (isCancelled) return;
 
                 let userData = null;
                 try {
@@ -75,68 +54,109 @@ export default function SplashScreen({ navigation }) {
                 } catch (e) {
                     console.warn('[Splash] Corrupt user data, clearing.');
                     await AsyncStorage.multiRemove(['token', 'user']);
-                    triggerExit('Welcome');
+                    useAppStore.getState().setSessionStatus('unauthenticated');
+                    navigation.replace('Welcome');
                     return;
                 }
 
-                if (token && userData) {
-                    if (token === 'mock-test-token-12345' || userData?.id === 9999) {
-                        console.log('[Splash] Clearing mock test user session');
-                        await AsyncStorage.multiRemove(['token', 'user']);
-                        triggerExit('Welcome');
-                        return;
-                    }
-                    try {
-                        console.log('[Splash] Validating token with server...');
-                        const res = await axios.get(`${API_URL}/auth/me`, {
-                            headers: { Authorization: `Bearer ${token}` },
-                            timeout: 10000
-                        });
+                if (!token || !userData) {
+                    useAppStore.getState().setSessionStatus('unauthenticated');
+                    navigation.replace('Welcome');
+                    return;
+                }
 
-                        const freshUser = res.data;
-                        await AsyncStorage.setItem('user', JSON.stringify(freshUser));
-                        useAppStore.getState().setUser(freshUser);
-                        console.log('[Splash] Session valid, navigating to Main');
+                if (token === 'mock-test-token-12345' || userData?.id === 9999) {
+                    await AsyncStorage.multiRemove(['token', 'user']);
+                    useAppStore.getState().setSessionStatus('unauthenticated');
+                    navigation.replace('Welcome');
+                    return;
+                }
 
-                        if (freshUser.onboarding_completed !== false) {
-                            triggerExit('Main', { user: { ...freshUser, token } });
-                        } else {
-                            triggerExit('Onboarding', { userId: freshUser.id, token });
-                        }
-                    } catch (verifyErr) {
-                        console.warn("[Session] Token verification failed:", verifyErr.message);
-                        await AsyncStorage.multiRemove(['token', 'user']);
-                        triggerExit('Welcome');
+                // Start single authoritative /auth/me check; keep alive even if >2000ms fallback triggers
+                useAppStore.getState().setBootAuthMeInFlight(true);
+                const meOutcomePromise = axios.get(`${API_URL}/auth/me`, {
+                    headers: { Authorization: `Bearer ${token}` },
+                    timeout: 10000
+                }).then((res) => ({
+                    kind: 'ok',
+                    freshUser: res.data,
+                })).catch((err) => {
+                    const status = err?.response?.status;
+                    if (status === 401 || status === 403) {
+                        return { kind: 'auth_error', status };
                     }
+                    return { kind: 'network_error', err };
+                }).finally(() => {
+                    useAppStore.getState().setBootAuthMeInFlight(false);
+                });
+
+                let bootTimerId;
+                const timeoutPromise = new Promise((resolve) => {
+                    bootTimerId = setTimeout(() => resolve({ kind: 'timeout' }), AUTH_ME_BOOT_WAIT_MS);
+                });
+
+                const outcome = await Promise.race([meOutcomePromise, timeoutPromise]);
+                clearTimeout(bootTimerId);
+                if (isCancelled) return;
+
+                if (outcome.kind === 'auth_error') {
+                    console.warn('[Session] Token rejected on boot, redirecting to Auth:', outcome.status);
+                    await clearInvalidSessionAndGoAuth(token, navigation);
+                    return;
+                }
+
+                if (outcome.kind === 'ok' && outcome.freshUser) {
+                    const freshUser = outcome.freshUser;
+                    const applied = await applyFreshUser(token, freshUser, false);
+                    if (!applied || isCancelled) return;
+
+                    if (freshUser.onboarding_completed !== false) {
+                        navigation.replace('Main', { user: { ...freshUser, token } });
+                    } else {
+                        navigation.replace('Onboarding', { userId: freshUser.id, token });
+                    }
+                    return;
+                }
+
+                // Timed out (>2000ms) or network unreachable: open cached session and continue verifying in background
+                const store = useAppStore.getState();
+                store.setServerAuthSync(false);
+                store.setUser(userData);
+                store.setSessionStatus('verified');
+
+                if (userData.onboarding_completed !== false) {
+                    navigation.replace('Main', { user: { ...userData, token } });
                 } else {
-                    console.log('[Splash] No session found, navigating to Welcome');
-                    triggerExit('Welcome');
+                    navigation.replace('Onboarding', { userId: userData.id, token });
+                }
+
+                if (outcome.kind === 'timeout') {
+                    meOutcomePromise.then(async (lateOutcome) => {
+                        if (lateOutcome.kind === 'ok' && lateOutcome.freshUser) {
+                            await applyFreshUser(token, lateOutcome.freshUser, userData?.onboarding_completed !== false);
+                        } else if (lateOutcome.kind === 'auth_error') {
+                            console.warn('[Session] Late /auth/me rejected token, redirecting to Auth:', lateOutcome.status);
+                            await clearInvalidSessionAndGoAuth(token, null);
+                        }
+                    });
                 }
             } catch (err) {
-                console.error("Session Check Error:", err);
-                triggerExit('Welcome');
+                console.error('Session Check Error:', err);
+                if (!isCancelled) {
+                    useAppStore.getState().setSessionStatus('unauthenticated');
+                    navigation.replace('Welcome');
+                }
             }
         };
 
-        // Allow the Fiva splash animation to be clearly visible for 1.5 seconds before navigating
-        const timer = setTimeout(checkSession, 1500);
-        return () => clearTimeout(timer);
-    }, []);
-
-    const animatedGradientStyle = useAnimatedStyle(() => ({
-        opacity: gradientOpacity.value,
-    }));
-
-    const animatedTextStyle = useAnimatedStyle(() => ({
-        opacity: textOpacity.value,
-        transform: [{ translateY: textTranslateY.value }, { scale: scale.value }],
-    }));
+        checkSession();
+        return () => { isCancelled = true; };
+    }, [navigation]);
 
     return (
         <View style={styles.container} pointerEvents="none">
             <StatusBar barStyle="light-content" />
 
-            {/* Layer 1: Base Gradient (Static) - Deep Dark Crimson/Wine */}
             <View style={StyleSheet.absoluteFill} pointerEvents="none">
                 <LinearGradient
                     colors={['#0F080A', '#1B0C11', '#29101A']}
@@ -146,22 +166,9 @@ export default function SplashScreen({ navigation }) {
                 />
             </View>
 
-            {/* Layer 2: Overlay Gradient (Animated Opacity) - Soft Ember Pulse */}
-            <Animated.View style={[StyleSheet.absoluteFill, animatedGradientStyle]} pointerEvents="none">
-                <LinearGradient
-                    colors={['#1B0C11', '#3B1421', '#29101A']}
-                    start={{ x: 0.2, y: 0 }}
-                    end={{ x: 0.8, y: 1 }}
-                    style={styles.background}
-                />
-            </Animated.View>
-
-            <Animated.View
-                pointerEvents="none"
-                style={[styles.contentContainer, animatedTextStyle]}
-            >
+            <View pointerEvents="none" style={styles.contentContainer}>
                 <Text style={styles.brandText}>Fiva</Text>
-            </Animated.View>
+            </View>
         </View>
     );
 }

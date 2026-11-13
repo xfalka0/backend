@@ -10,10 +10,12 @@ import Animated, {
     withRepeat,
     withSequence,
     withTiming,
+    cancelAnimation,
     Extrapolation,
     Easing
 } from 'react-native-reanimated';
 import GlassCard from './GlassCard';
+import { useScreenActive } from '../../utils/useScreenActive';
 
 const { width } = Dimensions.get('window');
 const BANNER_WIDTH = width * 0.9;
@@ -23,7 +25,7 @@ const PROMOS = [
     { id: 2, title: 'HAFTALIK FIRSAT', subtitle: '%50 VIP İndirimi', icon: 'star', colors: ['#8b5cf6', '#d946ef'], glow: '#f472b6', buttonColor: '#fff' },
 ];
 
-const AnimatedBannerItem = ({ item, index, scrollX, navigation }) => {
+const AnimatedBannerItem = ({ item, index, scrollX, navigation, shouldAnimate = true }) => {
     const animatedStyle = useAnimatedStyle(() => {
         const inputRange = [
             (index - 1) * width,
@@ -47,6 +49,13 @@ const AnimatedBannerItem = ({ item, index, scrollX, navigation }) => {
     const floatValue = useSharedValue(0);
 
     useEffect(() => {
+        if (!shouldAnimate) {
+            cancelAnimation(glowValue);
+            cancelAnimation(floatValue);
+            glowValue.value = 1;
+            floatValue.value = 0;
+            return;
+        }
         glowValue.value = withRepeat(
             withSequence(
                 withTiming(1.15, { duration: 1200 }),
@@ -64,7 +73,13 @@ const AnimatedBannerItem = ({ item, index, scrollX, navigation }) => {
             -1,
             true
         );
-    }, []);
+        return () => {
+            cancelAnimation(glowValue);
+            cancelAnimation(floatValue);
+            glowValue.value = 1;
+            floatValue.value = 0;
+        };
+    }, [shouldAnimate]);
 
     const iconStyle = useAnimatedStyle(() => ({
         transform: [
@@ -135,6 +150,7 @@ const AnimatedBannerItem = ({ item, index, scrollX, navigation }) => {
 };
 
 export default function PromoBanner({ navigation }) {
+    const { shouldAnimate } = useScreenActive();
     const scrollX = useSharedValue(0);
     const onScrollHandler = useAnimatedScrollHandler({
         onScroll: (event) => {
@@ -159,6 +175,7 @@ export default function PromoBanner({ navigation }) {
                         index={index}
                         scrollX={scrollX}
                         navigation={navigation}
+                        shouldAnimate={shouldAnimate}
                     />
                 ))}
             </Animated.ScrollView>

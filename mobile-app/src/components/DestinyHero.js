@@ -1,74 +1,19 @@
-import React, { useEffect } from 'react';
+import React from 'react';
 import { View, Text, StyleSheet, Pressable, Dimensions, Platform, Image } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
-import GlassCard from './ui/GlassCard';
 import Animated, {
     useSharedValue,
     useAnimatedStyle,
-    withRepeat,
-    withSequence,
     withTiming,
     withSpring,
-    Easing,
-    interpolate,
-    Extrapolation
 } from 'react-native-reanimated';
-
-import { PERFORMANCE } from '../config';
 
 const { width } = Dimensions.get('window');
 
 const DestinyHero = ({ onPress }) => {
-    // Animation Values
+    // Only press spring feedback runs; continuous idle loop removed to eliminate idle CPU & scroll jank
     const scale = useSharedValue(1);
-    const pulseGlow = useSharedValue(1);
-    const rotate = useSharedValue(0);
-    const float = useSharedValue(0);
-
-    useEffect(() => {
-        if (PERFORMANCE.reduceMotion) return;
-
-        // Simplified Breathing Animation - only if not in simple mode
-        if (!PERFORMANCE.simpleAnimations) {
-            scale.value = withRepeat(
-                withSequence(
-                    withTiming(1.01, { duration: 3000, easing: Easing.inOut(Easing.ease) }),
-                    withTiming(1, { duration: 3000, easing: Easing.inOut(Easing.ease) })
-                ),
-                -1,
-                true
-            );
-
-            // Slow Rotation for the ring - only in high performance mode
-            rotate.value = withRepeat(
-                withTiming(360, { duration: 30000, easing: Easing.linear }),
-                -1,
-                false
-            );
-        }
-
-        // Continuous Pulse Animation (Glow) - Subtler
-        pulseGlow.value = withRepeat(
-            withSequence(
-                withTiming(1.15, { duration: 3000, easing: Easing.inOut(Easing.ease) }),
-                withTiming(1, { duration: 3000, easing: Easing.inOut(Easing.ease) })
-            ),
-            -1,
-            true
-        );
-
-        // Floating Animation for the Icon - Slower
-        float.value = withRepeat(
-            withSequence(
-                withTiming(1, { duration: 2500, easing: Easing.inOut(Easing.ease) }),
-                withTiming(0, { duration: 2500, easing: Easing.inOut(Easing.ease) })
-            ),
-            -1,
-            true
-        );
-    }, []);
-
 
     const handlePressIn = () => {
         scale.value = withTiming(0.92, { duration: 150 });
@@ -80,19 +25,6 @@ const DestinyHero = ({ onPress }) => {
 
     const animatedContainerStyle = useAnimatedStyle(() => ({
         transform: [{ scale: scale.value }]
-    }));
-
-    const animatedGlowStyle = useAnimatedStyle(() => ({
-        transform: [{ scale: pulseGlow.value }],
-        opacity: interpolate(pulseGlow.value, [1, 1.2], [0.3, 0.1], Extrapolation.CLAMP)
-    }));
-
-    const animatedRingStyle = useAnimatedStyle(() => ({
-        transform: [{ rotate: `${rotate.value}deg` }]
-    }));
-
-    const animatedFloatStyle = useAnimatedStyle(() => ({
-        transform: [{ translateY: interpolate(float.value, [0, 1], [0, -8]) }]
     }));
 
     return (
@@ -119,14 +51,14 @@ const DestinyHero = ({ onPress }) => {
 
                     {/* Content */}
                     <View style={styles.content}>
-                        <Animated.View style={[styles.centerIconContainer, animatedFloatStyle]}>
+                        <View style={styles.centerIconContainer}>
                             <LinearGradient
                                 colors={['#ec4899', '#8b5cf6']}
                                 style={styles.iconGradient}
                             >
                                 <Ionicons name="infinite" size={20} color="white" />
                             </LinearGradient>
-                        </Animated.View>
+                        </View>
 
                         <View style={styles.textColumn}>
                             <Text style={styles.mainText} adjustsFontSizeToFit numberOfLines={1}>

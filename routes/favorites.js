@@ -1,6 +1,8 @@
 const express = require('express');
 const router = express.Router();
 const pool = require('../db');
+const { authenticateToken } = require('../middleware/auth');
+const { isUserVipActive } = require('../utils/vipUtils');
 
 // Add a user to favorites
 router.post('/', async (req, res) => {
@@ -139,12 +141,17 @@ router.get('/:userId', async (req, res) => {
 });
 
 // Get users who favorited me (Fans)
-router.get('/:userId/fans', async (req, res) => {
+// Centralized VIP fans check
+router.get('/:userId/fans', authenticateToken, async (req, res) => {
     const { userId } = req.params;
+
+    if (req.user.id.toString() !== userId.toString() && req.user.role !== 'admin' && req.user.role !== 'super_admin' && req.user.role !== 'operator') {
+        return res.status(403).json({ error: 'Yetkisiz işlem.' });
+    }
+
     try {
-        // First, check if the requested user is VIP
         const userCheck = await pool.query(
-            'SELECT is_vip, vip_expire_date, gender, vip_level FROM users WHERE id::text = $1::text',
+            'SELECT id, role, is_vip, vip_expire_date, gender, vip_level FROM users WHERE id::text = $1::text',
             [userId]
         );
 
@@ -153,10 +160,7 @@ router.get('/:userId/fans', async (req, res) => {
         }
 
         const user = userCheck.rows[0];
-        const now = new Date();
-        const expireDate = new Date(user.vip_expire_date);
-        const isLegacyVIP = user.is_vip && (expireDate > now || !user.vip_expire_date);
-        const isVip4Plus = parseInt(user.vip_level || 0, 10) >= 4 || isLegacyVIP;
+        const isVip = isUserVipActive(user);
 
         const fans = await pool.query(`
             SELECT u.id, COALESCE(u.display_name, u.username) as name, u.username, u.avatar_url, u.gender, u.is_vip, f.created_at,
@@ -168,33 +172,29 @@ router.get('/:userId/fans', async (req, res) => {
             ORDER BY f.created_at DESC
         `, [userId]);
 
-        // Sadece gercek takipciler
-// Merge and sort all fans by created_at DESC
         const allFans = fans.rows;
         const sortedFans = allFans.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
 
-        // If not VIP 4+, obscure the data
         const processedFans = sortedFans.map(fan => {
-            if (isVip4Plus) {
+            if (isVip) {
                 return fan;
             } else {
                 return {
                     id: fan.id,
                     name: 'Gizli Kullanıcı',
                     username: 'Gizli Kullanıcı',
-                    avatar_url: fan.avatar_url, // Let frontend blur it
+                    avatar_url: null,
                     gender: fan.gender,
                     created_at: fan.created_at,
                     is_online: false,
-                    is_blurred: true // flag for frontend
+                    is_blurred: true
                 };
             }
         });
 
         res.json({
-            isVIP: parseInt(user.vip_level || 0, 10) > 0 || isLegacyVIP,
+            isVIP: isVip,
             vipLevel: parseInt(user.vip_level || 0, 10),
-            isVip4Plus: isVip4Plus,
             fans: processedFans
         });
     } catch (err) {

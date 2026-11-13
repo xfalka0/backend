@@ -1,12 +1,7 @@
 package com.fivachat.app
 
-import android.graphics.Color
 import android.os.Build
 import android.os.Bundle
-import android.view.View
-import android.view.ViewGroup
-import android.view.ViewTreeObserver
-import android.widget.EditText
 import androidx.activity.OnBackPressedCallback
 
 import com.facebook.react.ReactActivity
@@ -20,32 +15,14 @@ class MainActivity : ReactActivity() {
 
   private var customDelegate: ReactActivityDelegate? = null
 
-  private val layoutListener = ViewTreeObserver.OnGlobalLayoutListener {
-    clearEditTextBackgrounds(window.decorView)
-  }
-
-  private fun clearEditTextBackgrounds(view: View) {
-    if (view is EditText) {
-      if (view.background != null) {
-        view.background = null
-        view.setBackgroundColor(Color.TRANSPARENT)
-      }
-    }
-    if (view is ViewGroup) {
-      for (i in 0 until view.childCount) {
-        clearEditTextBackgrounds(view.getChildAt(i))
-      }
-    }
-  }
-
   override fun onCreate(savedInstanceState: Bundle?) {
     // Set the theme to AppTheme BEFORE onCreate to support
     // coloring the background, status bar, and navigation bar.
     // This is required for expo-splash-screen.
     setTheme(R.style.AppTheme)
     super.onCreate(null)
-    // Clear native EditText backgrounds that cause a dark strip on focus/typing
-    window.decorView.viewTreeObserver.addOnGlobalLayoutListener(layoutListener)
+    // EditText transparent background is enforced natively via AppTheme/ResetEditText in styles.xml,
+    // avoiding per-layout ViewTreeObserver.OnGlobalLayoutListener decorView tree traversals.
 
     // Intercept hardware and gesture back presses on Android 13+ / 14+ / 15+ / 16+
     onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
@@ -57,11 +34,6 @@ class MainActivity : ReactActivity() {
         }
       }
     })
-  }
-
-  override fun onDestroy() {
-    super.onDestroy()
-    window.decorView.viewTreeObserver.removeOnGlobalLayoutListener(layoutListener)
   }
 
   override fun onKeyDown(keyCode: Int, event: android.view.KeyEvent?): Boolean {

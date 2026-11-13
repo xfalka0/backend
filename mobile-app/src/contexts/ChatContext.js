@@ -1,4 +1,5 @@
-import React, { createContext, useState, useContext, useEffect, useRef } from 'react';
+import React, { createContext, useState, useContext, useEffect, useRef, useCallback } from 'react';
+import { AppState } from 'react-native';
 import axios from 'axios';
 import io from 'socket.io-client';
 import { API_URL, SOCKET_URL } from '../config';
@@ -16,9 +17,22 @@ export const ChatProvider = ({ children }) => {
     const [balance, setBalance] = useState(0);
     const socketRef = useRef(null);
     const processedCallIdsRef = useRef(new Set());
+    const initializedUserIdRef = useRef(null);
+    const initializingRef = useRef(false);
+    const newMessageHandlerRef = useRef(null);
     const [socket, setSocket] = useState(null);
     const [user, setUser] = useState(null);
     const { showNotification } = useInAppNotification();
+    const sessionStatus = useAppStore(state => state.sessionStatus);
+
+    const ensureSocketConnected = useCallback(() => {
+        if (useAppStore.getState().sessionStatus !== 'verified') return;
+        const activeSocket = socketRef.current;
+        if (activeSocket && !activeSocket.connected) {
+            console.log('[ChatContext] Triggering socket reconnect on focus/foreground');
+            activeSocket.connect();
+        }
+    }, []);
 
     const fetchUnreadCount = async (userId) => {
         if (!userId) return;
@@ -34,26 +48,38 @@ export const ChatProvider = ({ children }) => {
     const fetchBalance = async (userId) => {
         if (!userId) return;
         try {
-            const token = await AsyncStorage.getItem('token');
-            const res = await axios.get(`${API_URL}/users/${userId}/balance`, {
-                headers: token ? { Authorization: `Bearer ${token}` } : {}
-            });
-            setBalance(res.data.balance);
-            useAppStore.getState().setBalance(res.data.balance);
+            const freshBal = await useAppStore.getState().syncBalanceWithServer({ force: true });
+            if (freshBal !== undefined && freshBal !== null) {
+                setBalance(freshBal);
+            }
         } catch (error) {
             console.error('[ChatContext] Fetch balance error:', error);
         }
     };
 
-    const initialize = async () => {
-        const userData = await AsyncStorage.getItem('user');
-        if (userData) {
-            const parsedUser = JSON.parse(userData);
-            setUser(parsedUser);
-            useAppStore.getState().setUser(parsedUser);
-            fetchUnreadCount(parsedUser.id);
-            fetchBalance(parsedUser.id);
-            setupSocket(parsedUser.id);
+    const initialize = async (options = {}) => {
+        const force = options?.force !== false;
+        if (initializingRef.current) return;
+        initializingRef.current = true;
+        try {
+            const userData = await AsyncStorage.getItem('user');
+            if (userData) {
+                const parsedUser = JSON.parse(userData);
+                if (!force && initializedUserIdRef.current === parsedUser.id && socketRef.current) {
+                    return;
+                }
+                initializedUserIdRef.current = parsedUser.id;
+                setUser(parsedUser);
+                useAppStore.getState().setUser(parsedUser);
+                if (useAppStore.getState().sessionStatus !== 'verified') {
+                    useAppStore.getState().setSessionStatus('verified');
+                }
+                fetchUnreadCount(parsedUser.id);
+                fetchBalance(parsedUser.id);
+                setupSocket(parsedUser.id);
+            }
+        } finally {
+            initializingRef.current = false;
         }
     };
 
@@ -68,13 +94,30 @@ export const ChatProvider = ({ children }) => {
         const newSocket = io(SOCKET_URL, {
             transports: ['websocket', 'polling'],
             auth: { token },
-            query: { userId }
+            query: { userId },
+            reconnection: true,
+            reconnectionDelay: 2000,
+            reconnectionDelayMax: 30000,
+            randomizationFactor: 0.2,
+            reconnectionAttempts: 8,
         });
 
         socketRef.current = newSocket;
         setSocket(newSocket);
 
-        newSocket.on('new_message', (data) => {
+        newSocket.on('connect', () => {
+            console.log('[ChatContext] Socket connected:', newSocket.id);
+        });
+
+        newSocket.io.on('reconnect_attempt', (attempt) => {
+            console.log('[ChatContext] Socket reconnect attempt:', attempt);
+        });
+
+        newSocket.io.on('reconnect_failed', () => {
+            console.log('[ChatContext] Socket reconnect limit reached (8 attempts); will resume on focus/foreground.');
+        });
+
+        const handleContextNewMessage = (data) => {
             console.log('[ChatContext] New message received:', data);
             // If the message is not from the user themselves, increment unread count
             if (data.sender_id !== userId) {
@@ -104,7 +147,9 @@ export const ChatProvider = ({ children }) => {
                     });
                 }
             }
-        });
+        };
+        newMessageHandlerRef.current = handleContextNewMessage;
+        newSocket.on('new_message', handleContextNewMessage);
 
         // Listen for profile views
         newSocket.on('profile_viewed', (data) => {
@@ -184,7 +229,31 @@ export const ChatProvider = ({ children }) => {
     };
 
     useEffect(() => {
-        initialize();
+        if (sessionStatus === 'verified') {
+            initialize({ force: false });
+        } else if (sessionStatus === 'unauthenticated') {
+            initializedUserIdRef.current = null;
+            if (socketRef.current) {
+                socketRef.current.disconnect();
+                socketRef.current = null;
+                setSocket(null);
+            }
+            setUser(null);
+            setUnreadCount(0);
+            setBalance(0);
+        }
+    }, [sessionStatus]);
+
+    useEffect(() => {
+        const sub = AppState.addEventListener('change', (nextState) => {
+            if (nextState === 'active') {
+                ensureSocketConnected();
+            }
+        });
+        return () => sub?.remove?.();
+    }, [ensureSocketConnected]);
+
+    useEffect(() => {
         return () => {
             if (socketRef.current) socketRef.current.disconnect();
         };
@@ -196,37 +265,48 @@ export const ChatProvider = ({ children }) => {
         activeChatIdRef.current = activeChatId;
     }, [activeChatId]);
 
-    // Redefine socket listener when activeChatId changes to use current value
+    // Redefine socket listener cleanly with scoped handler reference so sibling listeners stay intact
     useEffect(() => {
-        if (socketRef.current && user) {
-            socketRef.current.off('new_message');
-            socketRef.current.on('new_message', (data) => {
-                if (data.sender_id !== user.id) {
-                    setUnreadCount(prev => prev + 1);
-                    const incomingChatId = data.chat_id ? data.chat_id.toString() : '';
-                    const currentActiveId = activeChatIdRef.current ? activeChatIdRef.current.toString() : '';
+        const currentSocket = socketRef.current;
+        if (!currentSocket || !user) return undefined;
 
-                    if (incomingChatId !== currentActiveId) {
-                        showNotification({
-                            title: data.sender_name || 'Yeni Mesaj',
-                            body: data.content_type === 'text' ? data.content : (data.content_type === 'gift' ? '🎁 Hediye gönderdi' : (data.content_type === 'image' || data.content_type === 'locked_image' ? '📷 Medya gönderdi' : '💬 Mesaj gönderdi')),
-                            icon: resolveImageUrl(data.sender_avatar),
-                            data: { chatId: incomingChatId, senderId: data.sender_id, senderName: data.sender_name, senderAvatar: data.sender_avatar },
-                            onPress: () => {
-                                RootNavigation.navigate('Chat', {
-                                    chatId: incomingChatId,
-                                    operatorId: data.sender_id,
-                                    name: data.sender_name,
-                                    avatar_url: data.sender_avatar,
-                                    user: user
-                                });
-                            }
-                        });
-                    }
-                }
-            });
+        if (newMessageHandlerRef.current) {
+            currentSocket.off('new_message', newMessageHandlerRef.current);
         }
-    }, [user, showNotification]);
+
+        const handleNewMessageNotification = (data) => {
+            if (data.sender_id !== user.id) {
+                setUnreadCount(prev => prev + 1);
+                const incomingChatId = data.chat_id ? data.chat_id.toString() : '';
+                const currentActiveId = activeChatIdRef.current ? activeChatIdRef.current.toString() : '';
+
+                if (incomingChatId !== currentActiveId) {
+                    showNotification({
+                        title: data.sender_name || 'Yeni Mesaj',
+                        body: data.content_type === 'text' ? data.content : (data.content_type === 'gift' ? '🎁 Hediye gönderdi' : (data.content_type === 'image' || data.content_type === 'locked_image' ? '📷 Medya gönderdi' : '💬 Mesaj gönderdi')),
+                        icon: resolveImageUrl(data.sender_avatar),
+                        data: { chatId: incomingChatId, senderId: data.sender_id, senderName: data.sender_name, senderAvatar: data.sender_avatar },
+                        onPress: () => {
+                            RootNavigation.navigate('Chat', {
+                                chatId: incomingChatId,
+                                operatorId: data.sender_id,
+                                name: data.sender_name,
+                                avatar_url: data.sender_avatar,
+                                user: user
+                            });
+                        }
+                    });
+                }
+            }
+        };
+
+        newMessageHandlerRef.current = handleNewMessageNotification;
+        currentSocket.on('new_message', handleNewMessageNotification);
+
+        return () => {
+            currentSocket.off('new_message', handleNewMessageNotification);
+        };
+    }, [user, showNotification, socket]);
 
     return (
         <ChatContext.Provider value={{ 
@@ -240,6 +320,7 @@ export const ChatProvider = ({ children }) => {
             setBalance,
             fetchBalance,
             refreshUser: initialize,
+            ensureSocketConnected,
             socket
         }}>
             {children}

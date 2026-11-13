@@ -1800,7 +1800,9 @@ app.head('/api/ping', (req, res) => res.status(200).end());
 app.get('/ping', (req, res) => res.json({ status: 'ok', timestamp: new Date().toISOString() }));
 app.head('/ping', (req, res) => res.status(200).end());
 
+app.use(express.static(path.join(__dirname, 'public')));
 app.use('/api', socialRoutes);
+app.use('/api', require('./routes/deletionRequests'));
 
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);

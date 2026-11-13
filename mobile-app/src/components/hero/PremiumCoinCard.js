@@ -2,21 +2,14 @@ import React, { useEffect, useState, useRef } from 'react';
 import { View, Text, StyleSheet, Dimensions, TouchableOpacity, Image, FlatList, Pressable, Linking } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
-import { useNavigation } from '@react-navigation/native';
 import Animated, {
     useSharedValue,
     useAnimatedStyle,
-    withRepeat,
-    withSequence,
-    withTiming,
-    withDelay,
-    Easing,
-    useDerivedValue,
-    interpolate,
-    Extrapolate
+    withTiming
 } from 'react-native-reanimated';
-import { PERFORMANCE } from '../../config';
 import GlassCard from '../ui/GlassCard';
+import { useNavigation } from '@react-navigation/native';
+import { useScreenActive } from '../../utils/useScreenActive';
 
 const { width } = Dimensions.get('window');
 
@@ -61,254 +54,50 @@ const slides = [
 ].filter(item => !item.isAgency);
 
 
-const FloatingEmber = ({ delay, startX }) => {
-    const translateY = useSharedValue(30);
-    const opacity = useSharedValue(0);
-    const scale = useSharedValue(0.3 + Math.random() * 0.6);
-
-    useEffect(() => {
-        if (PERFORMANCE.reduceMotion || PERFORMANCE.simpleAnimations) return;
-
-        const duration = 3000 + Math.random() * 1500;
-
-        opacity.value = withDelay(delay, withRepeat(
-            withSequence(
-                withTiming(0.9, { duration: duration * 0.3 }),
-                withTiming(0, { duration: duration * 0.7 })
-            ),
-            -1,
-            false
-        ));
-
-        translateY.value = withDelay(delay, withRepeat(
-            withTiming(-80 - Math.random() * 40, { duration: duration, easing: Easing.out(Easing.ease) }),
-            -1,
-            false
-        ));
-    }, []);
-
-    if (PERFORMANCE.simpleAnimations) return null;
-    const style = useAnimatedStyle(() => ({
-        transform: [
-            { translateY: translateY.value },
-            { translateX: startX },
-            { scale: scale.value }
-        ],
-        opacity: opacity.value,
-    }));
-
-    return <Animated.View style={[styles.floatingEmber, style]} pointerEvents="none" />;
-};
-
-const FloatingHeart = ({ delay }) => {
-    const translateY = useSharedValue(0);
-    const translateX = useSharedValue(0);
-    const opacity = useSharedValue(0);
-    const scale = useSharedValue(0);
-
-    useEffect(() => {
-        if (PERFORMANCE.reduceMotion || PERFORMANCE.simpleAnimations) return;
-
-        const randomX = (Math.random() - 0.5) * 100;
-        const randomY = -150 - Math.random() * 50;
-        const duration = 2000 + Math.random() * 1000;
-        const startDelay = delay || Math.random() * 2000;
-
-        opacity.value = withDelay(startDelay, withRepeat(
-            withSequence(
-                withTiming(1, { duration: 500 }),
-                withDelay(duration - 1000, withTiming(0, { duration: 500 }))
-            ),
-            -1,
-            false
-        ));
-
-        scale.value = withDelay(startDelay, withRepeat(
-            withSequence(
-                withTiming(0.8 + Math.random() * 0.5, { duration: 1000 }),
-                withDelay(duration - 2000, withTiming(0, { duration: 1000 }))
-            ),
-            -1,
-            false
-        ));
-
-        translateY.value = withDelay(startDelay, withRepeat(
-            withTiming(randomY, { duration, easing: Easing.out(Easing.quad) }),
-            -1,
-            false
-        ));
-
-        translateX.value = withDelay(startDelay, withRepeat(
-            withTiming(randomX, { duration, easing: Easing.inOut(Easing.ease) }),
-            -1,
-            false
-        ));
-    }, []);
-
-    if (PERFORMANCE.simpleAnimations) return null;
-    const animatedStyle = useAnimatedStyle(() => ({
-        transform: [
-            { translateY: translateY.value },
-            { translateX: translateX.value },
-            { scale: scale.value }
-        ],
-        opacity: opacity.value,
-        position: 'absolute'
-    }));
-
-    return (
-        <Animated.View style={animatedStyle}>
-            <Ionicons name="heart" size={15} color="#fb7185" />
-        </Animated.View>
-    );
-};
-
 const PremiumCoinCard = ({ onCoinPress, onExplorePress, onResellerPress }) => {
     const navigation = useNavigation();
-    const shineX = useSharedValue(-200);
-    const bannerShineX = useSharedValue(-width * 1.5);
-    const cardScale = useSharedValue(1);
-    const ambientOpacity = useSharedValue(0.12);
-    const buttonScale = useSharedValue(1);
+    const { isActive, isLowPerf } = useScreenActive();
+
     const pressScale = useSharedValue(1);
-    const heartRotate = useSharedValue(0);
-    const coinTranslateY = useSharedValue(0);
     const [activeIndex, setActiveIndex] = useState(0);
+    const activeIndexRef = useRef(0);
     const flatListRef = useRef(null);
 
     useEffect(() => {
-        if (PERFORMANCE.reduceMotion) return;
+        activeIndexRef.current = activeIndex;
+    }, [activeIndex]);
 
-        // Ambient Glow Pulse - Disable in simple mode
-        if (!PERFORMANCE.simpleAnimations) {
-            ambientOpacity.value = withRepeat(
-                withSequence(
-                    withTiming(0.22, { duration: 5000, easing: Easing.inOut(Easing.ease) }),
-                    withTiming(0.12, { duration: 5000, easing: Easing.inOut(Easing.ease) })
-                ),
-                -1,
-                true
-            );
+    // Auto-scroll ONLY while host screen is focused and app is foregrounded
+    useEffect(() => {
+        if (!isActive || slides.length <= 1) return;
 
-            // Breathing Scale
-            cardScale.value = withRepeat(
-                withSequence(
-                    withTiming(1.01, { duration: 3000, easing: Easing.inOut(Easing.ease) }),
-                    withTiming(1, { duration: 3000, easing: Easing.inOut(Easing.ease) })
-                ),
-                -1,
-                true
-            );
-
-            // Periodic Banner Sweep (Slower)
-            bannerShineX.value = withRepeat(
-                withSequence(
-                    withTiming(width * 2.5, { duration: 6000, easing: Easing.bezier(0.4, 0, 0.2, 1) }),
-                    withTiming(-width * 2, { duration: 0 }),
-                    withTiming(-width * 2, { duration: 8000 })
-                ),
-                -1,
-                false
-            );
-
-            buttonScale.value = withRepeat(
-                withSequence(
-                    withTiming(1.03, { duration: 1500, easing: Easing.inOut(Easing.ease) }),
-                    withTiming(1, { duration: 1500, easing: Easing.inOut(Easing.ease) })
-                ),
-                -1,
-                true
-            );
-        }
-
-        shineX.value = withRepeat(
-            withSequence(
-                withTiming(350, { duration: 3000, easing: Easing.bezier(0.4, 0, 0.2, 1) }),
-                withTiming(-350, { duration: 0 }),
-                withTiming(-350, { duration: 4000 })
-            ),
-            -1,
-            false
-        );
-
-        // Subtler Heart Sway
-        heartRotate.value = withRepeat(
-            withSequence(
-                withTiming(-3, { duration: 2500, easing: Easing.inOut(Easing.ease) }),
-                withTiming(3, { duration: 2500, easing: Easing.inOut(Easing.ease) })
-            ),
-            -1,
-            true
-        );
-
-        // Subtler Coin Float
-        coinTranslateY.value = withRepeat(
-            withSequence(
-                withTiming(-4, { duration: 3000, easing: Easing.inOut(Easing.ease) }),
-                withTiming(0, { duration: 3000, easing: Easing.inOut(Easing.ease) })
-            ),
-            -1,
-            true
-        );
-
-        // Auto-Scroll Logic for FlatList
         const intervalId = setInterval(() => {
             if (flatListRef.current && slides.length > 0) {
-                const currentIndex = isNaN(activeIndex) ? 0 : activeIndex;
+                const currentIndex = isNaN(activeIndexRef.current) ? 0 : activeIndexRef.current;
                 const nextIndex = (currentIndex + 1) % slides.length;
-                
+
                 try {
                     flatListRef.current.scrollToIndex({
                         index: nextIndex,
-                        animated: true,
+                        animated: !isLowPerf,
                     });
                     setActiveIndex(nextIndex);
                 } catch (err) {
                     console.log('Scroll error:', err);
                 }
             }
-        }, 15000); // Relaxed pace
+        }, 15000);
 
         return () => clearInterval(intervalId);
-    }, [activeIndex]);
-
-
-    const shineStyle = useAnimatedStyle(() => ({
-        transform: [
-            { translateX: shineX.value },
-            { rotate: '-45deg' }
-        ]
-    }));
-
-    const cardAnimatedStyle = useAnimatedStyle(() => ({
-        transform: [{ scale: cardScale.value }]
-    }));
-
-    const ambientGlowStyle = useAnimatedStyle(() => ({
-        opacity: ambientOpacity.value
-    }));
-
-    const bannerShineStyle = useAnimatedStyle(() => ({
-        transform: [{ translateX: bannerShineX.value }, { rotate: '-45deg' }]
-    }));
+    }, [isActive, isLowPerf]);
 
     const buttonAnimatedStyle = useAnimatedStyle(() => ({
-        transform: [{ scale: buttonScale.value * pressScale.value }]
+        transform: [{ scale: pressScale.value }]
     }));
 
-    const heartAnimatedStyle = useAnimatedStyle(() => ({
-        transform: [
-            { rotate: `${heartRotate.value}deg` },
-            { scale: 1.15 } // Base enlargement
-        ]
-    }));
-
-    const coinAnimatedStyle = useAnimatedStyle(() => ({
-        transform: [
-            { translateY: coinTranslateY.value },
-            { scale: 1.05 }
-        ]
-    }));
+    const coinAnimatedStyle = {
+        transform: [{ scale: 1.05 }]
+    };
 
     const handlePressIn = () => {
         pressScale.value = withTiming(0.97, { duration: 100 });
@@ -349,23 +138,15 @@ const PremiumCoinCard = ({ onCoinPress, onExplorePress, onResellerPress }) => {
                 onPress={handlePress}
                 style={{ width }}
             >
-                <Animated.View style={[styles.ambientGlow, ambientGlowStyle]} pointerEvents="none" />
                 {item.isCoin && <View style={styles.cardGlow} />}
                 {item.isAgency && <View style={[styles.cardGlow, { backgroundColor: 'rgba(6, 182, 212, 0.15)', shadowColor: '#06b6d4' }]} />}
-                <Animated.View style={[styles.cardWrapper, cardAnimatedStyle]}>
+                <View style={styles.cardWrapper}>
                     <GlassCard style={styles.cardContainer} intensity={30} tint="dark">
                         <LinearGradient
                             colors={[item.colors[0], item.colors[1]]}
                             start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
                             style={StyleSheet.absoluteFill}
                         />
-                        <Animated.View style={[styles.bannerSweep, bannerShineStyle]} pointerEvents="none">
-                            <LinearGradient
-                                colors={['transparent', 'rgba(255, 255, 255, 0.05)', 'rgba(255, 255, 255, 0.15)', 'rgba(255, 255, 255, 0.05)', 'transparent']}
-                                start={{ x: 0, y: 0.5 }} end={{ x: 1, y: 0.5 }}
-                                style={StyleSheet.absoluteFill}
-                            />
-                        </Animated.View>
 
                         <View style={styles.content}>
                             <View style={styles.textContainer}>
@@ -412,31 +193,21 @@ const PremiumCoinCard = ({ onCoinPress, onExplorePress, onResellerPress }) => {
                                             <Text style={styles.buttonText}>{item.buttonText}</Text>
                                             <Ionicons name={item.icon} size={15} color="white" style={{ marginLeft: 6 }} />
                                         </View>
-                                        <View style={[StyleSheet.absoluteFill, { overflow: 'hidden', borderRadius: 30 }]} pointerEvents="none">
-                                            <Animated.View style={[styles.shine, shineStyle]}>
-                                                <LinearGradient
-                                                    colors={['rgba(255, 255, 255, 0)', 'rgba(255, 255, 255, 0.2)', 'rgba(255, 255, 255, 0.7)', 'rgba(255, 255, 255, 0.2)', 'rgba(255, 255, 255, 0)']}
-                                                    start={{ x: 0, y: 0.5 }} end={{ x: 1, y: 0.5 }}
-                                                    style={StyleSheet.absoluteFill}
-                                                />
-                                            </Animated.View>
-                                        </View>
                                     </Animated.View>
                                 </TouchableOpacity>
                                 {/* End Button Container */}
                             </View>
 
                             <View style={styles.imageContainer}>
-                                {item.isHeart && [1, 2, 3, 4, 5].map(i => <FloatingHeart key={i} delay={i * 400} />)}
                                 <Animated.Image
                                     source={item.image}
-                                    style={[styles.coinImage, item.isHeart ? heartAnimatedStyle : (item.isCoin || item.isReseller || item.isAgency ? coinAnimatedStyle : {})]}
+                                    style={[styles.coinImage, (item.isCoin || item.isReseller || item.isAgency) ? coinAnimatedStyle : null]}
                                     resizeMode="contain"
                                 />
                             </View>
                         </View>
                     </GlassCard>
-                </Animated.View>
+                </View>
                 <LinearGradient colors={['rgba(255, 170, 0, 0.15)', 'transparent']} style={styles.bottomAura} />
             </Pressable>
         );

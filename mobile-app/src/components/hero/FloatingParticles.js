@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { View, StyleSheet, Dimensions, Platform } from 'react-native';
 import Animated, {
     useSharedValue,
@@ -7,23 +7,35 @@ import Animated, {
     withTiming,
     withDelay,
     withSequence,
-    interpolate,
-    Extrapolate
+    cancelAnimation,
 } from 'react-native-reanimated';
 
 import { PERFORMANCE } from '../../config';
+import { useScreenActive } from '../../utils/useScreenActive';
 
-const { width, height } = Dimensions.get('window');
+const { width } = Dimensions.get('window');
 
-const Particle = ({ delay = 0 }) => {
+const Particle = ({ delay = 0, shouldAnimate }) => {
     const translateY = useSharedValue(0);
     const opacity = useSharedValue(0);
     const scale = useSharedValue(1);
-    const randomX = Math.random() * width;
-    const duration = 3000 + Math.random() * 4000;
+    const randomX = useRef(Math.random() * width).current;
+    const duration = useRef(3000 + Math.random() * 4000).current;
 
     useEffect(() => {
-        if (PERFORMANCE.reduceMotion) return;
+        const stop = () => {
+            cancelAnimation(opacity);
+            cancelAnimation(translateY);
+            cancelAnimation(scale);
+            opacity.value = 0;
+            translateY.value = 0;
+            scale.value = 1;
+        };
+
+        if (!shouldAnimate) {
+            stop();
+            return;
+        }
 
         opacity.value = withDelay(delay, withRepeat(
             withSequence(
@@ -51,7 +63,8 @@ const Particle = ({ delay = 0 }) => {
                 true
             ));
         }
-    }, []);
+        return stop;
+    }, [delay, duration, shouldAnimate]);
 
     const animatedStyle = useAnimatedStyle(() => ({
         transform: [
@@ -68,14 +81,15 @@ const Particle = ({ delay = 0 }) => {
 };
 
 const FloatingParticles = () => {
-    if (PERFORMANCE.reduceMotion) return null;
+    const { shouldAnimate } = useScreenActive();
+    if (!shouldAnimate) return null;
 
     const count = PERFORMANCE.simpleAnimations ? PERFORMANCE.maxParticles : 12;
 
     return (
         <View style={StyleSheet.absoluteFill} pointerEvents="none">
             {[...Array(count)].map((_, i) => (
-                <Particle key={i} delay={i * 500} />
+                <Particle key={i} delay={i * 500} shouldAnimate={shouldAnimate} />
             ))}
         </View>
     );

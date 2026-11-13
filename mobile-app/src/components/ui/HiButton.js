@@ -9,17 +9,45 @@ import Animated, {
     useSharedValue,
     useAnimatedStyle,
     withSpring,
-    withRepeat,
     withTiming,
-    withSequence,
     Easing,
     runOnJS,
 } from 'react-native-reanimated';
 
 const RESET_DURATION = 24 * 60 * 60 * 1000;
 
-// Global synchronous cache to prevent ANY flickers when parent components force a remount
+// Global synchronous cache + single-flight bulk hydration (eliminates per-row AsyncStorage.getItem calls)
 const localChatCache = new Set();
+let isHiCacheHydrated = false;
+let hiCacheHydrationPromise = null;
+
+export const hydrateHiStatusCache = async () => {
+    if (isHiCacheHydrated) return;
+    if (hiCacheHydrationPromise) return hiCacheHydrationPromise;
+
+    hiCacheHydrationPromise = (async () => {
+        try {
+            const keys = await AsyncStorage.getAllKeys();
+            const hiKeys = keys.filter(k => k.startsWith('lastHi_'));
+            if (hiKeys.length > 0) {
+                const entries = await AsyncStorage.multiGet(hiKeys);
+                const now = Date.now();
+                for (const [key, val] of entries) {
+                    if (!val) continue;
+                    const ts = parseInt(val, 10);
+                    if (!Number.isNaN(ts) && now - ts < RESET_DURATION) {
+                        localChatCache.add(key.slice('lastHi_'.length));
+                    }
+                }
+            }
+        } catch (e) {
+        } finally {
+            isHiCacheHydrated = true;
+        }
+    })();
+
+    return hiCacheHydrationPromise;
+};
 
 const Particle = ({ index, onComplete }) => {
     const pos = useSharedValue(0);
@@ -55,57 +83,32 @@ const Particle = ({ index, onComplete }) => {
 
 const HiButton = memo(({ onPress, operatorId, onHiPress }) => {
     const scale = useSharedValue(1);
-    const pulse = useSharedValue(1);
     const [particles, setParticles] = useState([]);
     const [sending, setSending] = useState(false);
-    
-    // 1. Synchronous initialization! If it was pressed in this session, it starts as 'Chat' instantly.
-    const [isChatMode, setIsChatMode] = useState(() => localChatCache.has(operatorId));
+    const cacheKey = operatorId !== undefined && operatorId !== null ? String(operatorId) : '';
+
+    // 1. Synchronous initialization from bulk-hydrated cache
+    const [isChatMode, setIsChatMode] = useState(() => localChatCache.has(cacheKey));
     const [alertVisible, setAlertVisible] = useState(false);
 
     useEffect(() => {
-        if (!isChatMode) {
-            checkHiStatus();
+        const cached = localChatCache.has(cacheKey);
+        if (cached !== isChatMode) {
+            setIsChatMode(cached);
         }
-    }, [operatorId]);
+        if (cached || isHiCacheHydrated || !cacheKey) return;
 
-    useEffect(() => {
-        if (!isChatMode) {
-            pulse.value = withRepeat(
-                withSequence(
-                    withTiming(1.05, { duration: 400, easing: Easing.bezier(0.4, 0, 0.2, 1) }),
-                    withTiming(1, { duration: 1200, easing: Easing.bezier(0.4, 0, 0.2, 1) })
-                ),
-                -1,
-                false
-            );
-        } else {
-            pulse.value = 1;
-        }
-    }, [isChatMode]);
-
-    const checkHiStatus = async () => {
-        try {
-            if (localChatCache.has(operatorId)) {
-                if (!isChatMode) setIsChatMode(true);
-                return;
+        let active = true;
+        hydrateHiStatusCache().then(() => {
+            if (active && localChatCache.has(cacheKey)) {
+                setIsChatMode(true);
             }
-
-            const lastHiStr = await AsyncStorage.getItem(`lastHi_${operatorId}`);
-            if (lastHiStr) {
-                const lastHiTime = parseInt(lastHiStr);
-                if (Date.now() - lastHiTime < RESET_DURATION) {
-                    localChatCache.add(operatorId); // Update global cache
-                    setIsChatMode(true);
-                }
-            }
-        } catch (e) {}
-    };
+        });
+        return () => { active = false; };
+    }, [cacheKey]);
 
     const animatedStyle = useAnimatedStyle(() => ({
-        transform: [{ scale: scale.value * pulse.value }],
-        shadowOpacity: !isChatMode ? 0.3 + (pulse.value - 1) * 5 : 0.2,
-        shadowRadius: !isChatMode ? 8 + (pulse.value - 1) * 30 : 6,
+        transform: [{ scale: scale.value }],
     }));
 
     const handlePressIn = () => {
@@ -124,21 +127,21 @@ const HiButton = memo(({ onPress, operatorId, onHiPress }) => {
     const handlePress = async () => {
         if (sending) return;
 
-        if (!isChatMode && !localChatCache.has(operatorId)) {
+        if (!isChatMode && !localChatCache.has(cacheKey)) {
             setSending(true);
             try {
                 if (onHiPress) {
                     const success = await onHiPress();
                     if (!success) {
-                        localChatCache.delete(operatorId);
+                        localChatCache.delete(cacheKey);
                         setIsChatMode(false);
-                        AsyncStorage.removeItem(`lastHi_${operatorId}`).catch(() => {});
+                        AsyncStorage.removeItem(`lastHi_${cacheKey}`).catch(() => {});
                         return;
                     }
                 }
 
                 // Instantly lock it globally and locally
-                localChatCache.add(operatorId);
+                localChatCache.add(cacheKey);
                 setIsChatMode(true);
                 
                 // Trigger Particle Burst
@@ -149,13 +152,13 @@ const HiButton = memo(({ onPress, operatorId, onHiPress }) => {
                 setParticles(newParticles);
 
                 const now = Date.now();
-                AsyncStorage.setItem(`lastHi_${operatorId}`, now.toString()).catch(() => {});
+                AsyncStorage.setItem(`lastHi_${cacheKey}`, now.toString()).catch(() => {});
                 
                 Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
             } catch (err) {
-                localChatCache.delete(operatorId);
+                localChatCache.delete(cacheKey);
                 setIsChatMode(false);
-                AsyncStorage.removeItem(`lastHi_${operatorId}`).catch(() => {});
+                AsyncStorage.removeItem(`lastHi_${cacheKey}`).catch(() => {});
             } finally {
                 setSending(false);
             }

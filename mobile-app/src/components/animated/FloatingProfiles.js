@@ -5,9 +5,11 @@ import Animated, {
     useAnimatedStyle,
     withRepeat,
     withTiming,
+    cancelAnimation,
     Easing,
 } from 'react-native-reanimated';
 import { BlurView } from 'expo-blur';
+import { useScreenActive } from '../../utils/useScreenActive';
 
 const { width, height } = Dimensions.get('window');
 
@@ -26,11 +28,15 @@ const CARD_WIDTH = width * 0.4;
 const CARD_HEIGHT = CARD_WIDTH * 1.3;
 const GAP = 15;
 
-const Column = React.memo(({ images, speed, reverse = false }) => {
+const Column = React.memo(({ images, speed, reverse = false, shouldAnimate = true }) => {
     const SET_HEIGHT = images.length * (CARD_HEIGHT + GAP);
     const translateY = useSharedValue(reverse ? -SET_HEIGHT : 0);
 
     useEffect(() => {
+        if (!shouldAnimate) {
+            cancelAnimation(translateY);
+            return;
+        }
         translateY.value = withRepeat(
             withTiming(reverse ? 0 : -SET_HEIGHT, {
                 duration: speed,
@@ -39,7 +45,10 @@ const Column = React.memo(({ images, speed, reverse = false }) => {
             -1,
             false
         );
-    }, []);
+        return () => {
+            cancelAnimation(translateY);
+        };
+    }, [shouldAnimate, SET_HEIGHT, speed, reverse]);
 
     const animatedStyle = useAnimatedStyle(() => ({
         transform: [{ translateY: translateY.value }],
@@ -61,6 +70,7 @@ const Column = React.memo(({ images, speed, reverse = false }) => {
 });
 
 export default function FloatingProfiles() {
+    const { shouldAnimate } = useScreenActive();
     // Split profiles into three distinct sets for variety
     const col1 = [PROFILES[0], PROFILES[1], PROFILES[2]];
     const col2 = [PROFILES[3], PROFILES[4], PROFILES[5]];
@@ -69,9 +79,9 @@ export default function FloatingProfiles() {
     return (
         <View style={styles.container} pointerEvents="none">
             <View style={styles.columnsWrapper}>
-                <Column images={col1} speed={40000} reverse={false} />
-                <Column images={col2} speed={35000} reverse={true} />
-                <Column images={col3} speed={45000} reverse={false} />
+                <Column images={col1} speed={40000} reverse={false} shouldAnimate={shouldAnimate} />
+                <Column images={col2} speed={35000} reverse={true} shouldAnimate={shouldAnimate} />
+                <Column images={col3} speed={45000} reverse={false} shouldAnimate={shouldAnimate} />
             </View>
         </View>
     );

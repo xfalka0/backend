@@ -10,6 +10,7 @@ import Animated, {
     withSpring,
     withTiming,
     withRepeat,
+    cancelAnimation,
 
     withSequence,
     withDelay,
@@ -70,10 +71,18 @@ const DestinyMatchModal = ({ visible, onClose, operators, navigation, user }) =>
 
         return () => {
             if (shuffleIntervalRef.current) clearInterval(shuffleIntervalRef.current);
+            cancelAnimation(pulseScale);
+            cancelAnimation(pulseOpacity);
         };
     }, [visible]);
 
     const resetState = () => {
+        if (shuffleIntervalRef.current) {
+            clearInterval(shuffleIntervalRef.current);
+            shuffleIntervalRef.current = null;
+        }
+        cancelAnimation(pulseScale);
+        cancelAnimation(pulseOpacity);
         setMatchState('idle');
         setMatchedProfile(null);
         setDisplayProfile(null);

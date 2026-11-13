@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, TextInput, FlatList, StyleSheet, KeyboardAvoidingView, Platform, TouchableOpacity, Image, RefreshControl, Animated, ScrollView, Keyboard, PanResponder, Alert, Linking, BackHandler } from 'react-native';
+import { View, Text, TextInput, FlatList, StyleSheet, KeyboardAvoidingView, Platform, TouchableOpacity, Image, RefreshControl, Animated, ScrollView, Keyboard, PanResponder, Alert, Linking, BackHandler, ActivityIndicator, UIManager, findNodeHandle } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 
 import * as Haptics from 'expo-haptics';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -40,10 +41,44 @@ import ImageLightbox from '../components/ui/ImageLightbox';
 import { useChat } from '../contexts/ChatContext';
 import QuickActionsModal from '../components/QuickActionsModal';
 
+const ChatMessageRow = React.memo(({
+    item,
+    index,
+    isTopItem,
+    showDate,
+    dateText,
+    renderMessage,
+    dateSeparatorStyle,
+    dateSeparatorLineStyle,
+    dateSeparatorTextStyle,
+}) => (
+    <View>
+        {showDate && (
+            <View style={dateSeparatorStyle}>
+                <View style={dateSeparatorLineStyle} />
+                <Text style={dateSeparatorTextStyle}>{dateText}</Text>
+                <View style={dateSeparatorLineStyle} />
+            </View>
+        )}
+        {renderMessage({ item, index })}
+    </View>
+), (prev, next) => (
+    prev.item === next.item
+    && prev.showDate === next.showDate
+    && prev.dateText === next.dateText
+    && prev.isTopItem === next.isTopItem
+    && prev.renderMessage === next.renderMessage
+));
+
 export default function ChatScreen({ route, navigation }) {
     console.log("RENDER ChatScreen");
     const insets = useSafeAreaInsets();
-    const { fetchUnreadCount, setActiveChatId, socket, user: contextUser } = useChat();
+    const { fetchUnreadCount, setActiveChatId, socket, user: contextUser, ensureSocketConnected } = useChat();
+    useFocusEffect(
+        React.useCallback(() => {
+            ensureSocketConnected?.();
+        }, [ensureSocketConnected])
+    );
     const { showAlert } = useAlert();
     const role = useAppStore(state => state.role);
     const isOperator = role === 'operator';
@@ -87,9 +122,24 @@ export default function ChatScreen({ route, navigation }) {
     const user = effectiveUser;
     const isPremiumMember = Boolean(effectiveUser?.is_vip === true || effectiveUser?.is_vip === 'true' || effectiveUser?.is_vip === 1 || effectiveUser?.is_premium || parseInt(effectiveUser?.vip_level || 0, 10) > 0 || (effectiveUser?.vip_expire_date && new Date(effectiveUser.vip_expire_date) > new Date()));
 
+    const PAGE_SIZE = 50;
     const [messages, setMessages] = useState([]);
+    const [loadingOlder, setLoadingOlder] = useState(false);
+    const [hasMoreMessages, setHasMoreMessages] = useState(true);
     const [isTyping, setIsTyping] = useState(false);
-    const [input, setInput] = useState('');
+    const lastInputEventCountRef = useRef(0);
+    const inputTextRef = useRef('');
+    const textInputRef = useRef(null);
+    const tempSeqRef = useRef(0);
+    const sendQueueRef = useRef(Promise.resolve());
+    const pendingAckResolversRef = useRef(new Map());
+    const liveAnimatedIdsRef = useRef(new Set());
+    const loadingOlderRef = useRef(false);
+    const hasMoreMessagesRef = useRef(true);
+    const loadedHistoryOffsetRef = useRef(0);
+    const newLiveServerCountRef = useRef(0);
+    const messagesRef = useRef([]);
+    const initialLoadedRef = useRef(false);
     const [isKeyboardVisible, setKeyboardVisible] = useState(false);
 
     useEffect(() => {
@@ -298,7 +348,6 @@ export default function ChatScreen({ route, navigation }) {
     const recordingRef = useRef(null);
     const isRecordingRef = useRef(false);
     const typingTimeoutRef = useRef(null);
-    const lastSentMessageRef = useRef({ text: '', time: 0 });
     const waveAnim = useRef(new Animated.Value(0)).current;
     const blinkAnim = useRef(new Animated.Value(1)).current;
     const slideAnim = useRef(new Animated.Value(0)).current;
@@ -326,7 +375,6 @@ export default function ChatScreen({ route, navigation }) {
         })
     ).current;
 
-    const [showIcebreakers, setShowIcebreakers] = useState(false);
     const [showQuickActions, setShowQuickActions] = useState(false);
     const [fakeCall, setFakeCall] = useState(null);
     const [fakeCallEndStatus, setFakeCallEndStatus] = useState(null);
@@ -742,7 +790,7 @@ export default function ChatScreen({ route, navigation }) {
                 tempId: tempId
             };
 
-            setMessages(prev => [optimisticMsg, ...prev]);
+            setTimeout(() => setMessages(prev => [optimisticMsg, ...prev]), 0);
         } catch (err) {
             console.error('[ChatScreen] Send location error:', err);
             showAlert({ title: 'Hata', message: 'Konum gönderilemedi.', type: 'error' });
@@ -923,8 +971,216 @@ export default function ChatScreen({ route, navigation }) {
             };
         }
 
-        // Case 2: chatId is available. Load all data and bind socket.
+        // Case 2: chatId is available. Load latest page and bind scoped socket listeners.
+        socketRef.current = socket;
+        const roomStr = chatId.toString();
+
+        const trackLiveAnimationId = (id) => {
+            const key = String(id);
+            liveAnimatedIdsRef.current.add(key);
+            if (liveAnimatedIdsRef.current.size > 10) {
+                const oldestKey = liveAnimatedIdsRef.current.values().next().value;
+                liveAnimatedIdsRef.current.delete(oldestKey);
+            }
+        };
+
+        const syncMissedMessagesAfterReconnect = async () => {
+            if (!active || !initialLoadedRef.current) return;
+            try {
+                const token = await AsyncStorage.getItem('token');
+                const authHeader = { headers: { Authorization: `Bearer ${token}` } };
+                const latestRes = await axios.get(`${API_URL}/messages/${chatId}?limit=${PAGE_SIZE}&offset=0`, authHeader);
+                if (!active || !Array.isArray(latestRes.data)) return;
+                const latestDesc = [...latestRes.data].reverse();
+                let addedCount = 0;
+                setMessages(prev => {
+                    const existingIds = new Set(prev.map(m => String(m.id)));
+                    const missed = latestDesc.filter(m => !existingIds.has(String(m.id)));
+                    if (missed.length === 0) return prev;
+                    addedCount = missed.length;
+                    missed.forEach(m => trackLiveAnimationId(m.id));
+                    const cleanedPrev = prev.filter(m => !(
+                        m.is_optimistic &&
+                        missed.some(s =>
+                            String(s.sender_id) === String(m.sender_id) &&
+                            s.content === m.content &&
+                            Math.abs(new Date(s.created_at) - new Date(m.created_at)) < 15000
+                        )
+                    ));
+                    return [...missed, ...cleanedPrev].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+                });
+                if (addedCount > 0) {
+                    newLiveServerCountRef.current += addedCount;
+                }
+            } catch (syncErr) {
+                console.log('[SOCKET] Reconnect sync error:', syncErr.message);
+            }
+        };
+
+        const handleSocketConnect = () => {
+            console.log('[SOCKET] Connected/Reconnected. Joining room:', roomStr);
+            socket.emit('join_room', roomStr);
+            syncMissedMessagesAfterReconnect();
+        };
+
+        const handleReceiveMessage = (msg) => {
+            console.log('[SOCKET] receive_message on Mobile:', msg.id, 'for chatId:', msg.chat_id, 'type:', msg.type || msg.content_type, 'content:', (msg.content || '').substring(0, 60), 'duration:', msg.duration, 'Current chatId:', chatId);
+
+            if (msg.tempId && pendingAckResolversRef.current.has(msg.tempId)) {
+                const resolveAck = pendingAckResolversRef.current.get(msg.tempId);
+                resolveAck?.();
+            }
+
+            if (msg.chat_id && chatId && msg.chat_id.toString() !== chatId.toString()) {
+                console.warn('[SOCKET] Received message for different chat! Ignoring.');
+                return;
+            }
+
+            setMessages(prev => {
+                const exists = prev.some(m => String(m.id) === String(msg.id));
+                if (exists) return prev;
+
+                let newMessages = [...prev];
+                let updated = false;
+
+                if (msg.tempId) {
+                    const optimisticIndex = newMessages.findIndex(m => m.id === msg.tempId);
+                    if (optimisticIndex !== -1) {
+                        const stableKey = newMessages[optimisticIndex]._clientKey || newMessages[optimisticIndex].id;
+                        newMessages[optimisticIndex] = { ...msg, _clientKey: stableKey };
+                        updated = true;
+                    }
+                } else {
+                    const optimisticIndex = newMessages.findIndex(m =>
+                        m.is_optimistic &&
+                        m.content === msg.content &&
+                        m.type === msg.type &&
+                        Math.abs(new Date(m.created_at) - new Date(msg.created_at)) < 5000
+                    );
+                    if (optimisticIndex !== -1) {
+                        const stableKey = newMessages[optimisticIndex]._clientKey || newMessages[optimisticIndex].id;
+                        newMessages[optimisticIndex] = { ...msg, _clientKey: stableKey };
+                        updated = true;
+                    }
+                }
+
+                if (!updated) {
+                    trackLiveAnimationId(msg.id);
+                    newMessages = [msg, ...newMessages];
+                }
+                newLiveServerCountRef.current += 1;
+
+                // Optimistic Reply Update: If the operator sent a message, mark the customer's last message as replied
+                const isFromMe = msg.sender_id == user.id;
+                if (isFromMe && isOperator) {
+                    const lastCustomerIndex = newMessages.findIndex(m => m.sender_id != user.id && m.content_type !== 'gift');
+                    if (lastCustomerIndex !== -1 && !newMessages[lastCustomerIndex].is_replied) {
+                        let potential = 43.5;
+                        if (msg.type === 'image' || msg.content_type === 'image') potential = 217.5;
+                        else if (msg.type === 'audio' || msg.content_type === 'audio') potential = 130.5;
+
+                        newMessages[lastCustomerIndex] = {
+                            ...newMessages[lastCustomerIndex],
+                            is_replied: true,
+                            earned_diamonds: potential
+                        };
+                    }
+                }
+
+                return newMessages;
+            });
+        };
+
+        const handleMessageError = (data) => {
+            console.log('[SOCKET] Message Error:', data);
+            if (data.tempId && pendingAckResolversRef.current.has(data.tempId)) {
+                const resolveAck = pendingAckResolversRef.current.get(data.tempId);
+                resolveAck?.();
+            }
+            if (data.tempId) {
+                setMessages(prev => prev.filter(m => m.id !== data.tempId));
+            }
+            if (data.code === 'INSUFFICIENT_FUNDS') {
+                handleInsufficientCoins();
+            } else {
+                const errorMsg = data.debug ? `${data.message}\n(Hata: ${data.debug})` : (data.message || 'Mesaj gönderilemedi.');
+                showAlert({ title: 'Hata', message: errorMsg, type: 'error' });
+            }
+        };
+
+        const handleBalanceUpdate = (data) => {
+            console.log('[SOCKET] Balance Update received:', data);
+            if (data.userId === user.id || data.id === user.id) {
+                setCurrentBalance(data.newBalance);
+            }
+        };
+
+        const handleMessageReaction = (data) => {
+            console.log('[SOCKET] Reaction received:', data);
+            setMessages(prev => prev.map(m =>
+                m.id === data.messageId ? { ...m, reaction: data.reaction } : m
+            ));
+        };
+
+        const handleMessageUpdated = (data) => {
+            console.log('[SOCKET] Message Update received:', data);
+            if (data && data.id) {
+                setMessages(prev => prev.map(m =>
+                    (m.id && m.id.toString().toLowerCase() === data.id.toString().toLowerCase())
+                        ? { ...m, is_replied: data.is_replied, earned_diamonds: data.earned_diamonds }
+                        : m
+                ));
+            }
+        };
+
+        const handleDisplayTyping = (data) => {
+            console.log('[SOCKET] display_typing received on Mobile:', data, 'Current chatId:', chatId);
+            const incomingChatId = data.chatId ? data.chatId.toString() : '';
+            const incomingUserId = data.userId ? data.userId.toString() : '';
+            const myId = user?.id ? user.id.toString() : '';
+            const myChatId = chatId ? chatId.toString() : '';
+
+            if (incomingChatId === myChatId && incomingUserId !== myId) {
+                console.log('[ChatScreen] Showing Typing Indicator');
+                setIsTyping(true);
+            }
+        };
+
+        const handleHideTyping = (data) => {
+            console.log('[SOCKET] hide_typing received on Mobile:', data);
+            const incomingChatId = data.chatId ? data.chatId.toString() : '';
+            const myChatId = chatId ? chatId.toString() : '';
+            if (incomingChatId === myChatId) {
+                setIsTyping(false);
+            }
+        };
+
+        socket.on('connect', handleSocketConnect);
+        socket.on('receive_message', handleReceiveMessage);
+        socket.on('message_error', handleMessageError);
+        socket.on('balance_update', handleBalanceUpdate);
+        socket.on('message_reaction', handleMessageReaction);
+        socket.on('message_updated', handleMessageUpdated);
+        socket.on('display_typing', handleDisplayTyping);
+        socket.on('hide_typing', handleHideTyping);
+
+        if (socket.connected) {
+            console.log('[SOCKET] Reusing global persistent socket. Joining Room:', roomStr);
+            socket.emit('join_room', roomStr);
+        } else {
+            socket.connect?.();
+        }
+
         const loadChatData = async () => {
+            initialLoadedRef.current = false;
+            loadedHistoryOffsetRef.current = 0;
+            newLiveServerCountRef.current = 0;
+            loadingOlderRef.current = false;
+            setLoadingOlder(false);
+            hasMoreMessagesRef.current = true;
+            setHasMoreMessages(true);
+            liveAnimatedIdsRef.current.clear();
+
             try {
                 const token = await AsyncStorage.getItem('token');
                 const authHeader = { headers: { Authorization: `Bearer ${token}` } };
@@ -937,7 +1193,7 @@ export default function ChatScreen({ route, navigation }) {
 
                 const [balanceRes, historyRes, readRes, inviteRes] = await Promise.all([
                     activeUserId ? axios.get(`${API_URL}/users/${activeUserId}`, authHeader).catch(() => ({ data: {} })) : Promise.resolve({ data: {} }),
-                    axios.get(`${API_URL}/messages/${chatId}`, authHeader),
+                    axios.get(`${API_URL}/messages/${chatId}?limit=${PAGE_SIZE}&offset=0`, authHeader),
                     activeUserId ? axios.put(`${API_URL}/chats/${chatId}/read`, { userId: activeUserId }, authHeader).catch(() => ({ data: {} })) : Promise.resolve({ data: {} }),
                     AGENCY_SYSTEM_ENABLED ? axios.get(`${API_URL}/agency/my-invitations`, authHeader).catch(() => ({ data: [] })) : Promise.resolve({ data: [] })
                 ]);
@@ -951,8 +1207,14 @@ export default function ChatScreen({ route, navigation }) {
                 if (balanceRes.data && balanceRes.data.balance !== undefined) {
                     setCurrentBalance(balanceRes.data.balance);
                 }
-                
-                let chatMessages = historyRes.data.reverse();
+
+                const rawRows = Array.isArray(historyRes.data) ? historyRes.data : [];
+                loadedHistoryOffsetRef.current = rawRows.length;
+                const moreAvailable = rawRows.length >= PAGE_SIZE;
+                hasMoreMessagesRef.current = moreAvailable;
+                setHasMoreMessages(moreAvailable);
+
+                let chatMessages = [...rawRows].reverse();
 
                 // Check pending invitations
                 if (inviteRes && inviteRes.data && inviteRes.data.length > 0) {
@@ -976,143 +1238,8 @@ export default function ChatScreen({ route, navigation }) {
                 }
 
                 setMessages(chatMessages);
+                initialLoadedRef.current = true;
                 setIsLoading(false);
-
-                // Bind Socket
-                socketRef.current = socket;
-                const roomStr = chatId.toString();
-                console.log('[SOCKET] Reusing global persistent socket. Joining Room:', roomStr);
-                socket.emit('join_room', roomStr);
-
-                // Clear listeners first to avoid duplicate bindings
-                socket.off('receive_message');
-                socket.off('message_error');
-                socket.off('balance_update');
-                socket.off('message_reaction');
-                socket.off('message_updated');
-                socket.off('display_typing');
-                socket.off('hide_typing');
-
-                // Bind new active listeners
-                socket.on('receive_message', (msg) => {
-                    console.log('[SOCKET] receive_message on Mobile:', msg.id, 'for chatId:', msg.chat_id, 'type:', msg.type || msg.content_type, 'content:', (msg.content||'').substring(0,60), 'duration:', msg.duration, 'Current chatId:', chatId);
-
-                    if (msg.chat_id && chatId && msg.chat_id.toString() !== chatId.toString()) {
-                        console.warn('[SOCKET] Received message for different chat! Ignoring.');
-                        return;
-                    }
-
-                    setMessages(prev => {
-                        const exists = prev.some(m => m.id === msg.id);
-                        if (exists) return prev;
-
-                        let newMessages = [...prev];
-                        let updated = false;
-
-                        if (msg.tempId) {
-                            const optimisticIndex = newMessages.findIndex(m => m.id === msg.tempId);
-                            if (optimisticIndex !== -1) {
-                                newMessages[optimisticIndex] = msg;
-                                updated = true;
-                            }
-                        } else {
-                            const optimisticIndex = newMessages.findIndex(m =>
-                                m.is_optimistic &&
-                                m.content === msg.content &&
-                                m.type === msg.type &&
-                                Math.abs(new Date(m.created_at) - new Date(msg.created_at)) < 5000
-                            );
-                            if (optimisticIndex !== -1) {
-                                newMessages[optimisticIndex] = msg;
-                                updated = true;
-                            }
-                        }
-
-                        if (!updated) {
-                            newMessages = [msg, ...newMessages];
-                        }
-
-                        // Optimistic Reply Update: If the operator sent a message, mark the customer's last message as replied
-                        const isFromMe = msg.sender_id == user.id;
-                        if (isFromMe && isOperator) {
-                            const lastCustomerIndex = newMessages.findIndex(m => m.sender_id != user.id && m.content_type !== 'gift');
-                            if (lastCustomerIndex !== -1 && !newMessages[lastCustomerIndex].is_replied) {
-                                let potential = 43.5;
-                                if (msg.type === 'image' || msg.content_type === 'image') potential = 217.5;
-                                else if (msg.type === 'audio' || msg.content_type === 'audio') potential = 130.5;
-
-                                newMessages[lastCustomerIndex] = {
-                                    ...newMessages[lastCustomerIndex],
-                                    is_replied: true,
-                                    earned_diamonds: potential
-                                };
-                            }
-                        }
-
-                        return newMessages;
-                    });
-                });
-
-                socket.on('message_error', (data) => {
-                    console.log('[SOCKET] Message Error:', data);
-                    if (data.tempId) {
-                        setMessages(prev => prev.filter(m => m.id !== data.tempId));
-                    }
-                    if (data.code === 'INSUFFICIENT_FUNDS') {
-                        handleInsufficientCoins();
-                    } else {
-                        const errorMsg = data.debug ? `${data.message}\n(Hata: ${data.debug})` : (data.message || 'Mesaj gönderilemedi.');
-                        showAlert({ title: 'Hata', message: errorMsg, type: 'error' });
-                    }
-                });
-
-                socket.on('balance_update', (data) => {
-                    console.log('[SOCKET] Balance Update received:', data);
-                    if (data.userId === user.id || data.id === user.id) {
-                        setCurrentBalance(data.newBalance);
-                    }
-                });
-
-                socket.on('message_reaction', (data) => {
-                    console.log('[SOCKET] Reaction received:', data);
-                    setMessages(prev => prev.map(m => 
-                        m.id === data.messageId ? { ...m, reaction: data.reaction } : m
-                    ));
-                });
-
-                socket.on('message_updated', (data) => {
-                    console.log('[SOCKET] Message Update received:', data);
-                    if (data && data.id) {
-                        setMessages(prev => prev.map(m => 
-                            (m.id && m.id.toString().toLowerCase() === data.id.toString().toLowerCase()) 
-                                ? { ...m, is_replied: data.is_replied, earned_diamonds: data.earned_diamonds } 
-                                : m
-                        ));
-                    }
-                });
-
-                socket.on('display_typing', (data) => {
-                    console.log('[SOCKET] display_typing received on Mobile:', data, 'Current chatId:', chatId);
-                    const incomingChatId = data.chatId ? data.chatId.toString() : '';
-                    const incomingUserId = data.userId ? data.userId.toString() : '';
-                    const myId = user?.id ? user.id.toString() : '';
-                    const myChatId = chatId ? chatId.toString() : '';
-
-                    if (incomingChatId === myChatId && incomingUserId !== myId) {
-                        console.log('[ChatScreen] Showing Typing Indicator');
-                        setIsTyping(true);
-                    }
-                });
-
-                socket.on('hide_typing', (data) => {
-                    console.log('[SOCKET] hide_typing received on Mobile:', data);
-                    const incomingChatId = data.chatId ? data.chatId.toString() : '';
-                    const myChatId = chatId ? chatId.toString() : '';
-                    if (incomingChatId === myChatId) {
-                        setIsTyping(false);
-                    }
-                });
-
             } catch (err) {
                 console.error('[ChatScreen] Init Error:', err);
                 if (active) setIsLoading(false);
@@ -1123,20 +1250,58 @@ export default function ChatScreen({ route, navigation }) {
 
         return () => {
             active = false;
-            console.log('[SOCKET] Leaving room and clearing listeners for chatId:', chatId);
-            socket.emit('leave_room', chatId.toString());
-            socket.off('receive_message');
-            socket.off('message_error');
-            socket.off('balance_update');
-            socket.off('message_reaction');
-            socket.off('message_updated');
-            socket.off('display_typing');
-            socket.off('hide_typing');
+            console.log('[SOCKET] Leaving room and clearing scoped listeners for chatId:', chatId);
+            socket.emit('leave_room', roomStr);
+            socket.off('connect', handleSocketConnect);
+            socket.off('receive_message', handleReceiveMessage);
+            socket.off('message_error', handleMessageError);
+            socket.off('balance_update', handleBalanceUpdate);
+            socket.off('message_reaction', handleMessageReaction);
+            socket.off('message_updated', handleMessageUpdated);
+            socket.off('display_typing', handleDisplayTyping);
+            socket.off('hide_typing', handleHideTyping);
+            pendingAckResolversRef.current.forEach(resolveAck => resolveAck?.());
+            pendingAckResolversRef.current.clear();
         };
     }, [chatId, socket, isFamilyChat, familyId]);
 
+    const loadOlderMessages = React.useCallback(async () => {
+        if (isFamilyChat || !chatId || !initialLoadedRef.current || loadingOlderRef.current || !hasMoreMessagesRef.current) return;
+        loadingOlderRef.current = true;
+        setLoadingOlder(true);
+        try {
+            const token = await AsyncStorage.getItem('token');
+            const authHeader = { headers: { Authorization: `Bearer ${token}` } };
+            if (!initialLoadedRef.current || !hasMoreMessagesRef.current) return;
+            const requestOffset = loadedHistoryOffsetRef.current + newLiveServerCountRef.current;
+            const res = await axios.get(`${API_URL}/messages/${chatId}?limit=${PAGE_SIZE}&offset=${requestOffset}`, authHeader);
+            const olderRows = Array.isArray(res.data) ? res.data : [];
+
+            if (olderRows.length < PAGE_SIZE) {
+                hasMoreMessagesRef.current = false;
+                setHasMoreMessages(false);
+            }
+            loadedHistoryOffsetRef.current += olderRows.length;
+
+            if (olderRows.length > 0) {
+                const olderDesc = [...olderRows].reverse();
+                setMessages(prev => {
+                    const existingIds = new Set(prev.map(m => String(m.id)));
+                    const deduped = olderDesc.filter(m => !existingIds.has(String(m.id)));
+                    return deduped.length > 0 ? [...prev, ...deduped] : prev;
+                });
+            }
+        } catch (err) {
+            console.log('[ChatScreen] Pagination load error:', err.message);
+        } finally {
+            loadingOlderRef.current = false;
+            setLoadingOlder(false);
+        }
+    }, [chatId, isFamilyChat]);
+
     const handleTyping = (text) => {
-        setInput(text);
+        inputTextRef.current = text;
+        // Uncontrolled composer: avoid re-rendering 3k-line ChatScreen on every keystroke.
 
         if (isFamilyChat) return;
 
@@ -1227,21 +1392,42 @@ export default function ChatScreen({ route, navigation }) {
         });
     };
 
-    const sendMessage = (textOrEvent) => {
-        const textToSend = typeof textOrEvent === 'string' ? textOrEvent : input;
-        if (!textToSend || typeof textToSend !== 'string' || textToSend.trim() === '' || !chatId) return;
-
-        const now = Date.now();
-        if (lastSentMessageRef.current.text === textToSend && (now - lastSentMessageRef.current.time) < 1000) {
-            console.log('[ChatScreen] Prevented duplicate message send');
-            return;
+    const clearComposerInput = () => {
+        const inputView = textInputRef.current;
+        if (!inputView) return;
+        const nextClearEventCount = (lastInputEventCountRef.current || 0) + 1000;
+        const node = findNodeHandle(inputView);
+        if (node) {
+            UIManager.dispatchViewManagerCommand(node, 'setTextAndSelection', [nextClearEventCount, '', 0, 0]);
+        } else {
+            inputView.clear?.();
         }
-        lastSentMessageRef.current = { text: textToSend, time: now };
+    };
+
+    const sendMessage = (textOrEvent) => {
+        const rawText = typeof textOrEvent === 'string' ? textOrEvent : inputTextRef.current;
+        if (!rawText || typeof rawText !== 'string' || rawText.trim() === '' || !chatId) return;
+        const textToSend = rawText;
+
+        if (typeof textOrEvent !== 'string') {
+            inputTextRef.current = '';
+            clearComposerInput();
+            // Native composer reset runs in clearComposerInput() above.
+            // setNativeProps skipped: stale React eventCount would be dropped by ReactEditText.
+        }
+        if (typingTimeoutRef.current) {
+            clearTimeout(typingTimeoutRef.current);
+            typingTimeoutRef.current = null;
+        }
+        if (!isFamilyChat && socketRef.current?.connected) {
+            socketRef.current.emit('typing_end', { chatId });
+        }
 
         if (isFamilyChat) {
-            const tempId = `family-temp-${Date.now()}`;
+            const tempId = `family-temp-${Date.now()}-${++tempSeqRef.current}`;
             const optimisticMsg = {
                 id: tempId,
+                _clientKey: tempId,
                 chat_id: `family-${familyId}`,
                 sender_id: user.id,
                 content: textToSend,
@@ -1251,44 +1437,47 @@ export default function ChatScreen({ route, navigation }) {
                 is_optimistic: true
             };
 
+            liveAnimatedIdsRef.current.add(tempId);
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-            setMessages(prev => [optimisticMsg, ...prev]);
-            setInput('');
+            setTimeout(() => setMessages(prev => [optimisticMsg, ...prev]), 0);
 
-            (async () => {
-                try {
-                    const token = await AsyncStorage.getItem('token');
-                    const res = await axios.post(`${API_URL}/families/${familyId}/chat`, { message: textToSend }, {
-                        headers: { Authorization: `Bearer ${token}` }
-                    });
-                    const savedMsg = {
-                        id: `family-${res.data.id}`,
-                        family_message_id: res.data.id,
-                        chat_id: `family-${familyId}`,
-                        sender_id: res.data.sender_id,
-                        content: res.data.message,
-                        type: 'text',
-                        content_type: 'text',
-                        created_at: res.data.created_at,
-                        avatar_url: res.data.avatar_url,
-                        sender_name: res.data.display_name || res.data.username
-                    };
-                    setMessages(prev => prev.map(m => m.id === tempId ? savedMsg : m));
-                } catch (err) {
-                    setMessages(prev => prev.filter(m => m.id !== tempId));
-                    showAlert({ title: 'Hata', message: err.response?.data?.error || 'Mesaj gönderilemedi.', type: 'error' });
-                }
-            })();
+            sendQueueRef.current = sendQueueRef.current
+                .catch(() => {})
+                .then(async () => {
+                    try {
+                        const token = await AsyncStorage.getItem('token');
+                        const res = await axios.post(`${API_URL}/families/${familyId}/chat`, { message: textToSend }, {
+                            headers: { Authorization: `Bearer ${token}` }
+                        });
+                        const savedMsg = {
+                            id: `family-${res.data.id}`,
+                            _clientKey: tempId,
+                            family_message_id: res.data.id,
+                            chat_id: `family-${familyId}`,
+                            sender_id: res.data.sender_id,
+                            content: res.data.message,
+                            type: 'text',
+                            content_type: 'text',
+                            created_at: res.data.created_at,
+                            avatar_url: res.data.avatar_url,
+                            sender_name: res.data.display_name || res.data.username
+                        };
+                        setMessages(prev => prev.map(m => m.id === tempId ? savedMsg : m));
+                    } catch (err) {
+                        setMessages(prev => prev.filter(m => m.id !== tempId));
+                        showAlert({ title: 'Hata', message: err.response?.data?.error || 'Mesaj gönderilemedi.', type: 'error' });
+                    }
+                });
 
             return;
         }
-        
+
         // SOCKET CHECK
         if (!socketRef.current) {
-            showAlert({ 
-                title: 'Bağlantı Hatası', 
-                message: 'Sunucu ile bağlantı kurulamadı. Lütfen internetinizi kontrol edin veya birazdan tekrar deneyin.', 
-                type: 'error' 
+            showAlert({
+                title: 'Bağlantı Hatası',
+                message: 'Sunucu ile bağlantı kurulamadı. Lütfen internetinizi kontrol edin veya birazdan tekrar deneyin.',
+                type: 'error'
             });
             console.error('[ChatScreen] Socket is not initialized!');
             return;
@@ -1297,11 +1486,16 @@ export default function ChatScreen({ route, navigation }) {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
         // Balance check is server-side — message_error with INSUFFICIENT_FUNDS triggers handleInsufficientCoins
 
+        const tempId = `tmp_${Date.now()}_${++tempSeqRef.current}`;
+        liveAnimatedIdsRef.current.add(tempId);
+        if (liveAnimatedIdsRef.current.size > 10) {
+            const oldestKey = liveAnimatedIdsRef.current.values().next().value;
+            liveAnimatedIdsRef.current.delete(oldestKey);
+        }
 
-
-        const tempId = Date.now().toString();
         const optimisticMsg = {
             id: tempId,
+            _clientKey: tempId,
             chat_id: chatId,
             sender_id: user.id,
             content: textToSend,
@@ -1310,8 +1504,7 @@ export default function ChatScreen({ route, navigation }) {
             is_optimistic: true
         };
 
-        setMessages(prev => [optimisticMsg, ...prev]);
-        setInput('');
+        setTimeout(() => setMessages(prev => [optimisticMsg, ...prev]), 0);
 
         const msgData = {
             chatId: chatId,
@@ -1321,42 +1514,36 @@ export default function ChatScreen({ route, navigation }) {
             tempId: tempId
         };
 
-        socketRef.current.emit('send_message', msgData);
-
-        // Stop typing immediately
-        socketRef.current.emit('typing_end', { chatId });
-        if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+        sendQueueRef.current = sendQueueRef.current
+            .catch(() => {})
+            .then(() => new Promise((resolve) => {
+                const activeSocket = socketRef.current;
+                if (!activeSocket) {
+                    resolve();
+                    return;
+                }
+                if (!activeSocket.connected) {
+                    activeSocket.connect?.();
+                }
+                let settled = false;
+                const timer = setTimeout(() => {
+                    if (!settled) {
+                        settled = true;
+                        pendingAckResolversRef.current.delete(tempId);
+                        resolve();
+                    }
+                }, 3500);
+                pendingAckResolversRef.current.set(tempId, () => {
+                    if (!settled) {
+                        settled = true;
+                        clearTimeout(timer);
+                        pendingAckResolversRef.current.delete(tempId);
+                        resolve();
+                    }
+                });
+                activeSocket.emit('send_message', msgData);
+            }));
     };
-
-    const renderIcebreakers = () => {
-        // Only show in empty chats AND when input is empty
-        if ((messages && messages.length > 0) || input.length > 0) return null;
-
-        return (
-            <View style={styles.icebreakerContainer}>
-                <ScrollView 
-                    horizontal 
-                    showsHorizontalScrollIndicator={false}
-                    contentContainerStyle={styles.icebreakerScroll}
-                >
-                    {ICEBREAKERS.map((text, index) => (
-                        <TouchableOpacity
-                            key={index}
-                            style={[styles.icebreakerPill, { backgroundColor: 'rgba(255,255,255,0.12)' }]}
-                            onPress={() => {
-                                sendMessage(text);
-                                setShowIcebreakers(false);
-                            }}
-                        >
-                            <Text style={styles.icebreakerText}>{text}</Text>
-                        </TouchableOpacity>
-                    ))}
-                </ScrollView>
-            </View>
-        );
-    };
-
-
 
     const handleSendGift = (gift, quantity = 1) => {
         if (!chatId) return;
@@ -1385,7 +1572,7 @@ export default function ChatScreen({ route, navigation }) {
             created_at: new Date().toISOString(),
             is_optimistic: true
         };
-        setMessages(prev => [optimisticMsg, ...prev]);
+        setTimeout(() => setMessages(prev => [optimisticMsg, ...prev]), 0);
 
         const msgData = {
             chatId: chatId,
@@ -1464,7 +1651,7 @@ export default function ChatScreen({ route, navigation }) {
                 created_at: new Date().toISOString(),
                 is_optimistic: true
             };
-            setMessages(prev => [optimisticMsg, ...prev]);
+            setTimeout(() => setMessages(prev => [optimisticMsg, ...prev]), 0);
 
             const msgData = {
                 chatId: chatId,
@@ -1670,7 +1857,8 @@ export default function ChatScreen({ route, navigation }) {
     };
 
 
-    const playAudio = async (uri) => {
+    const playAudioRef = useRef(null);
+    playAudioRef.current = async (uri) => {
         if (!uri || typeof uri !== 'string') return;
         if (uri.startsWith('[') || uri.startsWith('call_') || uri.includes('Sesli Arama') || uri.includes('Görüntülü Arama')) {
             return;
@@ -1750,6 +1938,7 @@ export default function ChatScreen({ route, navigation }) {
             setSound(null);
         }
     };
+    const playAudio = React.useCallback((uri) => playAudioRef.current?.(uri), []);
 
     const handleSelectVoice = (voice) => {
         sendMessage(`[Sesli Mesaj: ${voice.title}]`);
@@ -1795,6 +1984,29 @@ export default function ChatScreen({ route, navigation }) {
         return `${String(date.getDate()).padStart(2, '0')}.${String(date.getMonth() + 1).padStart(2, '0')}.${date.getFullYear()}`;
     };
 
+    const confirmUnlockRef = useRef(null);
+    confirmUnlockRef.current = confirmUnlock;
+    const stableConfirmUnlock = React.useCallback((msg) => confirmUnlockRef.current?.(msg), []);
+
+    const handlePartnerAvatarPress = React.useCallback(() => {
+        navigation.navigate('OperatorProfile', {
+            operator: {
+                id: operatorId,
+                name: partnerName || name,
+                avatar_url: partnerAvatar || avatar_url,
+                is_online,
+                vip_level
+            },
+            user
+        });
+    }, [navigation, operatorId, partnerName, name, partnerAvatar, avatar_url, is_online, vip_level, user]);
+
+    const handleBubbleReaction = React.useCallback((type, targetMessageId) => {
+        if (!targetMessageId) return;
+        socketRef.current?.emit('message_reaction', { messageId: targetMessageId, reaction: type, chatId });
+        setMessages(prev => prev.map(m => m.id === targetMessageId ? { ...m, reaction: type } : m));
+    }, [socketRef, chatId, setMessages]);
+
     const renderMessage = React.useCallback(({ item, index }) => {
         const isUser = item.sender_id == user.id;
 
@@ -1802,7 +2014,8 @@ export default function ChatScreen({ route, navigation }) {
             return (
                 <MessageBubble
                     isMine={false}
-                    index={index}
+                    messageId={item.id}
+                    animateEntrance={index === 0 && liveAnimatedIdsRef.current.has(String(item._clientKey || item.id))}
                     isRead={item.is_read}
                     avatar={resolveImageUrl(avatar_url)}
                     vipLevel={vip_level}
@@ -1900,7 +2113,8 @@ export default function ChatScreen({ route, navigation }) {
             return (
                 <MessageBubble 
                     isMine={isUser} 
-                    index={index} 
+                    messageId={item.id}
+                    animateEntrance={index === 0 && liveAnimatedIdsRef.current.has(String(item._clientKey || item.id))} 
                     isRead={item.is_read}
                     avatar={resolveImageUrl(isUser ? (user.avatar_url || user.avatar) : avatar_url)}
                     vipLevel={isUser ? user.vip_level : vip_level}
@@ -1938,7 +2152,7 @@ export default function ChatScreen({ route, navigation }) {
                     activeOpacity={0.9} 
                     onPress={() => { 
                         if (isLocked) {
-                            confirmUnlock(item);
+                            stableConfirmUnlock(item);
                         } else {
                             setSelectedImage(item.content);
                         }
@@ -1977,7 +2191,7 @@ export default function ChatScreen({ route, navigation }) {
                     {isLocked ? (
                         <TouchableOpacity 
                             activeOpacity={0.9} 
-                            onPress={() => confirmUnlock(item)}
+                            onPress={() => stableConfirmUnlock(item)}
                         >
                             <View style={{ width: 220, height: 220, borderRadius: 16, backgroundColor: '#0f172a', justifyContent: 'center', alignItems: 'center' }}>
                                 <Ionicons name="videocam" size={48} color="rgba(255,255,255,0.1)" />
@@ -2191,43 +2405,45 @@ export default function ChatScreen({ route, navigation }) {
         return (
             <MessageBubble
                 isMine={isUser}
-                index={index}
+                messageId={item.id}
+                    animateEntrance={index === 0 && liveAnimatedIdsRef.current.has(String(item._clientKey || item.id))}
                 isRead={item.is_read}
                 avatar={resolveImageUrl(isUser ? (user.avatar_url || user.avatar) : (isFamilyChat ? item.avatar_url : (partnerAvatar || avatar_url)))}
                 vipLevel={isFamilyChat ? 0 : (isUser ? user.vip_level : (gender === 'coin_bayisi' ? 'dealer' : vip_level))}
-                onAvatarPress={!isUser && !isFamilyChat ? () => navigation.navigate('OperatorProfile', { operator: { id: operatorId, name: partnerName || name, avatar_url: partnerAvatar || avatar_url, is_online, vip_level }, user }) : undefined}
+                onAvatarPress={!isUser && !isFamilyChat ? handlePartnerAvatarPress : undefined}
                 timestamp={item.created_at}
                 reaction={item.reaction}
                 isReplied={item.is_replied}
                 earnedDiamonds={item.earned_diamonds}
                 isOperator={isOperator}
-                onReaction={(type) => {
-                    socketRef.current?.emit('message_reaction', { messageId: item.id, reaction: type, chatId });
-                    setMessages(prev => prev.map(m => m.id === item.id ? { ...m, reaction: type } : m));
-                }}
+                onReaction={handleBubbleReaction}
             >
                 {content}
             </MessageBubble>
         );
-    }, [user.id, user.avatar_url, user.avatar, avatar_url, vip_level, pendingAgencyInvite, currentPlayingUri, audioDurations, playAudio, confirmUnlock, setSelectedImage, isOperator, socketRef, chatId, setMessages, theme, isFamilyChat]);
+    }, [user.id, user.avatar_url, user.avatar, avatar_url, vip_level, pendingAgencyInvite, currentPlayingUri, audioDurations, playAudio, stableConfirmUnlock, setSelectedImage, isOperator, socketRef, chatId, setMessages, theme, isFamilyChat, handlePartnerAvatarPress, handleBubbleReaction]);
+
+    messagesRef.current = messages;
 
     const renderMessageWithDate = React.useCallback(({ item, index }) => {
-        const nextMessage = messages[index + 1];
+        const nextMessage = messagesRef.current[index + 1];
         const showDate = !nextMessage || getDateKey(item.created_at) !== getDateKey(nextMessage.created_at);
+        const dateText = showDate ? formatMessageDate(item.created_at) : null;
 
         return (
-            <View>
-                {showDate && (
-                    <View style={styles.dateSeparator}>
-                        <View style={styles.dateSeparatorLine} />
-                        <Text style={styles.dateSeparatorText}>{formatMessageDate(item.created_at)}</Text>
-                        <View style={styles.dateSeparatorLine} />
-                    </View>
-                )}
-                {renderMessage({ item, index })}
-            </View>
+            <ChatMessageRow
+                item={item}
+                index={index}
+                isTopItem={index === 0}
+                showDate={showDate}
+                dateText={dateText}
+                renderMessage={renderMessage}
+                dateSeparatorStyle={styles.dateSeparator}
+                dateSeparatorLineStyle={styles.dateSeparatorLine}
+                dateSeparatorTextStyle={styles.dateSeparatorText}
+            />
         );
-    }, [messages, renderMessage]);
+    }, [renderMessage]);
 
     return (
         <View style={styles.container}>
@@ -2387,7 +2603,7 @@ export default function ChatScreen({ route, navigation }) {
                     ref={flatListRef}
                     data={messages}
                     inverted={true} // Start from bottom
-                    keyExtractor={item => item.id.toString()}
+                    keyExtractor={item => (item._clientKey || item.id).toString()}
                     renderItem={renderMessageWithDate}
                     contentContainerStyle={styles.messagesList}
                     scrollIndicatorInsets={{ right: 1 }} // Fix scrollbar on iOS
@@ -2395,6 +2611,20 @@ export default function ChatScreen({ route, navigation }) {
                     maxToRenderPerBatch={10}
                     windowSize={10}
                     initialNumToRender={15}
+                    onEndReached={loadOlderMessages}
+                    onEndReachedThreshold={0.5}
+                    maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
+                    ListFooterComponent={
+                        loadingOlder ? (
+                            <View style={{ paddingVertical: 14, alignItems: 'center' }}>
+                                <ActivityIndicator size="small" color={theme.colors.primary} />
+                            </View>
+                        ) : (!hasMoreMessages && messages.length >= PAGE_SIZE) ? (
+                            <Text style={{ textAlign: 'center', color: 'rgba(255,255,255,0.45)', fontSize: 11, paddingVertical: 10 }}>
+                                Tüm geçmiş mesajlar yüklendi
+                            </Text>
+                        ) : null
+                    }
                     style={{ flex: 1 }}
                 />
 
@@ -2451,8 +2681,15 @@ export default function ChatScreen({ route, navigation }) {
                                  ) : (
                                      <>
                                       <TextInput
+                                          ref={textInputRef}
                                           style={[styles.input, { color: theme.colors.text }]}
-                                          value={input}
+                                          defaultValue=""
+                                          onChange={(e) => {
+                                              const ec = e?.nativeEvent?.eventCount;
+                                              if (typeof ec === 'number' && ec > lastInputEventCountRef.current) {
+                                                  lastInputEventCountRef.current = ec;
+                                              }
+                                          }}
                                           onChangeText={handleTyping}
                                           placeholder="Mesaj yaz..."
                                           placeholderTextColor="rgba(255,255,255,0.4)"

@@ -2,36 +2,40 @@ import React, { useEffect, useMemo } from 'react';
 import { View, Text, StyleSheet, Dimensions } from 'react-native';
 import { STORE_THEME } from '../../constants/storeTheme';
 import { Ionicons } from '@expo/vector-icons';
-import Animated, { useSharedValue, useAnimatedStyle, withRepeat, withTiming, Easing, useReducedMotion, cancelAnimation, FadeInUp } from 'react-native-reanimated';
+import Animated, { useSharedValue, useAnimatedStyle, withRepeat, withTiming, Easing, cancelAnimation, FadeInUp } from 'react-native-reanimated';
+import { useScreenActive } from '../../utils/useScreenActive';
 
 const { width } = Dimensions.get('window');
 
 const Particle = ({ delay, duration, startX, size, opacity }) => {
     const translateY = useSharedValue(50);
-    const reduceMotion = useReducedMotion();
+    const { shouldAnimate } = useScreenActive();
 
     useEffect(() => {
-        if (!reduceMotion) {
+        if (!shouldAnimate) {
+            cancelAnimation(translateY);
             translateY.value = 50;
-            const timeout = setTimeout(() => {
-                translateY.value = withRepeat(
-                    withTiming(-120, { duration, easing: Easing.linear }),
-                    -1,
-                    false
-                );
-            }, delay);
-            return () => {
-                clearTimeout(timeout);
-                cancelAnimation(translateY);
-            };
+            return;
         }
-    }, [reduceMotion, delay, duration]);
+        translateY.value = 50;
+        const timeout = setTimeout(() => {
+            translateY.value = withRepeat(
+                withTiming(-120, { duration, easing: Easing.linear }),
+                -1,
+                false
+            );
+        }, delay);
+        return () => {
+            clearTimeout(timeout);
+            cancelAnimation(translateY);
+        };
+    }, [shouldAnimate, delay, duration]);
 
     const animatedStyle = useAnimatedStyle(() => ({
         transform: [{ translateY: translateY.value }]
     }));
 
-    if (reduceMotion) return null;
+    if (!shouldAnimate) return null;
 
     return (
         <Animated.View style={[{ position: 'absolute', bottom: -20, left: startX, opacity }, animatedStyle]} pointerEvents="none">

@@ -69,6 +69,9 @@ import AgencyApplicationScreen from './src/screens/AgencyApplicationScreen';
 import AgencyJoinScreen from './src/screens/AgencyJoinScreen';
 import AgencyOperatorsScreen from './src/screens/AgencyOperatorsScreen';
 import AnimatedTabBar from './src/components/animated/AnimatedTabBar';
+import GenderConfirmationModal, { needsGenderConfirmation } from './src/components/GenderConfirmationModal';
+import * as RootNavigation from './src/services/navigationRef';
+import { useAppStore } from './src/store/useAppStore';
 import PartyRoomsListScreen from './src/screens/PartyRoomsListScreen';
 import PartyRoomScreen from './src/screens/PartyRoomScreen';
 import CreateRoomScreen from './src/screens/CreateRoomScreen';
@@ -80,45 +83,51 @@ const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
 
 function MainTabs({ route }) {
-    const user = route.params?.user || null;
+    const routeUser = route.params?.user || null;
+    const storeUser = useAppStore(state => state.user);
+    const activeUser = storeUser || routeUser;
+    const showGenderConfirm = needsGenderConfirmation(activeUser);
 
     return (
-        <Tab.Navigator
-            tabBar={props => <AnimatedTabBar {...props} />}
-            screenOptions={{ headerShown: false }}
-            backBehavior="firstRoute"
-        >
-            <Tab.Screen
-                name="Ana Sayfa"
-                component={HomeScreen}
-                initialParams={{ user }}
-                options={{ tabBarIconName: 'home' }}
-            />
-            <Tab.Screen
-                name="Keşfet"
-                component={ExploreScreen}
-                initialParams={{ user }}
-                options={{ tabBarIconName: 'compass' }}
-            />
-            <Tab.Screen
-                name="Sohbet"
-                component={MessagesScreen}
-                initialParams={{ user }}
-                options={{ tabBarIconName: 'chatbubbles' }}
-            />
-            <Tab.Screen
-                name="Mağaza"
-                component={StoreScreen}
-                initialParams={{ user }}
-                options={{ tabBarIconName: 'cart' }}
-            />
-            <Tab.Screen
-                name="Profil"
-                component={ProfileScreen}
-                initialParams={{ user }}
-                options={{ tabBarIconName: 'person' }}
-            />
-        </Tab.Navigator>
+        <View style={{ flex: 1 }}>
+            <Tab.Navigator
+                tabBar={props => <AnimatedTabBar {...props} />}
+                screenOptions={{ headerShown: false }}
+                backBehavior="firstRoute"
+            >
+                <Tab.Screen
+                    name="Ana Sayfa"
+                    component={HomeScreen}
+                    initialParams={{ user: routeUser }}
+                    options={{ tabBarIconName: 'home' }}
+                />
+                <Tab.Screen
+                    name="Keşfet"
+                    component={ExploreScreen}
+                    initialParams={{ user: routeUser }}
+                    options={{ tabBarIconName: 'compass' }}
+                />
+                <Tab.Screen
+                    name="Sohbet"
+                    component={MessagesScreen}
+                    initialParams={{ user: routeUser }}
+                    options={{ tabBarIconName: 'chatbubbles' }}
+                />
+                <Tab.Screen
+                    name="Mağaza"
+                    component={StoreScreen}
+                    initialParams={{ user: routeUser }}
+                    options={{ tabBarIconName: 'cart' }}
+                />
+                <Tab.Screen
+                    name="Profil"
+                    component={ProfileScreen}
+                    initialParams={{ user: routeUser }}
+                    options={{ tabBarIconName: 'person' }}
+                />
+            </Tab.Navigator>
+            <GenderConfirmationModal visible={showGenderConfirm} user={activeUser} />
+        </View>
     );
 }
 
@@ -139,7 +148,6 @@ function StoreRedirect({ navigation }) {
 }
 
 import * as Notifications from 'expo-notifications';
-import { useAppStore } from './src/store/useAppStore';
 
 function AppContent() {
     const { theme } = useTheme();
@@ -168,6 +176,9 @@ function AppContent() {
 
     useEffect(() => {
         const onHardwareBack = () => {
+            if (needsGenderConfirmation(useAppStore.getState().user)) {
+                return true;
+            }
             if (navigationRef.isReady() && navigationRef.canGoBack()) {
                 navigationRef.goBack();
                 return true;
@@ -242,6 +253,9 @@ export default function App() {
         Outfit_500Medium,
         Outfit_400Regular,
     });
+    const sessionStatus = useAppStore(state => state.sessionStatus);
+    const storeUserId = useAppStore(state => state.user?.id);
+    const pushSyncedUserRef = React.useRef(null);
 
     useEffect(() => {
         const setupServices = async () => {
@@ -260,40 +274,17 @@ export default function App() {
                 console.warn('[App] Facebook SDK initialization failed (Normal in Expo Go):', fbErr.message);
             }
 
-            // 2. Initialize Other Services
+            // 2. Initialize Other Services (defer push-token upload until session is verified)
             try {
-                // Frictionless Referral Matching
-                const storedRef = await AsyncStorage.getItem('referralCode');
-                if (!storedRef) {
-                    try {
-                        const matchRes = await axios.post(`${API_URL}/match`);
-                        if (matchRes.data.match) {
-                            await AsyncStorage.setItem('referralCode', matchRes.data.code);
-                            console.log('[App] Referral Matched Automatically:', matchRes.data.code);
-                        }
-                    } catch (refErr) {
-                        console.warn('[App] Referral match failed:', refErr.message);
-                    }
-                }
-
                 const userData = await AsyncStorage.getItem('user');
                 const user = userData ? JSON.parse(userData) : null;
                 const appUserID = user?.id ? String(user.id) : null;
                 
                 // Initialize RevenueCat
                 await PurchaseService.init(appUserID);
-                
-                // --- PUSH NOTIFICATIONS SETUP ---
-                if (appUserID) {
-                    const token = await NotificationService.registerForPushNotificationsAsync();
-                    if (token) {
-                        await NotificationService.updateServerToken(appUserID, token);
-                    }
-                }
 
                 // 3. Initialize Performance Mode
                 try {
-                    const { useAppStore } = require('./src/store/useAppStore');
                     await useAppStore.getState().initializePerformanceMode();
                 } catch (perfErr) {
                     console.warn('[App] Performance initialization failed:', perfErr.message);
@@ -304,6 +295,30 @@ export default function App() {
         };
         setupServices();
     }, []);
+
+    // Upload push token ONLY once session is verified (prevents unauthenticated requests on 401 boot)
+    useEffect(() => {
+        if (sessionStatus !== 'verified' || !storeUserId) {
+            if (sessionStatus === 'unauthenticated') {
+                pushSyncedUserRef.current = null;
+            }
+            return;
+        }
+        const appUserID = String(storeUserId);
+        if (pushSyncedUserRef.current === appUserID) return;
+        pushSyncedUserRef.current = appUserID;
+
+        (async () => {
+            try {
+                const token = await NotificationService.registerForPushNotificationsAsync();
+                if (token) {
+                    await NotificationService.updateServerToken(appUserID, token);
+                }
+            } catch (err) {
+                console.warn('[App] Push registration failed:', err);
+            }
+        })();
+    }, [sessionStatus, storeUserId]);
 
     useEffect(() => {
         if (fontsLoaded) {

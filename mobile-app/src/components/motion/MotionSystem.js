@@ -5,20 +5,25 @@ import Animated, {
     FadeInUp,
     FadeOut,
     SlideInRight,
-    SlideInLeft,
     Layout,
     ZoomIn,
     ZoomOut
 } from 'react-native-reanimated';
 
 import { PERFORMANCE } from '../../config';
+import { useMotionPreferences } from '../../utils/useScreenActive';
+
+const useMotionDisabled = () => {
+    const { isLowPerf, reducedMotion } = useMotionPreferences();
+    return PERFORMANCE.reduceMotion || isLowPerf || reducedMotion;
+};
 
 /**
  * Reusable Motion wrappers to maintain consistency across the app.
  */
 export const Motion = {
     Fade: ({ children, delay = 0 }) => {
-        if (PERFORMANCE.reduceMotion) return <>{children}</>;
+        if (useMotionDisabled()) return <>{children}</>;
         return (
             <Animated.View entering={FadeIn.delay(delay)} exiting={FadeOut}>
                 {children}
@@ -27,7 +32,7 @@ export const Motion = {
     },
 
     SlideUp: ({ children, delay = 0 }) => {
-        if (PERFORMANCE.reduceMotion) return <>{children}</>;
+        if (useMotionDisabled()) return <>{children}</>;
         const entering = PERFORMANCE.simpleAnimations 
             ? FadeInDown.delay(delay).duration(400)
             : FadeInDown.delay(delay).springify();
@@ -40,7 +45,7 @@ export const Motion = {
     },
 
     SlideDown: ({ children, delay = 0 }) => {
-        if (PERFORMANCE.reduceMotion) return <>{children}</>;
+        if (useMotionDisabled()) return <>{children}</>;
         const entering = PERFORMANCE.simpleAnimations
             ? FadeInUp.delay(delay).duration(400)
             : FadeInUp.delay(delay).springify();
@@ -53,7 +58,7 @@ export const Motion = {
     },
 
     SlideRight: ({ children, delay = 0 }) => {
-        if (PERFORMANCE.reduceMotion) return <>{children}</>;
+        if (useMotionDisabled()) return <>{children}</>;
         const entering = PERFORMANCE.simpleAnimations
             ? SlideInRight.delay(delay).duration(400)
             : SlideInRight.delay(delay).springify();
@@ -66,7 +71,7 @@ export const Motion = {
     },
 
     List: ({ children }) => {
-        if (PERFORMANCE.reduceMotion) return <>{children}</>;
+        if (useMotionDisabled()) return <>{children}</>;
         return (
             <Animated.View layout={PERFORMANCE.simpleAnimations ? Layout.duration(300) : Layout.springify().damping(15)}>
                 {children}
@@ -75,8 +80,9 @@ export const Motion = {
     },
 
     Bounce: ({ children, visible, delay = 0 }) => {
+        const disabled = useMotionDisabled();
         if (!visible) return null;
-        if (PERFORMANCE.reduceMotion) return <>{children}</>;
+        if (disabled) return <>{children}</>;
         
         const entering = PERFORMANCE.simpleAnimations
             ? ZoomIn.delay(delay).duration(300)
@@ -93,7 +99,7 @@ export const Motion = {
     },
 
     Scale: ({ children, delay = 0 }) => {
-        if (PERFORMANCE.reduceMotion) return <>{children}</>;
+        if (useMotionDisabled()) return <>{children}</>;
         
         const entering = PERFORMANCE.simpleAnimations
             ? ZoomIn.delay(delay).duration(300)

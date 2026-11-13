@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, StyleSheet, ScrollView, SafeAreaView, StatusBar } from 'react-native';
+import { View, StyleSheet, ScrollView, SafeAreaView, StatusBar, TouchableOpacity, Text, Linking } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
 import axios from 'axios';
@@ -140,6 +140,40 @@ export default function StoreScreen({ navigation, route }) {
         }
     };
 
+    const handleRestorePurchases = async () => {
+        setPurchasing(true);
+        try {
+            const customerInfo = await PurchaseService.restorePurchases();
+            const activeEntitlements = customerInfo?.entitlements?.active || {};
+            const isRestored = Object.keys(activeEntitlements).length > 0;
+            if (isRestored) {
+                setAlertConfig({
+                    visible: true,
+                    title: 'Başarılı! 🎉',
+                    message: 'Satın alımlarınız ve abonelikleriniz başarıyla geri yüklendi.',
+                    type: 'success'
+                });
+                await loadCurrentUser();
+            } else {
+                setAlertConfig({
+                    visible: true,
+                    title: 'Bilgi',
+                    message: 'Bu Google Play hesabına ait aktif bir abonelik veya geri yüklenebilir ürün bulunamadı.',
+                    type: 'info'
+                });
+            }
+        } catch (error) {
+            setAlertConfig({
+                visible: true,
+                title: 'Hata',
+                message: 'Geri yükleme işlemi sırasında bir hata oluştu: ' + (error.message || 'Lütfen tekrar deneyiniz.'),
+                type: 'error'
+            });
+        } finally {
+            setPurchasing(false);
+        }
+    };
+
     const selectedPlan = PREMIUM_PLANS[selectedPlanIndex];
 
     return (
@@ -187,6 +221,28 @@ export default function StoreScreen({ navigation, route }) {
                         onSelectPlan={(idx) => setSelectedPlanIndex(idx)}
                         socialProofCount={WEEKLY_SOCIAL_PROOF}
                     />
+
+                    {/* Restore Purchases & Subscription Management */}
+                    <View style={styles.footerActionsContainer}>
+                        <TouchableOpacity
+                            style={styles.restoreButton}
+                            onPress={handleRestorePurchases}
+                            activeOpacity={0.7}
+                            disabled={purchasing}
+                        >
+                            <Text style={styles.restoreButtonText}>Satın Alımları Geri Yükle</Text>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                            style={styles.cancelSubscriptionLink}
+                            onPress={() => Linking.openURL('https://play.google.com/store/account/subscriptions')}
+                            activeOpacity={0.7}
+                        >
+                            <Text style={styles.cancelSubscriptionText}>
+                                Abonelik İptali & Google Play Yönetimi
+                            </Text>
+                        </TouchableOpacity>
+                    </View>
                 </ScrollView>
 
                 {/* 6. Sticky Bottom CTA Bar */}
@@ -227,5 +283,32 @@ const styles = StyleSheet.create({
     },
     scrollContent: {
         // paddingBottom is now set dynamically in component
+    },
+    footerActionsContainer: {
+        marginTop: 20,
+        marginBottom: 10,
+        alignItems: 'center',
+        gap: 12,
+    },
+    restoreButton: {
+        paddingVertical: 10,
+        paddingHorizontal: 20,
+        borderRadius: 20,
+        borderWidth: 1,
+        borderColor: 'rgba(255, 255, 255, 0.2)',
+        backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    },
+    restoreButtonText: {
+        color: '#E0E0E0',
+        fontSize: 13,
+        fontWeight: '500',
+    },
+    cancelSubscriptionLink: {
+        paddingVertical: 4,
+    },
+    cancelSubscriptionText: {
+        color: 'rgba(255, 255, 255, 0.4)',
+        fontSize: 12,
+        textDecorationLine: 'underline',
     },
 });

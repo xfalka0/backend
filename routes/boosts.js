@@ -3,34 +3,47 @@ const router = express.Router();
 const pool = require('../db');
 const { authenticateToken } = require('../middleware/auth');
 
-// Activate Boost for 24 hours (1440 minutes)
-router.post('/:userId', async (req, res) => {
-    const { userId } = req.params;
-    let { durationMinutes = 1440, cost = 1000 } = req.body; // Default 1 day, 1000 coins
+// Server-side fixed boost rates (cannot be manipulated by client)
+const BOOST_CONFIG = {
+    DEFAULT_COST: 1000,
+    RATES: {
+        1440: 1000,   // 1 day
+        10080: 500    // 7 days promo
+    }
+};
 
+// Activate Boost
+router.post('/:userId', authenticateToken, async (req, res) => {
+    const { userId } = req.params;
+
+    // Authorization check: Only current user (or admin) can boost their own profile
+    if (req.user.id.toString() !== userId.toString() && req.user.role !== 'admin' && req.user.role !== 'super_admin') {
+        return res.status(403).json({ error: 'Yetkisiz işlem. Başka bir kullanıcının profilini öne çıkaramazsınız.' });
+    }
+
+    let { durationMinutes = 1440 } = req.body;
     durationMinutes = parseInt(durationMinutes, 10) || 1440;
+
+    // Server-enforced cost: NEVER take cost from client
+    const cost = BOOST_CONFIG.RATES[durationMinutes] || BOOST_CONFIG.DEFAULT_COST;
 
     try {
         await pool.query('BEGIN');
 
-        // Check if user has enough balance
-        const userRes = await pool.query('SELECT balance FROM users WHERE id = $1', [userId]);
-        if (userRes.rows.length === 0) {
-            await pool.query('ROLLBACK');
-            return res.status(404).json({ error: 'User not found' });
-        }
+        // Atomic balance check and deduction in a single SQL operation
+        const deductRes = await pool.query(
+            'UPDATE users SET balance = balance - $1, total_spent = COALESCE(total_spent, 0) + $1 WHERE id = $2 AND balance >= $1 RETURNING balance',
+            [cost, userId]
+        );
 
-        const balance = userRes.rows[0].balance;
-        if (balance < cost) {
+        if (deductRes.rows.length === 0) {
             await pool.query('ROLLBACK');
             return res.status(400).json({ error: 'Bakiye yetersiz. Öne çıkmak için daha fazla Coin satın almalısınız.', insufficientFunds: true });
         }
 
-        // Deduct balance
-        await pool.query('UPDATE users SET balance = balance - $1 WHERE id = $2', [cost, userId]);
+        const newBalance = deductRes.rows[0].balance;
 
-        // Check if already boosted to extend, or just insert new
-        // A simple approach is just insert a new one, and the discovery logic uses the latest end_time
+        // Insert new boost
         const boostRes = await pool.query(`
             INSERT INTO boosts (user_id, start_time, end_time) 
             VALUES ($1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP + ($2 * interval '1 minute'))
@@ -42,7 +55,7 @@ router.post('/:userId', async (req, res) => {
         res.status(200).json({
             message: 'Profilin başarıyla öne çıkarıldı!',
             endTime: boostRes.rows[0].end_time,
-            newBalance: balance - cost
+            newBalance: newBalance
         });
     } catch (err) {
         await pool.query('ROLLBACK');

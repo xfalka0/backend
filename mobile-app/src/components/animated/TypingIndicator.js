@@ -1,33 +1,39 @@
 import React, { useEffect, useRef } from 'react';
 import { StyleSheet, View, Animated, Easing } from 'react-native';
 import GlassCard from '../ui/GlassCard';
+import { useScreenActive } from '../../utils/useScreenActive';
 
-const Dot = ({ index }) => {
+const Dot = ({ index, shouldAnimate }) => {
     const translateY = useRef(new Animated.Value(0)).current;
 
     useEffect(() => {
-        const startAnimation = () => {
-            Animated.loop(
-                Animated.sequence([
-                    Animated.timing(translateY, {
-                        toValue: -6,
-                        duration: 400,
-                        useNativeDriver: true,
-                        easing: Easing.ease,
-                        delay: index * 200,
-                    }),
-                    Animated.timing(translateY, {
-                        toValue: 0,
-                        duration: 400,
-                        useNativeDriver: true,
-                        easing: Easing.ease,
-                    }),
-                ])
-            ).start();
+        if (!shouldAnimate) {
+            translateY.stopAnimation();
+            translateY.setValue(0);
+            return;
+        }
+        const anim = Animated.loop(
+            Animated.sequence([
+                Animated.timing(translateY, {
+                    toValue: -6,
+                    duration: 400,
+                    useNativeDriver: true,
+                    easing: Easing.ease,
+                    delay: index * 200,
+                }),
+                Animated.timing(translateY, {
+                    toValue: 0,
+                    duration: 400,
+                    useNativeDriver: true,
+                    easing: Easing.ease,
+                }),
+            ])
+        );
+        anim.start();
+        return () => {
+            anim.stop();
         };
-
-        startAnimation();
-    }, [index]);
+    }, [index, shouldAnimate, translateY]);
 
     return (
         <Animated.View style={[styles.dot, { transform: [{ translateY }] }]} />
@@ -35,12 +41,13 @@ const Dot = ({ index }) => {
 };
 
 const TypingIndicator = () => {
+    const { shouldAnimate } = useScreenActive();
     return (
         <View style={{ marginLeft: 16, marginBottom: 8, alignSelf: 'flex-start' }}>
             <GlassCard intensity={30} tint="dark" style={styles.container}>
-                <Dot index={0} />
-                <Dot index={1} />
-                <Dot index={2} />
+                <Dot index={0} shouldAnimate={shouldAnimate} />
+                <Dot index={1} shouldAnimate={shouldAnimate} />
+                <Dot index={2} shouldAnimate={shouldAnimate} />
             </GlassCard>
         </View>
     );

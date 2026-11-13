@@ -12,4 +12,5 @@ export const PERFORMANCE = {
   simpleAnimations: true, // If true, uses simpler timing instead of heavy springs
   maxParticles: 6, // Limit for particle systems
   disableBlur: Platform.OS === "android", // Blur is heavy on Android
+  enableExtendedIdleAnimations: false, // Single toggle: true restores all removed Shop/Vip/Profile idle loops
 };

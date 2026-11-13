@@ -4,12 +4,14 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { STORE_THEME } from '../../constants/storeTheme';
 import { LAYOUT } from '../../theme';
-import Animated, { useSharedValue, useAnimatedStyle, withRepeat, withTiming, Easing, useReducedMotion, runOnJS, withSpring, FadeInUp } from 'react-native-reanimated';
+import Animated, { useSharedValue, useAnimatedStyle, withRepeat, withTiming, Easing, runOnJS, withSpring, cancelAnimation, FadeInUp } from 'react-native-reanimated';
+import { useScreenActive } from '../../utils/useScreenActive';
 
 export default function StickyPurchaseBar({ onPress, loading = false, planLabel = '', buttonTitle = "Premium'a Geç" }) {
     const insets = useSafeAreaInsets();
     const tabOffset = LAYOUT.tabBarHeight + LAYOUT.tabBarBottomOffset;
-    const reduceMotion = useReducedMotion();
+    const { shouldAnimate, reducedMotion, isLowPerf } = useScreenActive();
+    const reduceMotion = reducedMotion || isLowPerf;
 
     const pulseScale = useSharedValue(1);
     const pressScale = useSharedValue(1);
@@ -18,17 +20,24 @@ export default function StickyPurchaseBar({ onPress, loading = false, planLabel 
     const [displayLabel, setDisplayLabel] = useState(planLabel);
 
     useEffect(() => {
-        if (!reduceMotion) {
-            pulseScale.value = withRepeat(
-                withTiming(STORE_THEME.animations.buttonPulseScaleMax, { 
-                    duration: STORE_THEME.animations.buttonPulseDuration / 2, 
-                    easing: Easing.inOut(Easing.ease) 
-                }),
-                -1,
-                true // reverse
-            );
+        if (!shouldAnimate) {
+            cancelAnimation(pulseScale);
+            pulseScale.value = 1;
+            return;
         }
-    }, [reduceMotion]);
+        pulseScale.value = withRepeat(
+            withTiming(STORE_THEME.animations.buttonPulseScaleMax, { 
+                duration: STORE_THEME.animations.buttonPulseDuration / 2, 
+                easing: Easing.inOut(Easing.ease) 
+            }),
+            -1,
+            true // reverse
+        );
+        return () => {
+            cancelAnimation(pulseScale);
+            pulseScale.value = 1;
+        };
+    }, [shouldAnimate]);
 
     useEffect(() => {
         if (planLabel && planLabel !== displayLabel) {

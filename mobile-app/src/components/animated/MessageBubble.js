@@ -6,7 +6,6 @@ import Animated, {
     useSharedValue,
     useAnimatedStyle,
     withTiming,
-    withDelay,
     withSpring,
     withSequence
 } from 'react-native-reanimated';
@@ -16,6 +15,7 @@ import VipFrame from '../ui/VipFrame';
 import GlassCard from '../ui/GlassCard';
 import HeartBurst from './HeartBurst';
 import { useTheme } from '../../contexts/ThemeContext';
+import { useMotionPreferences } from '../../utils/useScreenActive';
 
 const REACTION_EMOJIS = [
     { type: 'heart', icon: '❤️' },
@@ -25,10 +25,13 @@ const REACTION_EMOJIS = [
     { type: 'like', icon: '👍' },
 ];
 
-const MessageBubble = React.memo(({ children, isMine, index, isRead, avatar, vipLevel = 0, timestamp, reaction, onReaction, isReplied, earnedDiamonds, isOperator, onAvatarPress }) => {
+const MessageBubble = React.memo(({ children, messageId, isMine, animateEntrance = false, isRead, avatar, vipLevel = 0, timestamp, reaction, onReaction, isReplied, earnedDiamonds, isOperator, onAvatarPress }) => {
     const { theme, themeMode } = useTheme();
-    const translateX = useSharedValue(isMine ? 50 : -50);
-    const opacity = useSharedValue(0);
+    const { isLowPerf, reducedMotion } = useMotionPreferences();
+    const disableMotion = isLowPerf || reducedMotion;
+    const shouldAnimateIn = Boolean(animateEntrance && !disableMotion);
+    const translateX = useSharedValue(shouldAnimateIn ? (isMine ? 18 : -18) : 0);
+    const opacity = useSharedValue(shouldAnimateIn ? 0 : 1);
 
     const [lastTap, setLastTap] = useState(null);
     const [reacted, setReacted] = useState(!!reaction);
@@ -38,12 +41,12 @@ const MessageBubble = React.memo(({ children, isMine, index, isRead, avatar, vip
     useEffect(() => {
         if (reaction) {
             setReacted(true);
-            reactScale.value = withSpring(1);
+            reactScale.value = disableMotion ? 1 : withSpring(1);
         } else {
             setReacted(false);
-            reactScale.value = withTiming(0);
+            reactScale.value = disableMotion ? 0 : withTiming(0);
         }
-    }, [reaction]);
+    }, [reaction, disableMotion]);
 
     const formatTime = (dateStr) => {
         if (!dateStr) return '';
@@ -58,12 +61,16 @@ const MessageBubble = React.memo(({ children, isMine, index, isRead, avatar, vip
             if (!reacted) {
                 setReacted(true);
                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                reactScale.value = withSequence(
-                    withTiming(1, { duration: 150 }),
-                    withSpring(1.2),
-                    withTiming(1, { duration: 100 })
-                );
-                onReaction && onReaction('heart');
+                if (disableMotion) {
+                    reactScale.value = 1;
+                } else {
+                    reactScale.value = withSequence(
+                        withTiming(1, { duration: 150 }),
+                        withSpring(1.2),
+                        withTiming(1, { duration: 100 })
+                    );
+                }
+                onReaction && onReaction('heart', messageId);
             }
             setLastTap(null);
         } else {
@@ -74,15 +81,17 @@ const MessageBubble = React.memo(({ children, isMine, index, isRead, avatar, vip
     const handleEmojiSelect = (emojiType) => {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
         setShowPicker(false);
-        onReaction && onReaction(emojiType);
+        onReaction && onReaction(emojiType, messageId);
     };
 
     useEffect(() => {
-        opacity.value = withDelay(index * 50, withTiming(1, { duration: 400 }));
-        translateX.value = withDelay(
-            index * 50,
-            withSpring(0, { damping: 12, stiffness: 100 })
-        );
+        if (!shouldAnimateIn) {
+            opacity.value = 1;
+            translateX.value = 0;
+            return;
+        }
+        opacity.value = withTiming(1, { duration: 180 });
+        translateX.value = withTiming(0, { duration: 180 });
     }, []);
 
     const animatedStyle = useAnimatedStyle(() => ({

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Switch, Platform, Linking, ActivityIndicator, Image, StatusBar } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Switch, Platform, Linking, ActivityIndicator, Image, StatusBar, Modal } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
@@ -9,6 +9,7 @@ import { API_URL } from '../config';
 import { useTheme } from '../contexts/ThemeContext';
 import { DARK_THEME } from '../theme';
 import ModernAlert from '../components/ui/ModernAlert';
+import { useAppStore } from '../store/useAppStore';
 
 // Generic MaskedView Gradient Icon for premium dating aesthetic
 const GradientIcon = ({ name, size = 22, colors = ['#FFFFFF', '#EC4899'] }) => (
@@ -31,6 +32,10 @@ const GradientIcon = ({ name, size = 22, colors = ['#FFFFFF', '#EC4899'] }) => (
 
 export default function SettingsScreen({ navigation, route }) {
     const { theme, themeMode } = useTheme();
+    const performanceMode = useAppStore(state => state.performanceMode);
+    const performanceModeUserOverride = useAppStore(state => state.performanceModeUserOverride);
+    const setPerformanceMode = useAppStore(state => state.setPerformanceMode);
+    const [showPerfModal, setShowPerfModal] = useState(false);
     const [currentUser, setCurrentUser] = useState(route.params?.user || null);
     const [loading, setLoading] = useState(false);
     const [alert, setAlert] = useState({
@@ -147,6 +152,8 @@ export default function SettingsScreen({ navigation, route }) {
             cancelText: 'Vazgeç',
             confirmText: 'Çıkış Yap',
             onConfirm: async () => {
+                const { useAppStore } = require('../store/useAppStore');
+                await useAppStore.getState().logout();
                 await AsyncStorage.clear();
                 navigation.replace('Welcome');
             }
@@ -335,6 +342,17 @@ export default function SettingsScreen({ navigation, route }) {
                 <SectionHeader title="HESAP AYARLARI" />
                 <View style={[styles.sectionCard, { backgroundColor: theme.colors.glass, borderColor: theme.colors.glassBorder }]}>
                     <SettingItem
+                        icon="speedometer-outline"
+                        label="Performans Modu"
+                        sublabel={
+                            performanceModeUserOverride
+                                ? `${performanceMode === 'low' ? 'Düşük' : performanceMode === 'high' ? 'Yüksek' : 'Dengeli'} (Manuel Seçim)`
+                                : `Otomatik (${performanceMode === 'low' ? 'Düşük' : performanceMode === 'high' ? 'Yüksek' : 'Dengeli'})`
+                        }
+                        colors={['#A855F7', '#7C3AED']}
+                        onPress={() => setShowPerfModal(true)}
+                    />
+                    <SettingItem
                         icon="language-outline"
                         label="Uygulama Dili"
                         sublabel="Türkçe"
@@ -419,6 +437,60 @@ export default function SettingsScreen({ navigation, route }) {
                 onConfirm={alert.onConfirm}
                 onClose={() => setAlert({ ...alert, visible: false })}
             />
+
+            <Modal
+                visible={showPerfModal}
+                transparent
+                animationType="fade"
+                onRequestClose={() => setShowPerfModal(false)}
+            >
+                <TouchableOpacity
+                    activeOpacity={1}
+                    onPress={() => setShowPerfModal(false)}
+                    style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'center', padding: 24 }}
+                >
+                    <View style={{ backgroundColor: themeMode === 'dark' ? '#1E1B2E' : '#FFFFFF', borderRadius: 18, padding: 18, borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)' }}>
+                        <Text style={{ color: theme.colors.text, fontSize: 16, fontWeight: '700', marginBottom: 12 }}>
+                            Performans Modu Seçimi
+                        </Text>
+                        {[
+                            { key: 'auto', label: 'Otomatik (Cihaz RAM)', desc: '4.5 GB altı Düşük, 6.5 GB üstü Yüksek' },
+                            { key: 'low', label: 'Düşük', desc: 'Sürekli animasyonları kapatır (en az pil/CPU)' },
+                            { key: 'balanced', label: 'Dengeli', desc: 'Sınırlı animasyonlar (önerilen)' },
+                            { key: 'high', label: 'Yüksek', desc: 'Tüm görsel efektler aktif' },
+                        ].map(opt => {
+                            const selected = opt.key === 'auto'
+                                ? !performanceModeUserOverride
+                                : (performanceModeUserOverride && performanceMode === opt.key);
+                            return (
+                                <TouchableOpacity
+                                    key={opt.key}
+                                    onPress={() => {
+                                        setPerformanceMode(opt.key, opt.key !== 'auto');
+                                        setShowPerfModal(false);
+                                    }}
+                                    style={{
+                                        flexDirection: 'row',
+                                        alignItems: 'center',
+                                        justifyContent: 'space-between',
+                                        paddingVertical: 11,
+                                        paddingHorizontal: 12,
+                                        borderRadius: 12,
+                                        marginBottom: 6,
+                                        backgroundColor: selected ? 'rgba(168, 85, 247, 0.18)' : 'transparent',
+                                    }}
+                                >
+                                    <View style={{ flex: 1, paddingRight: 10 }}>
+                                        <Text style={{ color: theme.colors.text, fontSize: 14, fontWeight: selected ? '700' : '500' }}>{opt.label}</Text>
+                                        <Text style={{ color: theme.colors.textSecondary, fontSize: 11, marginTop: 2 }}>{opt.desc}</Text>
+                                    </View>
+                                    {selected && <Ionicons name="checkmark-circle" size={20} color="#A855F7" />}
+                                </TouchableOpacity>
+                            );
+                        })}
+                    </View>
+                </TouchableOpacity>
+            </Modal>
         </LinearGradient>
     );
 }

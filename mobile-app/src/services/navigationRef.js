@@ -1,4 +1,4 @@
-import { createNavigationContainerRef } from '@react-navigation/native';
+import { CommonActions, createNavigationContainerRef } from '@react-navigation/native';
 
 export const navigationRef = createNavigationContainerRef();
 
@@ -13,12 +13,34 @@ export function navigate(name, params) {
   }
 }
 
+export function resetTo(name, params) {
+  if (navigationRef.isReady()) {
+    navigationRef.dispatch(
+      CommonActions.reset({
+        index: 0,
+        routes: [{ name, params }],
+      })
+    );
+  } else {
+    pendingNavigations = [{ type: 'reset', name, params }];
+  }
+}
+
 export function flushPendingNavigation() {
   if (navigationRef.isReady() && pendingNavigations.length > 0) {
     console.log('[RootNavigation] Flushing pending navigations count:', pendingNavigations.length);
     while (pendingNavigations.length > 0) {
       const nav = pendingNavigations.shift();
-      navigationRef.navigate(nav.name, nav.params);
+      if (nav.type === 'reset') {
+        navigationRef.dispatch(
+          CommonActions.reset({
+            index: 0,
+            routes: [{ name: nav.name, params: nav.params }],
+          })
+        );
+      } else {
+        navigationRef.navigate(nav.name, nav.params);
+      }
     }
   }
 }

@@ -27,12 +27,14 @@ import Animated, {
     withSpring,
     withTiming,
     withRepeat,
-    withSequence
+    withSequence,
+    cancelAnimation
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import axios from 'axios';
 import * as ImagePicker from 'expo-image-picker';
 import { API_URL } from '../config';
+import { useScreenActive } from '../utils/useScreenActive';
 import { COLORS, GRADIENTS } from '../theme';
 import AuthBackground from '../components/animated/AuthBackground';
 import GradientButton from '../components/ui/GradientButton';
@@ -113,11 +115,21 @@ const TURKISH_CITIES = [
 ];
 
 const PremiumWelcomeIllustration = () => {
+    const { shouldAnimate } = useScreenActive();
     const float1 = useSharedValue(0);
     const float2 = useSharedValue(0);
     const pulse = useSharedValue(1);
 
     React.useEffect(() => {
+        if (!shouldAnimate) {
+            cancelAnimation(float1);
+            cancelAnimation(float2);
+            cancelAnimation(pulse);
+            float1.value = 0;
+            float2.value = 0;
+            pulse.value = 1;
+            return;
+        }
         float1.value = withRepeat(
             withSequence(
                 withTiming(-6, { duration: 2500 }),
@@ -142,7 +154,15 @@ const PremiumWelcomeIllustration = () => {
             -1,
             true
         );
-    }, []);
+        return () => {
+            cancelAnimation(float1);
+            cancelAnimation(float2);
+            cancelAnimation(pulse);
+            float1.value = 0;
+            float2.value = 0;
+            pulse.value = 1;
+        };
+    }, [shouldAnimate]);
 
     const card1Style = useAnimatedStyle(() => ({
         transform: [{ translateY: float1.value }, { rotate: '-6deg' }],
@@ -791,6 +811,14 @@ export default function OnboardingScreen({ navigation, route }) {
                                 </Text>
                             </Animated.View>
                         )}
+
+                        {/* Cinsiyet Değiştirilemez Uyarısı */}
+                        <View style={{ marginTop: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: 'rgba(239, 68, 68, 0.1)', paddingVertical: 10, paddingHorizontal: 14, borderRadius: 10, borderWidth: 1, borderColor: 'rgba(239, 68, 68, 0.25)' }}>
+                            <Ionicons name="alert-circle-outline" size={18} color="#ef4444" />
+                            <Text style={{ color: '#fca5a5', fontSize: 13, fontWeight: '600', textAlign: 'center' }}>
+                                Bu seçim sonradan değiştirilemez.
+                            </Text>
+                        </View>
                     </View>
                 )}
 

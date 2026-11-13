@@ -1,32 +1,31 @@
 import { DISCOVERY_TABS, DEFAULT_TAB } from '../constants/tabs';
 import React, { useEffect, useState, useRef } from 'react';
-import { View, Text, FlatList, Image, TouchableOpacity, StyleSheet, Dimensions, ScrollView, Alert, TextInput, Modal, Pressable, ActivityIndicator, Linking, Platform, StatusBar } from 'react-native';
+import { View, Text, FlatList, Image, TouchableOpacity, StyleSheet, Dimensions, ScrollView, TextInput, ActivityIndicator, Platform, StatusBar, AppState } from 'react-native';
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
-import Animated, { FadeInDown, Layout } from 'react-native-reanimated';
-import io from 'socket.io-client';
 import { useFocusEffect } from '@react-navigation/native';
-import { API_URL, SOCKET_URL } from '../config';
+import { API_URL } from '../config';
 import { useTheme } from '../contexts/ThemeContext';
 import VipFrame from '../components/ui/VipFrame';
 import VipBadge from '../components/ui/VipBadge';
 import AgencyBadge from '../components/ui/AgencyBadge';
-import HiButton from '../components/ui/HiButton';
+import HiButton, { hydrateHiStatusCache } from '../components/ui/HiButton';
 import StoryRing from '../components/animated/StoryRing';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import GlassCard from '../components/ui/GlassCard';
-import SkeletonCard from '../components/ui/SkeletonCard';
-import DestinyHero from '../components/DestinyHero';
 import { resolveImageUrl } from '../utils/imageUtils';
 import { maskContactInfo } from '../utils/textUtils';
 import GradientText from '../components/ui/GradientText';
 import ActionCards from '../components/ui/ActionCards';
 import FilterModal from '../components/ui/FilterModal';
 import DestinyMatchModal from '../components/DestinyMatchModal';
-import GenderConfirmationModal from '../components/GenderConfirmationModal';
+import { needsGenderConfirmation } from '../components/GenderConfirmationModal';
+import DestinyHero from '../components/DestinyHero';
+import PremiumCoinCard from '../components/hero/PremiumCoinCard';
 import { useStarterPack } from '../contexts/StarterPackContext';
+import { useAppStore } from '../store/useAppStore';
+import { resetTo } from '../services/navigationRef';
 
 const { width } = Dimensions.get('window');
 let lastProfileTap = 0;
@@ -51,19 +50,52 @@ const getProfileGender = (profile) => {
 
 
 
-const OperatorItem = React.memo(({ item, navigation, user, theme, onHiPress }) => {
-    console.log('[DEBUG OPERATOR ITEM]', item.name, 'avatar:', item.avatar_url, 'photos:', item.photos);
+const TAB_TTL_MS = {
+    online: 30 * 1000,
+    default: 120 * 1000,
+};
+
+const getTabTtlMs = (tabId) => (tabId === 'online' ? TAB_TTL_MS.online : TAB_TTL_MS.default);
+const AUTH_ME_FOCUS_REFRESH_MS = 15 * 1000;
+
+const createInitialTabStates = () => {
+    const map = {};
+    DISCOVERY_TABS.forEach(t => {
+        map[t.id] = {
+            data: [],
+            page: 1,
+            hasMore: true,
+            loading: t.id === DEFAULT_TAB,
+            loadingMore: false,
+            refreshing: false,
+            timeoutError: false,
+            initialized: false,
+            lastFetchedAt: 0,
+        };
+    });
+    return map;
+};
+
+const OperatorItem = React.memo(({ item, theme, onOpenProfile, onOpenChat, onHiPress }) => {
     const profileGender = getProfileGender(item);
     const handleLocalHiPress = React.useCallback(async () => {
         if (onHiPress) return await onHiPress(item);
         return false;
     }, [onHiPress, item]);
 
+    const handleCardPress = React.useCallback(() => {
+        onOpenProfile?.(item);
+    }, [onOpenProfile, item]);
+
+    const handleChatPress = React.useCallback(() => {
+        onOpenChat?.(item);
+    }, [onOpenChat, item]);
+
     return (
-        <TouchableOpacity 
+        <TouchableOpacity
             style={styles.userCard}
             activeOpacity={0.7}
-            onPress={() => navigation.navigate('OperatorProfile', { operator: item, user })}
+            onPress={handleCardPress}
         >
             <View style={styles.cardHeader}>
                 <View style={{ flexDirection: 'row', flex: 1, alignItems: 'center' }}>
@@ -132,22 +164,20 @@ const OperatorItem = React.memo(({ item, navigation, user, theme, onHiPress }) =
                 <View style={{ transform: [{ scale: 0.9 }] }}>
                     <HiButton
                         operatorId={item.id}
-                        onPress={() => navigation.navigate('Chat', { operatorId: item.id, name: item.name, gender: item.gender, avatar_url: item.avatar_url, vip_level: item.vip_level || 0, user })}
+                        onPress={handleChatPress}
                         onHiPress={handleLocalHiPress}
                     />
                 </View>
             </View>
             {item.bio && <Text style={[styles.bioText, profileGender === 'coin_bayisi' && { marginTop: 14 }, { color: theme.colors.textSecondary }]} numberOfLines={2}>{maskContactInfo(item.bio)}</Text>}
-            
+
             {item.photos && item.photos.length > 0 && (
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.albumScroll}>
                     {item.photos.map((p, i) => (
-                        <Image 
-                            key={i} 
-                            source={{ uri: resolveImageUrl(p) }} 
-                            onError={(e) => console.log(`[DEBUG ListAlbumPhoto Error] User: ${item.name}, Index: ${i}, URI: ${resolveImageUrl(p)}, Error:`, e.nativeEvent.error)}
-                            onLoad={() => console.log(`[DEBUG ListAlbumPhoto Success] User: ${item.name}, Index: ${i}, URI: ${resolveImageUrl(p)} loaded successfully`)}
-                            style={styles.albumImage} 
+                        <Image
+                            key={i}
+                            source={{ uri: resolveImageUrl(p, 'avatar') }}
+                            style={styles.albumImage}
                         />
                     ))}
                 </ScrollView>
@@ -156,69 +186,173 @@ const OperatorItem = React.memo(({ item, navigation, user, theme, onHiPress }) =
     );
 });
 
-import PremiumCoinCard from '../components/hero/PremiumCoinCard';
-import PromotedProfiles from '../components/home/PromotedProfiles';
-
 export default function HomeScreen({ navigation, route }) {
     const insets = useSafeAreaInsets();
     const { theme } = useTheme();
     const { handleInsufficientCoins } = useStarterPack();
     const { user: routeUser } = route.params || {};
-    const [user, setUser] = useState(routeUser || { id: 'guest', name: 'Misafir', balance: 0 });
-    
-    const [operators, setOperators] = useState([]);
-    const [featuredOperators, setFeaturedOperators] = useState([]);
-    const [loading, setLoading] = useState(true);
-    const [balance, setBalance] = useState(user.balance || 0);
+    const storeUser = useAppStore(state => state.user);
+    const storeBalance = useAppStore(state => state.balance);
+    const initialUser = storeUser || routeUser || { id: 'guest', name: 'Misafir', balance: 0 };
+    const [user, setUser] = useState(initialUser);
+    const [balance, setBalance] = useState(initialUser?.balance || 0);
+
     const [activeTab, setActiveTab] = useState(DEFAULT_TAB);
+    const [tabStates, setTabStates] = useState(createInitialTabStates);
     const [searchText, setSearchText] = useState('');
     const [showSearch, setShowSearch] = useState(false);
-    const [refreshing, setRefreshing] = useState(false);
     const [currentFilters, setCurrentFilters] = useState({ gender: 'all', ageGroup: 'all' });
     const [showFilterModal, setShowFilterModal] = useState(false);
     const [showMatchModal, setShowMatchModal] = useState(false);
-    const [showGenderConfirm, setShowGenderConfirm] = useState(false);
+    const [showGenderConfirm, setShowGenderConfirm] = useState(() => needsGenderConfirmation(initialUser));
+    const prevNeedsConfirmRef = useRef(needsGenderConfirmation(initialUser));
 
-    // Pagination states
-    const [page, setPage] = useState(1);
-    const [hasMore, setHasMore] = useState(true);
-    const [loadingMore, setLoadingMore] = useState(false);
-    const [timeoutError, setTimeoutError] = useState(false);
+    const currentTabState = tabStates[activeTab] || createInitialTabStates()[DEFAULT_TAB];
+    const operators = currentTabState.data;
+    const loading = currentTabState.loading;
+    const refreshing = currentTabState.refreshing;
+    const hasMore = currentTabState.hasMore;
+    const loadingMore = currentTabState.loadingMore;
+    const timeoutError = currentTabState.timeoutError;
 
+    const flatListRef = useRef(null);
     const abortControllerRef = useRef(null);
     const requestIdRef = useRef(0);
     const isFetchingRef = useRef(false);
-    const pendingLoadMoreRef = useRef(false);
+    const activeTabRef = useRef(activeTab);
+    const tabStatesRef = useRef(tabStates);
+    const userRef = useRef(user);
+    const balanceRef = useRef(storeBalance ?? balance ?? user?.balance ?? 0);
+    const hasUserScrolledRef = useRef(false);
+    const shortListAutoFetchedRef = useRef({});
+    const viewportHeightRef = useRef(0);
+    const contentHeightRef = useRef(0);
+    const isFocusedRef = useRef(true);
+    const hasFocusedOnceRef = useRef(false);
+    const appStateRef = useRef(AppState.currentState);
+    const currentScrollYRef = useRef(0);
+    const tabScrollOffsetsRef = useRef({});
+    const authMeInFlightRef = useRef(false);
+
+    activeTabRef.current = activeTab;
+    tabStatesRef.current = tabStates;
+    userRef.current = user;
+    balanceRef.current = storeBalance ?? balance ?? user?.balance ?? 0;
+
+    useEffect(() => {
+        hydrateHiStatusCache();
+    }, []);
+
+    // Keep Home user and gender confirmation modal reactively synced to authoritative store user (/api/auth/me)
+    useEffect(() => {
+        if (!storeUser) return;
+        setUser(storeUser);
+        if (storeUser.balance !== undefined) {
+            setBalance(Number(storeUser.balance) || 0);
+        }
+        const nextNeedsConfirm = needsGenderConfirmation(storeUser);
+        if (prevNeedsConfirmRef.current && !nextNeedsConfirm) {
+            shortListAutoFetchedRef.current[activeTabRef.current] = false;
+            fetchOperators(1, false, activeTabRef.current);
+        }
+        prevNeedsConfirmRef.current = nextNeedsConfirm;
+        setShowGenderConfirm(nextNeedsConfirm);
+    }, [storeUser]);
+
+    const syncUserFromServerIfStale = React.useCallback(async () => {
+        if (authMeInFlightRef.current) return;
+        const storeState = useAppStore.getState();
+        if (storeState.bootAuthMeInFlight) return;
+        if (storeState.serverUserSynced && (Date.now() - storeState.lastAuthMeAt) < AUTH_ME_FOCUS_REFRESH_MS) {
+            setShowGenderConfirm(needsGenderConfirmation(storeState.user));
+            return;
+        }
+        try {
+            const token = await AsyncStorage.getItem('token');
+            if (!token) return;
+            authMeInFlightRef.current = true;
+            const res = await axios.get(`${API_URL}/auth/me`, {
+                headers: { Authorization: `Bearer ${token}` },
+                timeout: 8000,
+            });
+            const freshUser = res.data;
+            if (freshUser && freshUser.id) {
+                await AsyncStorage.setItem('user', JSON.stringify(freshUser));
+                useAppStore.getState().setUser(freshUser);
+                useAppStore.getState().setServerAuthSync(true);
+                setShowGenderConfirm(needsGenderConfirmation(freshUser));
+            }
+        } catch (err) {
+            const status = err?.response?.status;
+            if (status === 401 || status === 403) {
+                await AsyncStorage.multiRemove(['token', 'user']);
+                await useAppStore.getState().logout();
+                resetTo('Auth');
+            }
+        } finally {
+            authMeInFlightRef.current = false;
+        }
+    }, []);
+
+    useEffect(() => {
+        const sub = AppState.addEventListener('change', (nextState) => {
+            const prevState = appStateRef.current;
+            appStateRef.current = nextState;
+            if (prevState.match(/inactive|background/) && nextState === 'active' && isFocusedRef.current) {
+                const currentTab = activeTabRef.current;
+                if (tabStatesRef.current[currentTab]?.initialized) {
+                    fetchOperators(1, false, currentTab, { silent: true });
+                }
+                syncUserFromServerIfStale();
+            }
+        });
+        return () => sub?.remove?.();
+    }, [syncUserFromServerIfStale]);
 
     useFocusEffect(
         React.useCallback(() => {
-            const loadUser = async () => {
+            isFocusedRef.current = true;
+            const loadUserAndRevalidate = async () => {
                 try {
-                    const storedUserStr = await AsyncStorage.getItem('user');
-                    let currentParsed = null;
-                    if (storedUserStr) {
-                        currentParsed = JSON.parse(storedUserStr);
-                        setUser(currentParsed);
-                        setBalance(currentParsed.balance || 0);
-                        
-                        if (currentParsed.id !== 'guest' && !currentParsed.gender_confirmed_at && !['admin', 'super_admin', 'operator', 'moderator', 'staff', 'coin_bayisi'].includes(currentParsed.role) && currentParsed.gender !== 'coin_bayisi') {
-                            setShowGenderConfirm(true);
+                    const currentStoreUser = useAppStore.getState().user;
+                    let activeUser = currentStoreUser;
+                    if (!activeUser) {
+                        const storedUserStr = await AsyncStorage.getItem('user');
+                        if (storedUserStr) {
+                            activeUser = JSON.parse(storedUserStr);
+                        }
+                    }
+                    if (activeUser) {
+                        setUser(activeUser);
+                        setBalance(activeUser.balance || 0);
+                        setShowGenderConfirm(needsGenderConfirmation(activeUser));
+                    }
+
+                    // Server /api/auth/me is the single source of truth for gender_confirmed_at
+                    await syncUserFromServerIfStale();
+
+                    // Revalidate active tab silently when returning focus to HomeScreen
+                    if (!hasFocusedOnceRef.current) {
+                        hasFocusedOnceRef.current = true;
+                    } else {
+                        const currentTab = activeTabRef.current;
+                        if (tabStatesRef.current[currentTab]?.initialized) {
+                            fetchOperators(1, false, currentTab, { silent: true });
                         }
                     }
 
-                    // Always fetch fresh live balance on screen focus
+                    // Sync balance through shared deduplicator (skips duplicate boot call already made by ChatContext)
                     const token = await AsyncStorage.getItem('token');
                     if (token) {
-                        const balRes = await axios.get(`${API_URL}/users/balance`, {
-                            headers: { Authorization: `Bearer ${token}` }
-                        });
-                        if (balRes.data && balRes.data.balance !== undefined) {
-                            const freshBal = Number(balRes.data.balance);
-                            setBalance(freshBal);
-                            if (currentParsed) {
-                                currentParsed.balance = freshBal;
-                                await AsyncStorage.setItem('user', JSON.stringify(currentParsed));
-                                setUser(currentParsed);
+                        const freshBal = await useAppStore.getState().syncBalanceWithServer({ force: false });
+                        if (freshBal !== undefined && freshBal !== null) {
+                            const numBal = Number(freshBal);
+                            setBalance(numBal);
+                            const latestUser = useAppStore.getState().user || activeUser;
+                            if (latestUser && Number(latestUser.balance) !== numBal) {
+                                const nextUser = { ...latestUser, balance: numBal };
+                                await AsyncStorage.setItem('user', JSON.stringify(nextUser));
+                                useAppStore.getState().setUser(nextUser);
                             }
                         }
                     }
@@ -226,154 +360,285 @@ export default function HomeScreen({ navigation, route }) {
                     console.error('Error loading user in HomeScreen:', e);
                 }
             };
-            loadUser();
-        }, [])
+            loadUserAndRevalidate();
+            return () => {
+                isFocusedRef.current = false;
+            };
+        }, [syncUserFromServerIfStale])
     );
 
     useEffect(() => {
-        fetchOperators(1, false, activeTab);
-        
+        shortListAutoFetchedRef.current = {};
+        hasUserScrolledRef.current = false;
+        const resetStates = createInitialTabStates();
+        Object.keys(resetStates).forEach(k => {
+            resetStates[k].loading = k === activeTabRef.current;
+        });
+        setTabStates(resetStates);
+        tabStatesRef.current = resetStates;
+        fetchOperators(1, false, activeTabRef.current);
+
         return () => {
             if (abortControllerRef.current) abortControllerRef.current.abort();
         };
     }, [currentFilters]); // Initial load + Filter changes
 
-    const fetchOperators = async (pageNum = 1, isRefreshing = false, requestedTab = activeTab) => {
+    const fetchOperators = async (pageNum = 1, isRefreshing = false, requestedTab = activeTabRef.current, options = {}) => {
+        const isSilent = !!options.silent && pageNum === 1 && !isRefreshing;
         if (isFetchingRef.current && !isRefreshing && pageNum > 1) {
             return;
         }
         isFetchingRef.current = true;
 
-        if (isRefreshing) {
-            setRefreshing(true);
-        } else if (pageNum === 1) {
-            setLoading(true);
-            setTimeoutError(false);
-        } else {
-            setLoadingMore(true);
+        if (!isSilent) {
+            setTabStates(prev => {
+                const cur = prev[requestedTab] || createInitialTabStates()[DEFAULT_TAB];
+                return {
+                    ...prev,
+                    [requestedTab]: {
+                        ...cur,
+                        refreshing: isRefreshing,
+                        loading: !isRefreshing && pageNum === 1 && cur.data.length === 0,
+                        loadingMore: pageNum > 1,
+                        timeoutError: pageNum === 1 ? false : cur.timeoutError,
+                    }
+                };
+            });
         }
 
-        const currentRequestId = ++requestIdRef.current;
-
-        // Only abort previous requests when starting a fresh tab or refresh (pageNum === 1)
+        // Preserve requestId + AbortController race protection on tab change or refresh (pageNum === 1)
         if (pageNum === 1) {
             if (abortControllerRef.current) {
                 abortControllerRef.current.abort();
             }
             abortControllerRef.current = new AbortController();
         }
+        const currentRequestId = ++requestIdRef.current;
 
         // 8 second timeout
         const timeoutId = setTimeout(() => {
             if (currentRequestId === requestIdRef.current && abortControllerRef.current) {
                 abortControllerRef.current.abort('timeout');
-                setTimeoutError(true);
-                setLoading(false);
-                setRefreshing(false);
-                setLoadingMore(false);
+                isFetchingRef.current = false;
+                setTabStates(prev => {
+                    const cur = prev[requestedTab] || createInitialTabStates()[DEFAULT_TAB];
+                    return {
+                        ...prev,
+                        [requestedTab]: {
+                            ...cur,
+                            timeoutError: isSilent && cur.data.length > 0 ? cur.timeoutError : true,
+                            loading: false,
+                            refreshing: false,
+                            loadingMore: false,
+                        }
+                    };
+                });
             }
         }, 8000);
 
         try {
             const encodedTab = encodeURIComponent(requestedTab);
-            console.log(`[DISCOVERY_FETCH_START] RequestId: ${currentRequestId} | Tab: ${requestedTab} | Page: ${pageNum} | Limit: 30`);
             const token = await AsyncStorage.getItem('token');
             const res = await axios.get(`${API_URL}/discovery?tab=${encodedTab}&page=${pageNum}&limit=30`, {
                 headers: token ? { Authorization: `Bearer ${token}` } : {},
                 signal: abortControllerRef.current?.signal
             });
-            
+
             clearTimeout(timeoutId);
-            
+
             if (currentRequestId !== requestIdRef.current) {
-                console.log(`[DISCOVERY_FETCH_CANCEL] RequestId: ${currentRequestId} superseded by ${requestIdRef.current}`);
                 return;
             }
 
             const data = res.data?.data || (Array.isArray(res.data) ? res.data : []);
             const serverHasMore = res.data?.hasMore !== undefined ? res.data.hasMore : (data.length >= 30);
-            console.log(`[DISCOVERY_FETCH_FINISH] RequestId: ${currentRequestId} | Tab: ${requestedTab} | Raw Loaded: ${data.length} | HasMore: ${serverHasMore} | Page: ${pageNum}`);
-            
-            if (pageNum === 1) {
-                setOperators(data);
-                const featured = data.filter(op => op.is_boosted || op.vip_level > 0).slice(0, 15);
-                setFeaturedOperators(featured);
-                setPage(1);
-                setHasMore(serverHasMore);
 
-                // Auto-fulfill load more if user already swiped to bottom
-                if (pendingLoadMoreRef.current && serverHasMore) {
-                    pendingLoadMoreRef.current = false;
-                    setTimeout(() => {
-                        fetchOperators(2, false, requestedTab);
-                    }, 100);
+            setTabStates(prev => {
+                const cur = prev[requestedTab] || createInitialTabStates()[DEFAULT_TAB];
+                if (pageNum === 1) {
+                    let nextData = data;
+                    let nextPage = 1;
+                    // On silent SWR refresh when user already loaded page > 1, replace page-1 window and keep unique tail
+                    if (isSilent && cur.page > 1 && cur.data.length > 30) {
+                        const page1Ids = new Set(data.map(item => item.id));
+                        const tail = cur.data.slice(30).filter(item => !page1Ids.has(item.id));
+                        nextData = [...data, ...tail];
+                        nextPage = cur.page;
+                    }
+                    return {
+                        ...prev,
+                        [requestedTab]: {
+                            ...cur,
+                            data: nextData,
+                            page: nextPage,
+                            hasMore: cur.page > 1 && isSilent ? cur.hasMore : serverHasMore,
+                            initialized: true,
+                            lastFetchedAt: Date.now(),
+                            loading: false,
+                            refreshing: false,
+                            loadingMore: false,
+                            timeoutError: false,
+                        }
+                    };
                 }
-            } else {
                 if (data.length > 0) {
-                    setOperators(prev => {
-                        const existingIds = new Set(prev.map(item => item.id));
-                        const uniqueNewData = data.filter(item => !existingIds.has(item.id));
-                        return [...prev, ...uniqueNewData];
-                    });
-                    setPage(pageNum);
-                    setHasMore(serverHasMore);
-                } else {
-                    setHasMore(false);
+                    const existingIds = new Set(cur.data.map(item => item.id));
+                    const uniqueNewData = data.filter(item => !existingIds.has(item.id));
+                    return {
+                        ...prev,
+                        [requestedTab]: {
+                            ...cur,
+                            data: [...cur.data, ...uniqueNewData],
+                            page: pageNum,
+                            hasMore: serverHasMore,
+                            initialized: true,
+                            loading: false,
+                            refreshing: false,
+                            loadingMore: false,
+                        }
+                    };
                 }
-            }
+                return {
+                    ...prev,
+                    [requestedTab]: {
+                        ...cur,
+                        hasMore: false,
+                        initialized: true,
+                        loading: false,
+                        refreshing: false,
+                        loadingMore: false,
+                    }
+                };
+            });
         } catch (e) {
             clearTimeout(timeoutId);
-            if (axios.isCancel(e)) {
-                if (e.message === 'timeout') {
-                    console.log('Request timed out');
-                } else {
-                    console.log('Request canceled by user tab switch');
-                }
-            } else {
-                if (currentRequestId === requestIdRef.current) {
-                    setTimeoutError(true);
-                }
+            if (!axios.isCancel(e) && currentRequestId === requestIdRef.current) {
+                setTabStates(prev => {
+                    const cur = prev[requestedTab] || createInitialTabStates()[DEFAULT_TAB];
+                    return {
+                        ...prev,
+                        [requestedTab]: {
+                            ...cur,
+                            timeoutError: isSilent && cur.data.length > 0 ? cur.timeoutError : true,
+                            loading: false,
+                            refreshing: false,
+                            loadingMore: false,
+                        }
+                    };
+                });
             }
         } finally {
-            isFetchingRef.current = false;
-            setLoading(false);
-            setRefreshing(false);
-            setLoadingMore(false);
+            if (currentRequestId === requestIdRef.current) {
+                isFetchingRef.current = false;
+                setTabStates(prev => {
+                    const cur = prev[requestedTab];
+                    if (!cur || (!cur.loading && !cur.refreshing && !cur.loadingMore)) return prev;
+                    return {
+                        ...prev,
+                        [requestedTab]: {
+                            ...cur,
+                            loading: false,
+                            refreshing: false,
+                            loadingMore: false,
+                        }
+                    };
+                });
+            }
         }
     };
 
     const onRefresh = () => {
+        shortListAutoFetchedRef.current[activeTab] = false;
         fetchOperators(1, true, activeTab);
     };
 
     const handleTabPress = (tab) => {
         if (activeTab === tab) {
             // Already active, refresh
+            shortListAutoFetchedRef.current[tab] = false;
             fetchOperators(1, true, tab);
-        } else {
-            pendingLoadMoreRef.current = false;
+            return;
+        }
+
+        // Persist scroll offset of the leaving tab and restore target tab's saved offset
+        const prevTab = activeTabRef.current;
+        tabScrollOffsetsRef.current[prevTab] = currentScrollYRef.current;
+        const targetOffset = tabScrollOffsetsRef.current[tab] || 0;
+        hasUserScrolledRef.current = targetOffset > 20;
+
+        const cached = tabStatesRef.current[tab];
+        if (cached && cached.initialized && !cached.timeoutError) {
+            // Stale-while-revalidate: show cached data immediately (no spinner, no list reset)
+            const isStale = !cached.lastFetchedAt || (Date.now() - cached.lastFetchedAt) >= getTabTtlMs(tab);
+            setTabStates(prev => {
+                const curPrevTab = prev[prevTab];
+                if (!curPrevTab || (!curPrevTab.loading && !curPrevTab.refreshing && !curPrevTab.loadingMore)) return prev;
+                return {
+                    ...prev,
+                    [prevTab]: { ...curPrevTab, loading: false, refreshing: false, loadingMore: false }
+                };
+            });
             setActiveTab(tab);
-            setOperators([]);
-            setPage(1);
-            setHasMore(true);
-            setLoading(true);
-            setTimeoutError(false);
+            currentScrollYRef.current = targetOffset;
+            requestAnimationFrame(() => {
+                flatListRef.current?.scrollToOffset({ offset: targetOffset, animated: false });
+            });
+
+            if (isStale) {
+                fetchOperators(1, false, tab, { silent: true });
+            } else {
+                if (abortControllerRef.current) {
+                    abortControllerRef.current.abort();
+                }
+                requestIdRef.current += 1;
+                isFetchingRef.current = false;
+            }
+        } else {
+            setTabStates(prev => {
+                const curPrevTab = prev[prevTab];
+                const next = { ...prev };
+                if (curPrevTab && (curPrevTab.loading || curPrevTab.refreshing || curPrevTab.loadingMore)) {
+                    next[prevTab] = { ...curPrevTab, loading: false, refreshing: false, loadingMore: false };
+                }
+                next[tab] = {
+                    ...(next[tab] || createInitialTabStates()[DEFAULT_TAB]),
+                    loading: true,
+                    timeoutError: false,
+                };
+                return next;
+            });
+            setActiveTab(tab);
+            currentScrollYRef.current = 0;
+            requestAnimationFrame(() => {
+                flatListRef.current?.scrollToOffset({ offset: 0, animated: false });
+            });
             fetchOperators(1, false, tab);
         }
     };
 
     const handleLoadMore = () => {
-        if (!hasMore) return;
-        if (loading || isFetchingRef.current) {
-            pendingLoadMoreRef.current = true;
-            return;
+        const ts = tabStatesRef.current[activeTabRef.current];
+        if (!ts || !ts.hasMore || ts.loading || ts.loadingMore || ts.refreshing || isFetchingRef.current) return;
+        if (ts.data.length === 0) return;
+
+        // Prevent unsolicited page=2 fetch on initial launch/tab mount unless content doesn't fill viewport
+        if (!hasUserScrolledRef.current) {
+            const viewportH = viewportHeightRef.current;
+            const contentH = contentHeightRef.current;
+            const fillsViewport = viewportH > 0 && contentH > viewportH + 40;
+            if (fillsViewport || shortListAutoFetchedRef.current[activeTabRef.current]) {
+                return;
+            }
+            shortListAutoFetchedRef.current[activeTabRef.current] = true;
         }
-        if (loadingMore) return;
-        fetchOperators(page + 1, false, activeTab);
+
+        fetchOperators(ts.page + 1, false, activeTabRef.current);
     };
 
     const handleMomentumScrollEnd = (event) => {
+        if (!hasUserScrolledRef.current) return;
         const { layoutMeasurement, contentOffset, contentSize } = event.nativeEvent;
+        if (contentOffset.y <= 0) return;
         const paddingToBottom = 160;
         if (layoutMeasurement.height + contentOffset.y >= contentSize.height - paddingToBottom) {
             handleLoadMore();
@@ -399,8 +664,24 @@ export default function HomeScreen({ navigation, route }) {
         return <View style={{ height: 20 }} />;
     };
 
+    const handleOpenProfile = React.useCallback((operator) => {
+        navigation.navigate('OperatorProfile', { operator, user: userRef.current });
+    }, [navigation]);
+
+    const handleOpenChat = React.useCallback((operator) => {
+        navigation.navigate('Chat', {
+            operatorId: operator.id,
+            name: operator.name,
+            gender: operator.gender,
+            avatar_url: operator.avatar_url,
+            vip_level: operator.vip_level || 0,
+            user: userRef.current,
+        });
+    }, [navigation]);
+
     const handleHiPress = React.useCallback(async (operator) => {
-        const currentBal = Number(balance ?? user?.balance ?? 0);
+        const currentUser = userRef.current;
+        const currentBal = Number(balanceRef.current ?? currentUser?.balance ?? 0);
         if (currentBal < 10) {
             handleInsufficientCoins();
             return false;
@@ -409,7 +690,7 @@ export default function HomeScreen({ navigation, route }) {
         try {
             const token = await AsyncStorage.getItem('token');
             const res = await axios.post(`${API_URL}/messages/send-hi`, {
-                senderId: user.id,
+                senderId: currentUser.id,
                 receiverId: operator.id,
                 content: 'Merhaba'
             }, {
@@ -417,10 +698,12 @@ export default function HomeScreen({ navigation, route }) {
             });
 
             if (res.data.success) {
-                // Update local balance state and storage
                 if (res.data.newBalance !== undefined) {
-                    setBalance(res.data.newBalance);
-                    const updatedUser = { ...user, balance: res.data.newBalance };
+                    const nb = Number(res.data.newBalance);
+                    setBalance(nb);
+                    useAppStore.getState().setBalance(nb, true);
+                    const updatedUser = { ...currentUser, balance: nb };
+                    setUser(updatedUser);
                     await AsyncStorage.setItem('user', JSON.stringify(updatedUser));
                 }
                 return true;
@@ -434,7 +717,7 @@ export default function HomeScreen({ navigation, route }) {
             }
             return false;
         }
-    }, [user, balance, handleInsufficientCoins]);
+    }, [handleInsufficientCoins]);
 
     // Use useMemo for the header to prevent unnecessary re-renders of the entire list
     const headerComponent = React.useMemo(() => (
@@ -453,14 +736,14 @@ export default function HomeScreen({ navigation, route }) {
                 </View>
             )}
 
-            <PremiumCoinCard 
-                onCoinPress={() => navigation.navigate('PurchaseInfo', { user })}
+            <PremiumCoinCard
+                onCoinPress={() => navigation.navigate('PurchaseInfo', { user: userRef.current })}
                 onExplorePress={() => navigation.navigate('Keşfet')}
-                onResellerPress={() => navigation.navigate('OperatorProfile', { operator: { id: 66, user_id: 66, name: 'FS Coin Bayi', display_name: 'FS Coin Bayi' }, user })}
+                onResellerPress={() => navigation.navigate('OperatorProfile', { operator: { id: 66, user_id: 66, name: 'FS Coin Bayi', display_name: 'FS Coin Bayi' }, user: userRef.current })}
             />
-            <ActionCards 
-                onRewardsPress={() => navigation.navigate('Leaderboard')} 
-                onInvitePress={() => navigation.navigate('Invite')} 
+            <ActionCards
+                onRewardsPress={() => navigation.navigate('Leaderboard')}
+                onInvitePress={() => navigation.navigate('Invite')}
                 theme={theme}
             />
 
@@ -468,8 +751,8 @@ export default function HomeScreen({ navigation, route }) {
                 <DestinyHero onPress={() => setShowMatchModal(true)} />
             </View>
 
-            {false && <TouchableOpacity 
-                activeOpacity={0.85} 
+            {false && <TouchableOpacity
+                activeOpacity={0.85}
                 style={styles.partyBannerWrapper}
                 onPress={() => navigation.navigate('Main', { screen: 'Odalar' })}
             >
@@ -493,15 +776,15 @@ export default function HomeScreen({ navigation, route }) {
                     </View>
                 </LinearGradient>
             </TouchableOpacity>}
-            
+
             <View style={[styles.tabContainer, { justifyContent: 'space-between' }]}>
                 <View style={{ flexDirection: 'row', gap: 10, alignItems: 'center' }}>
                     {DISCOVERY_TABS.map(tab => {
                         const isActive = activeTab === tab.id;
                         return (
-                            <TouchableOpacity 
-                                key={tab.id} 
-                                onPress={() => handleTabPress(tab.id)} 
+                            <TouchableOpacity
+                                key={tab.id}
+                                onPress={() => handleTabPress(tab.id)}
                                 style={styles.tab}
                                 activeOpacity={0.75}
                             >
@@ -516,10 +799,10 @@ export default function HomeScreen({ navigation, route }) {
                                     </GradientText>
                                 ) : (
                                     <Text style={[
-                                        styles.tabText, 
+                                        styles.tabText,
                                         styles.inactiveTabText,
-                                        { 
-                                            color: theme.mode === 'dark' ? 'rgba(255, 255, 255, 0.4)' : '#64748B' 
+                                        {
+                                            color: theme.mode === 'dark' ? 'rgba(255, 255, 255, 0.4)' : '#64748B'
                                         }
                                     ]}>
                                         {tab.label}
@@ -538,19 +821,19 @@ export default function HomeScreen({ navigation, route }) {
                     })}
                 </View>
 
-                <TouchableOpacity 
+                <TouchableOpacity
                     onPress={() => setShowFilterModal(true)}
                     style={{ padding: 4 }}
                 >
-                    <Ionicons 
-                        name="options-outline" 
-                        size={24} 
-                        color={(currentFilters.gender !== 'all' || currentFilters.ageGroup !== 'all') ? '#ec4899' : (theme.mode === 'dark' ? '#fff' : '#0f172a')} 
+                    <Ionicons
+                        name="options-outline"
+                        size={24}
+                        color={(currentFilters.gender !== 'all' || currentFilters.ageGroup !== 'all') ? '#ec4899' : (theme.mode === 'dark' ? '#fff' : '#0f172a')}
                     />
                 </TouchableOpacity>
             </View>
         </View>
-    ), [theme, balance, showSearch, searchText, activeTab, user, featuredOperators, currentFilters]);
+    ), [theme, showSearch, searchText, activeTab, currentFilters]);
 
 
     const userGender = getProfileGender(user);
@@ -566,7 +849,7 @@ export default function HomeScreen({ navigation, route }) {
 
             const matchesSearch = normalizeText(op.name).includes(normalizeText(searchText)) ||
                                   normalizeText(op.job || '').includes(normalizeText(searchText));
-            
+
             let matchesGender = true;
             if (currentFilters.gender !== 'all') {
                 matchesGender = opGender === currentFilters.gender;
@@ -583,32 +866,30 @@ export default function HomeScreen({ navigation, route }) {
 
             return matchesSearch && matchesGender && matchesAge;
         });
-        console.log('[DEBUG FILTERED DATA] User Gender:', userGender, 'Filtered Length:', resList.length);
         return resList;
     }, [operators, searchText, currentFilters, userGender]);
 
-    const renderItem = React.useCallback(({ item, index }) => (
-        <View style={{ minHeight: 120 }}>
-            <OperatorItem 
-                item={item} 
-                navigation={navigation} 
-                user={user} 
-                theme={theme} 
-                onHiPress={handleHiPress}
-            />
-        </View>
-    ), [navigation, user, theme, handleHiPress]);
+    const renderItem = React.useCallback(({ item }) => (
+        <OperatorItem
+            item={item}
+            theme={theme}
+            onOpenProfile={handleOpenProfile}
+            onOpenChat={handleOpenChat}
+            onHiPress={handleHiPress}
+        />
+    ), [theme, handleOpenProfile, handleOpenChat, handleHiPress]);
 
     return (
         <LinearGradient
             colors={theme.mode === 'dark' ? theme.gradients.dark : [theme.colors.background, theme.colors.backgroundSecondary]}
             style={styles.container}
         >
+            <View style={{ flex: 1 }} pointerEvents={showGenderConfirm ? 'none' : 'auto'}>
             <View style={{ height: Platform.OS === 'ios' ? insets.top : (StatusBar.currentHeight || 24) - 4 }} />
             <FlatList
+                ref={flatListRef}
                 data={filteredData}
                 keyExtractor={item => item.id.toString()}
-                key={activeTab} // Force complete re-render on tab change to drop stale animations
                 renderItem={renderItem}
                 ListHeaderComponent={headerComponent}
                 ListFooterComponent={renderFooter}
@@ -621,7 +902,7 @@ export default function HomeScreen({ navigation, route }) {
                     <View style={styles.emptyContainer}>
                         <Ionicons name="warning-outline" size={48} color={theme.colors.textSecondary} />
                         <Text style={[styles.emptyText, { color: theme.colors.textSecondary }]}>Bağlantı zaman aşımına uğradı.</Text>
-                        <TouchableOpacity onPress={() => handleTabPress(activeTab)} style={{ marginTop: 16, padding: 10, backgroundColor: '#ec4899', borderRadius: 8 }}>
+                        <TouchableOpacity onPress={() => fetchOperators(1, false, activeTab)} style={{ marginTop: 16, padding: 10, backgroundColor: '#ec4899', borderRadius: 8 }}>
                             <Text style={{ color: '#fff', fontWeight: 'bold' }}>Tekrar Dene</Text>
                         </TouchableOpacity>
                     </View>
@@ -629,22 +910,34 @@ export default function HomeScreen({ navigation, route }) {
                     <View style={styles.emptyContainer}>
                         <Ionicons name="search-outline" size={48} color={theme.colors.textSecondary} />
                         <Text style={[styles.emptyText, { color: theme.colors.textSecondary }]}>
-                            {activeTab === 'Çevrimiçi' ? 'Şu an kimse çevrimiçi değil.' : 'Sonuç bulunamadı.'}
+                            {activeTab === 'online' ? 'Şu an kimse çevrimiçi değil.' : 'Sonuç bulunamadı.'}
                         </Text>
                     </View>
                 )}
                 contentContainerStyle={{ paddingBottom: 120 }}
                 onRefresh={onRefresh}
                 refreshing={refreshing}
+                scrollEnabled={!showGenderConfirm}
                 onEndReached={handleLoadMore}
-                onEndReachedThreshold={0.5}
+                onEndReachedThreshold={0.3}
+                onScroll={(e) => {
+                    const y = e.nativeEvent.contentOffset.y;
+                    currentScrollYRef.current = y;
+                    tabScrollOffsetsRef.current[activeTabRef.current] = y;
+                }}
+                scrollEventThrottle={100}
+                onScrollBeginDrag={() => { hasUserScrolledRef.current = true; }}
+                onMomentumScrollBegin={() => { hasUserScrolledRef.current = true; }}
                 onMomentumScrollEnd={handleMomentumScrollEnd}
+                onLayout={(e) => { viewportHeightRef.current = e.nativeEvent.layout.height; }}
+                onContentSizeChange={(_, h) => { contentHeightRef.current = h; }}
                 showsVerticalScrollIndicator={false}
-                removeClippedSubviews={false}
-                initialNumToRender={15}
-                maxToRenderPerBatch={15}
-                windowSize={21}
+                removeClippedSubviews={Platform.OS === 'android'}
+                initialNumToRender={5}
+                maxToRenderPerBatch={4}
+                windowSize={5}
             />
+            </View>
 
             <FilterModal 
                 visible={showFilterModal} 
@@ -660,17 +953,6 @@ export default function HomeScreen({ navigation, route }) {
                 operators={filteredData.filter(op => getProfileGender(op) !== 'coin_bayisi')}
                 navigation={navigation}
                 user={user}
-            />
-
-            <GenderConfirmationModal 
-                visible={showGenderConfirm}
-                user={user}
-                onConfirmed={(updatedUser) => {
-                    setShowGenderConfirm(false);
-                    setUser(updatedUser.user || updatedUser);
-                    setOperators([]);
-                    fetchOperators(1, false, activeTab);
-                }}
             />
         </LinearGradient>
     );
@@ -751,9 +1033,10 @@ const styles = StyleSheet.create({
         borderRadius: 2,
         marginTop: 4,
     },
-    userCard: { 
-        padding: 16, 
-        paddingHorizontal: 20, 
+    userCard: {
+        padding: 16,
+        paddingHorizontal: 20,
+        minHeight: 120,
         borderRadius: 0,
         backgroundColor: 'transparent',
     },

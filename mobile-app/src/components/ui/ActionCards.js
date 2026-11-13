@@ -1,84 +1,18 @@
-import React, { useEffect, useRef } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Platform, Image, Animated, Easing } from 'react-native';
+import React from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, Platform, Image } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 
-export default function ActionCards({ onRewardsPress, onInvitePress, theme }) {
-    const bgColor = theme?.colors?.background || '#110C24';
-    const shakeAnimation = useRef(new Animated.Value(0)).current;
-    const scrollAnimation = useRef(new Animated.Value(0)).current;
-
-    useEffect(() => {
-        const scrollSequence = Animated.sequence([
-            // Gelirken yavaşça dur (ortaya gel)
-            Animated.timing(scrollAnimation, {
-                toValue: 0.5,
-                duration: 4000,
-                easing: Easing.out(Easing.ease),
-                useNativeDriver: true,
-            }),
-            // Ortada bekle
-            Animated.delay(3500),
-            // Hızlanarak çık (sola doğru git)
-            Animated.timing(scrollAnimation, {
-                toValue: 1,
-                duration: 4000,
-                easing: Easing.in(Easing.ease),
-                useNativeDriver: true,
-            }),
-            // Tekrar sağa sıfırla
-            Animated.timing(scrollAnimation, {
-                toValue: 0,
-                duration: 0,
-                useNativeDriver: true,
-            }),
-            Animated.delay(1000)
-        ]);
-        const shake = Animated.sequence([
-            Animated.timing(shakeAnimation, { toValue: 1, duration: 600, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
-            Animated.timing(shakeAnimation, { toValue: -0.8, duration: 1000, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
-            Animated.timing(shakeAnimation, { toValue: 0.5, duration: 900, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
-            Animated.timing(shakeAnimation, { toValue: -0.2, duration: 800, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
-            Animated.timing(shakeAnimation, { toValue: 0, duration: 800, easing: Easing.out(Easing.ease), useNativeDriver: true }),
-            Animated.delay(5000),
-        ]);
-
-        Animated.loop(shake).start();
-    }, [shakeAnimation]);
-
-    const translateX = scrollAnimation.interpolate({
-        inputRange: [0, 0.5, 1],
-        outputRange: [10, -150, 10] 
-    });
-
-    useEffect(() => {
-        const scrollSequence = Animated.sequence([
-            Animated.timing(scrollAnimation, {
-                toValue: 0.5,
-                duration: 5000,
-                easing: Easing.inOut(Easing.ease),
-                useNativeDriver: true,
-            }),
-            Animated.timing(scrollAnimation, {
-                toValue: 1,
-                duration: 5000,
-                easing: Easing.inOut(Easing.ease),
-                useNativeDriver: true,
-            })
-        ]);
-
-        Animated.loop(scrollSequence).start();
-    }, [scrollAnimation]);
-
+export default function ActionCards({ onRewardsPress, onInvitePress }) {
     return (
         <View style={styles.container}>
             {/* Rewards Card */}
-            <TouchableOpacity 
-                style={styles.cardWrapper} 
+            <TouchableOpacity
+                style={styles.cardWrapper}
                 onPress={onRewardsPress}
                 activeOpacity={0.9}
             >
-                {/* 
-                  Using asymmetric border radius (borderTopRightRadius: 65) creates a beautiful 
+                {/*
+                  Using asymmetric border radius (borderTopRightRadius: 65) creates a beautiful
                   natural cutout shape for the icon to float outside of, without needing any SVG masks!
                 */}
                 <LinearGradient
@@ -92,24 +26,28 @@ export default function ActionCards({ onRewardsPress, onInvitePress, theme }) {
                     <View style={styles.glassOverlay} />
 
                     <View style={styles.textContainer}>
-                        <Text style={styles.title}>Sıralama</Text>
-                        <Text style={styles.subtitle}>Liderleri gör</Text>
+                        <Text style={styles.title} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
+                            Sıralama
+                        </Text>
+                        <Text style={styles.subtitle} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>
+                            Liderleri gör
+                        </Text>
                     </View>
                 </LinearGradient>
 
                 {/* Trophy Image sits outside the overflow: hidden gradient to break out of the box */}
                 <View style={styles.doubleCoinContainer}>
-                    <Animated.Image 
-                        source={require('../../../assets/kupa.png')} 
-                        style={[styles.trophyImage, { transform: [{ rotate: shakeAnimation.interpolate({ inputRange: [-1, 1], outputRange: ['-5deg', '5deg'] }) }] }]} 
+                    <Image
+                        source={require('../../../assets/kupa.png')}
+                        style={styles.trophyImage}
                         resizeMode="contain"
                     />
                 </View>
             </TouchableOpacity>
 
             {/* Invite Card */}
-            <TouchableOpacity 
-                style={styles.cardWrapper} 
+            <TouchableOpacity
+                style={styles.cardWrapper}
                 onPress={onInvitePress}
                 activeOpacity={0.9}
             >
@@ -123,26 +61,27 @@ export default function ActionCards({ onRewardsPress, onInvitePress, theme }) {
                     <View style={styles.circleOverlaySmall} />
                     <View style={styles.glassOverlay} />
 
-                    <View style={[styles.textContainer, { overflow: 'hidden', justifyContent: 'center' }]}>
-                        <Animated.View style={{ transform: [{ translateX }] }}>
-                            <Text style={[styles.title, { width: 400 }]}>
-                                Davet et          ödül kazan
-                            </Text>
-                        </Animated.View>
+                    <View style={styles.textContainer}>
+                        <Text style={styles.title} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
+                            Davet et
+                        </Text>
+                        <Text style={styles.subtitleHighlight} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>
+                            Ödül kazan
+                        </Text>
                     </View>
                 </LinearGradient>
 
                 {/* Double 3D Coin Image Composition */}
                 <View style={styles.doubleCoinContainer}>
                     <View style={styles.glowCircle} />
-                    <Animated.Image 
-                        source={require('../../../assets/gold_coin_3f.png')} 
-                        style={[styles.coinBackImage, { transform: [{ rotate: shakeAnimation.interpolate({ inputRange: [-1, 1], outputRange: ['-5deg', '5deg'] }) }] }]} 
+                    <Image
+                        source={require('../../../assets/gold_coin_3f.png')}
+                        style={styles.coinBackImage}
                         resizeMode="contain"
                     />
-                    <Animated.Image 
-                        source={require('../../../assets/gold_coin_3f.png')} 
-                        style={[styles.coinFrontImage, { transform: [{ rotate: shakeAnimation.interpolate({ inputRange: [-1, 1], outputRange: ['-10deg', '10deg'] }) }] }]} 
+                    <Image
+                        source={require('../../../assets/gold_coin_3f.png')}
+                        style={styles.coinFrontImage}
                         resizeMode="contain"
                     />
                 </View>
@@ -214,11 +153,11 @@ const styles = StyleSheet.create({
     textContainer: {
         flex: 1,
         zIndex: 2,
-        marginRight: 75,
+        marginRight: 58,
     },
     title: {
         fontFamily: 'Outfit_800ExtraBold',
-        fontSize: 20,
+        fontSize: 18,
         color: '#fff',
         marginBottom: 2,
     },

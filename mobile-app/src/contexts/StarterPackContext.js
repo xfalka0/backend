@@ -1,5 +1,5 @@
 import React, { createContext, useState, useContext, useRef, useEffect } from 'react';
-import { View, StyleSheet, TouchableOpacity, Text, Animated, Easing } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, Text, Animated } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import InsufficientCoinsModal from '../components/InsufficientCoinsModal';
@@ -8,6 +8,7 @@ import { API_URL } from '../config';
 import { useAlert } from './AlertContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useNavigation } from '@react-navigation/native';
+import { useAppStore } from '../store/useAppStore';
 
 const StarterPackContext = createContext();
 
@@ -20,45 +21,66 @@ export const StarterPackProvider = ({ children }) => {
     const pulseAnim = useRef(new Animated.Value(1)).current;
     const { showAlert } = useAlert();
     const navigation = useNavigation();
+    const sessionStatus = useAppStore(state => state.sessionStatus);
+    const storeUser = useAppStore(state => state.user);
 
-    // Load persisted state and check eligibility on mount
+    // Load persisted state and check eligibility ONLY after session is verified (never before /auth/me)
     useEffect(() => {
+        let cancelled = false;
+        if (sessionStatus !== 'verified' || !storeUser?.id) {
+            setShowBubble(false);
+            return;
+        }
+
         const loadStateAndCheck = async () => {
             try {
-                // 1. Check bubble visibility
+                const token = await AsyncStorage.getItem('token');
+                if (!token || cancelled) {
+                    setShowBubble(false);
+                    return;
+                }
+
+                // 1. Check bubble visibility for verified session
                 const saved = await AsyncStorage.getItem('starter_pack_bubble_visible');
-                if (saved === 'true') {
+                if (saved === 'true' && !cancelled) {
                     setShowBubble(true);
                 }
 
                 // 2. Check eligibility from backend
-                const token = await AsyncStorage.getItem('token');
-                if (token) {
-                    const res = await axios.get(`${API_URL}/starter-pack/check`, {
-                        headers: { Authorization: `Bearer ${token}` }
-                    });
-                    setIsEligible(res.data.eligible);
-                    
-                    // If not eligible anymore, hide bubble
-                    if (!res.data.eligible) {
-                        setShowBubble(false);
-                        await AsyncStorage.setItem('starter_pack_bubble_visible', 'false');
-                    }
+                const res = await axios.get(`${API_URL}/starter-pack/check`, {
+                    headers: { Authorization: `Bearer ${token}` }
+                });
+                if (cancelled) return;
+                setIsEligible(res.data.eligible);
+
+                // If not eligible anymore, hide bubble
+                if (!res.data.eligible) {
+                    setShowBubble(false);
+                    await AsyncStorage.setItem('starter_pack_bubble_visible', 'false');
                 }
             } catch (e) {
                 if (![401, 403].includes(e.response?.status)) {
                     console.error('[StarterPack] Error loading state/eligibility:', e);
                 }
-                setIsEligible(false);
-                setShowBubble(false);
+                if (!cancelled) {
+                    setIsEligible(false);
+                    setShowBubble(false);
+                }
                 await AsyncStorage.setItem('starter_pack_bubble_visible', 'false');
             }
         };
         loadStateAndCheck();
-    }, []);
+        return () => { cancelled = true; };
+    }, [sessionStatus, storeUser?.id]);
 
-    // Save state whenever showBubble changes
+    // Save state and run a single lightweight entrance spring (no continuous idle loop)
     useEffect(() => {
+        if (sessionStatus !== 'verified') {
+            pulseAnim.stopAnimation();
+            pulseAnim.setValue(1);
+            return;
+        }
+
         const saveState = async () => {
             try {
                 await AsyncStorage.setItem('starter_pack_bubble_visible', showBubble ? 'true' : 'false');
@@ -67,20 +89,22 @@ export const StarterPackProvider = ({ children }) => {
             }
         };
         saveState();
-        
+
         if (showBubble) {
-            let animation = Animated.loop(
-                Animated.sequence([
-                    Animated.timing(pulseAnim, { toValue: 1.15, duration: 1000, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-                    Animated.timing(pulseAnim, { toValue: 1, duration: 1000, easing: Easing.inOut(Easing.sin), useNativeDriver: true })
-                ])
-            );
-            animation.start();
-            return () => animation.stop();
+            pulseAnim.setValue(0.88);
+            const entrance = Animated.spring(pulseAnim, {
+                toValue: 1,
+                friction: 6,
+                tension: 90,
+                useNativeDriver: true,
+            });
+            entrance.start();
+            return () => entrance.stop();
         } else {
+            pulseAnim.stopAnimation();
             pulseAnim.setValue(1);
         }
-    }, [showBubble]);
+    }, [showBubble, sessionStatus]);
 
     const openStarterPack = () => {
         setShowModal(true);

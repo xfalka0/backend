@@ -59,9 +59,37 @@ function getVipThresholds() {
     return { ...VIP_THRESHOLDS };
 }
 
+/**
+ * Check whether a user's VIP / Premium access is currently active.
+ * - Staff roles (admin, super_admin, operator, moderator) have operational access.
+ * - Regular users require is_vip === true AND vip_expire_date in the future.
+ * - vip_level alone does NOT bypass expiration.
+ * @param {object} user - User record from database
+ * @returns {boolean}
+ */
+function isUserVipActive(user) {
+    if (!user) return false;
+
+    // Staff/internal roles exception
+    const staffRoles = ['admin', 'super_admin', 'operator', 'moderator'];
+    if (staffRoles.includes(user.role)) return true;
+
+    // Must be flagged as VIP
+    if (!user.is_vip) return false;
+
+    // Must have a valid future expiration date
+    if (!user.vip_expire_date) return false;
+
+    const expireDate = new Date(user.vip_expire_date);
+    if (isNaN(expireDate.getTime())) return false;
+
+    return expireDate > new Date();
+}
+
 module.exports = {
     getVipLevel,
     getVipProgress,
     getVipThresholds,
+    isUserVipActive,
     VIP_THRESHOLDS
 };

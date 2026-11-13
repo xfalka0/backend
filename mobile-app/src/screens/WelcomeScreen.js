@@ -19,6 +19,7 @@ import Animated, {
     withTiming,
     withSequence,
     withSpring,
+    cancelAnimation,
 } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -29,13 +30,21 @@ import { GoogleSignin, statusCodes } from '@react-native-google-signin/google-si
 import FloatingProfiles from '../components/animated/FloatingProfiles';
 import WelcomeButton from '../components/ui/WelcomeButton';
 import { API_URL } from '../config';
+import { useAppStore } from '../store/useAppStore';
+import { useScreenActive } from '../utils/useScreenActive';
 
 const { width, height } = Dimensions.get('window');
 
 const LoadingHeart = () => {
+    const { shouldAnimate } = useScreenActive();
     const scale = useSharedValue(1);
 
     useEffect(() => {
+        if (!shouldAnimate) {
+            cancelAnimation(scale);
+            scale.value = 1;
+            return;
+        }
         scale.value = withRepeat(
             withSequence(
                 withTiming(1.2, { duration: 600 }),
@@ -43,7 +52,11 @@ const LoadingHeart = () => {
             ),
             -1
         );
-    }, []);
+        return () => {
+            cancelAnimation(scale);
+            scale.value = 1;
+        };
+    }, [shouldAnimate]);
 
     const animatedStyle = useAnimatedStyle(() => ({
         transform: [{ scale: scale.value }]
@@ -63,11 +76,17 @@ const LoadingHeart = () => {
 
 export default function WelcomeScreen({ navigation }) {
     const insets = useSafeAreaInsets();
+    const { shouldAnimate } = useScreenActive();
     const bubbleY = useSharedValue(0);
     const [loading, setLoading] = useState(false);
     const [onlineCount, setOnlineCount] = useState(142);
 
     useEffect(() => {
+        if (!shouldAnimate) {
+            cancelAnimation(bubbleY);
+            bubbleY.value = 0;
+            return;
+        }
         bubbleY.value = withRepeat(
             withSequence(
                 withSpring(-8, { damping: 10, stiffness: 100 }),
@@ -76,7 +95,13 @@ export default function WelcomeScreen({ navigation }) {
             -1,
             true
         );
+        return () => {
+            cancelAnimation(bubbleY);
+            bubbleY.value = 0;
+        };
+    }, [shouldAnimate]);
 
+    useEffect(() => {
         try {
             GoogleSignin.configure({
                 webClientId: '46669084263-drv76chuoahgvfitcdmctvvqm3cbudl7.apps.googleusercontent.com',
@@ -119,6 +144,10 @@ export default function WelcomeScreen({ navigation }) {
                 const { user, token } = res.data;
                 await AsyncStorage.setItem('token', token);
                 await AsyncStorage.setItem('user', JSON.stringify(user));
+                const store = useAppStore.getState();
+                store.setUser(user);
+                store.setServerAuthSync(true);
+                store.setSessionStatus('verified');
 
                 if (user.onboarding_completed) {
                     navigation.replace('Main', { user: { ...user, token } });

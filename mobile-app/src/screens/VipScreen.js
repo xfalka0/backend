@@ -11,6 +11,7 @@ import Animated, {
     interpolate,
     useDerivedValue,
     withSpring,
+    cancelAnimation,
     Easing,
     withDelay
 } from 'react-native-reanimated';
@@ -19,10 +20,11 @@ import { Motion } from '../components/motion/MotionSystem';
 import VipFrame from '../components/ui/VipFrame';
 import VipBadge from '../components/ui/VipBadge';
 import axios from 'axios';
-import { API_URL } from '../config';
+import { API_URL, PERFORMANCE } from '../config';
 import { useFocusEffect } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { BlurView } from 'expo-blur';
+import { useScreenActive } from '../utils/useScreenActive';
 
 const { width, height } = Dimensions.get('window');
 
@@ -172,11 +174,38 @@ const VipScreen = ({ route, navigation }) => {
     const haloScale = useSharedValue(1);
     const haloOpacity = useSharedValue(0.5);
     const pulseScale = useSharedValue(1);
+    const { shouldAnimate } = useScreenActive();
     const frameRotate = useSharedValue(0);
     const rotateX = useSharedValue(0);
     const rotateY = useSharedValue(0);
 
     useEffect(() => {
+        const stopAll = () => {
+            cancelAnimation(floatingY);
+            cancelAnimation(rotateX);
+            cancelAnimation(rotateY);
+            cancelAnimation(frameRotate);
+            cancelAnimation(shineX);
+            cancelAnimation(haloScale);
+            cancelAnimation(haloOpacity);
+            cancelAnimation(pulseScale);
+            floatingY.value = 0;
+            rotateX.value = 0;
+            rotateY.value = 0;
+            frameRotate.value = 0;
+            shineX.value = -width;
+            haloScale.value = 1;
+            haloOpacity.value = 0;
+            pulseScale.value = 1;
+        };
+
+        if (!shouldAnimate) {
+            stopAll();
+            return;
+        }
+
+        // Default ('balanced'): cap to at most 2 concurrent loops (floatingY + pulseScale).
+        // Toggle PERFORMANCE.enableExtendedIdleAnimations in config.js to restore all 8 loops.
         floatingY.value = withRepeat(
             withSequence(
                 withTiming(-12, { duration: 2500, easing: Easing.inOut(Easing.sin) }),
@@ -186,60 +215,64 @@ const VipScreen = ({ route, navigation }) => {
             true
         );
 
-        rotateX.value = withRepeat(
-            withSequence(
-                withTiming(3, { duration: 3000, easing: Easing.inOut(Easing.sin) }),
-                withTiming(-3, { duration: 3000, easing: Easing.inOut(Easing.sin) })
-            ),
-            -1,
-            true
-        );
-
-        rotateY.value = withRepeat(
-            withSequence(
-                withTiming(-4, { duration: 3500, easing: Easing.inOut(Easing.sin) }),
-                withTiming(4, { duration: 3500, easing: Easing.inOut(Easing.sin) })
-            ),
-            -1,
-            true
-        );
-
-        frameRotate.value = withRepeat(
-            withTiming(360, { duration: 3500, easing: Easing.linear }),
-            -1,
-            false
-        );
-
-        if (selectedLevel >= 3) {
-            shineX.value = withRepeat(
-                withSequence(
-                    withTiming(width, { duration: 2500, easing: Easing.linear }),
-                    withDelay(1200, withTiming(-width, { duration: 0 }))
-                ),
-                -1,
-                false
-            );
-        }
-
-        if (selectedLevel >= 5) {
-            haloScale.value = withRepeat(
-                withTiming(1.5, { duration: 2200 }),
-                -1,
-                false
-            );
-            haloOpacity.value = withRepeat(
-                withSequence(withTiming(0.8, { duration: 1100 }), withTiming(0, { duration: 1100 })),
-                -1,
-                false
-            );
-        }
-
         pulseScale.value = withRepeat(
             withSequence(withTiming(1.08, { duration: 1200 }), withTiming(1, { duration: 1200 })),
             -1,
             true
         );
-    }, [selectedLevel]);
+
+        if (PERFORMANCE.enableExtendedIdleAnimations) {
+            rotateX.value = withRepeat(
+                withSequence(
+                    withTiming(3, { duration: 3000, easing: Easing.inOut(Easing.sin) }),
+                    withTiming(-3, { duration: 3000, easing: Easing.inOut(Easing.sin) })
+                ),
+                -1,
+                true
+            );
+
+            rotateY.value = withRepeat(
+                withSequence(
+                    withTiming(-4, { duration: 3500, easing: Easing.inOut(Easing.sin) }),
+                    withTiming(4, { duration: 3500, easing: Easing.inOut(Easing.sin) })
+                ),
+                -1,
+                true
+            );
+
+            frameRotate.value = withRepeat(
+                withTiming(360, { duration: 3500, easing: Easing.linear }),
+                -1,
+                false
+            );
+
+            if (selectedLevel >= 3) {
+                shineX.value = withRepeat(
+                    withSequence(
+                        withTiming(width, { duration: 2500, easing: Easing.linear }),
+                        withDelay(1200, withTiming(-width, { duration: 0 }))
+                    ),
+                    -1,
+                    false
+                );
+            }
+
+            if (selectedLevel >= 5) {
+                haloScale.value = withRepeat(
+                    withTiming(1.5, { duration: 2200 }),
+                    -1,
+                    false
+                );
+                haloOpacity.value = withRepeat(
+                    withSequence(withTiming(0.8, { duration: 1100 }), withTiming(0, { duration: 1100 })),
+                    -1,
+                    false
+                );
+            }
+        }
+
+        return stopAll;
+    }, [selectedLevel, shouldAnimate]);
 
     const handleLevelSelect = (level) => {
         setSelectedLevel(level);

@@ -5,15 +5,23 @@ import Animated, {
     useAnimatedStyle,
     withRepeat,
     withSequence,
-    withTiming
+    withTiming,
+    cancelAnimation
 } from 'react-native-reanimated';
 import { useTheme } from '../../contexts/ThemeContext';
+import { useScreenActive } from '../../utils/useScreenActive';
 
 export default function SkeletonCard() {
     const { theme } = useTheme();
+    const { shouldAnimate } = useScreenActive();
     const pulseValue = useSharedValue(0.4);
 
     useEffect(() => {
+        if (!shouldAnimate) {
+            cancelAnimation(pulseValue);
+            pulseValue.value = 0.65;
+            return;
+        }
         pulseValue.value = withRepeat(
             withSequence(
                 withTiming(1, { duration: 800 }),
@@ -22,7 +30,11 @@ export default function SkeletonCard() {
             -1,
             true
         );
-    }, []);
+        return () => {
+            cancelAnimation(pulseValue);
+            pulseValue.value = 0.65;
+        };
+    }, [shouldAnimate]);
 
     const animatedStyle = useAnimatedStyle(() => ({
         opacity: pulseValue.value,

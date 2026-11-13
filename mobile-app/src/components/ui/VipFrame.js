@@ -6,12 +6,14 @@ import Animated, {
     withRepeat,
     withSequence,
     withTiming,
+    cancelAnimation,
     Easing
 } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
 
 import { useTheme } from '../../contexts/ThemeContext';
 import { resolveImageUrl } from '../../utils/imageUtils';
+import { useScreenActive } from '../../utils/useScreenActive';
 
 /**
  * VIP_FRAME_CONFIGS: Grand Sugo Style Assets
@@ -96,11 +98,12 @@ const VIP_FRAME_CONFIGS = {
 
 const VipFrame = memo(({ level = 0, avatar, size = 80, isStatic = false }) => {
     const { theme } = useTheme();
+    const { shouldAnimate } = useScreenActive();
     const config = VIP_FRAME_CONFIGS[level];
     const pulseValue = useSharedValue(1);
 
     useEffect(() => {
-        if (config?.hasPulse && !isStatic) {
+        if (config?.hasPulse && !isStatic && shouldAnimate) {
             pulseValue.value = withRepeat(
                 withSequence(
                     withTiming(1.05, { duration: 1500, easing: Easing.inOut(Easing.ease) }),
@@ -109,10 +112,15 @@ const VipFrame = memo(({ level = 0, avatar, size = 80, isStatic = false }) => {
                 -1,
                 true
             );
+            return () => {
+                cancelAnimation(pulseValue);
+                pulseValue.value = 1;
+            };
         } else {
+            cancelAnimation(pulseValue);
             pulseValue.value = 1;
         }
-    }, [level, isStatic]);
+    }, [level, isStatic, shouldAnimate]);
 
     const animatedStyle = useAnimatedStyle(() => ({
         transform: [{ scale: pulseValue.value }],

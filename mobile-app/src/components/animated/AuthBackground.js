@@ -7,21 +7,28 @@ import Animated, {
     useAnimatedStyle,
     withRepeat,
     withTiming,
+    cancelAnimation,
     Easing,
     interpolate,
 } from 'react-native-reanimated';
 
 import { PERFORMANCE } from '../../config';
+import { useScreenActive } from '../../utils/useScreenActive';
 
 const { width, height } = Dimensions.get('window');
 
-const Blob = ({ color, size, duration, delay }) => {
+const Blob = ({ color, size, duration, delay, shouldAnimate }) => {
     const translateX = useSharedValue(0);
     const translateY = useSharedValue(0);
     const scale = useSharedValue(1);
 
     useEffect(() => {
-        if (PERFORMANCE.reduceMotion) return;
+        if (!shouldAnimate) {
+            cancelAnimation(translateX);
+            cancelAnimation(translateY);
+            cancelAnimation(scale);
+            return;
+        }
 
         translateX.value = withRepeat(
             withTiming(Math.random() * width - width / 2, {
@@ -47,7 +54,13 @@ const Blob = ({ color, size, duration, delay }) => {
             -1,
             true
         );
-    }, []);
+
+        return () => {
+            cancelAnimation(translateX);
+            cancelAnimation(translateY);
+            cancelAnimation(scale);
+        };
+    }, [shouldAnimate]);
 
     const animatedStyle = useAnimatedStyle(() => ({
         transform: [
@@ -75,7 +88,7 @@ const Blob = ({ color, size, duration, delay }) => {
 };
 
 export default function AuthBackground({ hideCircles = false }) {
-    const showBlobs = !hideCircles && !PERFORMANCE.reduceMotion;
+    const { shouldAnimate } = useScreenActive();
 
     return (
         <View style={styles.container} pointerEvents="none">
@@ -86,8 +99,8 @@ export default function AuthBackground({ hideCircles = false }) {
 
             {!hideCircles && (
                 <View style={styles.blobsContainer}>
-                    <Blob color="#7928ca" size={400} duration={12000} />
-                    <Blob color="#ff0080" size={350} duration={15000} />
+                    <Blob color="#7928ca" size={400} duration={12000} shouldAnimate={shouldAnimate} />
+                    <Blob color="#ff0080" size={350} duration={15000} shouldAnimate={shouldAnimate} />
                     {!PERFORMANCE.simpleAnimations && (
                         <>
                             <Blob color="#0070f3" size={300} duration={18000} />

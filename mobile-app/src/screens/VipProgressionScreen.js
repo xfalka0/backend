@@ -17,12 +17,14 @@ import Animated, {
     withRepeat,
     withSequence,
     withTiming,
+    cancelAnimation,
     Easing,
     withSpring
 } from 'react-native-reanimated';
 import VipFrame from '../components/ui/VipFrame';
 import { API_URL } from '../config';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useScreenActive } from '../utils/useScreenActive';
 import ModernAlert from '../components/ui/ModernAlert';
 
 const { width } = Dimensions.get('window');
@@ -48,11 +50,23 @@ const VipProgressionScreen = ({ navigation, route }) => {
     const [alert, setAlert] = useState({ visible: false, title: '', message: '', type: 'info' });
 
     // Animations
+    const { shouldAnimate } = useScreenActive();
     const shimmerX = useSharedValue(-width);
     const glowPulse = useSharedValue(1);
     const progressWidth = useSharedValue(0);
 
     useEffect(() => {
+        fetchVipProgress();
+    }, []);
+
+    useEffect(() => {
+        if (!shouldAnimate) {
+            cancelAnimation(shimmerX);
+            cancelAnimation(glowPulse);
+            shimmerX.value = -width;
+            glowPulse.value = 1;
+            return;
+        }
         // Shimmer effect
         shimmerX.value = withRepeat(
             withSequence(
@@ -73,8 +87,13 @@ const VipProgressionScreen = ({ navigation, route }) => {
             true
         );
 
-        fetchVipProgress();
-    }, []);
+        return () => {
+            cancelAnimation(shimmerX);
+            cancelAnimation(glowPulse);
+            shimmerX.value = -width;
+            glowPulse.value = 1;
+        };
+    }, [shouldAnimate]);
 
     useEffect(() => {
         // Animate progress bar

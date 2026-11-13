@@ -4,7 +4,7 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, SafeAreaVi
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import axios from 'axios';
-import { API_URL } from '../config';
+import { API_URL, PERFORMANCE } from '../config';
 import { useTheme } from '../contexts/ThemeContext';
 import { PurchaseService } from '../services/purchaseService';
 import { useEffect, useState, useRef } from 'react';
@@ -13,6 +13,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import ModernAlert from '../components/ui/ModernAlert';
 import { STORE_THEME } from '../constants/storeTheme';
 import { Modal } from 'react-native';
+import { useScreenActive } from '../utils/useScreenActive';
 
 const { width } = Dimensions.get('window');
 
@@ -58,7 +59,7 @@ const PACKAGE_CONFIG = {
     '40000': { bonus: 20000 },
 };
 
-const CoinPackageCard = React.memo(({ pack, index, handlePurchaseIntent, isPopular, isCheapest }) => {
+const CoinPackageCard = React.memo(({ pack, index, handlePurchaseIntent, isPopular, isCheapest, baseRate }) => {
     const product = pack.product;
     const coinAmountStr = product.title ? product.title.split(' ')[0] : (product.coins || '0');
     const coinAmount = parseInt(coinAmountStr, 10) || 0;
@@ -66,11 +67,11 @@ const CoinPackageCard = React.memo(({ pack, index, handlePurchaseIntent, isPopul
     const price = product.price;
 
     const rate = price > 0 ? (price / coinAmount).toFixed(2) : '0.00';
-    // Dynamic real advantage calculation based on base unit price (100 coins = 0.3999 TL/coin)
-    const baseRate = 0.3999;
+    // Dynamic real advantage calculation based on base unit price (from 100 coin package)
+    const effectiveBaseRate = (baseRate && baseRate > 0) ? baseRate : (price > 0 && coinAmount === 100 ? (price / 100) : 0.4399);
     const currentRate = (price > 0 && coinAmount > 0) ? (price / coinAmount) : 0;
-    const realAdvantage = (currentRate > 0 && currentRate < baseRate && coinAmount > 100)
-        ? Math.round((1 - (currentRate / baseRate)) * 100)
+    const realAdvantage = (currentRate > 0 && currentRate < effectiveBaseRate && coinAmount > 100)
+        ? Math.round((1 - (currentRate / effectiveBaseRate)) * 100)
         : 0;
     
     // Icon scaling based on amount
@@ -177,26 +178,44 @@ export default function ShopScreen({ navigation, route }) {
     }, []);
 
     // Premium Animations
+    const { shouldAnimate } = useScreenActive();
     const shimmerAnim = useRef(new Animated.Value(-width)).current;
     const floatAnim = useRef(new Animated.Value(0)).current;
     const balanceScaleAnim = useRef(new Animated.Value(1)).current;
     const continuousPulse = useRef(new Animated.Value(0)).current;
 
     useEffect(() => {
-        // Discrete Shimmer (Super Elegant, Extra Slow Flow)
-        Animated.loop(
-            Animated.sequence([
-                Animated.timing(shimmerAnim, {
-                    toValue: width + 200,
-                    duration: 6000, // Drastically slowed down to 6 seconds
-                    useNativeDriver: true,
-                }),
-                Animated.delay(3000), // Adjusted delay
-            ])
-        ).start();
+        if (!shouldAnimate) {
+            shimmerAnim.stopAnimation();
+            floatAnim.stopAnimation();
+            continuousPulse.stopAnimation();
+            shimmerAnim.setValue(-width);
+            floatAnim.setValue(0);
+            continuousPulse.setValue(0);
+            return;
+        }
+        // Default ('balanced'): cap to 2 concurrent loops (floatLoop + pulseLoop);
+        // shimmerLoop is gated under PERFORMANCE.enableExtendedIdleAnimations.
+        let shimmerLoop = null;
+        if (PERFORMANCE.enableExtendedIdleAnimations) {
+            shimmerLoop = Animated.loop(
+                Animated.sequence([
+                    Animated.timing(shimmerAnim, {
+                        toValue: width + 200,
+                        duration: 6000, // Drastically slowed down to 6 seconds
+                        useNativeDriver: true,
+                    }),
+                    Animated.delay(3000), // Adjusted delay
+                ])
+            );
+            shimmerLoop.start();
+        } else {
+            shimmerAnim.stopAnimation();
+            shimmerAnim.setValue(-width);
+        }
 
         // Continuous Floating Icon
-        Animated.loop(
+        const floatLoop = Animated.loop(
             Animated.sequence([
                 Animated.timing(floatAnim, {
                     toValue: -10,
@@ -209,15 +228,24 @@ export default function ShopScreen({ navigation, route }) {
                     useNativeDriver: true,
                 })
             ])
-        ).start();
+        );
 
-        Animated.loop(
+        const pulseLoop = Animated.loop(
             Animated.sequence([
                 Animated.timing(continuousPulse, { toValue: 1, duration: 2500, useNativeDriver: true }),
                 Animated.timing(continuousPulse, { toValue: 0, duration: 2500, useNativeDriver: true })
             ])
-        ).start();
-    }, [shimmerAnim, floatAnim, continuousPulse]);
+        );
+
+        floatLoop.start();
+        pulseLoop.start();
+
+        return () => {
+            shimmerLoop?.stop();
+            floatLoop.stop();
+            pulseLoop.stop();
+        };
+    }, [shouldAnimate, shimmerAnim, floatAnim, continuousPulse]);
 
     useFocusEffect(
         React.useCallback(() => {
@@ -465,8 +493,49 @@ export default function ShopScreen({ navigation, route }) {
         }
     };
 
+    const handleRestorePurchases = async () => {
+        try {
+            const customerInfo = await PurchaseService.restorePurchases();
+            const activeEntitlements = customerInfo?.entitlements?.active || {};
+            const isRestored = Object.keys(activeEntitlements).length > 0;
+            if (isRestored) {
+                setAlertConfig({
+                    visible: true,
+                    title: 'Başarılı! 🎉',
+                    message: 'Satın alımlarınız başarıyla geri yüklendi.',
+                    type: 'success'
+                });
+            } else {
+                setAlertConfig({
+                    visible: true,
+                    title: 'Bilgi',
+                    message: 'Bu Google Play hesabına ait geri yüklenebilir aktif bir ürün bulunamadı.',
+                    type: 'info'
+                });
+            }
+        } catch (error) {
+            setAlertConfig({
+                visible: true,
+                title: 'Hata',
+                message: 'Geri yükleme işlemi sırasında bir hata oluştu: ' + (error.message || 'Lütfen tekrar deneyiniz.'),
+                type: 'error'
+            });
+        }
+    };
+
     let cheapestPackId = null;
     let minRate = Infinity;
+    let dynamicBaseRate = 0.4399;
+
+    if (offerings.length > 0) {
+        const firstPack = offerings[0];
+        const firstCoins = parseInt(firstPack.product.title ? firstPack.product.title.split(' ')[0] : (firstPack.product.coins || '100'), 10) || 100;
+        const firstPrice = firstPack.product.price || 0;
+        if (firstCoins > 0 && firstPrice > 0) {
+            dynamicBaseRate = firstPrice / firstCoins;
+        }
+    }
+
     offerings.forEach(pack => {
         const coinAmountStr = pack.product.title ? pack.product.title.split(' ')[0] : (pack.product.coins || '0');
         const coinAmount = parseInt(coinAmountStr, 10) || 0;
@@ -586,6 +655,7 @@ export default function ShopScreen({ navigation, route }) {
                                         handlePurchaseIntent={handlePurchaseIntent}
                                         isPopular={cAmount === 1200}
                                         isCheapest={pack.product.identifier === cheapestPackId}
+                                        baseRate={dynamicBaseRate}
                                     />
                                 );
                             })
@@ -618,6 +688,26 @@ export default function ShopScreen({ navigation, route }) {
                                 />
                             ))
                         )}
+                    </View>
+
+                    {/* Restore Purchases Button */}
+                    <View style={{ alignItems: 'center', marginTop: 15, marginBottom: 25 }}>
+                        <TouchableOpacity
+                            style={{
+                                paddingVertical: 10,
+                                paddingHorizontal: 20,
+                                borderRadius: 20,
+                                borderWidth: 1,
+                                borderColor: 'rgba(255, 255, 255, 0.2)',
+                                backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                            }}
+                            onPress={handleRestorePurchases}
+                            activeOpacity={0.7}
+                        >
+                            <Text style={{ color: '#E0E0E0', fontSize: 13, fontWeight: '500' }}>
+                                Satın Alımları Geri Yükle
+                            </Text>
+                        </TouchableOpacity>
                     </View>
                 </ScrollView>
                 <ModernAlert

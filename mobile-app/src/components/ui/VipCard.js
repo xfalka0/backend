@@ -7,10 +7,12 @@ import Animated, {
     withRepeat,
     withTiming,
     withSequence,
+    cancelAnimation,
     interpolate,
     useSharedValue,
     Easing,
 } from 'react-native-reanimated';
+import { useScreenActive } from '../../utils/useScreenActive';
 
 
 const { width } = Dimensions.get('window');
@@ -63,6 +65,7 @@ const VIP_CONFIGS = {
 };
 
 const VipCard = ({ level, userAvatar }) => {
+    const { shouldAnimate } = useScreenActive();
     const config = VIP_CONFIGS[level] || VIP_CONFIGS[1];
     const pulseValue = useSharedValue(1);
     const shineValue = useSharedValue(-CARD_WIDTH);
@@ -70,6 +73,17 @@ const VipCard = ({ level, userAvatar }) => {
     const rotateY = useSharedValue(0);
 
     useEffect(() => {
+        if (!shouldAnimate) {
+            cancelAnimation(pulseValue);
+            cancelAnimation(shineValue);
+            cancelAnimation(rotateX);
+            cancelAnimation(rotateY);
+            pulseValue.value = 1;
+            shineValue.value = -CARD_WIDTH;
+            rotateX.value = 0;
+            rotateY.value = 0;
+            return;
+        }
         pulseValue.value = withRepeat(
             withSequence(
                 withTiming(1.05, { duration: 1500 }),
@@ -102,7 +116,17 @@ const VipCard = ({ level, userAvatar }) => {
             -1,
             true
         );
-    }, [level]);
+        return () => {
+            cancelAnimation(pulseValue);
+            cancelAnimation(shineValue);
+            cancelAnimation(rotateX);
+            cancelAnimation(rotateY);
+            pulseValue.value = 1;
+            shineValue.value = -CARD_WIDTH;
+            rotateX.value = 0;
+            rotateY.value = 0;
+        };
+    }, [level, shouldAnimate]);
 
     const animatedGlow = useAnimatedStyle(() => ({
         transform: [

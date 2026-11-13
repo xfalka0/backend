@@ -23,9 +23,11 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons, FontAwesome5 } from '@expo/vector-icons';
 import MaskedView from '@react-native-masked-view/masked-view';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useScreenActive } from '../utils/useScreenActive';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
-import { API_URL } from '../config';
+import { API_URL, PERFORMANCE } from '../config';
 import { useTheme } from '../contexts/ThemeContext';
 import * as ImagePicker from 'expo-image-picker';
 import { resolveImageUrl } from '../utils/imageUtils';
@@ -176,6 +178,7 @@ const VipBoostClaimWidget = ({ userId, vipLevel, balance, setBalance, showAlert 
 const ProfileScreen = ({ route }) => {
     console.log("RENDER ProfileScreen");
     const navigation = useNavigation();
+    const insets = useSafeAreaInsets();
     const { theme, themeMode } = useTheme();
     const { showAlert } = useAlert();
     const [user, setUser] = useState(route?.params?.user || {});
@@ -204,12 +207,20 @@ const ProfileScreen = ({ route }) => {
         }
     }, [isEditModalVisible, user?.city]);
 
-    // Nobility breathing glow animation hooks
+    // Nobility breathing glow animation hooks (paused when tab is unfocused or app backgrounded)
+    const { shouldAnimate } = useScreenActive();
     const nobilityScale = React.useRef(new Animated.Value(1)).current;
     const nobilityOpacity = React.useRef(new Animated.Value(0.75)).current;
 
     useEffect(() => {
-        Animated.loop(
+        if (!shouldAnimate || !PERFORMANCE.enableExtendedIdleAnimations) {
+            nobilityOpacity.stopAnimation();
+            nobilityScale.stopAnimation();
+            nobilityOpacity.setValue(0.95);
+            nobilityScale.setValue(1);
+            return;
+        }
+        const loopAnim = Animated.loop(
             Animated.parallel([
                 Animated.sequence([
                     Animated.timing(nobilityOpacity, {
@@ -236,15 +247,27 @@ const ProfileScreen = ({ route }) => {
                     })
                 ])
             ])
-        ).start();
-    }, []);
+        );
+        loopAnim.start();
+        return () => {
+            loopAnim.stop();
+        };
+    }, [shouldAnimate]);
 
     // Visitor eye blink animation hook
     const visitorEyeScaleY = React.useRef(new Animated.Value(1)).current;
 
     useEffect(() => {
+        if (!shouldAnimate) {
+            visitorEyeScaleY.stopAnimation();
+            visitorEyeScaleY.setValue(1);
+            return;
+        }
+        let cancelled = false;
+        let currentAnim = null;
         const runBlinkAnim = () => {
-            Animated.sequence([
+            if (cancelled) return;
+            currentAnim = Animated.sequence([
                 Animated.delay(2500 + Math.random() * 2500), // Blink every 2.5 to 5.0 seconds
                 // Close Eye slowly
                 Animated.timing(visitorEyeScaleY, {
@@ -258,10 +281,18 @@ const ProfileScreen = ({ route }) => {
                     duration: 400, // 400ms to open
                     useNativeDriver: true
                 })
-            ]).start(() => runBlinkAnim());
+            ]);
+            currentAnim.start(({ finished }) => {
+                if (finished && !cancelled) runBlinkAnim();
+            });
         };
         runBlinkAnim();
-    }, []);
+        return () => {
+            cancelled = true;
+            currentAnim?.stop();
+            visitorEyeScaleY.stopAnimation();
+        };
+    }, [shouldAnimate]);
 
     // Zustand Role & Cihaz Güvenliği
     const role = useAppStore(state => state.role);
@@ -850,7 +881,10 @@ const ProfileScreen = ({ route }) => {
                     [{ nativeEvent: { contentOffset: { y: scrollY } } }],
                     { useNativeDriver: true }
                 )}
-                contentContainerStyle={styles.scrollContent}
+                contentContainerStyle={[
+                    styles.scrollContent,
+                    { paddingTop: Math.max(insets.top + 8, Platform.OS === 'ios' ? 30 : 15) }
+                ]}
             >
                 {/* Top Navigation Bar */}
                 <View style={styles.topNavBar}>

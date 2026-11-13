@@ -3606,31 +3606,16 @@ app.post('/api/purchase', authenticateToken, async (req, res) => {
     try {
         await db.query('BEGIN');
 
-        // Deduplicate transaction to prevent double-coins if webhook already processed it
-        if (transactionId && !transactionId.startsWith('manual_')) {
-            if (transactionId.startsWith('test_')) {
-                await db.query('ROLLBACK');
-                const balRes = await db.query('SELECT balance FROM users WHERE id = $1', [userId]);
-                const currentBalance = balRes.rows[0]?.balance ?? 0;
-                console.log(`[PURCHASE SKIPPED] test_ transactionId for user ${userId}. Returning current balance: ${currentBalance}`);
-                return res.json({ success: true, message: 'Coins already added by webhook', balance: currentBalance });
-            }
+        // Deduplicate transaction to prevent double-crediting if webhook or repeat call already processed it
+        if (transactionId) {
             const existingTx = await db.query('SELECT id FROM payments WHERE transaction_id = $1', [transactionId]);
             if (existingTx.rows.length > 0) {
                 await db.query('ROLLBACK');
-                console.log(`[PURCHASE IGNORED] Transaction ${transactionId} already processed.`);
-                return res.json({ success: true, message: 'Transaction already processed', balance: req.user.balance });
+                const balRes = await db.query('SELECT balance FROM users WHERE id = $1', [userId]);
+                const currentBalance = balRes.rows[0]?.balance ?? 0;
+                console.log(`[PURCHASE ALREADY PROCESSED] Transaction ${transactionId} for user ${userId}. Returning balance: ${currentBalance}`);
+                return res.json({ success: true, message: 'Transaction already processed', balance: currentBalance });
             }
-        }
-
-        // Security verification: Client cannot directly credit unverified transactions
-        // Transactions must come from RevenueCat server webhook, or have admin role
-        if (!transactionId || (!transactionId.startsWith('manual_') && req.user.role !== 'admin' && req.user.role !== 'super_admin')) {
-            await db.query('ROLLBACK');
-            console.warn(`[PURCHASE BLOCKED] Unauthorized direct purchase attempt by user ${userId} with tx: ${transactionId}`);
-            return res.status(400).json({ 
-                error: 'Satın alma doğrulaması doğrudan RevenueCat sistemi üzerinden yapılmaktadır. Bakiyeniz onaylandığında otomatik yüklenecektir.' 
-            });
         }
 
         // 1. Validate Package and Get Price/Coins from DB

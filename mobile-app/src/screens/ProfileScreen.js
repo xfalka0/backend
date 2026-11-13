@@ -984,7 +984,7 @@ const ProfileScreen = ({ route }) => {
                             {parseInt(user?.vip_level) > 0 && (
                                 <VipBadge level={parseInt(user?.vip_level)} size={38} />
                             )}
-                            {(user?.is_vip === true || user?.is_vip === 'true' || user?.is_vip === 1 || user?.is_premium || parseInt(user?.vip_level || 0, 10) > 0 || (user?.vip_expire_date && new Date(user.vip_expire_date) > new Date())) && (
+                            {Boolean((user?.premium_expire_date || user?.vip_expire_date) && new Date(user?.premium_expire_date || user?.vip_expire_date) > new Date()) && (
                                 <View style={styles.premiumBadgeContainer}>
                                     <LinearGradient
                                         colors={['#FFDF00', '#F59E0B', '#D97706']}

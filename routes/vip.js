@@ -133,17 +133,18 @@ router.post('/upgrade-direct', authenticateToken, async (req, res) => {
         }
         
         // Add months to current expire date or from now
-        const userRes = await db.query('SELECT vip_expire_date, is_vip FROM users WHERE id = $1', [userId]);
+        const userRes = await db.query('SELECT premium_expire_date, vip_expire_date, is_premium, premium_start_date, vip_start_date FROM users WHERE id = $1', [userId]);
         if (userRes.rows.length === 0) {
             return res.status(404).json({ error: 'Kullanıcı bulunamadı.' });
         }
         
         const user = userRes.rows[0];
         let baseDate = new Date();
-        let startDate = user.vip_start_date || new Date();
+        const existingExpire = user.premium_expire_date || user.vip_expire_date;
+        let startDate = user.premium_start_date || user.vip_start_date || new Date();
         
-        if (user.is_vip && user.vip_expire_date && new Date(user.vip_expire_date) > baseDate) {
-            baseDate = new Date(user.vip_expire_date);
+        if (existingExpire && new Date(existingExpire) > baseDate) {
+            baseDate = new Date(existingExpire);
         } else {
             startDate = new Date();
         }
@@ -151,9 +152,15 @@ router.post('/upgrade-direct', authenticateToken, async (req, res) => {
         // Add months
         baseDate.setMonth(baseDate.getMonth() + months);
         
-        // Update user
+        // Update user: Premium is the subscription with start and expire dates
         await db.query(
-            'UPDATE users SET is_vip = true, vip_start_date = $1, vip_expire_date = $2 WHERE id = $3',
+            `UPDATE users 
+             SET is_premium = true, 
+                 premium_start_date = $1::timestamptz, 
+                 premium_expire_date = $2::timestamptz,
+                 vip_start_date = $1::timestamptz, 
+                 vip_expire_date = $2::timestamp 
+             WHERE id = $3`,
             [startDate, baseDate, userId]
         );
         
@@ -161,7 +168,9 @@ router.post('/upgrade-direct', authenticateToken, async (req, res) => {
         
         res.json({
             success: true,
-            is_vip: true,
+            is_premium: true,
+            premium_start_date: startDate,
+            premium_expire_date: baseDate,
             vip_expire_date: baseDate
         });
         

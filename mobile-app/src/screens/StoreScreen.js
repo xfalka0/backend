@@ -43,9 +43,10 @@ export default function StoreScreen({ navigation, route }) {
     const [alertConfig, setAlertConfig] = useState({ visible: false, title: '', message: '', type: 'info' });
     const [premiumSuccessVisible, setPremiumSuccessVisible] = useState(false);
 
+    // Premium is the timed subscription that expires. VIP is permanent level progression.
+    const premiumExpireDate = currentUser?.premium_expire_date || currentUser?.vip_expire_date;
     const isPremium = Boolean(
-        currentUser?.is_vip && 
-        (!currentUser?.vip_expire_date || new Date(currentUser.vip_expire_date) > new Date())
+        premiumExpireDate && new Date(premiumExpireDate) > new Date()
     );
 
     // Fetch user profile and balance
@@ -105,17 +106,39 @@ export default function StoreScreen({ navigation, route }) {
             );
             if (result.success) {
                 const token = await AsyncStorage.getItem('token');
-                await axios.post(`${API_URL}/vip/upgrade-direct`, {
-                    months: plan.months,
-                    transactionId: result.customerInfo?.originalAppUserId || `rc_${Date.now()}`
-                }, {
-                    headers: { Authorization: `Bearer ${token}` }
-                }).catch(err => console.log('Backend sync error:', err.message));
-
-                const currentUser = useAppStore.getState().user;
-                if (currentUser) {
-                    useAppStore.getState().setUser({ ...currentUser, is_vip: true });
+                let newExpireDate = null;
+                try {
+                    const syncRes = await axios.post(`${API_URL}/vip/upgrade-direct`, {
+                        months: plan.months,
+                        transactionId: result.customerInfo?.originalAppUserId || `rc_${Date.now()}`
+                    }, {
+                        headers: { Authorization: `Bearer ${token}` }
+                    });
+                    if (syncRes.data?.vip_expire_date) {
+                        newExpireDate = syncRes.data.vip_expire_date;
+                    }
+                } catch (err) {
+                    console.log('Backend sync error:', err.message);
                 }
+
+                if (!newExpireDate) {
+                    const d = new Date();
+                    d.setMonth(d.getMonth() + plan.months);
+                    newExpireDate = d.toISOString();
+                }
+
+                const storeUser = useAppStore.getState().user;
+                const updatedUser = {
+                    ...(storeUser || currentUser || {}),
+                    is_premium: true,
+                    premium_expire_date: newExpireDate,
+                    premium_start_date: storeUser?.premium_start_date || new Date().toISOString(),
+                    vip_expire_date: newExpireDate,
+                    vip_start_date: storeUser?.vip_start_date || new Date().toISOString()
+                };
+                useAppStore.getState().setUser(updatedUser);
+                setCurrentUser(updatedUser);
+                await AsyncStorage.setItem('user', JSON.stringify(updatedUser));
 
                 setPremiumSuccessVisible(true);
             } else if (!result.cancelled) {

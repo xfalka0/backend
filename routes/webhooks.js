@@ -196,7 +196,13 @@ async function handleSuccessfulPayment(userId, event, io) {
             baseDate.setMonth(baseDate.getMonth() + months);
 
             await db.query(
-                'UPDATE users SET is_vip = true, vip_start_date = $1, vip_expire_date = $2, vip_level = GREATEST(COALESCE(vip_level, 0), 1) WHERE id::text = $3::text',
+                `UPDATE users 
+                 SET is_premium = true, 
+                     premium_start_date = $1::timestamptz, 
+                     premium_expire_date = $2::timestamptz, 
+                     vip_start_date = $1::timestamptz, 
+                     vip_expire_date = $2::timestamp 
+                 WHERE id::text = $3::text`,
                 [startDate, baseDate, userId]
             );
 

@@ -25,3 +25,13 @@ BEGIN
         ALTER TABLE users ADD CONSTRAINT check_user_balance_non_negative CHECK (balance >= 0);
     END IF;
 END $$;
+
+-- 3. VIP Start Date Column on users
+ALTER TABLE users ADD COLUMN IF NOT EXISTS vip_start_date TIMESTAMP WITH TIME ZONE DEFAULT NOW();
+
+-- 4. Premium Subscription Columns on users (Biten abonelik süresi)
+ALTER TABLE users ADD COLUMN IF NOT EXISTS is_premium BOOLEAN DEFAULT FALSE;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS premium_start_date TIMESTAMP WITH TIME ZONE;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS premium_expire_date TIMESTAMP WITH TIME ZONE;
+
+

@@ -5,14 +5,14 @@ import { FontAwesome5, Ionicons } from '@expo/vector-icons';
 import { STORE_THEME } from '../../constants/storeTheme';
 
 export default function ActiveSubscriptionBanner({ startDate, expireDate }) {
-    const formatDate = (dateString) => {
-        if (!dateString) return '-';
+    const formatDate = (dateString, isExpire = false) => {
+        if (!dateString) return isExpire ? 'Süresiz' : '-';
         try {
             const d = new Date(dateString);
-            if (isNaN(d.getTime())) return '-';
+            if (isNaN(d.getTime())) return isExpire ? 'Süresiz' : '-';
             return d.toLocaleDateString('tr-TR', { day: 'numeric', month: 'short', year: 'numeric' });
         } catch (e) {
-            return '-';
+            return isExpire ? 'Süresiz' : '-';
         }
     };
 
@@ -75,7 +75,7 @@ export default function ActiveSubscriptionBanner({ startDate, expireDate }) {
 
                     <View style={styles.infoCol}>
                         <Text style={styles.infoLabel}>BİTİŞ TARİHİ</Text>
-                        <Text style={[styles.infoValue, { color: '#FFC53D' }]}>{formatDate(expireDate)}</Text>
+                        <Text style={[styles.infoValue, { color: '#FFC53D' }]}>{formatDate(expireDate, true)}</Text>
                     </View>
 
                     {remainingDays !== null ? (

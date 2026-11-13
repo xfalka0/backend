@@ -120,7 +120,13 @@ export default function ChatScreen({ route, navigation }) {
     const [currentUser, setCurrentUser] = useState({ ...(contextUser || {}), ...(globalUser || {}), ...(routeUser || {}) });
     const effectiveUser = currentUser;
     const user = effectiveUser;
-    const isPremiumMember = Boolean(effectiveUser?.is_vip === true || effectiveUser?.is_vip === 'true' || effectiveUser?.is_vip === 1 || effectiveUser?.is_premium || parseInt(effectiveUser?.vip_level || 0, 10) > 0 || (effectiveUser?.vip_expire_date && new Date(effectiveUser.vip_expire_date) > new Date()));
+    const premiumExpireStr = effectiveUser?.premium_expire_date || effectiveUser?.vip_expire_date;
+    const isPremiumMember = Boolean(
+        premiumExpireStr && new Date(premiumExpireStr) > new Date()
+    );
+    const isVipMember = Boolean(
+        parseInt(effectiveUser?.vip_level || 0, 10) > 0 || effectiveUser?.is_vip
+    );
 
     const PAGE_SIZE = 50;
     const [messages, setMessages] = useState([]);
@@ -632,7 +638,7 @@ export default function ChatScreen({ route, navigation }) {
                     showCancel: true,
                     cancelText: 'Vazgeç',
                     confirmText: 'Coin Yükle',
-                    onConfirm: () => handleInsufficientCoins()
+                    onConfirm: () => navigation.navigate('Shop')
                 });
                 return;
             }
@@ -669,7 +675,7 @@ export default function ChatScreen({ route, navigation }) {
                         showCancel: true,
                         cancelText: 'Vazgeç',
                         confirmText: 'Coin Yükle',
-                        onConfirm: () => handleInsufficientCoins()
+                    onConfirm: () => navigation.navigate('Shop')
                     });
                     return;
                 }
@@ -711,7 +717,7 @@ export default function ChatScreen({ route, navigation }) {
                 showCancel: true,
                 cancelText: 'Vazgeç',
                 confirmText: 'Coin Yükle',
-                onConfirm: () => handleInsufficientCoins()
+                    onConfirm: () => navigation.navigate('Shop')
             });
             return;
         }

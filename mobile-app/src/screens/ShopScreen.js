@@ -442,26 +442,41 @@ export default function ShopScreen({ navigation, route }) {
             }
 
             if (success) {
-                // Webhook already added coins to the balance — just fetch the updated balance.
                 const token = user?.token || await AsyncStorage.getItem('token');
-                let liveBalance = 0;
-                let liveVipLevel = undefined;
-                let liveVipXp = undefined;
+                let liveBalance = balance;
+                let coinsCredited = 0;
 
-                // Wait briefly for webhook to process before fetching balance
-                await new Promise(resolve => setTimeout(resolve, 2000));
+                const product = pack.product || {};
+                const coinAmountStr = product.title ? product.title.split(' ')[0] : (product.coins || '0');
+                const parsedCoinAmount = parseInt(coinAmountStr, 10) || 0;
+                const productId = product.identifier || (parsedCoinAmount ? `coins_${parsedCoinAmount}` : null) || pack.id;
 
                 try {
-                    const balRes = await axios.get(`${API_URL}/users/balance`, {
+                    const syncRes = await axios.post(`${API_URL}/purchase`, {
+                        productId: productId,
+                        transactionId: transactionId
+                    }, {
                         headers: { 'Authorization': `Bearer ${token}` }
                     });
-                    if (balRes.data && balRes.data.balance !== undefined) {
-                        liveBalance = balRes.data.balance;
-                        liveVipLevel = balRes.data.vip_level;
-                        liveVipXp = balRes.data.vip_xp;
+
+                    if (syncRes.data && syncRes.data.balance !== undefined) {
+                        liveBalance = syncRes.data.balance;
+                        coinsCredited = syncRes.data.coins_added || parsedCoinAmount;
                     }
                 } catch (syncError) {
-                    console.error('[SHOP] Balance fetch error after purchase:', syncError.message);
+                    console.error('[SHOP] Purchase sync error:', syncError.message);
+                    try {
+                        const balRes = await axios.get(`${API_URL}/users/balance`, {
+                            headers: { 'Authorization': `Bearer ${token}` }
+                        });
+                        if (balRes.data && balRes.data.balance !== undefined) {
+                            liveBalance = balRes.data.balance;
+                        }
+                    } catch (e) {}
+                }
+
+                if (!coinsCredited && parsedCoinAmount > 0) {
+                    coinsCredited = parsedCoinAmount;
                 }
 
                 // Force update UI and storage
@@ -473,16 +488,20 @@ export default function ShopScreen({ navigation, route }) {
                     const parsed = JSON.parse(storedUser);
                     parsed.balance = liveBalance;
                     parsed.hearts = liveBalance;
-                    if (liveVipLevel !== undefined) parsed.vip_level = liveVipLevel;
-                    if (liveVipXp !== undefined) parsed.vip_xp = liveVipXp;
-                    if (liveVipLevel !== undefined) parsed.is_vip = liveVipLevel > 0;
                     await AsyncStorage.setItem('user', JSON.stringify(parsed));
                 }
+
+                try {
+                    const storeUser = useAppStore.getState().user;
+                    if (storeUser) {
+                        useAppStore.getState().setUser({ ...storeUser, balance: liveBalance, hearts: liveBalance });
+                    }
+                } catch (e) {}
 
                 setAlertConfig({
                     visible: true,
                     title: 'Tebrikler!',
-                    message: `Satın alım başarılı.${liveVipLevel ? `\nVIP Seviyesi: VIP ${liveVipLevel}` : ''}\nYeni Bakiye: ${liveBalance}`,
+                    message: `Satın alım başarılı.\n${coinsCredited ? `+${coinsCredited} Coin hesabınıza tanımlandı.\n` : ''}Yeni Bakiye: ${liveBalance}`,
                     type: 'success'
                 });
             }

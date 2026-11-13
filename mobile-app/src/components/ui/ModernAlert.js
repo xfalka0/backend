@@ -20,8 +20,12 @@ export default function ModernAlert({
     if (!visible) return null;
 
     const handleConfirm = () => {
-        if (onConfirm) onConfirm();
         onClose();
+        if (onConfirm) {
+            setTimeout(() => {
+                try { onConfirm(); } catch (e) { console.error('[ModernAlert] onConfirm error:', e); }
+            }, 80);
+        }
     };
 
     const handleCancel = () => {

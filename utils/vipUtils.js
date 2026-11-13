@@ -60,36 +60,55 @@ function getVipThresholds() {
 }
 
 /**
- * Check whether a user's VIP / Premium access is currently active.
+ * Check whether a user's Premium subscription is currently active.
  * - Staff roles (admin, super_admin, operator, moderator) have operational access.
- * - Regular users require is_vip === true AND vip_expire_date in the future.
- * - vip_level alone does NOT bypass expiration.
+ * - Regular users require an unexpired subscription date (premium_expire_date or vip_expire_date).
+ * - VIP level alone does NOT grant Premium; Premium is the timed subscription that expires.
  * @param {object} user - User record from database
  * @returns {boolean}
  */
-function isUserVipActive(user) {
+function isUserPremiumActive(user) {
     if (!user) return false;
 
     // Staff/internal roles exception
     const staffRoles = ['admin', 'super_admin', 'operator', 'moderator'];
     if (staffRoles.includes(user.role)) return true;
 
-    // Must be flagged as VIP
-    if (!user.is_vip) return false;
-
     // Must have a valid future expiration date
-    if (!user.vip_expire_date) return false;
+    const expireDateStr = user.premium_expire_date || user.vip_expire_date;
+    if (!expireDateStr) return false;
 
-    const expireDate = new Date(user.vip_expire_date);
+    const expireDate = new Date(expireDateStr);
     if (isNaN(expireDate.getTime())) return false;
 
     return expireDate > new Date();
+}
+
+/**
+ * Check whether a user has VIP status.
+ * VIP has NO expiration date. It is a permanent level progression (VIP 1-6)
+ * gained as the user deposits money, buys coins, or accumulates VIP XP.
+ * @param {object} user - User record from database
+ * @returns {boolean}
+ */
+function isUserVip(user) {
+    if (!user) return false;
+    return (parseInt(user.vip_level || 0, 10) > 0) || Boolean(user.is_vip);
+}
+
+/**
+ * Legacy alias for backwards compatibility: maps to isUserPremiumActive
+ */
+function isUserVipActive(user) {
+    return isUserPremiumActive(user);
 }
 
 module.exports = {
     getVipLevel,
     getVipProgress,
     getVipThresholds,
+    isUserPremiumActive,
+    isUserVip,
     isUserVipActive,
     VIP_THRESHOLDS
 };

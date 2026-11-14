@@ -1146,6 +1146,10 @@ const initializeDatabase = async () => {
                 );
                 CREATE INDEX IF NOT EXISTS idx_processed_webhook_events_event_id ON processed_webhook_events(event_id);
             `);
+            await db.query(`ALTER TABLE processed_webhook_events ADD COLUMN IF NOT EXISTS claimed BOOLEAN DEFAULT TRUE`);
+            await db.query(`ALTER TABLE processed_webhook_events ADD COLUMN IF NOT EXISTS coins INTEGER`);
+            await db.query(`ALTER TABLE processed_webhook_events ADD COLUMN IF NOT EXISTS transaction_id VARCHAR(255)`);
+            await db.query(`ALTER TABLE processed_webhook_events ADD COLUMN IF NOT EXISTS price DECIMAL(10,2)`);
             await db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS is_premium BOOLEAN DEFAULT FALSE`);
             await db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS premium_start_date TIMESTAMPTZ`);
             await db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS premium_expire_date TIMESTAMPTZ`);
@@ -3646,9 +3650,19 @@ app.post('/api/purchase', authenticateToken, async (req, res) => {
         let coinsToAdd = 0;
         let packageName = '';
 
+        const cleanProductId = (productId || '').toString().split(':')[0].trim();
         const pkgRes = await db.query(
-            'SELECT * FROM coin_packages WHERE id = $1 OR revenuecat_id = $2',
-            [isNaN(productId) ? -1 : parseInt(productId), productId]
+            `SELECT * FROM coin_packages 
+             WHERE id = $1 
+                OR revenuecat_id = $2 
+                OR revenuecat_id = $3 
+                OR revenuecat_id = $4`,
+            [
+                isNaN(cleanProductId) ? -1 : parseInt(cleanProductId, 10),
+                cleanProductId,
+                cleanProductId + '_v1',
+                cleanProductId.replace('_v1', '')
+            ]
         );
 
         if (pkgRes.rows.length === 0) {
@@ -6669,12 +6683,73 @@ app.post('/api/messages/send-hi', authenticateToken, async (req, res) => {
     }
 });
 
-// 1.5 Get Fresh User Balance
+// 1.5 Get Fresh User Balance (with auto-claim for pending anonymous purchases)
 app.get('/api/users/balance', authenticateToken, async (req, res) => {
     try {
-        const result = await db.query('SELECT balance FROM users WHERE id = $1', [req.user.id]);
+        const userId = req.user.id;
+
+        // Auto-claim any unassigned anonymous purchase from the last 15 minutes
+        try {
+            const pending = await db.query(
+                `SELECT * FROM processed_webhook_events 
+                 WHERE claimed = FALSE 
+                   AND coins > 0 
+                   AND created_at > NOW() - INTERVAL '15 minutes' 
+                 ORDER BY id DESC LIMIT 1 FOR UPDATE SKIP LOCKED`
+            );
+
+            if (pending.rows.length > 0) {
+                const claimItem = pending.rows[0];
+                const coinsToAdd = parseInt(claimItem.coins, 10) || 0;
+                const claimPrice = parseFloat(claimItem.price) || 0;
+                const txId = claimItem.transaction_id || `claim_${Date.now()}`;
+
+                if (coinsToAdd > 0) {
+                    await db.query('BEGIN');
+                    await db.query(
+                        `UPDATE users 
+                         SET balance = COALESCE(balance, 0) + $1, 
+                             total_spent = COALESCE(total_spent, 0) + $2 
+                         WHERE id = $3`,
+                        [coinsToAdd, claimPrice, userId]
+                    );
+
+                    await db.query(
+                        `INSERT INTO payments (user_id, transaction_id, amount, status) 
+                         VALUES ($1, $2, $3, 'completed') 
+                         ON CONFLICT (transaction_id) DO NOTHING`,
+                        [userId, txId, claimPrice || coinsToAdd]
+                    );
+
+                    await db.query(
+                        `INSERT INTO transactions (user_id, amount, type, description) 
+                         VALUES ($1, $2, 'purchase', $3)`,
+                        [userId, coinsToAdd, `Otomatik Eşleşen Coin (${claimItem.product_id})`]
+                    );
+
+                    await db.query(
+                        `UPDATE processed_webhook_events 
+                         SET claimed = TRUE, app_user_id = $1 
+                         WHERE id = $2`,
+                        [String(userId), claimItem.id]
+                    );
+
+                    await db.query('COMMIT');
+                    console.log(`[AUTO-CLAIM SUCCESS] Credited ${coinsToAdd} coins to user ${userId} from tx ${txId}`);
+                }
+            }
+        } catch (claimErr) {
+            console.error('[AUTO-CLAIM ERROR]', claimErr.message);
+            try { await db.query('ROLLBACK'); } catch (_) {}
+        }
+
+        const result = await db.query('SELECT balance, vip_level, vip_xp FROM users WHERE id = $1', [userId]);
         if (result.rows.length === 0) return res.status(404).json({ error: 'User not found' });
-        res.json({ balance: result.rows[0].balance });
+        res.json({
+            balance: result.rows[0].balance,
+            vip_level: result.rows[0].vip_level,
+            vip_xp: result.rows[0].vip_xp
+        });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }

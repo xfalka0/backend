@@ -10,22 +10,57 @@ const RC_API_KEYS = {
 export const PurchaseService = {
     init: async (userId) => {
         try {
-            if (__DEV__) {
-                Purchases.setLogLevel(Purchases.LOG_LEVEL.DEBUG);
-            }
-
-            if (Platform.OS === 'ios') {
-                if (!RC_API_KEYS.apple) {
-                    throw new Error('RevenueCat iOS API anahtarı yapılandırılmamış.');
+            const isConfigured = await Purchases.isConfigured();
+            if (!isConfigured) {
+                if (__DEV__) {
+                    Purchases.setLogLevel(Purchases.LOG_LEVEL.DEBUG);
                 }
-                await Purchases.configure({ apiKey: RC_API_KEYS.apple, appUserID: userId });
-            } else if (Platform.OS === 'android') {
-                await Purchases.configure({ apiKey: RC_API_KEYS.google, appUserID: userId });
-            }
 
-            console.log('[Purchases] Configured for user:', userId);
+                if (Platform.OS === 'ios') {
+                    if (!RC_API_KEYS.apple) {
+                        throw new Error('RevenueCat iOS API anahtarı yapılandırılmamış.');
+                    }
+                    await Purchases.configure({ apiKey: RC_API_KEYS.apple, appUserID: userId ? String(userId) : null });
+                } else if (Platform.OS === 'android') {
+                    await Purchases.configure({ apiKey: RC_API_KEYS.google, appUserID: userId ? String(userId) : null });
+                }
+
+                console.log('[Purchases] Configured for user:', userId);
+            } else if (userId) {
+                await PurchaseService.identifyUser(userId);
+            }
         } catch (e) {
             console.error('[Purchases] Initialization Error:', e);
+        }
+    },
+
+    identifyUser: async (userId) => {
+        if (!userId) return;
+        try {
+            const isConfigured = await Purchases.isConfigured();
+            if (!isConfigured) {
+                await PurchaseService.init(String(userId));
+                return;
+            }
+            const currentAppUserId = await Purchases.getAppUserID();
+            if (currentAppUserId !== String(userId)) {
+                console.log(`[Purchases] Logging in user: ${userId} (was: ${currentAppUserId})`);
+                await Purchases.logIn(String(userId));
+            }
+        } catch (e) {
+            console.error('[Purchases] identifyUser error:', e);
+        }
+    },
+
+    logOut: async () => {
+        try {
+            const isConfigured = await Purchases.isConfigured();
+            if (isConfigured) {
+                await Purchases.logOut();
+                console.log('[Purchases] Logged out from RevenueCat');
+            }
+        } catch (e) {
+            console.error('[Purchases] logOut error:', e);
         }
     },
 

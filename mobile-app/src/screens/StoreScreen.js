@@ -77,6 +77,7 @@ export default function StoreScreen({ navigation, route }) {
                         setBalance(Number(freshUser.balance));
                     }
                     await AsyncStorage.setItem('user', JSON.stringify(freshUser));
+                    PurchaseService.identifyUser(freshUser.id);
                 }
             } else if (token) {
                 const balRes = await axios.get(`${API_URL}/users/balance`, {

@@ -172,10 +172,13 @@ export default function ShopScreen({ navigation, route }) {
                     console.log('[Shop] Loaded userId from storage:', parsed.id);
                     setCurrentUserId(parsed.id);
                     if (parsed.balance !== undefined) setBalance(parsed.balance);
+                    PurchaseService.identifyUser(parsed.id);
                 }
             });
+        } else {
+            PurchaseService.identifyUser(currentUserId);
         }
-    }, []);
+    }, [currentUserId]);
 
     // Premium Animations
     const { shouldAnimate } = useScreenActive();

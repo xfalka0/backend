@@ -32,6 +32,7 @@ import { GoogleSignin, statusCodes } from '@react-native-google-signin/google-si
 
 import { API_URL } from '../config';
 import { NotificationService } from '../services/notificationService';
+import { PurchaseService } from '../services/purchaseService';
 import { useChat } from '../contexts/ChatContext';
 import { COLORS } from '../theme';
 import AuthBackground from '../components/animated/AuthBackground';
@@ -151,6 +152,7 @@ export default function AuthScreen({ navigation, route }) {
 
                 // Initialize global ChatProvider context immediately
                 await refreshUser();
+                PurchaseService.identifyUser(user?.id);
 
                 if (user.onboarding_completed) {
                     // Register notifications after login
@@ -231,6 +233,7 @@ export default function AuthScreen({ navigation, route }) {
 
                 // Initialize global ChatProvider context immediately
                 await refreshUser();
+                PurchaseService.identifyUser(user?.id);
 
                 if (user.onboarding_completed) {
                     // Register notifications after login
@@ -268,6 +271,7 @@ export default function AuthScreen({ navigation, route }) {
 
                 // Initialize global ChatProvider context immediately
                 await refreshUser();
+                PurchaseService.identifyUser(user?.id);
 
                 if (user.onboarding_completed) {
                     // Register notifications after login
@@ -311,6 +315,7 @@ export default function AuthScreen({ navigation, route }) {
                 
                 // Initialize global ChatProvider context immediately
                 await refreshUser();
+                PurchaseService.identifyUser(user?.id);
                 
                 // Register notifications after login
                 const tokenResult = await NotificationService.registerForPushNotificationsAsync();

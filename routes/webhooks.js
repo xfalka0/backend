@@ -7,18 +7,33 @@ const { getVipLevel, VIP_THRESHOLDS } = require('../utils/vipUtils');
 // Server-side product catalogs (fixed truth source)
 const COIN_PRODUCT_MAPPING = {
     'coins_100': 100,
+    'coins_100_v1': 100,
     'coins_200': 200,
+    'coins_200_v1': 200,
     'coins_400': 400,
+    'coins_400_v1': 400,
     'coins_700': 700,
+    'coins_700_v1': 700,
     'coins_1200': 1200,
+    'coins_1200_v1': 1200,
     'coins_2500': 2500,
-    'coins_5000': 5000
+    'coins_2500_v1': 2500,
+    'coins_5000': 5000,
+    'coins_5000_v1': 5000,
+    'coins_10000_v1': 10000,
+    'coins_20000_v1': 20000,
+    'coins_40000_v1': 40000,
+    'starter300': 300,
+    'starter_pack': 300,
+    '300_coins_starter': 300
 };
 
 const VIP_PRODUCT_MAPPING = {
     'premium_1_month': 1,
     'premium_3_months': 3,
     'premium_6_months': 6,
+    'premium_12_months': 12,
+    'premium_1_year': 12,
     'vip_1_month': 1,
     'vip_3_months': 3,
     'vip_6_months': 6
@@ -129,51 +144,114 @@ router.post('/revenuecat', async (req, res) => {
 });
 
 async function handleSuccessfulPayment(userId, event, io) {
-    const productId = event.product_id || event.productId;
+    const rawProductId = event.product_id || event.productId || '';
+    const cleanProductId = rawProductId.toString().split(':')[0].trim();
     const transactionId = event.transaction_id || event.id || `rc_${Date.now()}`;
 
-    if (!userId) {
-        return { success: false, statusCode: 400, error: 'Missing app_user_id' };
+    // 1. Resolve Target User ID (support anonymous alias merging)
+    let targetUserId = userId;
+    if (!targetUserId || String(targetUserId).startsWith('$RCAnonymousID:')) {
+        const candidateIds = [
+            event.original_app_user_id,
+            ...(Array.isArray(event.aliases) ? event.aliases : [])
+        ].filter(id => id && !String(id).startsWith('$RCAnonymousID:'));
+
+        for (const candidate of candidateIds) {
+            const checkUser = await db.query('SELECT id FROM users WHERE id::text = $1::text', [candidate]);
+            if (checkUser.rows.length > 0) {
+                targetUserId = checkUser.rows[0].id;
+                console.log(`[WEBHOOK] Resolved anonymous ID ${userId} to real user ID: ${targetUserId}`);
+                break;
+            }
+        }
     }
 
-    // A) Check Coin Products
-    if (COIN_PRODUCT_MAPPING.hasOwnProperty(productId)) {
-        const coinAmount = COIN_PRODUCT_MAPPING[productId];
+    // 2. Identify Product Category (Coins vs VIP/Premium)
+    let isCoinProduct = COIN_PRODUCT_MAPPING.hasOwnProperty(cleanProductId) || COIN_PRODUCT_MAPPING.hasOwnProperty(rawProductId);
+    let coinAmount = COIN_PRODUCT_MAPPING[cleanProductId] || COIN_PRODUCT_MAPPING[rawProductId] || 0;
+    let packageId = null;
+    let price = 0;
+
+    try {
+        const dbPkg = await db.query(
+            `SELECT * FROM coin_packages 
+             WHERE revenuecat_id = $1 OR revenuecat_id = $2 OR revenuecat_id = $3`,
+            [cleanProductId, cleanProductId + '_v1', cleanProductId.replace('_v1', '')]
+        );
+        if (dbPkg.rows.length > 0) {
+            isCoinProduct = true;
+            coinAmount = parseInt(dbPkg.rows[0].coins, 10);
+            packageId = dbPkg.rows[0].id;
+            price = parseFloat(dbPkg.rows[0].price);
+        }
+    } catch (e) {
+        console.warn('[WEBHOOK] coin_packages DB check fallback:', e.message);
+    }
+
+    // Fallback: If user ID is anonymous, save as pending so immediate balance check can auto-claim
+    if (!targetUserId || String(targetUserId).startsWith('$RCAnonymousID:')) {
+        if (isCoinProduct && coinAmount > 0) {
+            try {
+                await db.query(
+                    `INSERT INTO processed_webhook_events 
+                     (event_id, app_user_id, event_type, product_id, coins, transaction_id, price, claimed, created_at) 
+                     VALUES ($1, $2, $3, $4, $5, $6, $7, FALSE, NOW()) 
+                     ON CONFLICT (event_id) DO UPDATE SET claimed = FALSE, coins = $5, transaction_id = $6, price = $7`,
+                    [event.id || `anon_${Date.now()}`, userId || null, event.type || 'PURCHASE', cleanProductId, coinAmount, transactionId, price || 0]
+                );
+                console.log(`[WEBHOOK PENDING] Stored anonymous purchase of ${coinAmount} coins (tx: ${transactionId}) for auto-claim`);
+                return { success: true, pendingClaim: true };
+            } catch (pErr) {
+                console.error('[WEBHOOK PENDING ERROR]', pErr.message);
+            }
+        }
+        return { success: false, statusCode: 400, error: 'Missing or unresolvable app_user_id' };
+    }
+
+    // A) Process Coin Products
+    if (isCoinProduct && coinAmount > 0) {
         try {
             await db.query('BEGIN');
 
             const existingTx = await db.query('SELECT id FROM payments WHERE transaction_id = $1', [transactionId]);
             if (existingTx.rows.length === 0) {
-                const userRes = await db.query('SELECT balance, vip_xp, vip_level FROM users WHERE id::text = $1::text FOR UPDATE', [userId]);
+                const userRes = await db.query('SELECT id, balance, vip_xp, vip_level, total_spent FROM users WHERE id::text = $1::text FOR UPDATE', [targetUserId]);
                 if (userRes.rows.length === 0) {
                     await db.query('ROLLBACK');
                     return { success: false, statusCode: 404, error: 'User not found' };
                 }
 
-                const currentBalance = parseInt(userRes.rows[0].balance, 10) || 0;
-                const currentVipXp = parseInt(userRes.rows[0].vip_xp, 10) || 0;
-                const currentVipLevel = parseInt(userRes.rows[0].vip_level, 10) || 0;
+                const resolvedUser = userRes.rows[0];
+                const numericUserId = parseInt(resolvedUser.id, 10);
+                const currentBalance = parseInt(resolvedUser.balance, 10) || 0;
+                const currentVipXp = parseInt(resolvedUser.vip_xp, 10) || 0;
+                const currentVipLevel = parseInt(resolvedUser.vip_level, 10) || 0;
+                const currentTotalSpent = parseFloat(resolvedUser.total_spent) || 0;
 
                 const newBalance = currentBalance + coinAmount;
                 const newVipXp = currentVipXp + coinAmount;
                 const calculatedLevel = getVipLevel(newVipXp);
                 const newVipLevel = Math.max(currentVipLevel, calculatedLevel);
-                const isVip = newVipLevel > 0;
+                const newTotalSpent = currentTotalSpent + (price || 0);
 
                 await db.query(
-                    'UPDATE users SET balance = $1, vip_xp = $2, vip_level = $3, is_vip = $4 WHERE id::text = $5::text',
-                    [newBalance, newVipXp, newVipLevel, isVip, userId]
+                    'UPDATE users SET balance = $1, vip_xp = $2, vip_level = $3, total_spent = $4 WHERE id = $5',
+                    [newBalance, newVipXp, newVipLevel, newTotalSpent, numericUserId]
                 );
 
-                await db.query('INSERT INTO payments (user_id, transaction_id, amount, status) VALUES ($1, $2, $3, $4)',
-                    [userId, transactionId, coinAmount, 'completed']);
-                await db.query('INSERT INTO transactions (user_id, amount, type, description) VALUES ($1, $2, $3, $4)',
-                    [userId, coinAmount, 'webhook_purchase', `RevenueCat webhook: ${productId}`]);
+                await db.query(
+                    'INSERT INTO payments (user_id, package_id, transaction_id, amount, status) VALUES ($1, $2, $3, $4, $5)',
+                    [numericUserId, packageId, transactionId, price || coinAmount, 'completed']
+                );
+                await db.query(
+                    'INSERT INTO transactions (user_id, amount, type, description) VALUES ($1, $2, $3, $4)',
+                    [numericUserId, coinAmount, 'purchase', `RevenueCat webhook: ${cleanProductId}`]
+                );
 
-                console.log(`[WEBHOOK SUCCESS] Added ${coinAmount} coins to user ${userId} for tx ${transactionId}`);
+                console.log(`[WEBHOOK SUCCESS] Added ${coinAmount} coins to user ${numericUserId} for tx ${transactionId}`);
 
                 if (io) {
-                    io.to(`user_${userId}`).emit('balance_update', {
+                    io.to(`user_${numericUserId}`).emit('balance_update', {
                         balance: newBalance,
                         hearts: newBalance,
                         vip_level: newVipLevel,
@@ -191,13 +269,14 @@ async function handleSuccessfulPayment(userId, event, io) {
     }
 
     // B) Check VIP Subscription Products
-    if (VIP_PRODUCT_MAPPING.hasOwnProperty(productId)) {
-        const months = VIP_PRODUCT_MAPPING[productId];
+    const isVipProduct = VIP_PRODUCT_MAPPING.hasOwnProperty(cleanProductId) || VIP_PRODUCT_MAPPING.hasOwnProperty(rawProductId);
+    if (isVipProduct) {
+        const months = VIP_PRODUCT_MAPPING[cleanProductId] || VIP_PRODUCT_MAPPING[rawProductId] || 1;
         try {
             await db.query('BEGIN');
             const userRes = await db.query(
-                'SELECT vip_expire_date, is_vip, vip_level FROM users WHERE id::text = $1::text FOR UPDATE',
-                [userId]
+                'SELECT id, vip_expire_date, is_vip, vip_level FROM users WHERE id::text = $1::text FOR UPDATE',
+                [targetUserId]
             );
             if (userRes.rows.length === 0) {
                 await db.query('ROLLBACK');
@@ -205,13 +284,12 @@ async function handleSuccessfulPayment(userId, event, io) {
             }
 
             const user = userRes.rows[0];
+            const numericUserId = parseInt(user.id, 10);
             let baseDate = new Date();
-            let startDate = user.vip_start_date || new Date();
+            let startDate = new Date();
 
-            if (user.is_vip && user.vip_expire_date && new Date(user.vip_expire_date) > baseDate) {
+            if (user.vip_expire_date && new Date(user.vip_expire_date) > baseDate) {
                 baseDate = new Date(user.vip_expire_date);
-            } else {
-                startDate = new Date();
             }
 
             baseDate.setMonth(baseDate.getMonth() + months);
@@ -223,18 +301,18 @@ async function handleSuccessfulPayment(userId, event, io) {
                      premium_expire_date = $2::timestamptz, 
                      vip_start_date = $1::timestamptz, 
                      vip_expire_date = $2::timestamp 
-                 WHERE id::text = $3::text`,
-                [startDate, baseDate, userId]
+                 WHERE id = $3`,
+                [startDate, baseDate, numericUserId]
             );
 
             await db.query('INSERT INTO payments (user_id, transaction_id, amount, status) VALUES ($1, $2, $3, $4)',
-                [userId, transactionId, months, 'completed_vip']);
+                [numericUserId, transactionId, months, 'completed_vip']);
 
             await db.query('COMMIT');
-            console.log(`[WEBHOOK VIP SUCCESS] Activated ${months} months VIP for user ${userId} until ${baseDate.toISOString()}`);
+            console.log(`[WEBHOOK VIP SUCCESS] Activated ${months} months VIP for user ${numericUserId} until ${baseDate.toISOString()}`);
 
             if (io) {
-                io.to(`user_${userId}`).emit('vip_level_up', {
+                io.to(`user_${numericUserId}`).emit('vip_level_up', {
                     is_vip: true,
                     vip_level: Math.max(user.vip_level || 0, 1),
                     vip_expire_date: baseDate
@@ -249,8 +327,8 @@ async function handleSuccessfulPayment(userId, event, io) {
     }
 
     // C) UNKNOWN PRODUCT ID: REJECT
-    console.warn(`[WEBHOOK REJECTED] Unknown product_id: ${productId}`);
-    return { success: false, statusCode: 400, error: `Bilinmeyen veya desteklenmeyen product_id: ${productId}` };
+    console.warn(`[WEBHOOK REJECTED] Unknown product_id: ${rawProductId}`);
+    return { success: false, statusCode: 400, error: `Bilinmeyen veya desteklenmeyen product_id: ${rawProductId}` };
 }
 
 module.exports = router;

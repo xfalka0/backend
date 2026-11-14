@@ -648,20 +648,35 @@ export default function HomeScreen({ navigation, route }) {
     const renderFooter = () => {
         if (loadingMore) {
             return (
-                <View style={{ paddingVertical: 20, alignItems: 'center' }}>
+                <View style={{ paddingVertical: 24, alignItems: 'center' }}>
                     <ActivityIndicator size="small" color="#ec4899" />
+                    <Text style={{ color: theme.colors.textSecondary, fontSize: 12, marginTop: 8 }}>Daha fazla profil yükleniyor...</Text>
                 </View>
             );
         }
-        if (!hasMore && filteredData.length > 5) {
+        if (!hasMore && filteredData.length > 0) {
             return (
-                <View style={{ paddingVertical: 30, alignItems: 'center', opacity: 0.5 }}>
-                    <Ionicons name="checkmark-done-circle-outline" size={24} color={theme.colors.textSecondary} />
-                    <Text style={{ color: theme.colors.textSecondary, fontSize: 12, marginTop: 4 }}>Tüm kişileri görüntülediniz</Text>
+                <View style={{ paddingVertical: 28, alignItems: 'center', justifyContent: 'center' }}>
+                    <View style={{
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        backgroundColor: 'rgba(255, 255, 255, 0.08)',
+                        paddingHorizontal: 18,
+                        paddingVertical: 10,
+                        borderRadius: 22,
+                        borderWidth: 1,
+                        borderColor: 'rgba(255, 255, 255, 0.12)',
+                        gap: 8
+                    }}>
+                        <Ionicons name="checkmark-done-circle" size={20} color="#ec4899" />
+                        <Text style={{ color: '#ffffff', fontSize: 13, fontWeight: '600', letterSpacing: 0.3 }}>
+                            Bütün profilleri gördünüz
+                        </Text>
+                    </View>
                 </View>
             );
         }
-        return <View style={{ height: 20 }} />;
+        return <View style={{ height: 30 }} />;
     };
 
     const handleOpenProfile = React.useCallback((operator) => {
@@ -919,7 +934,7 @@ export default function HomeScreen({ navigation, route }) {
                 refreshing={refreshing}
                 scrollEnabled={!showGenderConfirm}
                 onEndReached={handleLoadMore}
-                onEndReachedThreshold={0.3}
+                onEndReachedThreshold={0.5}
                 onScroll={(e) => {
                     const y = e.nativeEvent.contentOffset.y;
                     currentScrollYRef.current = y;
@@ -933,9 +948,9 @@ export default function HomeScreen({ navigation, route }) {
                 onContentSizeChange={(_, h) => { contentHeightRef.current = h; }}
                 showsVerticalScrollIndicator={false}
                 removeClippedSubviews={Platform.OS === 'android'}
-                initialNumToRender={5}
-                maxToRenderPerBatch={4}
-                windowSize={5}
+                initialNumToRender={8}
+                maxToRenderPerBatch={8}
+                windowSize={10}
             />
             </View>
 

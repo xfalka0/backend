@@ -156,7 +156,28 @@ router.post('/:messageId/unlock', authenticateToken, async (req, res) => {
         await recordOperatorCommission(client, msg.chat_id, userId, unlockCost, 'locked_image');
 
         await client.query('COMMIT');
-        res.json({ success: true, message: updated.rows[0] });
+
+        const updatedMsg = updated.rows[0];
+
+        // Broadcast to socket room and global io so operator panel & clients update in real time
+        try {
+            const io = req.app.get('io');
+            if (io) {
+                const unlockPayload = {
+                    messageId: parseInt(messageId, 10),
+                    chatId: msg.chat_id,
+                    is_unlocked: true,
+                    message: updatedMsg
+                };
+                io.to(msg.chat_id.toString()).emit('message_unlocked', unlockPayload);
+                io.to(msg.chat_id.toString()).emit('message_updated', unlockPayload);
+                io.emit('message_unlocked', unlockPayload);
+            }
+        } catch (socketErr) {
+            console.error('[UNLOCK-SOCKET-ERROR]:', socketErr.message);
+        }
+
+        res.json({ success: true, message: updatedMsg });
     } catch (err) {
         await client.query('ROLLBACK');
         console.error('[UNLOCK-COMMISSION-ERROR]:', err.message);

@@ -747,7 +747,7 @@ function initializeSockets(io) {
                 // --- 3. SAVE MESSAGE ---
                 const res = await client.query(
                     'INSERT INTO messages (chat_id, sender_id, content, content_type, gift_id, unlock_cost, is_unlocked, duration) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *',
-                    [chatId, finalSenderId, content, type || 'text', giftId || null, type === 'locked_image' ? (unlockCost || 200) : 0, type === 'locked_image' ? false : true, duration || null]
+                    [chatId, finalSenderId, content, type || 'text', giftId || null, (type === 'locked_image' || type === 'locked_video') ? (unlockCost || 200) : 0, (type === 'locked_image' || type === 'locked_video') ? false : true, duration || null]
                 );
                 const savedMsg = res.rows[0];
 
@@ -768,6 +768,7 @@ function initializeSockets(io) {
                 } else if (type === 'gift') lastMsgPreview = '🎁 Hediye Gönderildi';
                 else if (type === 'image') lastMsgPreview = '📷 Resim';
                 else if (type === 'locked_image') lastMsgPreview = '🔒 Kilitli Resim';
+                else if (type === 'locked_video') lastMsgPreview = '🔒 Kilitli Video';
                 else if (type === 'audio') lastMsgPreview = '🎤 Ses Kaydı';
                 else if (type === 'location') lastMsgPreview = '📍 Konum';
 

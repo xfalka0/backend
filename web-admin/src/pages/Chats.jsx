@@ -269,6 +269,31 @@ const Chats = () => {
             fetchChats();
         });
 
+        socketRef.current.on('message_unlocked', (data) => {
+            if (data && data.messageId) {
+                setMessages((prev) =>
+                    prev.map((m) =>
+                        (m.id == data.messageId || (data.message && m.id == data.message.id))
+                            ? { ...m, is_unlocked: true }
+                            : m
+                    )
+                );
+            }
+        });
+
+        socketRef.current.on('message_updated', (data) => {
+            if (data && (data.messageId || data.id)) {
+                const targetId = data.messageId || data.id;
+                setMessages((prev) =>
+                    prev.map((m) =>
+                        m.id == targetId
+                            ? { ...m, ...data, is_unlocked: data.is_unlocked !== undefined ? data.is_unlocked : m.is_unlocked }
+                            : m
+                    )
+                );
+            }
+        });
+
         socketRef.current.on('display_typing', (data) => {
             if (selectedChatIdRef.current == data.chatId) {
                 setIsTyping(true);
@@ -364,7 +389,7 @@ const Chats = () => {
             console.log('[Admin] Switching to chat:', chat.id);
             setSelectedChat(chat);
             selectedChatIdRef.current = chat.id;
-            setUserNotes(chat.user_notes || '');
+            setUserNotes(chat.user_notes || chat.notes || '');
             setOperatorNotes(chat.operator_notes || '');
             setNotesSavedStatus('');
             setOperatorNotesSavedStatus('');
@@ -400,8 +425,8 @@ const Chats = () => {
         }
     };
 
-    const handleSaveNotes = async (targetUserId, notesText, type = 'user') => {
-        if (!targetUserId) return;
+    const handleSaveNotes = async (chatId, notesText, type = 'user') => {
+        if (!chatId) return;
         if (type === 'user') {
             setSavingNotes(true);
             setNotesSavedStatus('');
@@ -412,19 +437,22 @@ const Chats = () => {
 
         try {
             const localToken = localStorage.getItem('token') || token;
-            await axios.post(`${API_URL}/api/admin/users/${targetUserId}/notes`, { notes: notesText }, {
+            await axios.post(`${API_URL}/api/chats/${chatId}/notes`, {
+                notes: notesText,
+                type: type
+            }, {
                 headers: { Authorization: `Bearer ${localToken}` }
             });
 
             if (type === 'user') {
                 setNotesSavedStatus('Kaydedildi ✓');
-                setSelectedChat(prev => prev ? { ...prev, user_notes: notesText } : prev);
-                setChats(prev => prev.map(c => c.user_id === targetUserId ? { ...c, user_notes: notesText } : c));
+                setSelectedChat(prev => (prev && prev.id === chatId) ? { ...prev, user_notes: notesText, notes: notesText } : prev);
+                setChats(prev => prev.map(c => c.id === chatId ? { ...c, user_notes: notesText, notes: notesText } : c));
                 setTimeout(() => setNotesSavedStatus(''), 3000);
             } else {
                 setOperatorNotesSavedStatus('Kaydedildi ✓');
-                setSelectedChat(prev => prev ? { ...prev, operator_notes: notesText } : prev);
-                setChats(prev => prev.map(c => c.operator_id === targetUserId ? { ...c, operator_notes: notesText } : c));
+                setSelectedChat(prev => (prev && prev.id === chatId) ? { ...prev, operator_notes: notesText } : prev);
+                setChats(prev => prev.map(c => c.id === chatId ? { ...c, operator_notes: notesText } : c));
                 setTimeout(() => setOperatorNotesSavedStatus(''), 3000);
             }
         } catch (err) {
@@ -695,7 +723,7 @@ const Chats = () => {
                 content: fileUrl,
                 content_type: msgType,
                 unlock_cost: isLockedImage ? Number(lockedImageCost) : 0,
-                is_unlocked: true,
+                is_unlocked: !isLockedImage,
                 chat_id: selectedChat.id,
                 created_at: new Date().toISOString(),
                 is_optimistic: true,
@@ -863,9 +891,9 @@ const Chats = () => {
                                         alt="Resim"
                                         onClick={() => window.open(msg.content, '_blank')}
                                     />
-                                    {msg.content_type === 'locked_image' && (
-                                        <div className="absolute top-2 right-2 bg-black/60 text-white text-[10px] px-2 py-1 rounded-full flex items-center gap-1 font-bold">
-                                            <span className="text-yellow-400">🔒</span> {msg.unlock_cost || 50} Coin
+                                    {(msg.content_type === 'locked_image' || msg.type === 'locked_image') && (
+                                        <div className={`absolute top-2 right-2 text-white text-[10px] px-2.5 py-1 rounded-full flex items-center gap-1 font-bold shadow-lg backdrop-blur-md border ${msg.is_unlocked ? 'bg-emerald-600/90 border-emerald-400/50' : 'bg-rose-600/90 border-rose-400/50'}`}>
+                                            <span>{msg.is_unlocked ? '🔓' : '🔒'}</span> {msg.is_unlocked ? 'Açıldı' : 'Açılmadı'} ({msg.unlock_cost || 200} Coin)
                                         </div>
                                     )}
                                     <div className="absolute inset-0 bg-black/0 group-hover/img:bg-black/20 transition-all rounded-lg flex items-center justify-center pointer-events-none group-hover/img:pointer-events-auto">
@@ -873,6 +901,15 @@ const Chats = () => {
                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v3m0 0v3m0-3h3m-3 0H7" />
                                         </svg>
                                     </div>
+                                    {(msg.content_type === 'locked_image' || msg.type === 'locked_image') && (
+                                        <div className={`mt-1.5 px-2.5 py-1 rounded-md text-[11px] font-bold flex items-center justify-between gap-2 border ${msg.is_unlocked ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40' : 'bg-rose-500/20 text-rose-300 border-rose-500/40'}`}>
+                                            <span className="flex items-center gap-1.5">
+                                                <span className={`w-2 h-2 rounded-full ${msg.is_unlocked ? 'bg-emerald-400 animate-pulse' : 'bg-rose-400'}`}></span>
+                                                {msg.is_unlocked ? 'Fotoğraf Açıldı' : 'Fotoğraf Açılmadı'}
+                                            </span>
+                                            <span className="text-[10px] opacity-80 font-normal">{msg.is_unlocked ? 'Kilit Açık' : `${msg.unlock_cost || 200} Coin`}</span>
+                                        </div>
+                                    )}
                                 </div>
                             ) : msg.content_type === 'video' || msg.content_type === 'locked_video' || msg.type === 'video' || msg.type === 'locked_video' ? (
                                 <div className="relative group/vid">
@@ -882,8 +919,17 @@ const Chats = () => {
                                         className={`max-w-full rounded-lg shadow-2xl border border-white/10 ${msg.content_type === 'locked_video' && !msg.is_unlocked && msg.sender_id != selectedChat.operator_id ? 'blur-md pointer-events-none' : ''}`}
                                     />
                                     {(msg.content_type === 'locked_video' || msg.type === 'locked_video') && (
-                                        <div className="absolute top-2 right-2 bg-black/60 text-white text-[10px] px-2 py-1 rounded-full flex items-center gap-1 font-bold">
-                                            <span className="text-yellow-400">🔒</span> {msg.unlock_cost || 50} Coin
+                                        <div className={`absolute top-2 right-2 text-white text-[10px] px-2.5 py-1 rounded-full flex items-center gap-1 font-bold shadow-lg backdrop-blur-md border ${msg.is_unlocked ? 'bg-emerald-600/90 border-emerald-400/50' : 'bg-rose-600/90 border-rose-400/50'}`}>
+                                            <span>{msg.is_unlocked ? '🔓' : '🔒'}</span> {msg.is_unlocked ? 'Açıldı' : 'Açılmadı'} ({msg.unlock_cost || 200} Coin)
+                                        </div>
+                                    )}
+                                    {(msg.content_type === 'locked_video' || msg.type === 'locked_video') && (
+                                        <div className={`mt-1.5 px-2.5 py-1 rounded-md text-[11px] font-bold flex items-center justify-between gap-2 border ${msg.is_unlocked ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40' : 'bg-rose-500/20 text-rose-300 border-rose-500/40'}`}>
+                                            <span className="flex items-center gap-1.5">
+                                                <span className={`w-2 h-2 rounded-full ${msg.is_unlocked ? 'bg-emerald-400 animate-pulse' : 'bg-rose-400'}`}></span>
+                                                {msg.is_unlocked ? 'Video Açıldı' : 'Video Açılmadı'}
+                                            </span>
+                                            <span className="text-[10px] opacity-80 font-normal">{msg.is_unlocked ? 'Kilit Açık' : `${msg.unlock_cost || 200} Coin`}</span>
                                         </div>
                                     )}
                                 </div>
@@ -1335,18 +1381,30 @@ const Chats = () => {
                                 </div>
                                 <textarea
                                     value={userNotes}
-                                    onChange={(e) => setUserNotes(e.target.value)}
+                                    onChange={(e) => {
+                                        const val = e.target.value;
+                                        setUserNotes(val);
+                                        if (selectedChat) {
+                                            setSelectedChat(prev => prev ? { ...prev, user_notes: val, notes: val } : prev);
+                                            setChats(prev => prev.map(c => c.id === selectedChat.id ? { ...c, user_notes: val, notes: val } : c));
+                                        }
+                                    }}
+                                    onBlur={() => {
+                                        if (selectedChat?.id) {
+                                            handleSaveNotes(selectedChat.id, userNotes, 'user');
+                                        }
+                                    }}
                                     onKeyDown={(e) => {
                                         if (e.key === 'Enter' && !e.shiftKey) {
                                             e.preventDefault();
-                                            handleSaveNotes(selectedChat.user_id, userNotes, 'user');
+                                            handleSaveNotes(selectedChat.id, userNotes, 'user');
                                         }
                                     }}
                                     placeholder="Örn: Bu kişi Ankara'da yaşıyor, yazılım mühendisi..."
                                     className="w-full h-56 min-h-[200px] bg-slate-900 border border-white/15 rounded-xl p-3 text-xs text-white placeholder:text-slate-500 focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500/20 transition-all resize-y font-medium leading-relaxed"
                                 />
                                 <button
-                                    onClick={() => handleSaveNotes(selectedChat.user_id, userNotes, 'user')}
+                                    onClick={() => handleSaveNotes(selectedChat.id, userNotes, 'user')}
                                     disabled={savingNotes}
                                     className="w-full py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 active:scale-95 text-white font-black text-xs uppercase tracking-wider rounded-xl shadow-lg shadow-purple-600/30 transition-all disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer"
                                 >
@@ -1448,18 +1506,30 @@ const Chats = () => {
                                 </div>
                                 <textarea
                                     value={operatorNotes}
-                                    onChange={(e) => setOperatorNotes(e.target.value)}
+                                    onChange={(e) => {
+                                        const val = e.target.value;
+                                        setOperatorNotes(val);
+                                        if (selectedChat) {
+                                            setSelectedChat(prev => prev ? { ...prev, operator_notes: val } : prev);
+                                            setChats(prev => prev.map(c => c.id === selectedChat.id ? { ...c, operator_notes: val } : c));
+                                        }
+                                    }}
+                                    onBlur={() => {
+                                        if (selectedChat?.id) {
+                                            handleSaveNotes(selectedChat.id, operatorNotes, 'operator');
+                                        }
+                                    }}
                                     onKeyDown={(e) => {
                                         if (e.key === 'Enter' && !e.shiftKey) {
                                             e.preventDefault();
-                                            handleSaveNotes(selectedChat.operator_id, operatorNotes, 'operator');
+                                            handleSaveNotes(selectedChat.id, operatorNotes, 'operator');
                                         }
                                     }}
                                     placeholder="Örn: Bu operatör/kadın profili hakkında özel notlar, hikayesi, konuşma tarzı..."
                                     className="w-full h-56 min-h-[200px] bg-slate-900 border border-white/15 rounded-xl p-3 text-xs text-white placeholder:text-slate-500 focus:outline-none focus:border-fuchsia-500 focus:ring-1 focus:ring-fuchsia-500/20 transition-all resize-y font-medium leading-relaxed"
                                 />
                                 <button
-                                    onClick={() => handleSaveNotes(selectedChat.operator_id, operatorNotes, 'operator')}
+                                    onClick={() => handleSaveNotes(selectedChat.id, operatorNotes, 'operator')}
                                     disabled={savingOperatorNotes}
                                     className="w-full py-2.5 bg-gradient-to-r from-fuchsia-600 to-pink-600 hover:from-fuchsia-500 hover:to-pink-500 active:scale-95 text-white font-black text-xs uppercase tracking-wider rounded-xl shadow-lg shadow-fuchsia-600/30 transition-all disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer"
                                 >

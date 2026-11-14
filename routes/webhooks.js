@@ -257,6 +257,15 @@ async function handleSuccessfulPayment(userId, event, io) {
                         vip_level: newVipLevel,
                         vip_xp: newVipXp
                     });
+                    io.emit('new_payment', {
+                        user_id: numericUserId,
+                        amount: price || coinAmount,
+                        package_id: packageId,
+                        transaction_id: transactionId,
+                        status: 'completed',
+                        created_at: new Date().toISOString()
+                    });
+                    io.emit('admin_payment_update', { type: 'coins', user_id: numericUserId });
                 }
             }
             await db.query('COMMIT');
@@ -317,6 +326,14 @@ async function handleSuccessfulPayment(userId, event, io) {
                     vip_level: Math.max(user.vip_level || 0, 1),
                     vip_expire_date: baseDate
                 });
+                io.emit('new_payment', {
+                    user_id: numericUserId,
+                    amount: months,
+                    transaction_id: transactionId,
+                    status: 'completed_vip',
+                    created_at: new Date().toISOString()
+                });
+                io.emit('admin_payment_update', { type: 'vip', user_id: numericUserId });
             }
             return { success: true };
         } catch (vipErr) {

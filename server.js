@@ -825,6 +825,9 @@ const initializeDatabase = async () => {
         await db.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS device_id VARCHAR(255)');
         await db.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS managed_by UUID REFERENCES users(id) ON DELETE SET NULL');
         await db.query('ALTER TABLE chats ADD COLUMN IF NOT EXISTS last_message TEXT');
+        await db.query("ALTER TABLE chats ADD COLUMN IF NOT EXISTS notes TEXT DEFAULT ''");
+        await db.query("ALTER TABLE chats ADD COLUMN IF NOT EXISTS user_notes TEXT DEFAULT ''");
+        await db.query("ALTER TABLE chats ADD COLUMN IF NOT EXISTS operator_notes TEXT DEFAULT ''");
         await db.query('ALTER TABLE payments ADD COLUMN IF NOT EXISTS coin_amount INTEGER');
 
         // Operators table enhancements
@@ -1881,18 +1884,19 @@ app.get('/api/admin/fix-genders', authenticateToken, authorizeRole('admin', 'sup
     }
 });
 
-app.get('/api/admin/payments', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
+app.get('/api/admin/payments', authenticateToken, authorizeRole('admin', 'super_admin', 'operator', 'moderator', 'staff'), async (req, res) => {
     try {
         const query = `
             SELECT 
                 p.*, 
-                u.username as user_name, 
+                COALESCE(u.display_name, u.username, 'Bilinmeyen') as user_name, 
                 u.email,
-                cp.name as package_name
+                COALESCE(cp.name, (SELECT name FROM coin_packages WHERE price::numeric = p.amount::numeric LIMIT 1), CONCAT(COALESCE(p.coin_amount, 0), ' Coin')) as package_name
             FROM payments p
-            LEFT JOIN users u ON p.user_id = u.id
+            LEFT JOIN users u ON p.user_id::text = u.id::text
             LEFT JOIN coin_packages cp ON p.package_id = cp.id
             ORDER BY p.created_at DESC
+            LIMIT 200
         `;
         const result = await db.query(query);
         res.json(result.rows);
@@ -3724,6 +3728,15 @@ app.post('/api/purchase', authenticateToken, async (req, res) => {
         const io = req.app.get('io');
         if (io) {
             io.emit('balance_update', { userId, newBalance });
+            io.emit('new_payment', {
+                user_id: userId,
+                package_id: packageId,
+                amount: price,
+                transaction_id: transactionId,
+                status: 'completed',
+                created_at: new Date().toISOString()
+            });
+            io.emit('admin_payment_update', { type: 'purchase', user_id: userId });
         }
 
         res.json({
@@ -3896,7 +3909,8 @@ app.get('/api/chats/admin', authenticateToken, authorizeRole('admin', 'super_adm
                 u.job,
                 u.interests as user_interests,
                 u.bio as user_bio,
-                u.admin_notes as user_notes,
+                COALESCE(c.user_notes, c.notes, '') as user_notes,
+                COALESCE(c.notes, c.user_notes, '') as notes,
                 u.city as user_city,
                 COALESCE(op.display_name, op.username, 'Bilinmeyen Operatör') as operator_name, 
                 op.avatar_url as operator_avatar,
@@ -3906,7 +3920,7 @@ app.get('/api/chats/admin', authenticateToken, authorizeRole('admin', 'super_adm
                 op.job as operator_job,
                 op.bio as operator_bio,
                 op.interests as operator_interests,
-                op.admin_notes as operator_notes,
+                COALESCE(c.operator_notes, op.admin_notes, '') as operator_notes,
                 op.managed_by as managed_by_id, -- Who manages this profile
                 (SELECT content FROM messages WHERE chat_id = c.id ORDER BY created_at DESC LIMIT 1) as last_message,
                 (SELECT content_type FROM messages WHERE chat_id = c.id ORDER BY created_at DESC LIMIT 1) as last_message_type,
@@ -3942,6 +3956,33 @@ app.get('/api/chats/admin', authenticateToken, authorizeRole('admin', 'super_adm
         res.json(sanitizedRows);
     } catch (err) {
         console.error('GET /api/chats/admin - ERROR:', err.message);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// SAVE CHAT NOTES (Per-chat, user-operator isolated)
+app.post('/api/chats/:chatId/notes', authenticateToken, authorizeRole('admin', 'super_admin', 'operator', 'moderator', 'staff'), async (req, res) => {
+    try {
+        const { chatId } = req.params;
+        const { notes, type } = req.body;
+        const notesVal = typeof notes === 'string' ? notes : (req.body.userNotes || req.body.operatorNotes || '');
+
+        if (type === 'operator') {
+            await db.query(
+                "UPDATE chats SET operator_notes = $1 WHERE id = $2",
+                [notesVal, chatId]
+            );
+            return res.json({ success: true, operator_notes: notesVal });
+        } else {
+            // default is user/chat note for this specific chat
+            await db.query(
+                "UPDATE chats SET notes = $1, user_notes = $1 WHERE id = $2",
+                [notesVal, chatId]
+            );
+            return res.json({ success: true, user_notes: notesVal, notes: notesVal });
+        }
+    } catch (err) {
+        console.error('POST /api/chats/:chatId/notes ERROR:', err.message);
         res.status(500).json({ error: err.message });
     }
 });
@@ -6736,6 +6777,19 @@ app.get('/api/users/balance', authenticateToken, async (req, res) => {
 
                     await db.query('COMMIT');
                     console.log(`[AUTO-CLAIM SUCCESS] Credited ${coinsToAdd} coins to user ${userId} from tx ${txId}`);
+                    try {
+                        const claimIo = req.app.get('io');
+                        if (claimIo) {
+                            claimIo.emit('new_payment', {
+                                user_id: userId,
+                                amount: claimPrice || coinsToAdd,
+                                transaction_id: txId,
+                                status: 'completed',
+                                created_at: new Date().toISOString()
+                            });
+                            claimIo.emit('admin_payment_update', { type: 'auto-claim', user_id: userId });
+                        }
+                    } catch (_) {}
                 }
             }
         } catch (claimErr) {

@@ -1,10 +1,32 @@
 import React, { useState, useEffect } from 'react';
 import { CreditCard, TrendingUp, DollarSign, Calendar, Search, Download, CheckCircle2, Clock, Loader2, Package, Plus, Edit2, Trash2, X, Check } from 'lucide-react';
 import axios from 'axios';
+import io from 'socket.io-client';
 
 const API_URL = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
     ? ''
     : '';
+const SOCKET_URL = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+    ? 'http://localhost:5000'
+    : window.location.origin;
+
+const formatTurkeyTime = (dateStr) => {
+    if (!dateStr) return '-';
+    try {
+        const d = new Date(dateStr);
+        return d.toLocaleString('tr-TR', {
+            timeZone: 'Europe/Istanbul',
+            day: '2-digit',
+            month: '2-digit',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit'
+        });
+    } catch (e) {
+        return dateStr;
+    }
+};
 
 export default function PaymentsPage() {
     const [activeTab, setActiveTab] = useState('transactions'); // 'transactions' or 'packages'
@@ -26,13 +48,38 @@ export default function PaymentsPage() {
     useEffect(() => {
         if (activeTab === 'transactions') {
             fetchPayments();
+
+            const token = localStorage.getItem('token');
+            const socket = io(SOCKET_URL, {
+                transports: ['websocket', 'polling'],
+                auth: { token }
+            });
+
+            socket.on('new_payment', (data) => {
+                console.log('[PAYMENTS] Real-time payment notification received:', data);
+                fetchPayments(true);
+            });
+
+            socket.on('admin_payment_update', () => {
+                fetchPayments(true);
+            });
+
+            // Automatic 10-second polling fail-safe
+            const pollInterval = setInterval(() => {
+                fetchPayments(true);
+            }, 10000);
+
+            return () => {
+                socket.disconnect();
+                clearInterval(pollInterval);
+            };
         } else {
             fetchPackages();
         }
     }, [activeTab]);
 
-    const fetchPayments = async () => {
-        setLoading(true);
+    const fetchPayments = async (isSilent = false) => {
+        if (!isSilent) setLoading(true);
         try {
             const token = localStorage.getItem('token');
             const res = await axios.get(`${API_URL}/api/admin/payments`, {
@@ -42,7 +89,7 @@ export default function PaymentsPage() {
         } catch (err) {
             console.error("Fetch Payments Error:", err);
         } finally {
-            setLoading(false);
+            if (!isSilent) setLoading(false);
         }
     };
 
@@ -172,7 +219,7 @@ export default function PaymentsPage() {
                                         <th className="px-8 py-5">Kullanıcı</th>
                                         <th className="px-8 py-5">Paket Detayı</th>
                                         <th className="px-8 py-5">Tutar</th>
-                                        <th className="px-8 py-5">Tarih</th>
+                                        <th className="px-8 py-5">Tarih / Saat (TSİ)</th>
                                         <th className="px-8 py-5">Durum</th>
                                         <th className="px-8 py-5 text-right">Fatura</th>
                                     </tr>
@@ -206,8 +253,11 @@ export default function PaymentsPage() {
                                                 <td className="px-8 py-5 text-sm font-black text-emerald-500 tracking-tight">
                                                     ₺{payment.amount}
                                                 </td>
-                                                <td className="px-8 py-5 text-[10px] font-black text-slate-500 uppercase flex items-center gap-1.5 py-7">
-                                                    <Calendar size={10} /> {new Date(payment.created_at).toLocaleDateString("tr-TR")}
+                                                <td className="px-8 py-5 whitespace-nowrap">
+                                                    <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-800/80 border border-white/5 font-mono text-xs font-bold text-slate-200 shadow-sm">
+                                                        <Clock size={13} className="text-emerald-400 shrink-0" />
+                                                        <span>{formatTurkeyTime(payment.created_at)}</span>
+                                                    </div>
                                                 </td>
                                                 <td className="px-8 py-5">
                                                     <div className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider ${payment.status === 'completed' ? 'bg-emerald-500/10 text-emerald-500' : 'bg-amber-500/10 text-amber-500'

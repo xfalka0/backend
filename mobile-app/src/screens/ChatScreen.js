@@ -1160,10 +1160,23 @@ export default function ChatScreen({ route, navigation }) {
 
         const handleMessageUpdated = (data) => {
             console.log('[SOCKET] Message Update received:', data);
-            if (data && data.id) {
+            if (data && (data.id || data.messageId)) {
+                const targetId = (data.id || data.messageId).toString().toLowerCase();
                 setMessages(prev => prev.map(m =>
-                    (m.id && m.id.toString().toLowerCase() === data.id.toString().toLowerCase())
-                        ? { ...m, is_replied: data.is_replied, earned_diamonds: data.earned_diamonds }
+                    (m.id && m.id.toString().toLowerCase() === targetId)
+                        ? { ...m, is_replied: data.is_replied !== undefined ? data.is_replied : m.is_replied, earned_diamonds: data.earned_diamonds !== undefined ? data.earned_diamonds : m.earned_diamonds, is_unlocked: data.is_unlocked !== undefined ? data.is_unlocked : m.is_unlocked }
+                        : m
+                ));
+            }
+        };
+
+        const handleMessageUnlocked = (data) => {
+            console.log('[SOCKET] message_unlocked received:', data);
+            if (data && (data.messageId || data.id)) {
+                const targetId = (data.messageId || data.id).toString().toLowerCase();
+                setMessages(prev => prev.map(m =>
+                    (m.id && m.id.toString().toLowerCase() === targetId)
+                        ? { ...m, is_unlocked: true }
                         : m
                 ));
             }
@@ -1197,6 +1210,7 @@ export default function ChatScreen({ route, navigation }) {
         socket.on('balance_update', handleBalanceUpdate);
         socket.on('message_reaction', handleMessageReaction);
         socket.on('message_updated', handleMessageUpdated);
+        socket.on('message_unlocked', handleMessageUnlocked);
         socket.on('display_typing', handleDisplayTyping);
         socket.on('hide_typing', handleHideTyping);
 
@@ -1294,6 +1308,7 @@ export default function ChatScreen({ route, navigation }) {
             socket.off('balance_update', handleBalanceUpdate);
             socket.off('message_reaction', handleMessageReaction);
             socket.off('message_updated', handleMessageUpdated);
+            socket.off('message_unlocked', handleMessageUnlocked);
             socket.off('display_typing', handleDisplayTyping);
             socket.off('hide_typing', handleHideTyping);
             pendingAckResolversRef.current.forEach(resolveAck => resolveAck?.());
@@ -2201,6 +2216,12 @@ export default function ChatScreen({ route, navigation }) {
                             resizeMode="cover"
                             blurRadius={isLocked ? 95 : 0}
                         />
+                        {isUser && (item.content_type === 'locked_image' || item.type === 'locked_image') && (
+                            <View style={{ position: 'absolute', top: 8, right: 8, backgroundColor: item.is_unlocked ? 'rgba(5, 150, 105, 0.92)' : 'rgba(225, 29, 72, 0.92)', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 12, flexDirection: 'row', alignItems: 'center', zIndex: 10 }}>
+                                <Ionicons name={item.is_unlocked ? 'lock-open' : 'lock-closed'} size={12} color="#fff" style={{ marginRight: 4 }} />
+                                <Text style={{ color: '#fff', fontSize: 10, fontWeight: 'bold' }}>{item.is_unlocked ? 'Açıldı' : 'Açılmadı'}</Text>
+                            </View>
+                        )}
                         {isLocked && (
                             <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(15, 23, 42, 0.88)', borderRadius: 16 }}>
                                 <LinearGradient

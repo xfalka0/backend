@@ -13,6 +13,9 @@ router.get('/admin', authenticateToken, authorizeRole('admin', 'super_admin', 'o
     try {
         let query = `
             SELECT c.*, 
+                COALESCE(c.user_notes, c.notes, '') as user_notes,
+                COALESCE(c.notes, c.user_notes, '') as notes,
+                COALESCE(c.operator_notes, op.admin_notes, '') as operator_notes,
                 COALESCE(u.display_name, u.username, 'Bilinmeyen') as user_name, u.avatar_url as user_avatar,
                 u.vip_level, u.age, u.gender, u.job, u.balance as user_balance,
                 COALESCE(op.display_name, op.username, 'Bilinmeyen') as operator_name, op.avatar_url as operator_avatar,
@@ -104,6 +107,33 @@ router.post('/:chatId/rtc-token', authenticateToken, async (req, res) => {
     } catch (err) {
         console.error('[Call RTC Token API] Error:', err.message);
         res.status(500).json({ error: 'Arama RTC token üretilemedi.' });
+    }
+});
+
+
+// SAVE CHAT NOTES (Per-chat, user-operator isolated)
+router.post('/:chatId/notes', authenticateToken, authorizeRole('admin', 'super_admin', 'operator', 'moderator', 'staff'), async (req, res) => {
+    try {
+        const { chatId } = req.params;
+        const { notes, type } = req.body;
+        const notesVal = typeof notes === 'string' ? notes : (req.body.userNotes || req.body.operatorNotes || '');
+
+        if (type === 'operator') {
+            await db.query(
+                "UPDATE chats SET operator_notes = $1 WHERE id = $2",
+                [notesVal, chatId]
+            );
+            return res.json({ success: true, operator_notes: notesVal });
+        } else {
+            await db.query(
+                "UPDATE chats SET notes = $1, user_notes = $1 WHERE id = $2",
+                [notesVal, chatId]
+            );
+            return res.json({ success: true, user_notes: notesVal, notes: notesVal });
+        }
+    } catch (err) {
+        console.error('POST /api/chats/:chatId/notes ERROR:', err.message);
+        res.status(500).json({ error: err.message });
     }
 });
 

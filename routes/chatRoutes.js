@@ -16,11 +16,27 @@ router.get('/admin', authenticateToken, authorizeRole('admin', 'super_admin', 'o
                 COALESCE(c.user_notes, c.notes, '') as user_notes,
                 COALESCE(c.notes, c.user_notes, '') as notes,
                 COALESCE(c.operator_notes, op.admin_notes, '') as operator_notes,
-                COALESCE(u.display_name, u.username, 'Bilinmeyen') as user_name, u.avatar_url as user_avatar,
-                u.vip_level, u.age, u.gender, u.job, u.balance as user_balance,
-                COALESCE(op.display_name, op.username, 'Bilinmeyen') as operator_name, op.avatar_url as operator_avatar,
+                COALESCE(u.display_name, u.username, 'Bilinmeyen Kullanıcı') as user_name,
+                u.email as user_email,
+                u.avatar_url as user_avatar,
+                u.balance as user_balance,
+                u.vip_level, u.age, u.gender, u.job,
+                u.interests as user_interests,
+                u.bio as user_bio,
+                u.city as user_city,
+                COALESCE(op.display_name, op.username, 'Bilinmeyen Operatör') as operator_name,
+                op.avatar_url as operator_avatar,
+                op.city as operator_city,
+                op.age as operator_age,
+                op.gender as operator_gender,
+                op.job as operator_job,
+                op.bio as operator_bio,
+                op.interests as operator_interests,
                 op.managed_by as managed_by_id,
                 (SELECT content FROM messages WHERE chat_id = c.id ORDER BY created_at DESC LIMIT 1) as last_message,
+                (SELECT content_type FROM messages WHERE chat_id = c.id ORDER BY created_at DESC LIMIT 1) as last_message_type,
+                (SELECT sender_id FROM messages WHERE chat_id = c.id ORDER BY created_at DESC LIMIT 1) as last_message_sender_id,
+                (SELECT created_at FROM messages WHERE chat_id = c.id ORDER BY created_at DESC LIMIT 1) as last_message_time,
                 (SELECT COUNT(*)::int FROM messages WHERE chat_id = c.id AND sender_id = c.user_id AND is_read = false) as unread_count
             FROM chats c
             LEFT JOIN users u ON c.user_id = u.id
@@ -110,6 +126,28 @@ router.post('/:chatId/rtc-token', authenticateToken, async (req, res) => {
     }
 });
 
+
+// GET CHAT NOTES (Per-chat, user-operator isolated)
+router.get('/:chatId/notes', authenticateToken, authorizeRole('admin', 'super_admin', 'operator', 'moderator', 'staff'), async (req, res) => {
+    try {
+        const { chatId } = req.params;
+        const result = await db.query(
+            `SELECT c.id, 
+                    COALESCE(c.user_notes, c.notes, '') as user_notes,
+                    COALESCE(c.notes, c.user_notes, '') as notes,
+                    COALESCE(c.operator_notes, '') as operator_notes
+             FROM chats c WHERE c.id = $1`,
+            [chatId]
+        );
+        if (result.rows.length === 0) {
+            return res.status(404).json({ error: 'Sohbet bulunamadı.' });
+        }
+        res.json(result.rows[0]);
+    } catch (err) {
+        console.error('GET /api/chats/:chatId/notes ERROR:', err.message);
+        res.status(500).json({ error: err.message });
+    }
+});
 
 // SAVE CHAT NOTES (Per-chat, user-operator isolated)
 router.post('/:chatId/notes', authenticateToken, authorizeRole('admin', 'super_admin', 'operator', 'moderator', 'staff'), async (req, res) => {

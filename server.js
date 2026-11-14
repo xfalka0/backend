@@ -2433,7 +2433,7 @@ app.get('/api/admin/emergency-clear-user', async (req, res) => {
 
 // Health Check
 // Serve static files from the React app
-app.use(express.static(path.join(__dirname, 'web-admin', 'dist')));
+app.use(express.static(path.join(__dirname, 'public/admin')));
 
 // Account Deletion Page (Google Play Requirement)
 app.get('/account-deletion', (req, res) => {
@@ -3956,6 +3956,28 @@ app.get('/api/chats/admin', authenticateToken, authorizeRole('admin', 'super_adm
         res.json(sanitizedRows);
     } catch (err) {
         console.error('GET /api/chats/admin - ERROR:', err.message);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// GET CHAT NOTES (Per-chat, user-operator isolated)
+app.get('/api/chats/:chatId/notes', authenticateToken, authorizeRole('admin', 'super_admin', 'operator', 'moderator', 'staff'), async (req, res) => {
+    try {
+        const { chatId } = req.params;
+        const result = await db.query(
+            `SELECT c.id, 
+                    COALESCE(c.user_notes, c.notes, '') as user_notes,
+                    COALESCE(c.notes, c.user_notes, '') as notes,
+                    COALESCE(c.operator_notes, '') as operator_notes
+             FROM chats c WHERE c.id = $1`,
+            [chatId]
+        );
+        if (result.rows.length === 0) {
+            return res.status(404).json({ error: 'Sohbet bulunamadı.' });
+        }
+        res.json(result.rows[0]);
+    } catch (err) {
+        console.error('GET /api/chats/:chatId/notes ERROR:', err.message);
         res.status(500).json({ error: err.message });
     }
 });

@@ -140,6 +140,8 @@ const Chats = () => {
     const popupsContainerRef = useRef(null);
     const isSendingTypingRef = useRef(false);
     const isFetchingChatsRef = useRef(false);
+    const saveUserNotesTimeoutRef = useRef(null);
+    const saveOpNotesTimeoutRef = useRef(null);
 
     useEffect(() => {
         const handleClickOutside = (event) => {
@@ -367,6 +369,14 @@ const Chats = () => {
                 });
             } else {
                 setChats(res.data);
+                // Auto-restore last selected chat on page reload
+                const lastChatId = localStorage.getItem('fiva_admin_last_chat_id');
+                if (lastChatId && !selectedChatIdRef.current) {
+                    const matched = res.data.find(c => c.id.toString() === lastChatId.toString());
+                    if (matched) {
+                        fetchMessages(matched);
+                    }
+                }
             }
 
             if (list && !isLoadMore) {
@@ -389,12 +399,34 @@ const Chats = () => {
             console.log('[Admin] Switching to chat:', chat.id);
             setSelectedChat(chat);
             selectedChatIdRef.current = chat.id;
-            setUserNotes(chat.user_notes || chat.notes || '');
-            setOperatorNotes(chat.operator_notes || '');
+            localStorage.setItem('fiva_admin_last_chat_id', chat.id);
+
+            const initialUserNote = chat.user_notes || chat.notes || localStorage.getItem(`draft_user_notes_${chat.id}`) || '';
+            const initialOpNote = chat.operator_notes || localStorage.getItem(`draft_op_notes_${chat.id}`) || '';
+            setUserNotes(initialUserNote);
+            setOperatorNotes(initialOpNote);
             setNotesSavedStatus('');
             setOperatorNotesSavedStatus('');
             setMessages([]); // Clear previous messages
             setIsTyping(false); // Reset typing status on switch
+
+            // Fetch live isolated single chat notes from server
+            const localToken = localStorage.getItem('token') || token;
+            axios.get(`${API_URL}/api/chats/${chat.id}/notes`, {
+                headers: { Authorization: `Bearer ${localToken}` }
+            }).then(notesRes => {
+                if (notesRes.data && selectedChatIdRef.current === chat.id) {
+                    const dbUserNote = notesRes.data.user_notes !== undefined ? notesRes.data.user_notes : '';
+                    const dbOpNote = notesRes.data.operator_notes !== undefined ? notesRes.data.operator_notes : '';
+                    setUserNotes(dbUserNote);
+                    setOperatorNotes(dbOpNote);
+                    if (dbUserNote) localStorage.setItem(`draft_user_notes_${chat.id}`, dbUserNote);
+                    if (dbOpNote) localStorage.setItem(`draft_op_notes_${chat.id}`, dbOpNote);
+                }
+            }).catch(err => {
+                console.warn('Single chat notes fetch err:', err.message);
+            });
+
             if (socketRef.current) {
                 console.log('[Admin] Joining room:', chat.id);
                 socketRef.current.emit('join_room', chat.id.toString());
@@ -430,9 +462,11 @@ const Chats = () => {
         if (type === 'user') {
             setSavingNotes(true);
             setNotesSavedStatus('');
+            localStorage.setItem(`draft_user_notes_${chatId}`, notesText);
         } else {
             setSavingOperatorNotes(true);
             setOperatorNotesSavedStatus('');
+            localStorage.setItem(`draft_op_notes_${chatId}`, notesText);
         }
 
         try {
@@ -1441,18 +1475,25 @@ const Chats = () => {
                                         const val = e.target.value;
                                         setUserNotes(val);
                                         if (selectedChat) {
+                                            localStorage.setItem(`draft_user_notes_${selectedChat.id}`, val);
                                             setSelectedChat(prev => prev ? { ...prev, user_notes: val, notes: val } : prev);
                                             setChats(prev => prev.map(c => c.id === selectedChat.id ? { ...c, user_notes: val, notes: val } : c));
+                                            if (saveUserNotesTimeoutRef.current) clearTimeout(saveUserNotesTimeoutRef.current);
+                                            saveUserNotesTimeoutRef.current = setTimeout(() => {
+                                                handleSaveNotes(selectedChat.id, val, 'user');
+                                            }, 800);
                                         }
                                     }}
                                     onBlur={() => {
                                         if (selectedChat?.id) {
+                                            if (saveUserNotesTimeoutRef.current) clearTimeout(saveUserNotesTimeoutRef.current);
                                             handleSaveNotes(selectedChat.id, userNotes, 'user');
                                         }
                                     }}
                                     onKeyDown={(e) => {
                                         if (e.key === 'Enter' && !e.shiftKey) {
                                             e.preventDefault();
+                                            if (saveUserNotesTimeoutRef.current) clearTimeout(saveUserNotesTimeoutRef.current);
                                             handleSaveNotes(selectedChat.id, userNotes, 'user');
                                         }
                                     }}
@@ -1460,7 +1501,10 @@ const Chats = () => {
                                     className="w-full h-56 min-h-[200px] bg-slate-900 border border-white/15 rounded-xl p-3 text-xs text-white placeholder:text-slate-500 focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500/20 transition-all resize-y font-medium leading-relaxed"
                                 />
                                 <button
-                                    onClick={() => handleSaveNotes(selectedChat.id, userNotes, 'user')}
+                                    onClick={() => {
+                                        if (saveUserNotesTimeoutRef.current) clearTimeout(saveUserNotesTimeoutRef.current);
+                                        handleSaveNotes(selectedChat.id, userNotes, 'user');
+                                    }}
                                     disabled={savingNotes}
                                     className="w-full py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 active:scale-95 text-white font-black text-xs uppercase tracking-wider rounded-xl shadow-lg shadow-purple-600/30 transition-all disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer"
                                 >
@@ -1566,18 +1610,25 @@ const Chats = () => {
                                         const val = e.target.value;
                                         setOperatorNotes(val);
                                         if (selectedChat) {
+                                            localStorage.setItem(`draft_op_notes_${selectedChat.id}`, val);
                                             setSelectedChat(prev => prev ? { ...prev, operator_notes: val } : prev);
                                             setChats(prev => prev.map(c => c.id === selectedChat.id ? { ...c, operator_notes: val } : c));
+                                            if (saveOpNotesTimeoutRef.current) clearTimeout(saveOpNotesTimeoutRef.current);
+                                            saveOpNotesTimeoutRef.current = setTimeout(() => {
+                                                handleSaveNotes(selectedChat.id, val, 'operator');
+                                            }, 800);
                                         }
                                     }}
                                     onBlur={() => {
                                         if (selectedChat?.id) {
+                                            if (saveOpNotesTimeoutRef.current) clearTimeout(saveOpNotesTimeoutRef.current);
                                             handleSaveNotes(selectedChat.id, operatorNotes, 'operator');
                                         }
                                     }}
                                     onKeyDown={(e) => {
                                         if (e.key === 'Enter' && !e.shiftKey) {
                                             e.preventDefault();
+                                            if (saveOpNotesTimeoutRef.current) clearTimeout(saveOpNotesTimeoutRef.current);
                                             handleSaveNotes(selectedChat.id, operatorNotes, 'operator');
                                         }
                                     }}
@@ -1585,7 +1636,10 @@ const Chats = () => {
                                     className="w-full h-56 min-h-[200px] bg-slate-900 border border-white/15 rounded-xl p-3 text-xs text-white placeholder:text-slate-500 focus:outline-none focus:border-fuchsia-500 focus:ring-1 focus:ring-fuchsia-500/20 transition-all resize-y font-medium leading-relaxed"
                                 />
                                 <button
-                                    onClick={() => handleSaveNotes(selectedChat.id, operatorNotes, 'operator')}
+                                    onClick={() => {
+                                        if (saveOpNotesTimeoutRef.current) clearTimeout(saveOpNotesTimeoutRef.current);
+                                        handleSaveNotes(selectedChat.id, operatorNotes, 'operator');
+                                    }}
                                     disabled={savingOperatorNotes}
                                     className="w-full py-2.5 bg-gradient-to-r from-fuchsia-600 to-pink-600 hover:from-fuchsia-500 hover:to-pink-500 active:scale-95 text-white font-black text-xs uppercase tracking-wider rounded-xl shadow-lg shadow-fuchsia-600/30 transition-all disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer"
                                 >

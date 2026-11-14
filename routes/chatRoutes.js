@@ -60,6 +60,47 @@ router.get('/admin', authenticateToken, authorizeRole('admin', 'super_admin', 'o
     }
 });
 
+// GET USER CHATS (Mobile App / General Client)
+router.get('/', authenticateToken, async (req, res) => {
+    const userId = req.user.id;
+    const limit = parseInt(req.query.limit) || 20;
+    const offset = parseInt(req.query.offset) || 0;
+    try {
+        const query = `
+            SELECT c.id, c.operator_id, c.user_id, c.last_message_at,
+                COALESCE(
+                    (SELECT 
+                        CASE 
+                            WHEN content_type = 'audio' THEN '🎤 Ses Mesajı'
+                            WHEN content_type = 'image' THEN '📷 Fotoğraf'
+                            WHEN content_type = 'locked_image' THEN '🔒 Kilitli Resim'
+                            WHEN content_type = 'video' THEN '🎥 Video'
+                            WHEN content_type = 'gift' THEN '🎁 Hediye'
+                            WHEN content_type = 'location' THEN '📍 Konum'
+                            ELSE content 
+                        END
+                     FROM messages WHERE chat_id = c.id ORDER BY created_at DESC LIMIT 1),
+                    c.last_message,
+                    'Sohbet Başladı 💬'
+                ) as last_message,
+                (SELECT content_type FROM messages WHERE chat_id = c.id ORDER BY created_at DESC LIMIT 1) as last_message_type,
+                (SELECT COUNT(*)::int FROM messages WHERE chat_id = c.id AND sender_id::text != $1::text AND is_read = false) as unread_count,
+                COALESCE(u.display_name, u.username, 'Bilinmeyen Kullanıcı') as name,
+                COALESCE(u.avatar_url, 'https://via.placeholder.com/150') as avatar_url,
+                u.vip_level, u.is_verified, u.gender, true as is_online
+            FROM chats c
+            JOIN users u ON (CASE WHEN c.user_id::text = $1::text THEN c.operator_id = u.id ELSE c.user_id = u.id END)
+            WHERE c.user_id::text = $1::text OR c.operator_id::text = $1::text
+            ORDER BY c.last_message_at DESC NULLS LAST
+            LIMIT $2 OFFSET $3
+        `;
+        const result = await db.query(query, [userId, limit, offset]);
+        res.json(result.rows);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // CREATE OR GET CHAT
 router.post('/', async (req, res) => {
     const { userId, operatorId } = req.body;

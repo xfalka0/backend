@@ -173,7 +173,17 @@ exports.registerEmail = async (req, res) => {
     const io = req.app.get('io');
     
     if (!email && !phone) return res.status(400).json({ error: 'E-posta veya telefon numarası zorunludur.' });
-    if (!username) return res.status(400).json({ error: 'Kullanıcı adı zorunludur.' });
+
+    if (!username || !username.trim()) {
+        if (email) {
+            const prefix = email.split('@')[0].replace(/[^a-zA-Z0-9_]/g, '').toLowerCase() || 'user';
+            username = `${prefix}_${Math.floor(1000 + Math.random() * 9000)}`;
+        } else if (phone) {
+            username = `user_${phone.slice(-4)}_${Math.floor(1000 + Math.random() * 9000)}`;
+        } else {
+            username = `user_${Date.now().toString().slice(-6)}`;
+        }
+    }
 
     const normalizedEmail = email ? email.trim().toLowerCase() : null;
     const finalDisplayName = displayName || display_name || username;

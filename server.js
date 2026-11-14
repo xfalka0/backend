@@ -5764,6 +5764,16 @@ const initializeGifts = async () => {
 // but initializeDatabase is top-level. I'll just run it.
 initializeGifts();
 
+// Public Gifts Endpoint for Mobile App (useGiftStore)
+app.get('/api/gifts', async (req, res) => {
+    try {
+        const result = await db.query('SELECT * FROM gifts ORDER BY cost ASC');
+        res.json(result.rows);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 const { initializeSockets } = require('./socket/socketHandler');
 
 io.use(async (socket, next) => {

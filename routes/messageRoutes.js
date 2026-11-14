@@ -30,12 +30,13 @@ router.get('/:chatId', async (req, res) => {
 
 // POST A MESSAGE (REST fallback - primarily socket.io used)
 router.post('/', async (req, res) => {
-    const { chatId, senderId, content, type } = req.body;
-    if (!chatId || !senderId || !content) return res.status(400).json({ error: 'Missing parameters' });
+    const finalSenderId = req.body.senderId || req.body.userId;
+    const { chatId, content, type } = req.body;
+    if (!chatId || !finalSenderId || !content) return res.status(400).json({ error: 'Missing parameters' });
     try {
         const result = await db.query(
             'INSERT INTO messages (chat_id, sender_id, content, content_type) VALUES ($1, $2, $3, $4) RETURNING *',
-            [chatId, senderId, content, type || 'text']
+            [chatId, finalSenderId, content, type || 'text']
         );
         await db.query('UPDATE chats SET last_message_at = NOW(), last_message = $2 WHERE id = $1', [chatId, content]);
         res.json(result.rows[0]);

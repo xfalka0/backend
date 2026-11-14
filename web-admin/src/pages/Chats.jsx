@@ -737,6 +737,7 @@ const Chats = () => {
         } finally {
             setUploading(false);
             if (fileInputRef.current) fileInputRef.current.value = '';
+            setIsLockedImage(false);
         }
     };
 
@@ -1002,6 +1003,30 @@ const Chats = () => {
 
 
                         <form ref={popupsContainerRef} onSubmit={(e) => { e.preventDefault(); }} className="p-6 bg-slate-900/80 border-t border-white/10 flex flex-col gap-2.5 relative">
+                            {isLockedImage && (
+                                <div className="flex items-center justify-between px-4 py-2 bg-gradient-to-r from-amber-500/20 via-amber-500/10 to-transparent border border-amber-500/40 rounded-2xl text-xs text-amber-300 font-bold shadow-lg shadow-amber-500/10">
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-base">🔒</span>
+                                        <span>Yüklenecek Medya Kilitli Olacak: <strong className="text-amber-400 font-black text-sm underline">{lockedImageCost} Coin</strong></span>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <button
+                                            type="button"
+                                            onClick={() => setShowAttachmentMenu(true)}
+                                            className="text-[11px] bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 px-2.5 py-1 rounded-lg border border-amber-500/30 transition cursor-pointer"
+                                        >
+                                            Fiyat Değiştir
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => setIsLockedImage(false)}
+                                            className="text-[11px] text-slate-400 hover:text-white transition cursor-pointer px-1.5 py-1"
+                                        >
+                                            ✕ İptal
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
                             <div className="flex items-center gap-4 relative">
                                 {/* Quick Messages */}
                                 <div className="relative shrink-0">
@@ -1113,7 +1138,7 @@ const Chats = () => {
                                     />
 
                                     {showAttachmentMenu && (
-                                        <div className="absolute bottom-[calc(100%+14px)] left-0 z-30 w-60 rounded-2xl border border-white/10 bg-slate-900 p-2 shadow-2xl flex flex-col gap-1">
+                                        <div className="absolute bottom-[calc(100%+14px)] left-0 z-30 w-72 rounded-2xl border border-white/10 bg-slate-900 p-2 shadow-2xl flex flex-col gap-1">
                                             <button
                                                 type="button"
                                                 onClick={() => { setShowAttachmentMenu(false); sendLocationMessage(); }}
@@ -1153,25 +1178,56 @@ const Chats = () => {
                                             <button
                                                 type="button"
                                                 onClick={() => { setShowAttachmentMenu(false); fileInputRef.current?.click(); }}
-                                                className="flex items-center gap-3 w-full rounded-xl px-4 py-3 text-left text-sm font-medium text-slate-200 transition hover:bg-slate-800"
+                                                className="flex items-center gap-3 w-full rounded-xl px-4 py-2.5 text-left text-sm font-medium text-slate-200 transition hover:bg-slate-800"
                                             >
                                                 <svg className="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
                                                 </svg>
-                                                Medya Gönder
+                                                {isLockedImage ? '🔒 Kilitli Medya Seç & Gönder' : 'Medya Seç & Gönder'}
                                             </button>
 
-                                            <label className="flex items-center gap-3 w-full rounded-xl px-4 py-3 text-left text-sm font-medium text-slate-200 transition hover:bg-amber-500/10 cursor-pointer select-none">
-                                                <input
-                                                    type="checkbox"
-                                                    checked={isLockedImage}
-                                                    onChange={(e) => setIsLockedImage(e.target.checked)}
-                                                    className="w-4 h-4 rounded bg-slate-900 border-white/30 text-amber-500 focus:ring-amber-500/50 cursor-pointer"
-                                                />
-                                                <span className={`${isLockedImage ? 'text-amber-400 font-bold' : ''}`}>
-                                                    🔒 Medyayı Ücretli Yap
-                                                </span>
-                                            </label>
+                                            <div className="p-2.5 rounded-xl bg-slate-950/80 border border-white/5 space-y-2 mt-0.5">
+                                                <label className="flex items-center justify-between cursor-pointer select-none">
+                                                    <div className="flex items-center gap-2.5">
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={isLockedImage}
+                                                            onChange={(e) => setIsLockedImage(e.target.checked)}
+                                                            className="w-4 h-4 rounded bg-slate-900 border-white/30 text-amber-500 focus:ring-amber-500/50 cursor-pointer"
+                                                        />
+                                                        <span className={`text-xs font-bold ${isLockedImage ? 'text-amber-400' : 'text-slate-300'}`}>
+                                                            🔒 Medyayı Ücretli Yap
+                                                        </span>
+                                                    </div>
+                                                    {isLockedImage && (
+                                                        <span className="text-[10px] font-black text-amber-400 bg-amber-500/15 px-2 py-0.5 rounded border border-amber-500/30">
+                                                            {lockedImageCost} Coin
+                                                        </span>
+                                                    )}
+                                                </label>
+
+                                                {isLockedImage && (
+                                                    <div className="pt-2 border-t border-white/5 space-y-1.5">
+                                                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Coin Seçimi:</span>
+                                                        <div className="grid grid-cols-3 gap-1.5">
+                                                            {[100, 200, 500, 1000, 2000, 5000].map((cost) => (
+                                                                <button
+                                                                    key={cost}
+                                                                    type="button"
+                                                                    onClick={() => setLockedImageCost(cost)}
+                                                                    className={`py-1.5 px-1 rounded-lg text-xs font-black transition-all cursor-pointer ${
+                                                                        lockedImageCost === cost
+                                                                            ? 'bg-gradient-to-r from-amber-500 to-yellow-500 text-slate-950 shadow-md shadow-amber-500/30 font-black scale-105'
+                                                                            : 'bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white border border-white/10'
+                                                                    }`}
+                                                                >
+                                                                    {cost} 🪙
+                                                                </button>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </div>
                                         </div>
                                     )}
                                 </div>

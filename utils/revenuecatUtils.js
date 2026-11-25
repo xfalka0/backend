@@ -1,4 +1,5 @@
 const axios = require('axios');
+const dbPool = require('../db');
 const { getVipLevel } = require('./vipUtils');
 const { withTransaction } = require('./dbUtils');
 const { isStarterProductId, claimStarterPackLock } = require('./starterPackUtils');
@@ -8,13 +9,13 @@ const REVENUECAT_API_BASE = 'https://api.revenuecat.com/v1';
 let paymentSchemaPromise = null;
 
 /**
- * Ensures payments.external_tx_id exists so client SDK IDs and store order IDs can be paired safely.
+ * Ensures payments.external_tx_id exists using the autocommit pool (never inside a rollbackable tx).
  */
-async function ensurePaymentSchema(queryable) {
+async function ensurePaymentSchema() {
     if (!paymentSchemaPromise) {
         paymentSchemaPromise = (async () => {
-            await queryable.query(`ALTER TABLE payments ADD COLUMN IF NOT EXISTS external_tx_id VARCHAR(255)`);
-            await queryable.query(`CREATE INDEX IF NOT EXISTS idx_payments_external_tx_id ON payments(external_tx_id)`);
+            await dbPool.query(`ALTER TABLE payments ADD COLUMN IF NOT EXISTS external_tx_id VARCHAR(255)`);
+            await dbPool.query(`CREATE INDEX IF NOT EXISTS idx_payments_external_tx_id ON payments(external_tx_id)`);
         })().catch((err) => {
             paymentSchemaPromise = null;
             throw err;
@@ -174,7 +175,7 @@ async function creditCoinPurchaseAtomic(client, {
     pairWindowSeconds = 180,
     beforeCreditHook = null,
 }) {
-    await ensurePaymentSchema(client);
+    await ensurePaymentSchema();
 
     const userRes = await client.query(
         'SELECT id, balance, vip_xp, vip_level, total_spent FROM users WHERE id::text = $1::text FOR UPDATE',
@@ -381,7 +382,7 @@ async function insertPaymentIfAbsent(client, {
     packageNameSnapshot = null,
     status = 'completed',
 }) {
-    await ensurePaymentSchema(client);
+    await ensurePaymentSchema();
     const txKey = String(transactionId);
     await client.query('SELECT pg_advisory_xact_lock(hashtext($1::text))', [txKey]);
 

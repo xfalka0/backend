@@ -40,7 +40,7 @@ const bcrypt = require('bcrypt');
 const { authenticateToken, authorizeRole, SECRET_KEY } = require('./middleware/auth');
 const { getVipLevel, getVipProgress } = require('./utils/vipUtils');
 const { withTransaction } = require('./utils/dbUtils');
-const { isSyntheticTransactionId, verifyRevenueCatPurchase, creditCoinPurchaseAtomic, autoClaimPendingWebhookPurchase } = require('./utils/revenuecatUtils');
+const { isSyntheticTransactionId, ensurePaymentSchema, verifyRevenueCatPurchase, creditCoinPurchaseAtomic, autoClaimPendingWebhookPurchase } = require('./utils/revenuecatUtils');
 const { recordOperatorCommission } = require('./utils/commissionUtils');
 const { AGENCY_SYSTEM_ENABLED } = require('./utils/featureFlags');
 const jwt = require('jsonwebtoken');
@@ -3759,6 +3759,7 @@ app.post('/api/purchase', authenticateToken, async (req, res) => {
     const syntheticTx = isSyntheticTransactionId(cleanTxId);
 
     try {
+        await ensurePaymentSchema();
         // 1. Validate Package and Get Price/Coins from DB
         const cleanProductId = String(productId).split(':')[0].trim();
         const pkgRes = await db.query(

@@ -459,6 +459,7 @@ export default function ShopScreen({ navigation, route }) {
                 const productId = product.identifier || (parsedCoinAmount ? `coins_${parsedCoinAmount}` : null) || pack.id;
 
                 let isPendingWebhook = false;
+                let syncErrorDetail = null;
                 try {
                     const syncRes = await axios.post(`${API_URL}/purchase`, {
                         productId: productId,
@@ -474,11 +475,12 @@ export default function ShopScreen({ navigation, route }) {
                     }
                 } catch (syncError) {
                     console.error('[SHOP] Purchase sync error:', syncError.message);
+                    syncErrorDetail = syncError.response?.data?.details || syncError.response?.data?.error || syncError.message;
                     isPendingWebhook = true;
                 }
 
                 if (isPendingWebhook) {
-                    for (let attempt = 0; attempt < 2; attempt++) {
+                    for (let attempt = 0; attempt < 3; attempt++) {
                         await new Promise((r) => setTimeout(r, 1200));
                         try {
                             const balRes = await axios.get(`${API_URL}/users/balance`, {
@@ -489,6 +491,7 @@ export default function ShopScreen({ navigation, route }) {
                                 if (liveBalance > (balance || 0)) {
                                     coinsCredited = liveBalance - (balance || 0);
                                     isPendingWebhook = false;
+                                    syncErrorDetail = null;
                                     break;
                                 }
                             }
@@ -516,14 +519,23 @@ export default function ShopScreen({ navigation, route }) {
                     }
                 } catch (e) {}
 
-                setAlertConfig({
-                    visible: true,
-                    title: 'Tebrikler!',
-                    message: isPendingWebhook && !coinsCredited
-                        ? `Satın alım onaylandı. Bakiyeniz birkaç saniye içinde otomatik güncellenecektir.\nMevcut Bakiye: ${liveBalance}`
-                        : `Satın alım başarılı.\n${coinsCredited ? `+${coinsCredited} Coin hesabınıza tanımlandı.\n` : ''}Yeni Bakiye: ${liveBalance}`,
-                    type: 'success'
-                });
+                if (syncErrorDetail && !coinsCredited) {
+                    setAlertConfig({
+                        visible: true,
+                        title: 'Senkronizasyon Bekleniyor',
+                        message: `Google Play ödemesi alındı ancak sunucu şu an yanıt vermedi (${syncErrorDetail}). Bakiyeniz kısa süre içinde güncellenmezse uygulamayı yenileyin.`,
+                        type: 'warning'
+                    });
+                } else {
+                    setAlertConfig({
+                        visible: true,
+                        title: 'Tebrikler!',
+                        message: isPendingWebhook && !coinsCredited
+                            ? `Satın alım onaylandı. Bakiyeniz birkaç saniye içinde otomatik güncellenecektir.\nMevcut Bakiye: ${liveBalance}`
+                            : `Satın alım başarılı.\n${coinsCredited ? `+${coinsCredited} Coin hesabınıza tanımlandı.\n` : ''}Yeni Bakiye: ${liveBalance}`,
+                        type: 'success'
+                    });
+                }
             }
         } catch (error) {
             console.error('Purchase Error:', error);

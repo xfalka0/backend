@@ -3,6 +3,11 @@ const router = express.Router();
 const crypto = require('crypto');
 const db = require('../db');
 const { getVipLevel, VIP_THRESHOLDS } = require('../utils/vipUtils');
+const {
+    STARTER_PACK,
+    isStarterProductId,
+    claimStarterPackLock,
+} = require('../utils/starterPackUtils');
 
 // Server-side product catalogs (fixed truth source)
 const COIN_PRODUCT_MAPPING = {
@@ -167,10 +172,13 @@ async function handleSuccessfulPayment(userId, event, io) {
     }
 
     // 2. Identify Product Category (Coins vs VIP/Premium)
-    let isCoinProduct = COIN_PRODUCT_MAPPING.hasOwnProperty(cleanProductId) || COIN_PRODUCT_MAPPING.hasOwnProperty(rawProductId);
-    let coinAmount = COIN_PRODUCT_MAPPING[cleanProductId] || COIN_PRODUCT_MAPPING[rawProductId] || 0;
+    const isStarterProduct = isStarterProductId(rawProductId) || isStarterProductId(cleanProductId);
+    let isCoinProduct = isStarterProduct || COIN_PRODUCT_MAPPING.hasOwnProperty(cleanProductId) || COIN_PRODUCT_MAPPING.hasOwnProperty(rawProductId);
+    let coinAmount = isStarterProduct
+        ? STARTER_PACK.coins
+        : (COIN_PRODUCT_MAPPING[cleanProductId] || COIN_PRODUCT_MAPPING[rawProductId] || 0);
     let packageId = null;
-    let price = 0;
+    let price = isStarterProduct ? STARTER_PACK.discounted_price : 0;
 
     try {
         const dbPkg = await db.query(
@@ -180,7 +188,9 @@ async function handleSuccessfulPayment(userId, event, io) {
         );
         if (dbPkg.rows.length > 0) {
             isCoinProduct = true;
-            coinAmount = parseInt(dbPkg.rows[0].coins, 10);
+            if (!isStarterProduct) {
+                coinAmount = parseInt(dbPkg.rows[0].coins, 10);
+            }
             packageId = dbPkg.rows[0].id;
             price = parseFloat(dbPkg.rows[0].price);
         }
@@ -222,7 +232,22 @@ async function handleSuccessfulPayment(userId, event, io) {
                 }
 
                 const resolvedUser = userRes.rows[0];
-                const numericUserId = parseInt(resolvedUser.id, 10);
+                const resolvedUserId = resolvedUser.id;
+
+                // Prevent double-crediting starter pack when /api/starter-pack/purchase already claimed it
+                if (isStarterProduct) {
+                    const claimedNow = await claimStarterPackLock(db, String(resolvedUserId), coinAmount);
+                    if (!claimedNow) {
+                        await db.query(
+                            'INSERT INTO payments (user_id, package_id, transaction_id, amount, coin_amount, payment_method, package_name_snapshot, status) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
+                            [resolvedUserId, packageId, transactionId, price || coinAmount, coinAmount, 'revenuecat', cleanProductId, 'completed']
+                        );
+                        await db.query('COMMIT');
+                        console.log(`[WEBHOOK SKIP] Starter pack already credited to user ${resolvedUserId} (tx: ${transactionId})`);
+                        return { success: true, alreadyClaimed: true };
+                    }
+                }
+
                 const currentBalance = parseInt(resolvedUser.balance, 10) || 0;
                 const currentVipXp = parseInt(resolvedUser.vip_xp, 10) || 0;
                 const currentVipLevel = parseInt(resolvedUser.vip_level, 10) || 0;
@@ -236,36 +261,36 @@ async function handleSuccessfulPayment(userId, event, io) {
 
                 await db.query(
                     'UPDATE users SET balance = $1, vip_xp = $2, vip_level = $3, total_spent = $4 WHERE id = $5',
-                    [newBalance, newVipXp, newVipLevel, newTotalSpent, numericUserId]
+                    [newBalance, newVipXp, newVipLevel, newTotalSpent, resolvedUserId]
                 );
 
                 await db.query(
-                    'INSERT INTO payments (user_id, package_id, transaction_id, amount, status) VALUES ($1, $2, $3, $4, $5)',
-                    [numericUserId, packageId, transactionId, price || coinAmount, 'completed']
+                    'INSERT INTO payments (user_id, package_id, transaction_id, amount, coin_amount, payment_method, package_name_snapshot, status) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
+                    [resolvedUserId, packageId, transactionId, price || coinAmount, coinAmount, 'revenuecat', cleanProductId, 'completed']
                 );
                 await db.query(
                     'INSERT INTO transactions (user_id, amount, type, description) VALUES ($1, $2, $3, $4)',
-                    [numericUserId, coinAmount, 'purchase', `RevenueCat webhook: ${cleanProductId}`]
+                    [resolvedUserId, coinAmount, 'purchase', `RevenueCat webhook: ${cleanProductId}`]
                 );
 
-                console.log(`[WEBHOOK SUCCESS] Added ${coinAmount} coins to user ${numericUserId} for tx ${transactionId}`);
+                console.log(`[WEBHOOK SUCCESS] Added ${coinAmount} coins to user ${resolvedUserId} for tx ${transactionId}`);
 
                 if (io) {
-                    io.to(`user_${numericUserId}`).emit('balance_update', {
+                    io.to(`user_${resolvedUserId}`).emit('balance_update', {
                         balance: newBalance,
                         hearts: newBalance,
                         vip_level: newVipLevel,
                         vip_xp: newVipXp
                     });
                     io.emit('new_payment', {
-                        user_id: numericUserId,
+                        user_id: resolvedUserId,
                         amount: price || coinAmount,
                         package_id: packageId,
                         transaction_id: transactionId,
                         status: 'completed',
                         created_at: new Date().toISOString()
                     });
-                    io.emit('admin_payment_update', { type: 'coins', user_id: numericUserId });
+                    io.emit('admin_payment_update', { type: 'coins', user_id: resolvedUserId });
                 }
             }
             await db.query('COMMIT');

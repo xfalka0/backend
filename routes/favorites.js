@@ -38,7 +38,7 @@ router.post('/', async (req, res) => {
 
         // Send push notification to target user (non-blocking)
         try {
-            const { sendPushNotification } = require('../utils/pushNotifications');
+            const { sendPushNotification } = require('../utils/notificationUtils');
             const followerRes = await pool.query('SELECT username, display_name FROM users WHERE id::text = $1::text', [userId]);
             const followerName = followerRes.rows[0]?.display_name || followerRes.rows[0]?.username || 'Biri';
             sendPushNotification(targetUserId, {

@@ -301,6 +301,140 @@ function onUserCompletedOnboarding(io, userId) {
     }
 }
 
+// Dışarıdaki (uygulamada olmayan) kullanıcıları geri çağırmak için kanca (hook) mesajları
+const OFFLINE_HOOK_MESSAGES = [
+    "selam buralarda mısın seni merak ettim",
+    "profilin aklımda kaldı hala uyanık mısın",
+    "nerelerdesin ya biraz sohbet edelim mi",
+    "az önce fotoğrafına baktım çok tatlısın",
+    "buralar sensiz çok sıkıcı geldi bi yazsana",
+    "uyumadıysan biraz konuşalım mı çok sıkıldım"
+];
+
+/**
+ * Uygulamada olmayan kullanıcılara periyodik olarak kanca (hook) bildirimi gönderir.
+ * Kullanıcıyı uygulamaya geri çekmek için operatör ağzından mesaj + push atar.
+ */
+async function runOfflineHookNotifications(io) {
+    try {
+        // En az 2 saattir uygulamada olmayan, son 24 saatte otomatik hook almamış, push_token sahibi aktif kullanıcılar
+        const usersRes = await db.query(`
+            SELECT id, username, display_name, gender, push_token
+            FROM users
+            WHERE role = 'user'
+              AND account_status = 'active'
+              AND onboarding_completed = true
+              AND push_token IS NOT NULL
+              AND push_token != ''
+              AND COALESCE(last_login_at, created_at) < NOW() - INTERVAL '2 hours'
+              AND (last_auto_message_at IS NULL OR last_auto_message_at < NOW() - INTERVAL '24 hours')
+            ORDER BY last_auto_message_at ASC NULLS FIRST
+            LIMIT 25
+        `);
+
+        if (usersRes.rows.length === 0) return { processed: 0, sent: 0 };
+
+        let sentCount = 0;
+
+        for (const u of usersRes.rows) {
+            const userIdStr = u.id.toString();
+            // Halen aktif socket oturumu varsa (uygulamadaysa) offline hook gönderme
+            const activeSession = activeUserSessions.get(userIdStr);
+            if (activeSession && activeSession.socketIds.size > 0) continue;
+
+            const userGenderRaw = (u.gender || 'erkek').toLowerCase();
+            const userGender = (userGenderRaw === 'male' || userGenderRaw === 'erkek') ? 'erkek' : 'kadin';
+            const targetGender = userGender === 'kadin' ? 'erkek' : 'kadin';
+
+            // Bu kullanıcıya daha önce mesaj atmamış aktif operatörü seç; yoksa herhangi aktif operatörü al
+            let opRes = await db.query(`
+                SELECT u.id, COALESCE(u.display_name, u.name, u.username) as display_name, u.avatar_url
+                FROM users u
+                JOIN operators o ON u.id = o.user_id
+                WHERE u.account_status = 'active'
+                  AND u.role = 'operator'
+                  AND u.gender = $1
+                  AND u.gender != 'coin_bayisi'
+                  AND u.id NOT IN (
+                      SELECT sender_id FROM messages m
+                      JOIN chats c ON m.chat_id = c.id
+                      WHERE c.user_id = $2
+                  )
+                ORDER BY RANDOM()
+                LIMIT 1
+            `, [targetGender, u.id]);
+
+            if (opRes.rows.length === 0) {
+                opRes = await db.query(`
+                    SELECT u.id, COALESCE(u.display_name, u.name, u.username) as display_name, u.avatar_url
+                    FROM users u
+                    JOIN operators o ON u.id = o.user_id
+                    WHERE u.account_status = 'active'
+                      AND u.role = 'operator'
+                      AND u.gender = $1
+                      AND u.gender != 'coin_bayisi'
+                    ORDER BY RANDOM()
+                    LIMIT 1
+                `, [targetGender]);
+            }
+
+            if (opRes.rows.length === 0) continue;
+            const op = opRes.rows[0];
+            const hookText = OFFLINE_HOOK_MESSAGES[Math.floor(Math.random() * OFFLINE_HOOK_MESSAGES.length)];
+
+            // Sohbeti bul veya aç
+            let chatRes = await db.query(
+                'SELECT id FROM chats WHERE (user_id = $1 AND operator_id = $2) OR (user_id = $2 AND operator_id = $1) LIMIT 1',
+                [u.id, op.id]
+            );
+            let chatId;
+            if (chatRes.rows.length === 0) {
+                const newChat = await db.query(
+                    'INSERT INTO chats (user_id, operator_id, last_message, last_message_at) VALUES ($1, $2, $3, NOW()) RETURNING id',
+                    [u.id, op.id, hookText]
+                );
+                chatId = newChat.rows[0].id;
+            } else {
+                chatId = chatRes.rows[0].id;
+                await db.query(
+                    'UPDATE chats SET last_message = $1, last_message_at = NOW() WHERE id = $2',
+                    [hookText, chatId]
+                );
+            }
+
+            // Mesajı veritabanına yaz
+            await db.query(
+                'INSERT INTO messages (chat_id, sender_id, content, content_type, is_read, created_at) VALUES ($1, $2, $3, $4, false, NOW())',
+                [chatId, op.id, hookText, 'text']
+            );
+
+            // Spam önleme zaman damgasını güncelle
+            await db.query('UPDATE users SET last_auto_message_at = NOW() WHERE id = $1', [u.id]);
+
+            // Doğrudan telefona Push Bildirimi gönder
+            const pushResult = await sendPushNotification(u.id, {
+                title: op.display_name,
+                body: hookText,
+                data: {
+                    chatId: chatId.toString(),
+                    senderId: op.id.toString(),
+                    senderName: op.display_name,
+                    senderAvatar: op.avatar_url,
+                    type: 'reengagement'
+                }
+            });
+
+            if (pushResult?.sent) sentCount++;
+            console.log(`[OFFLINE-HOOK] Gönderildi: [${op.display_name}] -> ${u.username} (${u.id}): "${hookText}"`);
+        }
+
+        return { processed: usersRes.rows.length, sent: sentCount };
+    } catch (err) {
+        console.error('[OFFLINE-HOOK ERROR]:', err.message);
+        return { processed: 0, sent: 0, error: err.message };
+    }
+}
+
 /**
  * Kullanıcı uygulamadan çıktığında (socket koptuğunda) durdurur
  */
@@ -327,6 +461,7 @@ function stopUserAutoEngagement(userId, socketId) {
         }
 
         activeUserSessions.delete(userIdStr);
+        db.query('UPDATE users SET last_login_at = NOW() WHERE id = $1', [userId]).catch(() => {});
     }
 }
 
@@ -334,5 +469,6 @@ module.exports = {
     startUserAutoEngagement,
     stopUserAutoEngagement,
     onUserCompletedOnboarding,
-    sendSingleAutoMessage
+    sendSingleAutoMessage,
+    runOfflineHookNotifications
 };

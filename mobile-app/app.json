@@ -37,7 +37,8 @@
       "googleServicesFile": "./google-services.json",
       "versionCode": 110,
       "permissions": [
-        "android.permission.INTERNET"
+        "android.permission.INTERNET",
+        "android.permission.POST_NOTIFICATIONS"
       ]
     },
     "web": {

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Search, Filter, MoreHorizontal, User, Heart, Crown, Ban, Eye, Mail, Coins, X, Check, Clock } from 'lucide-react';
 import axios from 'axios';
 import io from 'socket.io-client';
@@ -10,6 +11,7 @@ const SOCKET_URL = (window.location.hostname === 'localhost' || window.location.
     : window.location.origin;
 
 export default function UsersPage() {
+    const navigate = useNavigate();
     const [users, setUsers] = useState([]);
     const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState('');
@@ -295,6 +297,13 @@ export default function UsersPage() {
                                         </td>
                                         <td className="px-8 py-5 text-right">
                                             <div className="flex items-center justify-end gap-2 opacity-0 group-hover/row:opacity-100 transition-opacity">
+                                                <button
+                                                    onClick={() => navigate(`/crm?userId=${user.id}`)}
+                                                    className="p-2 hover:bg-blue-500/10 text-blue-400 rounded-lg transition-colors"
+                                                    title="360° CRM Profilini Aç"
+                                                >
+                                                    <Eye size={18} />
+                                                </button>
                                                 <button
                                                     onClick={() => setBalanceModal({ open: true, user })}
                                                     className="p-2 hover:bg-amber-500/10 text-amber-400 rounded-lg transition-colors"

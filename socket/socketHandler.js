@@ -95,6 +95,10 @@ async function chargeCallMinute(io, chatId, callerId, receiverId) {
         if (shouldChargeCaller) {
             const updRes = await client.query('UPDATE users SET balance = balance - $2 WHERE id = $1 RETURNING balance', [callerId, costPerMinute]);
             callerBalance = parseFloat(updRes.rows[0].balance);
+            await client.query(
+                'INSERT INTO transactions (user_id, amount, type, description) VALUES ($1, $2, $3, $4)',
+                [callerId, -Math.round(costPerMinute), 'spend_call', `${callType === 'video' ? 'Görüntülü' : 'Sesli'} arama dakikası`]
+            );
             io.emit('admin_balance_update', { userId: callerId, newBalance: callerBalance });
             io.to(callerId.toString()).emit('balance_update', { userId: callerId, newBalance: callerBalance });
             console.log(`[CALL BILLING 💰] Deducted ${costPerMinute} coins from male caller ${callerId}. New balance: ${callerBalance}`);
@@ -104,6 +108,10 @@ async function chargeCallMinute(io, chatId, callerId, receiverId) {
         if (shouldChargeReceiver) {
             const updRes = await client.query('UPDATE users SET balance = balance - $2 WHERE id = $1 RETURNING balance', [receiverId, costPerMinute]);
             receiverBalance = parseFloat(updRes.rows[0].balance);
+            await client.query(
+                'INSERT INTO transactions (user_id, amount, type, description) VALUES ($1, $2, $3, $4)',
+                [receiverId, -Math.round(costPerMinute), 'spend_call', `${callType === 'video' ? 'Görüntülü' : 'Sesli'} arama dakikası`]
+            );
             io.emit('admin_balance_update', { userId: receiverId, newBalance: receiverBalance });
             io.to(receiverId.toString()).emit('balance_update', { userId: receiverId, newBalance: receiverBalance });
             console.log(`[CALL BILLING 💰] Deducted ${costPerMinute} coins from male receiver ${receiverId}. New balance: ${receiverBalance}`);
@@ -518,6 +526,7 @@ function initializeSockets(io) {
             const userRoom = effectiveUserId.toString();
             socket.join(userRoom);
             console.log(`[SOCKET] User ${socket.user?.username || effectiveUserId} joined personal room: ${userRoom}`);
+            db.query('UPDATE users SET last_login_at = NOW() WHERE id = $1', [effectiveUserId]).catch(() => {});
         }
 
         socket.on('join_room', (chatId) => {
@@ -692,6 +701,14 @@ function initializeSockets(io) {
 
                     const updateRes = await client.query('UPDATE users SET balance = balance - $2 WHERE id = $1 RETURNING balance', [senderId, cost]);
                     userBalance = parseFloat(updateRes.rows[0].balance);
+                    if (cost > 0) {
+                        const spendType = type === 'gift' ? 'spend_gift' : (type === 'image' ? 'spend_image' : (type === 'audio' ? 'spend_audio' : 'spend_text'));
+                        const spendDesc = type === 'gift' ? `Hediye gönderildi (${giftDetails?.name || 'Hediye'})` : (type === 'image' ? 'Fotoğraf gönderimi' : (type === 'audio' ? 'Sesli mesaj' : 'Sohbet mesajı'));
+                        await client.query(
+                            'INSERT INTO transactions (user_id, amount, type, description) VALUES ($1, $2, $3, $4)',
+                            [senderId, -Math.round(cost), spendType, spendDesc]
+                        );
+                    }
                     io.emit('admin_balance_update', { userId: senderId, newBalance: userBalance });
                     socket.emit('balance_update', { userId: senderId, newBalance: userBalance });
 
@@ -1087,7 +1104,7 @@ function initializeSockets(io) {
                 // Trigger Push Notification for incoming call (Non-blocking)
                 (async () => {
                     try {
-                        const { sendPushNotification } = require('../utils/pushNotifications');
+                        const { sendPushNotification } = require('../utils/notificationUtils');
                         await sendPushNotification(receiverId, {
                             title: `📞 Gelen ${type === 'video' ? 'Görüntülü' : 'Sesli'} Arama`,
                             body: `${dbCallerName} seni arıyor...`,

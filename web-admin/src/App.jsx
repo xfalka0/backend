@@ -8,6 +8,7 @@ import Login from './pages/Login';
 // Pages
 import Dashboard from './pages/Dashboard';
 import UsersPage from './pages/Users';
+import CRMPage from './pages/CRM';
 import ProfilesPage from './pages/Profiles';
 import PaymentsPage from './pages/Payments';
 import GiftsPage from './pages/Gifts';
@@ -147,6 +148,7 @@ function App() {
                             {/* If we want strict block for moderators on these: */}
                             <Route element={<ProtectedRoute allowedRoles={['admin', 'super_admin']} />}>
                                 <Route path="/users" element={<UsersPage />} />
+                                <Route path="/crm" element={<CRMPage />} />
                                 <Route path="/profiles" element={<ProfilesPage />} />
                                 <Route path="/social" element={<SocialPage />} />
                                 <Route path="/payments" element={<PaymentsPage />} />

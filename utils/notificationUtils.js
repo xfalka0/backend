@@ -2,50 +2,60 @@ const { Expo } = require('expo-server-sdk');
 const db = require('../db');
 
 // Create a new Expo SDK client
-let expo = new Expo();
+const expo = new Expo();
 
 /**
- * Sends a push notification to a specific user
+ * Sends a push notification to a specific user via Expo Push Service.
+ * Ensures Android high-priority default channel and cleans up unregistered tokens.
  * @param {string} userId - The ID of the recipient user
- * @param {object} notificationContent - { title, body, data }
+ * @param {object} notificationContent - { title, body, data, channelId }
  */
-const sendPushNotification = async (userId, { title, body, data }) => {
+const sendPushNotification = async (userId, { title, body, data, channelId = 'default' }) => {
     try {
-        // 1. Get user's push token from DB
         const res = await db.query('SELECT push_token FROM users WHERE id = $1', [userId]);
         const pushToken = res.rows[0]?.push_token;
 
         if (!pushToken || !Expo.isExpoPushToken(pushToken)) {
-            // console.warn(`[NOTIFY] User ${userId} has no valid push token.`);
-            return;
+            return { sent: false, reason: 'invalid_or_missing_token' };
         }
 
-        // 2. Construct the message
         const messages = [{
             to: pushToken,
             sound: 'default',
             title: title,
             body: body,
             data: data || {},
+            channelId: channelId,
+            priority: 'high',
+            ttl: 86400
         }];
 
-        // 3. Send the notification
         const chunks = expo.chunkPushNotifications(messages);
         const tickets = [];
 
-        for (let chunk of chunks) {
+        for (const chunk of chunks) {
             try {
                 const ticketChunk = await expo.sendPushNotificationsAsync(chunk);
                 tickets.push(...ticketChunk);
             } catch (error) {
-                console.error('[NOTIFY ERROR] Chunk send error:', error);
+                console.error('[NOTIFY ERROR] Chunk send error:', error.message);
             }
         }
 
-        // Note: In production, you should handle tickets to check for errors/receipts
-        // console.log(`[NOTIFY SUCCESS] Sent to user ${userId}`);
+        for (const ticket of tickets) {
+            if (ticket.status === 'error') {
+                console.error(`[NOTIFY ERROR] Expo ticket error for user ${userId}: ${ticket.message}`, ticket.details || '');
+                if (ticket.details?.error === 'DeviceNotRegistered') {
+                    await db.query('UPDATE users SET push_token = NULL WHERE id = $1', [userId]).catch(() => {});
+                    console.log(`[NOTIFY] Cleared unregistered push_token for user ${userId}`);
+                }
+            }
+        }
+
+        return { sent: tickets.some(t => t.status === 'ok'), tickets };
     } catch (err) {
         console.error('[NOTIFY ERROR] Critical error:', err.message);
+        return { sent: false, error: err.message };
     }
 };
 

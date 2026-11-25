@@ -151,28 +151,56 @@ import * as Notifications from 'expo-notifications';
 
 function AppContent() {
     const { theme } = useTheme();
+    const sessionStatus = useAppStore(state => state.sessionStatus);
+    const handledInitialNotificationRef = React.useRef(false);
+
+    const handleNotificationResponse = React.useCallback((response) => {
+        try {
+            const data = response?.notification?.request?.content?.data;
+            if (!data) return;
+            console.log('[PUSH TAP 📲] System notification tapped with payload:', JSON.stringify(data));
+            if (data.chatId) {
+                const currentUser = useAppStore.getState().user;
+                RootNavigation.navigate('Chat', {
+                    chatId: data.chatId.toString(),
+                    operatorId: data.senderId || data.callerId,
+                    name: data.senderName || 'Sohbet',
+                    avatar_url: data.senderAvatar,
+                    user: currentUser
+                });
+            } else if (data.type === 'profile_view') {
+                RootNavigation.navigate('ProfileVisitors');
+            } else if (data.type === 'new_follower') {
+                RootNavigation.navigate('Favorites');
+            }
+        } catch (err) {
+            console.error('[PUSH TAP ❌] Notification tap error:', err.message);
+        }
+    }, []);
 
     useEffect(() => {
-        const subscription = Notifications.addNotificationResponseReceivedListener(response => {
+        const subscription = Notifications.addNotificationResponseReceivedListener(handleNotificationResponse);
+        return () => subscription.remove();
+    }, [handleNotificationResponse]);
+
+    // Handle cold-start notification tap (when app was completely closed) once session is verified
+    useEffect(() => {
+        if (sessionStatus !== 'verified' || handledInitialNotificationRef.current) return;
+        handledInitialNotificationRef.current = true;
+
+        const timer = setTimeout(async () => {
             try {
-                const data = response?.notification?.request?.content?.data;
-                console.log('[PUSH TAP 📲] System notification tapped with payload:', JSON.stringify(data));
-                if (data && data.chatId) {
-                    const currentUser = useAppStore.getState().user;
-                    RootNavigation.navigate('Chat', {
-                        chatId: data.chatId.toString(),
-                        operatorId: data.senderId || data.callerId,
-                        name: data.senderName || 'Sohbet',
-                        avatar_url: data.senderAvatar,
-                        user: currentUser
-                    });
+                const lastResponse = await Notifications.getLastNotificationResponseAsync();
+                if (lastResponse) {
+                    handleNotificationResponse(lastResponse);
                 }
             } catch (err) {
-                console.error('[PUSH TAP ❌] Notification tap error:', err.message);
+                console.warn('[PUSH TAP] Initial notification check error:', err.message);
             }
-        });
-        return () => subscription.remove();
-    }, []);
+        }, 350);
+
+        return () => clearTimeout(timer);
+    }, [sessionStatus, handleNotificationResponse]);
 
     useEffect(() => {
         const onHardwareBack = () => {

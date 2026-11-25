@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import {
     LayoutDashboard,
     Users,
+    Briefcase,
     MessageSquare,
     CreditCard,
     Gift,
@@ -70,6 +71,7 @@ export default function Sidebar() {
         {
             title: 'MAĞAZA & FİNANS',
             items: [
+                { path: '/crm', icon: <Briefcase size={18} />, label: 'Müşteri CRM', roles: ['admin', 'super_admin'] },
                 { path: '/payments', icon: <CreditCard size={18} />, label: 'Ödemeler', roles: ['admin', 'super_admin'] },
                 { path: '/withdrawals', icon: <Wallet size={18} />, label: 'Para Çekme', roles: ['admin', 'super_admin'] },
                 { path: '/gifts', icon: <Gift size={18} />, label: 'Hediyeler', roles: ['admin', 'super_admin'] },

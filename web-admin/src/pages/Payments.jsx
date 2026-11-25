@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { CreditCard, TrendingUp, DollarSign, Calendar, Search, Download, CheckCircle2, Clock, Loader2, Package, Plus, Edit2, Trash2, X, Check } from 'lucide-react';
 import axios from 'axios';
 import io from 'socket.io-client';
@@ -29,6 +30,7 @@ const formatTurkeyTime = (dateStr) => {
 };
 
 export default function PaymentsPage() {
+    const navigate = useNavigate();
     const [activeTab, setActiveTab] = useState('transactions'); // 'transactions' or 'packages'
     const [payments, setPayments] = useState([]);
     const [packages, setPackages] = useState([]);
@@ -235,7 +237,11 @@ export default function PaymentsPage() {
                                         payments.map((payment) => (
                                             <tr key={payment.id} className="group/row hover:bg-white/[0.02] transition-colors">
                                                 <td className="px-8 py-5">
-                                                    <div className="flex items-center gap-3">
+                                                    <div
+                                                        onClick={() => payment.user_id && navigate(`/crm?userId=${payment.user_id}`)}
+                                                        className="flex items-center gap-3 cursor-pointer"
+                                                        title="Müşteri CRM Detayını Aç"
+                                                    >
                                                         <div className="w-8 h-8 rounded-lg bg-slate-800 flex items-center justify-center text-xs font-bold text-slate-400 group-hover/row:bg-emerald-600 transition-all">
                                                             {(payment.user_name || '?')[0].toUpperCase()}
                                                         </div>
@@ -248,7 +254,10 @@ export default function PaymentsPage() {
                                                     </div>
                                                 </td>
                                                 <td className="px-8 py-5 text-xs font-bold text-slate-400">
-                                                    {payment.package_name || 'Bilinmeyen Paket'}
+                                                    <div>{payment.package_name || 'Bilinmeyen Paket'}</div>
+                                                    {payment.coin_amount > 0 && (
+                                                        <span className="text-[10px] text-amber-400 font-black">+{payment.coin_amount} Coin</span>
+                                                    )}
                                                 </td>
                                                 <td className="px-8 py-5 text-sm font-black text-emerald-500 tracking-tight">
                                                     ₺{payment.amount}

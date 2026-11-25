@@ -59,14 +59,16 @@ const storeRoutes = require('./routes/store');
 const chatRoutes = require('./routes/chatRoutes');
 const messageRoutes = require('./routes/messageRoutes');
 const vipRoutes = require('./routes/vip');
+const adminCrmRoutes = require('./routes/adminCrm');
 const { sanitizeUser, logActivity } = require('./utils/helpers');
 const { sendPushNotification } = require('./utils/notificationUtils');
 const { checkProfileText, checkPhotoSecurity } = require('./utils/moderationFilter');
 const { resolveTab, VALID_TABS } = require('./constants/tabs');
+const { isStarterProductId, claimStarterPackLock } = require('./utils/starterPackUtils');
 const { validateAge } = require('./utils/validation');
 const { handleRoomsSockets } = require('./socket/roomsSocket');
 const { handlePartyRoomSockets, startStaleSeatSweeper } = require('./socket/partyRoomSocket');
-const { startUserAutoEngagement, stopUserAutoEngagement, onUserCompletedOnboarding } = require('./utils/autoMessageSystem');
+const { startUserAutoEngagement, stopUserAutoEngagement, onUserCompletedOnboarding, runOfflineHookNotifications } = require('./utils/autoMessageSystem');
 const { processAiAutoReply } = require('./services/aiChatService');
 
 const app = express();
@@ -830,6 +832,8 @@ const initializeDatabase = async () => {
         await db.query("ALTER TABLE chats ADD COLUMN IF NOT EXISTS user_notes TEXT DEFAULT ''");
         await db.query("ALTER TABLE chats ADD COLUMN IF NOT EXISTS operator_notes TEXT DEFAULT ''");
         await db.query('ALTER TABLE payments ADD COLUMN IF NOT EXISTS coin_amount INTEGER');
+        await db.query('ALTER TABLE payments ADD COLUMN IF NOT EXISTS payment_method VARCHAR(50)');
+        await db.query('ALTER TABLE payments ADD COLUMN IF NOT EXISTS package_name_snapshot VARCHAR(255)');
 
         // Operators table enhancements
         await db.query('ALTER TABLE operators ADD COLUMN IF NOT EXISTS last_active_at TIMESTAMP');
@@ -1952,6 +1956,7 @@ app.use('/api/families', familyRoutes);
 app.use('/api/nobility', nobilityRoutes);
 app.use('/api/store', storeRoutes);
 app.use('/api/vip', vipRoutes);
+app.use('/api/admin/crm', adminCrmRoutes);
 
 // TEMPORARY: Fix Genders Route
 app.get('/api/admin/fix-genders', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
@@ -1991,7 +1996,8 @@ app.get('/api/admin/payments', authenticateToken, authorizeRole('admin', 'super_
                 p.*, 
                 COALESCE(u.display_name, u.username, 'Bilinmeyen') as user_name, 
                 u.email,
-                COALESCE(cp.name, (SELECT name FROM coin_packages WHERE price::numeric = p.amount::numeric LIMIT 1), CONCAT(COALESCE(p.coin_amount, 0), ' Coin')) as package_name
+                COALESCE(p.coin_amount, cp.coins, 0) as coin_amount,
+                COALESCE(p.package_name_snapshot, cp.name, (SELECT name FROM coin_packages WHERE price::numeric = p.amount::numeric LIMIT 1), CONCAT(COALESCE(p.coin_amount, cp.coins, 0), ' Coin')) as package_name
             FROM payments p
             LEFT JOIN users u ON p.user_id::text = u.id::text
             LEFT JOIN coin_packages cp ON p.package_id = cp.id
@@ -3246,19 +3252,35 @@ app.post('/api/admin/users/:id/unban', authenticateToken, authorizeRole('admin',
 // MANAGE BALANCE
 app.post('/api/admin/users/:id/balance', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
     const { id } = req.params;
-    const { amount } = req.body; // Can be positive or negative
+    const amount = parseInt(req.body.amount, 10);
+    const reason = (req.body.reason || '').trim();
+
+    if (isNaN(amount) || amount === 0) {
+        return res.status(400).json({ error: 'Geçerli bir miktar giriniz.' });
+    }
 
     try {
         const result = await db.query(
             `UPDATE users 
-             SET balance = balance + $1,
-                 total_spent = total_spent + (CASE WHEN $1 > 0 THEN $1 ELSE 0 END)
+             SET balance = GREATEST(0, COALESCE(balance, 0) + $1)
              WHERE id = $2 RETURNING balance`,
             [amount, id]
         );
 
+        if (result.rows.length === 0) {
+            return res.status(404).json({ error: 'Kullanıcı bulunamadı.' });
+        }
+
+        const txType = amount > 0 ? 'admin_grant' : 'admin_deduct';
+        const txDesc = reason || (amount > 0 ? 'Admin Manuel Coin Yükleme' : 'Admin Manuel Coin Kesintisi');
+        await db.query(
+            'INSERT INTO transactions (user_id, amount, type, description) VALUES ($1, $2, $3, $4)',
+            [id, amount, txType, txDesc]
+        );
+
         // 3. Emit Real-time Update
         io.emit('balance_update', { userId: id, newBalance: result.rows[0].balance });
+        io.emit('admin_balance_update', { userId: id, newBalance: result.rows[0].balance });
 
         res.json({ success: true, newBalance: result.rows[0].balance });
     } catch (err) {
@@ -3812,8 +3834,8 @@ app.post('/api/purchase', authenticateToken, async (req, res) => {
 
         // 4. Record Payment
         await db.query(
-            'INSERT INTO payments (user_id, package_id, transaction_id, amount, status) VALUES ($1, $2, $3, $4, $5)',
-            [userId, packageId, transactionId || `manual_${Date.now()}`, price, 'completed']
+            'INSERT INTO payments (user_id, package_id, transaction_id, amount, coin_amount, payment_method, package_name_snapshot, status) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
+            [userId, packageId, transactionId || `manual_${Date.now()}`, price, coinsToAdd, 'google_play', packageName, 'completed']
         );
 
         // 5. Record Transaction
@@ -6711,26 +6733,34 @@ async function runMessageScheduler() {
                 AND id NOT IN (SELECT id FROM users WHERE role != 'user')
             `;
             
-            if (sch.target === 'inactive') userQuery += " AND last_login < NOW() - interval '3 days'";
+            if (sch.target === 'inactive') userQuery += " AND COALESCE(last_login_at, created_at) < NOW() - interval '3 days'";
             else if (sch.target === 'new') userQuery += " AND created_at > NOW() - interval '7 days'";
             
             const users = await db.query(userQuery + " ORDER BY RANDOM() LIMIT 20", [targetGender]);
+
+            const opInfoRes = await db.query("SELECT COALESCE(display_name, name, username) as display_name, avatar_url FROM users WHERE id = $1", [sch.operator_id]);
+            const opName = opInfoRes.rows[0]?.display_name || 'Yeni Mesaj!';
+            const opAvatar = opInfoRes.rows[0]?.avatar_url || null;
             
             for (const u of users.rows) {
                 // Check if already has a chat
                 let chatRes = await db.query(
-                    'SELECT id FROM chats WHERE (user1_id = $1 AND user2_id = $2) OR (user1_id = $2 AND user2_id = $1)',
-                    [sch.operator_id, u.id]
+                    'SELECT id FROM chats WHERE (user_id = $1 AND operator_id = $2) OR (user_id = $2 AND operator_id = $1) LIMIT 1',
+                    [u.id, sch.operator_id]
                 );
                 let chatId;
                 if (chatRes.rows.length === 0) {
                     const newChat = await db.query(
-                        'INSERT INTO chats (user1_id, user2_id) VALUES ($1, $2) RETURNING id',
-                        [sch.operator_id, u.id]
+                        'INSERT INTO chats (user_id, operator_id, last_message, last_message_at) VALUES ($1, $2, $3, NOW()) RETURNING id',
+                        [u.id, sch.operator_id, sch.message_template]
                     );
                     chatId = newChat.rows[0].id;
                 } else {
                     chatId = chatRes.rows[0].id;
+                    await db.query(
+                        'UPDATE chats SET last_message = $1, last_message_at = NOW() WHERE id = $2',
+                        [sch.message_template, chatId]
+                    );
                 }
 
                 // --- DUPLICATE PREVENTION ---
@@ -6747,15 +6777,21 @@ async function runMessageScheduler() {
 
                 // Send message
                 await db.query(
-                    'INSERT INTO messages (chat_id, sender_id, content, type) VALUES ($1, $2, $3, $4)',
+                    'INSERT INTO messages (chat_id, sender_id, content, content_type, is_read, created_at) VALUES ($1, $2, $3, $4, false, NOW())',
                     [chatId, sch.operator_id, sch.message_template, 'text']
                 );
                 
                 // Trigger push
                 sendPushNotification(u.id, {
-                    title: 'Yeni Mesaj!',
+                    title: opName,
                     body: sch.message_template,
-                    data: { chatId: chatId.toString(), type: 'message' }
+                    data: {
+                        chatId: chatId.toString(),
+                        senderId: sch.operator_id.toString(),
+                        senderName: opName,
+                        senderAvatar: opAvatar,
+                        type: 'message'
+                    }
                 }).catch(() => {});
             }
         }
@@ -6767,6 +6803,10 @@ async function runMessageScheduler() {
 // Start Scheduler (runs every 5 minutes). Do not keep test processes alive.
 const messageScheduler = setInterval(runMessageScheduler, 5 * 60 * 1000);
 messageScheduler.unref?.();
+
+// Offline Hook Re-engagement Scheduler (runs every 15 minutes to bring inactive users back to the app)
+const offlineHookScheduler = setInterval(() => runOfflineHookNotifications(io), 15 * 60 * 1000);
+offlineHookScheduler.unref?.();
 
 
 
@@ -6891,26 +6931,31 @@ app.get('/api/users/balance', authenticateToken, async (req, res) => {
 
                 if (coinsToAdd > 0) {
                     await db.query('BEGIN');
-                    await db.query(
-                        `UPDATE users 
-                         SET balance = COALESCE(balance, 0) + $1, 
-                             total_spent = COALESCE(total_spent, 0) + $2 
-                         WHERE id = $3`,
-                        [coinsToAdd, claimPrice, userId]
-                    );
+                    const isStarterClaim = isStarterProductId(claimItem.product_id);
+                    const canCreditStarter = !isStarterClaim || await claimStarterPackLock(db, String(userId), coinsToAdd);
 
-                    await db.query(
-                        `INSERT INTO payments (user_id, transaction_id, amount, status) 
-                         VALUES ($1, $2, $3, 'completed') 
-                         ON CONFLICT (transaction_id) DO NOTHING`,
-                        [userId, txId, claimPrice || coinsToAdd]
-                    );
+                    if (canCreditStarter) {
+                        await db.query(
+                            `UPDATE users 
+                             SET balance = COALESCE(balance, 0) + $1, 
+                                 total_spent = COALESCE(total_spent, 0) + $2 
+                             WHERE id = $3`,
+                            [coinsToAdd, claimPrice, userId]
+                        );
 
-                    await db.query(
-                        `INSERT INTO transactions (user_id, amount, type, description) 
-                         VALUES ($1, $2, 'purchase', $3)`,
-                        [userId, coinsToAdd, `Otomatik Eşleşen Coin (${claimItem.product_id})`]
-                    );
+                        await db.query(
+                            `INSERT INTO payments (user_id, transaction_id, amount, coin_amount, payment_method, package_name_snapshot, status) 
+                             VALUES ($1, $2, $3, $4, 'revenuecat_autoclaim', $5, 'completed') 
+                             ON CONFLICT (transaction_id) DO NOTHING`,
+                            [userId, txId, claimPrice || coinsToAdd, coinsToAdd, claimItem.product_id]
+                        );
+
+                        await db.query(
+                            `INSERT INTO transactions (user_id, amount, type, description) 
+                             VALUES ($1, $2, 'purchase', $3)`,
+                            [userId, coinsToAdd, `Otomatik Eşleşen Coin (${claimItem.product_id})`]
+                        );
+                    }
 
                     await db.query(
                         `UPDATE processed_webhook_events 
@@ -6920,20 +6965,24 @@ app.get('/api/users/balance', authenticateToken, async (req, res) => {
                     );
 
                     await db.query('COMMIT');
-                    console.log(`[AUTO-CLAIM SUCCESS] Credited ${coinsToAdd} coins to user ${userId} from tx ${txId}`);
-                    try {
-                        const claimIo = req.app.get('io');
-                        if (claimIo) {
-                            claimIo.emit('new_payment', {
-                                user_id: userId,
-                                amount: claimPrice || coinsToAdd,
-                                transaction_id: txId,
-                                status: 'completed',
-                                created_at: new Date().toISOString()
-                            });
-                            claimIo.emit('admin_payment_update', { type: 'auto-claim', user_id: userId });
-                        }
-                    } catch (_) {}
+                    if (canCreditStarter) {
+                        console.log(`[AUTO-CLAIM SUCCESS] Credited ${coinsToAdd} coins to user ${userId} from tx ${txId}`);
+                        try {
+                            const claimIo = req.app.get('io');
+                            if (claimIo) {
+                                claimIo.emit('new_payment', {
+                                    user_id: userId,
+                                    amount: claimPrice || coinsToAdd,
+                                    transaction_id: txId,
+                                    status: 'completed',
+                                    created_at: new Date().toISOString()
+                                });
+                                claimIo.emit('admin_payment_update', { type: 'auto-claim', user_id: userId });
+                            }
+                        } catch (_) {}
+                    } else {
+                        console.log(`[AUTO-CLAIM SKIP] Starter pack already credited to user ${userId} (tx: ${txId})`);
+                    }
                 }
             }
         } catch (claimErr) {

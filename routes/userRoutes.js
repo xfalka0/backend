@@ -147,7 +147,7 @@ router.get('/:id', async (req, res) => {
                 const decoded = jwt.verify(token, SECRET_KEY);
                 if (decoded) {
                     if (decoded.id && decoded.id.toString() !== targetUserId.toString()) {
-                        const { sendPushNotification } = require('../utils/pushNotifications');
+                        const { sendPushNotification } = require('../utils/notificationUtils');
                         sendPushNotification(targetUserId, {
                             title: '👀 Profiline Bakan Biri Var!',
                             body: 'Biri senin profilini inceledi. Hemen tıkla ve kim olduğuna bak!',

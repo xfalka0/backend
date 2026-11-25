@@ -1,4 +1,3 @@
-
 import * as Notifications from 'expo-notifications';
 import * as Device from 'expo-device';
 import { Platform } from 'react-native';
@@ -6,6 +5,8 @@ import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
 import { API_URL } from '../config';
+
+const FALLBACK_EAS_PROJECT_ID = '39f2753e-8bbe-487c-a7a8-e83a7cfe4d74';
 
 // Configure how notifications are handled when the app is in foreground
 Notifications.setNotificationHandler({
@@ -18,15 +19,25 @@ Notifications.setNotificationHandler({
 
 export const NotificationService = {
   /**
-   * Registers for push notifications and returns the token
+   * Registers Android notification channel & push notifications and returns the Expo Push Token
    */
   registerForPushNotificationsAsync: async () => {
     try {
-      let token;
+      if (Platform.OS === 'android') {
+        await Notifications.setNotificationChannelAsync('default', {
+          name: 'Genel Bildirimler',
+          importance: Notifications.AndroidImportance.MAX,
+          vibrationPattern: [0, 250, 250, 250],
+          lightColor: '#EC4899',
+          sound: 'default',
+          enableLights: true,
+          enableVibrate: true,
+          showBadge: true,
+        });
+      }
 
       if (!Device.isDevice) {
-        console.log('[NOTIFY] Must use physical device for Push Notifications');
-        return null;
+        console.log('[NOTIFY] Emulator/non-physical device detected, attempting push registration...');
       }
 
       const { status: existingStatus } = await Notifications.getPermissionsAsync();
@@ -38,27 +49,21 @@ export const NotificationService = {
       }
 
       if (finalStatus !== 'granted') {
-        console.log('[NOTIFY] Failed to get push token for push notification!');
+        console.log('[NOTIFY] Push notification permission not granted.');
         return null;
       }
 
-      // Get the token from Expo
-      const projectId = Constants.expoConfig?.extra?.eas?.projectId;
-      token = (await Notifications.getExpoPushTokenAsync({ projectId })).data;
-      console.log('[NOTIFY] Expo Push Token:', token);
+      const projectId =
+        Constants.expoConfig?.extra?.eas?.projectId ??
+        Constants.easConfig?.projectId ??
+        FALLBACK_EAS_PROJECT_ID;
 
-      if (Platform.OS === 'android') {
-        Notifications.setNotificationChannelAsync('default', {
-          name: 'default',
-          importance: Notifications.AndroidImportance.MAX,
-          vibrationPattern: [0, 250, 250, 250],
-          lightColor: '#FF231F7C',
-        });
-      }
+      const token = (await Notifications.getExpoPushTokenAsync({ projectId })).data;
+      console.log('[NOTIFY] Expo Push Token:', token);
 
       return token;
     } catch (err) {
-      console.warn('[NOTIFY] Error registering push notifications (ignoring EAS project error in dev):', err.message);
+      console.warn('[NOTIFY] Error registering push notifications:', err.message);
       return null;
     }
   },

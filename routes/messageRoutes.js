@@ -149,6 +149,10 @@ router.post('/:messageId/unlock', authenticateToken, async (req, res) => {
 
         // 1. Deduct Coins from Customer
         await client.query('UPDATE users SET balance = balance - $1 WHERE id = $2', [unlockCost, userId]);
+        await client.query(
+            'INSERT INTO transactions (user_id, amount, type, description) VALUES ($1, $2, $3, $4)',
+            [userId, -Math.round(unlockCost), 'spend_unlock', 'Kilitli medya açma']
+        );
         
         // 2. Mark Message as Unlocked
         const updated = await client.query('UPDATE messages SET is_unlocked = true WHERE id = $1 RETURNING *', [messageId]);

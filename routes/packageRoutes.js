@@ -106,8 +106,10 @@ router.post('/purchase', authenticateToken, async (req, res) => {
         const isVip = newVipLevel > 0;
 
         await db.query('UPDATE users SET vip_level = $1, is_vip = $2 WHERE id = $3', [newVipLevel, isVip, userId]);
-        await db.query('INSERT INTO payments (user_id, package_id, transaction_id, amount, status) VALUES ($1, $2, $3, $4, $5)',
-            [userId, packageId, transactionId || `manual_${Date.now()}`, price, 'completed']);
+        await db.query(
+            'INSERT INTO payments (user_id, package_id, transaction_id, amount, coin_amount, payment_method, package_name_snapshot, status) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
+            [userId, packageId, transactionId || `manual_${Date.now()}`, price, coinsToAdd, 'in_app', packageName, 'completed']
+        );
         await db.query('INSERT INTO transactions (user_id, amount, type, description) VALUES ($1, $2, $3, $4)',
             [userId, coinsToAdd, 'purchase', `${packageName} satın alındı`]);
         await db.query('COMMIT');

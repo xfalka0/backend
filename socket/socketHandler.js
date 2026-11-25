@@ -676,11 +676,21 @@ function initializeSockets(io) {
                         cost = 400;
                     }
 
-                    const userResult = await client.query('SELECT balance, is_vip FROM users WHERE id = $1 FOR UPDATE', [senderId]);
+                    const userResult = await client.query(
+                        'SELECT balance, is_vip, is_premium, premium_expire_date, vip_expire_date, vip_level FROM users WHERE id = $1 FOR UPDATE',
+                        [senderId]
+                    );
                     if (userResult.rows.length === 0) throw new Error('User not found');
                     
-                    const isVip = userResult.rows[0].is_vip;
-                    if (type === 'location' && !isVip && !isManagement) {
+                    const uRow = userResult.rows[0];
+                    const hasActiveSub = Boolean(
+                        (uRow.premium_expire_date && new Date(uRow.premium_expire_date) > new Date()) ||
+                        (uRow.vip_expire_date && new Date(uRow.vip_expire_date) > new Date())
+                    );
+                    const hasPremiumOrVip = Boolean(
+                        uRow.is_premium || uRow.is_vip || hasActiveSub || parseInt(uRow.vip_level || 0, 10) > 0
+                    );
+                    if (type === 'location' && !hasPremiumOrVip && !isManagement) {
                         throw new Error('PREMIUM_REQUIRED');
                     }
 

@@ -318,7 +318,7 @@ async function handleSuccessfulPayment(userId, event, io) {
             }
 
             const user = userRes.rows[0];
-            const numericUserId = parseInt(user.id, 10);
+            const resolvedUserId = user.id;
             let baseDate = new Date();
             let startDate = new Date();
 
@@ -336,29 +336,33 @@ async function handleSuccessfulPayment(userId, event, io) {
                      vip_start_date = $1::timestamptz, 
                      vip_expire_date = $2::timestamp 
                  WHERE id = $3`,
-                [startDate, baseDate, numericUserId]
+                [startDate, baseDate, resolvedUserId]
             );
 
-            await db.query('INSERT INTO payments (user_id, transaction_id, amount, status) VALUES ($1, $2, $3, $4)',
-                [numericUserId, transactionId, months, 'completed_vip']);
+            await db.query(
+                'INSERT INTO payments (user_id, transaction_id, amount, payment_method, package_name_snapshot, status) VALUES ($1, $2, $3, $4, $5, $6)',
+                [resolvedUserId, transactionId, price || months, 'revenuecat', cleanProductId, 'completed_vip']
+            );
 
             await db.query('COMMIT');
-            console.log(`[WEBHOOK VIP SUCCESS] Activated ${months} months VIP for user ${numericUserId} until ${baseDate.toISOString()}`);
+            console.log(`[WEBHOOK VIP SUCCESS] Activated ${months} months VIP for user ${resolvedUserId} until ${baseDate.toISOString()}`);
 
             if (io) {
-                io.to(`user_${numericUserId}`).emit('vip_level_up', {
+                io.to(`user_${resolvedUserId}`).emit('vip_level_up', {
                     is_vip: true,
+                    is_premium: true,
                     vip_level: Math.max(user.vip_level || 0, 1),
+                    premium_expire_date: baseDate,
                     vip_expire_date: baseDate
                 });
                 io.emit('new_payment', {
-                    user_id: numericUserId,
-                    amount: months,
+                    user_id: resolvedUserId,
+                    amount: price || months,
                     transaction_id: transactionId,
                     status: 'completed_vip',
                     created_at: new Date().toISOString()
                 });
-                io.emit('admin_payment_update', { type: 'vip', user_id: numericUserId });
+                io.emit('admin_payment_update', { type: 'vip', user_id: resolvedUserId });
             }
             return { success: true };
         } catch (vipErr) {

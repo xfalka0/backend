@@ -134,10 +134,10 @@ export default function ChatScreen({ route, navigation }) {
     } = route.params;
     const isFamilyChat = chatType === 'family';
 
-    // User Handling
+    // User Handling (routeUser has lowest priority so stale navigation params never override fresh Store/API user state)
     const globalUser = useAppStore(state => state.user) || {};
-    const [currentUser, setCurrentUser] = useState({ ...(contextUser || {}), ...(globalUser || {}), ...(routeUser || {}) });
-    const effectiveUser = { ...(currentUser || {}), ...(contextUser || {}), ...(globalUser || {}), ...(routeUser || {}) };
+    const [currentUser, setCurrentUser] = useState({ ...(routeUser || {}), ...(contextUser || {}), ...(globalUser || {}) });
+    const effectiveUser = { ...(routeUser || {}), ...(contextUser || {}), ...(currentUser || {}), ...(globalUser || {}) };
     const user = effectiveUser;
     const hasActiveExpire = Boolean(
         (effectiveUser?.premium_expire_date && new Date(effectiveUser.premium_expire_date) > new Date()) ||
@@ -253,42 +253,60 @@ export default function ChatScreen({ route, navigation }) {
         return () => { active = false; };
     }, [operatorId, name, avatar_url]);
 
-    useEffect(() => {
-        let active = true;
-        const syncCurrentUser = async () => {
-            try {
-                const storedUserStr = await AsyncStorage.getItem('user');
-                let targetId = null;
-                if (storedUserStr) {
-                    const parsed = JSON.parse(storedUserStr);
-                    if (active) {
-                        setCurrentUser(prev => ({ ...prev, ...parsed }));
-                        if (parsed.balance !== undefined) setCurrentBalance(parsed.balance);
-                    }
-                    targetId = parsed.id;
-                }
-                const token = await AsyncStorage.getItem('token');
-                const uid = targetId || routeUser?.id || globalUser?.id || contextUser?.id;
-                if (uid && token) {
-                    const res = await axios.get(`${API_URL}/users/${uid}`, {
-                        headers: { Authorization: `Bearer ${token}` }
-                    });
-                    if (res.data && active) {
-                        setCurrentUser(res.data);
-                        if (res.data.balance !== undefined) setCurrentBalance(res.data.balance);
-                        await AsyncStorage.setItem('user', JSON.stringify(res.data));
-                        if (useAppStore.getState().setUser) {
-                            useAppStore.getState().setUser(res.data);
-                        }
-                    }
-                }
-            } catch (err) {
-                console.warn('[ChatScreen] syncCurrentUser error:', err.message);
+    const syncCurrentUser = useCallback(async () => {
+        try {
+            const storedUserStr = await AsyncStorage.getItem('user');
+            let targetId = null;
+            if (storedUserStr) {
+                const parsed = JSON.parse(storedUserStr);
+                setCurrentUser(prev => ({ ...prev, ...parsed }));
+                if (parsed.balance !== undefined) setCurrentBalance(parsed.balance);
+                targetId = parsed.id;
             }
-        };
-        syncCurrentUser();
-        return () => { active = false; };
-    }, []);
+            const token = await AsyncStorage.getItem('token');
+            const uid = targetId || globalUser?.id || contextUser?.id || routeUser?.id;
+            if (uid && token) {
+                const res = await axios.get(`${API_URL}/users/${uid}`, {
+                    headers: { Authorization: `Bearer ${token}` }
+                });
+                if (res.data) {
+                    const latestStoreUser = useAppStore.getState().user;
+                    const localExpire = latestStoreUser?.premium_expire_date || latestStoreUser?.vip_expire_date;
+                    const hasLocalActivePremium = Boolean(
+                        latestStoreUser?.is_premium && (!localExpire || new Date(localExpire) > new Date())
+                    );
+                    const serverExpire = res.data.premium_expire_date || res.data.vip_expire_date;
+                    const hasServerActivePremium = Boolean(
+                        res.data.is_premium || (serverExpire && new Date(serverExpire) > new Date())
+                    );
+
+                    const mergedUser = (!hasServerActivePremium && hasLocalActivePremium)
+                        ? {
+                            ...res.data,
+                            is_premium: true,
+                            premium_expire_date: latestStoreUser.premium_expire_date,
+                            vip_expire_date: latestStoreUser.vip_expire_date,
+                          }
+                        : res.data;
+
+                    setCurrentUser(mergedUser);
+                    if (mergedUser.balance !== undefined) setCurrentBalance(mergedUser.balance);
+                    await AsyncStorage.setItem('user', JSON.stringify(mergedUser));
+                    if (useAppStore.getState().setUser) {
+                        useAppStore.getState().setUser(mergedUser);
+                    }
+                }
+            }
+        } catch (err) {
+            console.warn('[ChatScreen] syncCurrentUser error:', err.message);
+        }
+    }, [globalUser?.id, contextUser?.id, routeUser?.id]);
+
+    useFocusEffect(
+        useCallback(() => {
+            syncCurrentUser();
+        }, [syncCurrentUser])
+    );
 
     const [chatId, setChatId] = useState(existingChatId || (isFamilyChat && familyId ? `family-${familyId}` : null));
 

@@ -20,6 +20,7 @@ import StickyPurchaseBar from '../components/store/StickyPurchaseBar';
 import PremiumSuccessModal from '../components/store/PremiumSuccessModal';
 import ActiveSubscriptionBanner from '../components/store/ActiveSubscriptionBanner';
 import { useAppStore } from '../store/useAppStore';
+import { useChat } from '../contexts/ChatContext';
 
 const PREMIUM_PLANS = [
     { months: 1, badge: 'BAŞLANGIÇ', price: '449,99 ₺', productId: 'premium_1_month' },
@@ -31,6 +32,7 @@ const WEEKLY_SOCIAL_PROOF = '2.340';
 
 export default function StoreScreen({ navigation, route }) {
     const { user: initialUser } = route.params || {};
+    const { refreshUser } = useChat() || {};
     const insets = useSafeAreaInsets();
     const tabOffset = LAYOUT.tabBarHeight + LAYOUT.tabBarBottomOffset;
 
@@ -149,6 +151,7 @@ export default function StoreScreen({ navigation, route }) {
         useAppStore.getState().setUser(updatedUser);
         setCurrentUser(updatedUser);
         await AsyncStorage.setItem('user', JSON.stringify(updatedUser));
+        refreshUser?.({ force: true });
         return true;
     };
 
@@ -204,6 +207,7 @@ export default function StoreScreen({ navigation, route }) {
                 useAppStore.getState().setUser(updatedUser);
                 setCurrentUser(updatedUser);
                 await AsyncStorage.setItem('user', JSON.stringify(updatedUser));
+                refreshUser?.({ force: true });
 
                 setPremiumSuccessVisible(true);
             } else if (!result.cancelled) {

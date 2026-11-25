@@ -2,7 +2,8 @@ const express = require('express');
 const router = express.Router();
 const db = require('../db');
 const { authenticateToken, authorizeRole } = require('../middleware/auth');
-const { getVipLevel } = require('../utils/vipUtils');
+const { withTransaction } = require('../utils/dbUtils');
+const { creditCoinPurchaseAtomic } = require('../utils/revenuecatUtils');
 
 // GET COIN PACKAGES (Admin)
 router.get('/', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
@@ -63,56 +64,45 @@ router.post('/purchase', authenticateToken, async (req, res) => {
     }
 
     try {
-        await db.query('BEGIN');
-
-        // Check if transactionId was already processed
-        const existingTx = await db.query('SELECT id FROM payments WHERE transaction_id = $1', [transactionId]);
-        if (existingTx.rows.length > 0) {
-            await db.query('ROLLBACK');
-            return res.status(400).json({ error: 'Bu işlem zaten gerçekleştirilmiş.' });
-        }
-
         const pkgRes = await db.query(
             'SELECT * FROM coin_packages WHERE id = $1 OR revenuecat_id = $2',
-            [isNaN(productId) ? -1 : parseInt(productId), productId]
+            [isNaN(productId) ? -1 : parseInt(productId, 10), productId]
         );
-        if (pkgRes.rows.length === 0) { await db.query('ROLLBACK'); return res.status(404).json({ error: 'Paket bulunamadı.' }); }
+        if (pkgRes.rows.length === 0) {
+            return res.status(404).json({ error: 'Paket bulunamadı.' });
+        }
 
         const price = parseFloat(pkgRes.rows[0].price);
-        const coinsToAdd = parseInt(pkgRes.rows[0].coins);
+        const coinsToAdd = parseInt(pkgRes.rows[0].coins, 10);
         const packageName = pkgRes.rows[0].name;
         const packageId = pkgRes.rows[0].id;
 
-        const updateRes = await db.query(
-            `UPDATE users SET total_spent = COALESCE(total_spent, 0) + $1, balance = COALESCE(balance, 0) + $2, vip_xp = COALESCE(vip_xp, 0) + $2 WHERE id = $3 RETURNING balance, total_spent, vip_xp, vip_level`,
-            [price, coinsToAdd, userId]
+        const txResult = await withTransaction(db, (client) =>
+            creditCoinPurchaseAtomic(client, {
+                userId,
+                coinsToAdd,
+                price,
+                packageId,
+                packageName,
+                primaryTxId: transactionId,
+                paymentMethod: 'in_app',
+                txDescription: `${packageName} satın alındı`,
+                allowPairSourceMethods: ['revenuecat', 'revenuecat_autoclaim'],
+                pairFromClientToCanonical: false,
+            })
         );
-        if (updateRes.rows.length === 0) { await db.query('ROLLBACK'); return res.status(404).json({ error: 'Kullanıcı güncellenemedi.' }); }
 
-        const newBalance = updateRes.rows[0].balance;
-        const newTotalSpent = parseFloat(updateRes.rows[0].total_spent);
-        const newVipXp = parseInt(updateRes.rows[0].vip_xp || 0, 10);
-        const oldVipLevel = parseInt(updateRes.rows[0].vip_level || 0, 10);
+        if (txResult.userNotFound) {
+            return res.status(404).json({ error: 'Kullanıcı güncellenemedi.' });
+        }
+        if (txResult.alreadyProcessed) {
+            return res.status(400).json({ error: 'Bu işlem zaten gerçekleştirilmiş.' });
+        }
 
-        let newVipLevel = getVipLevel(newVipXp);
-        if (newTotalSpent >= 10000) newVipLevel = Math.max(newVipLevel, 6);
-        else if (newTotalSpent >= 5000) newVipLevel = Math.max(newVipLevel, 5);
-        else if (newTotalSpent >= 3500) newVipLevel = Math.max(newVipLevel, 4);
-        else if (newTotalSpent >= 2000) newVipLevel = Math.max(newVipLevel, 3);
-        else if (newTotalSpent >= 1000) newVipLevel = Math.max(newVipLevel, 2);
-        else if (newTotalSpent >= 500) newVipLevel = Math.max(newVipLevel, 1);
-
-        newVipLevel = Math.max(newVipLevel, oldVipLevel);
-        const isVip = newVipLevel > 0;
-
-        await db.query('UPDATE users SET vip_level = $1, is_vip = $2 WHERE id = $3', [newVipLevel, isVip, userId]);
-        await db.query(
-            'INSERT INTO payments (user_id, package_id, transaction_id, amount, coin_amount, payment_method, package_name_snapshot, status) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
-            [userId, packageId, transactionId || `manual_${Date.now()}`, price, coinsToAdd, 'in_app', packageName, 'completed']
-        );
-        await db.query('INSERT INTO transactions (user_id, amount, type, description) VALUES ($1, $2, $3, $4)',
-            [userId, coinsToAdd, 'purchase', `${packageName} satın alındı`]);
-        await db.query('COMMIT');
+        const newBalance = txResult.balance;
+        const newVipLevel = txResult.vipLevel;
+        const oldVipLevel = txResult.oldVipLevel;
+        const newVipXp = txResult.vipXp;
 
         const io = req.app.get('io');
         if (io) {
@@ -176,13 +166,11 @@ router.post('/purchase', authenticateToken, async (req, res) => {
             console.error('[REFERRAL_PURCHASE_REWARD_ERROR]', refErr);
         }
         if (io) {
-            io.emit('balance_update', { userId, newBalance });
             io.emit('admin_balance_update', { userId, newBalance });
         }
 
         res.json({ success: true, balance: newBalance, hearts: newBalance, vip_level: newVipLevel, coins_added: coinsToAdd });
     } catch (err) {
-        await db.query('ROLLBACK');
         res.status(500).json({ error: err.message });
     }
 });

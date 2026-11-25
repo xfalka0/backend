@@ -4,6 +4,7 @@ const db = require('../db');
 const { authenticateToken } = require('../middleware/auth');
 const { getVipLevel, getVipProgress } = require('../utils/vipUtils');
 const { logActivity } = require('../utils/helpers');
+const { withTransaction } = require('../utils/dbUtils');
 
 // VIP XP PURCHASE ENDPOINT
 // User spends coins to gain VIP XP (1 coin = 1 XP)
@@ -124,79 +125,174 @@ router.get('/progress', authenticateToken, async (req, res) => {
 // PREMIUM UPGRADE DIRECT
 // Mobile app calls this when purchase is successful or when syncing an active store subscription
 router.post('/upgrade-direct', authenticateToken, async (req, res) => {
-    const { months, transactionId, isSync = false, expireDate: clientExpireDate } = req.body;
+    const { months, productId, transactionId, isSync = false, expireDate: clientExpireDate } = req.body;
     const userId = req.user.id;
-    
+
     try {
         const parsedMonths = parseInt(months, 10);
         if (!parsedMonths || parsedMonths <= 0) {
             return res.status(400).json({ error: 'Geçersiz süre.' });
         }
-        
-        // Add months to current expire date or from now
-        const userRes = await db.query('SELECT premium_expire_date, vip_expire_date, is_premium, premium_start_date, vip_start_date FROM users WHERE id = $1', [userId]);
-        if (userRes.rows.length === 0) {
-            return res.status(404).json({ error: 'Kullanıcı bulunamadı.' });
-        }
-        
-        const user = userRes.rows[0];
-        const now = new Date();
-        const existingExpire = user.premium_expire_date || user.vip_expire_date;
-        const hasActiveFutureExpire = Boolean(existingExpire && new Date(existingExpire) > now);
 
-        // Prevent automatic sync/restore calls from stacking extra months onto an already-active subscription
-        if (isSync && hasActiveFutureExpire) {
-            if (!user.is_premium) {
-                await db.query('UPDATE users SET is_premium = true WHERE id = $1', [userId]);
+        const rawTx = typeof transactionId === 'string' ? transactionId.trim() : '';
+        const isSyntheticTx = !rawTx || rawTx === String(userId) || rawTx.startsWith('rc_');
+        const realTxId = isSyntheticTx ? null : rawTx;
+
+        const outcome = await withTransaction(db, async (client) => {
+            const userRes = await client.query(
+                'SELECT id, premium_expire_date, vip_expire_date, is_premium, premium_start_date, vip_start_date FROM users WHERE id::text = $1::text FOR UPDATE',
+                [String(userId)]
+            );
+            if (userRes.rows.length === 0) {
+                return { status: 404, body: { error: 'Kullanıcı bulunamadı.' } };
             }
-            return res.json({
-                success: true,
-                already_active: true,
-                is_premium: true,
-                premium_start_date: user.premium_start_date || user.vip_start_date || now,
-                premium_expire_date: existingExpire,
-                vip_expire_date: existingExpire
-            });
+
+            const user = userRes.rows[0];
+            const now = new Date();
+            const existingExpire = user.premium_expire_date || user.vip_expire_date;
+            const hasActiveFutureExpire = Boolean(existingExpire && new Date(existingExpire) > now);
+            const existingStart = user.premium_start_date || user.vip_start_date || now;
+
+            // 1. If this exact transactionId was already processed (e.g. by RevenueCat webhook), never stack again
+            if (realTxId) {
+                const existingTx = await client.query(
+                    'SELECT id FROM payments WHERE transaction_id = $1',
+                    [realTxId]
+                );
+                if (existingTx.rows.length > 0) {
+                    if (!user.is_premium) {
+                        await client.query('UPDATE users SET is_premium = true WHERE id = $1', [user.id]);
+                    }
+                    return {
+                        status: 200,
+                        alreadyActive: true,
+                        body: {
+                            success: true,
+                            already_active: true,
+                            is_premium: true,
+                            premium_start_date: existingStart,
+                            premium_expire_date: existingExpire || now,
+                            vip_expire_date: existingExpire || now
+                        }
+                    };
+                }
+            }
+
+            // 2. Prevent automatic sync/restore calls from stacking extra months onto an already-active subscription
+            if (isSync && hasActiveFutureExpire) {
+                if (!user.is_premium) {
+                    await client.query('UPDATE users SET is_premium = true WHERE id = $1', [user.id]);
+                }
+                return {
+                    status: 200,
+                    alreadyActive: true,
+                    body: {
+                        success: true,
+                        already_active: true,
+                        is_premium: true,
+                        premium_start_date: existingStart,
+                        premium_expire_date: existingExpire,
+                        vip_expire_date: existingExpire
+                    }
+                };
+            }
+
+            // 3. Prevent client + webhook double-stacking on the same purchase (even if transactionIds differ)
+            if (hasActiveFutureExpire) {
+                const recentVipPayment = await client.query(
+                    `SELECT id FROM payments
+                     WHERE user_id::text = $1::text
+                       AND status = 'completed_vip'
+                       AND created_at > NOW() - INTERVAL '120 seconds'
+                     LIMIT 1`,
+                    [String(user.id)]
+                );
+                if (recentVipPayment.rows.length > 0) {
+                    if (!user.is_premium) {
+                        await client.query('UPDATE users SET is_premium = true WHERE id = $1', [user.id]);
+                    }
+                    return {
+                        status: 200,
+                        alreadyActive: true,
+                        body: {
+                            success: true,
+                            already_active: true,
+                            is_premium: true,
+                            premium_start_date: existingStart,
+                            premium_expire_date: existingExpire,
+                            vip_expire_date: existingExpire
+                        }
+                    };
+                }
+            }
+
+            const startDate = hasActiveFutureExpire ? existingStart : now;
+            const parsedClientExpire = clientExpireDate ? new Date(clientExpireDate) : null;
+            const hasFullStoreExpire = Boolean(
+                parsedClientExpire &&
+                !isNaN(parsedClientExpire.getTime()) &&
+                parsedClientExpire.getTime() - now.getTime() > 24 * 60 * 60 * 1000
+            );
+
+            let baseDate;
+            if (hasFullStoreExpire) {
+                // Production store expiration date is authoritative; never stack onto it
+                baseDate = parsedClientExpire;
+            } else {
+                baseDate = hasActiveFutureExpire ? new Date(existingExpire) : new Date(now);
+                baseDate.setMonth(baseDate.getMonth() + parsedMonths);
+            }
+
+            await client.query(
+                `UPDATE users 
+                 SET is_premium = true, 
+                     premium_start_date = $1::timestamptz, 
+                     premium_expire_date = $2::timestamptz,
+                     vip_start_date = $1::timestamptz, 
+                     vip_expire_date = $2::timestamp 
+                 WHERE id = $3`,
+                [startDate, baseDate, user.id]
+            );
+
+            if (!isSync) {
+                const auditTxId = realTxId || `vip_client_${user.id}_${Date.now()}`;
+                await client.query(
+                    `INSERT INTO payments (user_id, transaction_id, amount, payment_method, package_name_snapshot, status)
+                     VALUES ($1, $2, $3, $4, $5, $6)
+                     ON CONFLICT (transaction_id) DO NOTHING`,
+                    [
+                        user.id,
+                        auditTxId,
+                        parsedMonths,
+                        'revenuecat_client',
+                        productId || `premium_${parsedMonths}_months`,
+                        'completed_vip'
+                    ]
+                );
+            }
+
+            return {
+                status: 200,
+                alreadyActive: false,
+                body: {
+                    success: true,
+                    is_premium: true,
+                    premium_start_date: startDate,
+                    premium_expire_date: baseDate,
+                    vip_expire_date: baseDate
+                }
+            };
+        });
+
+        if (outcome.status !== 200) {
+            return res.status(outcome.status).json(outcome.body);
         }
 
-        let baseDate = new Date();
-        let startDate = user.premium_start_date || user.vip_start_date || now;
-        
-        if (hasActiveFutureExpire) {
-            baseDate = new Date(existingExpire);
-        } else {
-            startDate = new Date();
+        if (!outcome.alreadyActive) {
+            logActivity(userId, 'premium_upgrade', `${parsedMonths} aylık premium ${isSync ? 'senkronize edildi' : 'satın aldı'}. (Tx: ${realTxId || transactionId || 'none'})`);
         }
-        
-        // Use valid future store expireDate on first sync if provided, otherwise add purchased months
-        if (isSync && clientExpireDate && !isNaN(new Date(clientExpireDate).getTime()) && new Date(clientExpireDate) > now) {
-            baseDate = new Date(clientExpireDate);
-        } else {
-            baseDate.setMonth(baseDate.getMonth() + parsedMonths);
-        }
-        
-        // Update user: Premium is the subscription with start and expire dates
-        await db.query(
-            `UPDATE users 
-             SET is_premium = true, 
-                 premium_start_date = $1::timestamptz, 
-                 premium_expire_date = $2::timestamptz,
-                 vip_start_date = $1::timestamptz, 
-                 vip_expire_date = $2::timestamp 
-             WHERE id = $3`,
-            [startDate, baseDate, userId]
-        );
-        
-        logActivity(userId, 'premium_upgrade', `${parsedMonths} aylık premium ${isSync ? 'senkronize edildi' : 'satın aldı'}. (Tx: ${transactionId})`);
-        
-        res.json({
-            success: true,
-            is_premium: true,
-            premium_start_date: startDate,
-            premium_expire_date: baseDate,
-            vip_expire_date: baseDate
-        });
-        
+
+        res.json(outcome.body);
     } catch (err) {
         console.error('Premium Upgrade Error:', err.message);
         res.status(500).json({ error: 'Sunucu hatası: ' + err.message });

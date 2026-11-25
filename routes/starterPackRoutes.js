@@ -8,6 +8,11 @@ const {
     claimStarterPackLock,
     withTransaction,
 } = require('../utils/starterPackUtils');
+const {
+    isSyntheticTransactionId,
+    verifyRevenueCatPurchase,
+    creditCoinPurchaseAtomic,
+} = require('../utils/revenuecatUtils');
 
 // Ensure starter_pack_purchases table exists
 ensureStarterPackTable(db).catch(console.error);
@@ -81,102 +86,129 @@ router.post('/purchase', authenticateToken, async (req, res) => {
     const userId = req.user.id.toString();
     const { transactionId } = req.body;
     const cleanTxId = typeof transactionId === 'string' && transactionId.trim() ? transactionId.trim() : null;
+    const syntheticTx = isSyntheticTransactionId(cleanTxId);
 
     try {
+        const rcResult = await verifyRevenueCatPurchase(userId, 'starter300', cleanTxId);
+        let chosenTx = null;
+
+        if (rcResult.verified === true && Array.isArray(rcResult.entries) && rcResult.entries.length > 0) {
+            chosenTx = rcResult.entries[0];
+        } else if (rcResult.verified === false) {
+            // Check if webhook already recorded starter_pack_purchases within 120s
+            for (let attempt = 0; attempt < 2; attempt++) {
+                const spRes = await db.query(
+                    `SELECT s.purchased_at, u.balance FROM starter_pack_purchases s
+                     JOIN users u ON u.id::text = s.user_id
+                     WHERE s.user_id = $1 AND s.purchased_at > NOW() - INTERVAL '120 seconds'`,
+                    [userId]
+                );
+                if (spRes.rows.length > 0) {
+                    const curBal = parseInt(spRes.rows[0].balance || 0, 10);
+                    return res.json({
+                        success: true,
+                        already_processed: true,
+                        coins_added: STARTER_PACK.coins,
+                        new_balance: curBal,
+                        message: `${STARTER_PACK.coins} coin hesabınıza eklendi!`
+                    });
+                }
+                if (attempt === 0) await new Promise((r) => setTimeout(r, 700));
+            }
+            const alreadyEver = await db.query('SELECT 1 FROM starter_pack_purchases WHERE user_id = $1', [userId]);
+            if (alreadyEver.rows.length > 0) {
+                return res.status(400).json({ error: 'Bu paketi daha önce satın aldınız.' });
+            }
+            return res.status(402).json({ error: 'Başlangıç paketi ödemesi RevenueCat tarafından doğrulanamadı.' });
+        }
+
+        const webhooksActive = Boolean((process.env.REVENUECAT_WEBHOOK_SECRET || '').trim());
+        if (rcResult.fallback && syntheticTx && webhooksActive) {
+            for (let attempt = 0; attempt < 2; attempt++) {
+                const spRes = await db.query(
+                    `SELECT s.purchased_at, u.balance FROM starter_pack_purchases s
+                     JOIN users u ON u.id::text = s.user_id
+                     WHERE s.user_id = $1 AND s.purchased_at > NOW() - INTERVAL '120 seconds'`,
+                    [userId]
+                );
+                if (spRes.rows.length > 0) {
+                    const curBal = parseInt(spRes.rows[0].balance || 0, 10);
+                    return res.json({
+                        success: true,
+                        already_processed: true,
+                        coins_added: STARTER_PACK.coins,
+                        new_balance: curBal,
+                        message: `${STARTER_PACK.coins} coin hesabınıza eklendi!`
+                    });
+                }
+                if (attempt === 0) await new Promise((r) => setTimeout(r, 700));
+            }
+        }
+
+        const canonicalTxId = chosenTx?.store_transaction_id || chosenTx?.id || cleanTxId || `starter_${userId}_${Date.now()}`;
+        const externalTxId = chosenTx?.id && chosenTx.id !== canonicalTxId
+            ? chosenTx.id
+            : (!syntheticTx && cleanTxId !== canonicalTxId ? cleanTxId : null);
+        const alternateTxIds = [...new Set([
+            chosenTx?.store_transaction_id,
+            chosenTx?.id,
+            syntheticTx ? null : cleanTxId,
+        ].filter(Boolean))];
+
         const outcome = await withTransaction(db, async (client) => {
-            const userRes = await client.query(
-                'SELECT id, balance FROM users WHERE id::text = $1::text FOR UPDATE',
-                [userId]
-            );
-            if (userRes.rows.length === 0) {
+            const atomicRes = await creditCoinPurchaseAtomic(client, {
+                userId,
+                coinsToAdd: STARTER_PACK.coins,
+                price: STARTER_PACK.discounted_price,
+                packageId: null,
+                packageName: `${STARTER_PACK.label} (Başlangıç Paketi)`,
+                primaryTxId: canonicalTxId,
+                alternateTxIds,
+                externalTxId,
+                paymentMethod: 'starter_pack',
+                txDescription: `${STARTER_PACK.label} - Başlangıç Paketi`,
+                allowPairSourceMethods: ['revenuecat', 'revenuecat_autoclaim'],
+                pairFromClientToCanonical: false,
+                beforeCreditHook: (txClient, resolvedId) => claimStarterPackLock(txClient, String(resolvedId), STARTER_PACK.coins),
+            });
+
+            if (atomicRes.userNotFound) {
                 return { status: 404, body: { error: 'Kullanıcı bulunamadı.' } };
             }
 
-            const currentBalance = parseInt(userRes.rows[0].balance || 0, 10);
-
-            // If RevenueCat webhook already credited this transactionId, return success without adding coins again
-            if (cleanTxId) {
-                const existingTx = await client.query(
-                    'SELECT id FROM payments WHERE transaction_id = $1',
-                    [cleanTxId]
-                );
-                if (existingTx.rows.length > 0) {
-                    await claimStarterPackLock(client, userId, STARTER_PACK.coins);
-                    return {
-                        status: 200,
-                        alreadyProcessed: true,
-                        body: {
-                            success: true,
-                            already_processed: true,
-                            coins_added: STARTER_PACK.coins,
-                            new_balance: currentBalance,
-                            message: `${STARTER_PACK.coins} coin hesabınıza eklendi!`
-                        }
-                    };
-                }
-            }
-
-            // Atomically claim the one-time starter pack lock
-            const claimedNow = await claimStarterPackLock(client, userId, STARTER_PACK.coins);
-            if (!claimedNow) {
-                // If webhook beat this request by a few seconds with a different/fallback transactionId,
-                // treat a just-recorded purchase during checkout as already processed rather than showing an error.
-                if (cleanTxId) {
+            if (atomicRes.alreadyProcessed) {
+                await claimStarterPackLock(client, userId, STARTER_PACK.coins);
+                if (atomicRes.blockedByHook) {
                     const recentRes = await client.query(
                         `SELECT purchased_at FROM starter_pack_purchases
                          WHERE user_id = $1 AND purchased_at > NOW() - INTERVAL '120 seconds'`,
                         [userId]
                     );
-                    if (recentRes.rows.length > 0) {
-                        return {
-                            status: 200,
-                            alreadyProcessed: true,
-                            body: {
-                                success: true,
-                                already_processed: true,
-                                coins_added: STARTER_PACK.coins,
-                                new_balance: currentBalance,
-                                message: `${STARTER_PACK.coins} coin hesabınıza eklendi!`
-                            }
-                        };
+                    if (recentRes.rows.length === 0) {
+                        return { status: 400, body: { error: 'Bu paketi daha önce satın aldınız.' } };
                     }
                 }
-                return { status: 400, body: { error: 'Bu paketi daha önce satın aldınız.' } };
+                return {
+                    status: 200,
+                    alreadyProcessed: true,
+                    body: {
+                        success: true,
+                        already_processed: true,
+                        coins_added: STARTER_PACK.coins,
+                        new_balance: atomicRes.balance,
+                        message: `${STARTER_PACK.coins} coin hesabınıza eklendi!`
+                    }
+                };
             }
-
-            // Add exactly STARTER_PACK.coins (300)
-            const updateRes = await client.query(
-                `UPDATE users SET balance = COALESCE(balance, 0) + $1,
-                 total_spent = COALESCE(total_spent, 0) + $2
-                 WHERE id::text = $3::text RETURNING balance`,
-                [STARTER_PACK.coins, STARTER_PACK.discounted_price, userId]
-            );
-            const newBalance = updateRes.rows[0].balance;
-
-            // Record payment so a subsequent RevenueCat webhook with the same transactionId skips crediting
-            if (cleanTxId) {
-                await client.query(
-                    `INSERT INTO payments (user_id, package_id, transaction_id, amount, coin_amount, payment_method, package_name_snapshot, status)
-                     VALUES ($1, NULL, $2::varchar, $3::numeric, $4::integer, 'starter_pack', $5::varchar, 'completed')
-                     ON CONFLICT (transaction_id) DO NOTHING`,
-                    [userId, cleanTxId, STARTER_PACK.discounted_price, STARTER_PACK.coins, `${STARTER_PACK.label} (Başlangıç Paketi)`]
-                );
-            }
-
-            // Record transaction
-            await client.query(
-                'INSERT INTO transactions (user_id, amount, type, description) VALUES ($1, $2, $3, $4)',
-                [userId, STARTER_PACK.coins, 'starter_pack', `${STARTER_PACK.label} - Başlangıç Paketi`]
-            );
 
             return {
                 status: 200,
                 alreadyProcessed: false,
-                newBalance,
+                newBalance: atomicRes.balance,
                 body: {
                     success: true,
                     coins_added: STARTER_PACK.coins,
-                    new_balance: newBalance,
+                    new_balance: atomicRes.balance,
                     message: `${STARTER_PACK.coins} coin hesabınıza eklendi!`
                 }
             };

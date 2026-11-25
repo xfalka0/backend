@@ -4,6 +4,7 @@ const db = require('../db');
 const { authenticateToken, authorizeRole } = require('../middleware/auth');
 const { sanitizeUser, logActivity } = require('../utils/helpers');
 const { checkProfileText, checkPhotoSecurity } = require('../utils/moderationFilter');
+const { autoClaimPendingWebhookPurchase } = require('../utils/revenuecatUtils');
 
 const normalizeGenderValue = (gender) => {
     const raw = (gender || '').toString().trim().toLowerCase();
@@ -19,11 +20,16 @@ const normalizeGenderValue = (gender) => {
     return null;
 };
 
-// GET USER BALANCE
+// GET USER BALANCE (with atomic auto-claim for pending anonymous purchases)
 router.get('/balance', authenticateToken, async (req, res) => {
     try {
         const userId = req.user.id;
-        const result = await db.query('SELECT balance, vip_level, vip_xp, is_vip FROM users WHERE id = $1', [userId]);
+        try {
+            await autoClaimPendingWebhookPurchase(db, userId, req.app.get('io'));
+        } catch (claimErr) {
+            console.error('[AUTO-CLAIM ERROR]', claimErr.message);
+        }
+        const result = await db.query('SELECT balance, vip_level, vip_xp, is_vip FROM users WHERE id::text = $1::text', [userId]);
         if (result.rows.length === 0) return res.status(404).json({ error: 'User not found' });
         res.json({
             balance: result.rows[0].balance || 0,

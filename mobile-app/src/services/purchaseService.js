@@ -7,6 +7,25 @@ const RC_API_KEYS = {
     google: 'goog_EerPgzQtDpetwESLvIcHjFeiDXG', // Android Anahtarı Eklendi
 };
 
+const extractPurchaseTxId = (transaction, customerInfo, productId) => {
+    if (transaction?.transactionIdentifier) {
+        return String(transaction.transactionIdentifier);
+    }
+    const nonSubs = customerInfo?.nonSubscriptionTransactions;
+    if (Array.isArray(nonSubs) && nonSubs.length > 0) {
+        const cleanTarget = productId ? String(productId).split(':')[0].toLowerCase() : null;
+        const candidates = cleanTarget
+            ? nonSubs.filter((t) => String(t.productIdentifier || '').split(':')[0].toLowerCase() === cleanTarget)
+            : nonSubs;
+        const pool = candidates.length > 0 ? candidates : nonSubs;
+        const sorted = [...pool].sort((a, b) => Date.parse(b.purchaseDate || 0) - Date.parse(a.purchaseDate || 0));
+        if (sorted[0]?.transactionIdentifier) {
+            return String(sorted[0].transactionIdentifier);
+        }
+    }
+    return null;
+};
+
 export const PurchaseService = {
     init: async (userId) => {
         try {
@@ -87,7 +106,7 @@ export const PurchaseService = {
 
     purchasePackage: async (pack) => {
         try {
-            const { customerInfo, productIdentifier } = await Purchases.purchasePackage(pack);
+            const { customerInfo, productIdentifier, transaction } = await Purchases.purchasePackage(pack);
 
             // For consumable coin packages, the fact that we reached here means the store accepted the payment.
             // We return success so the app can sync with our backend.
@@ -103,11 +122,7 @@ export const PurchaseService = {
                 console.error('[META_ADS] Purchase tracking error:', trackErr);
             }
 
-            let txId = null;
-            if (customerInfo && customerInfo.nonSubscriptionTransactions && customerInfo.nonSubscriptionTransactions.length > 0) {
-                const txs = customerInfo.nonSubscriptionTransactions;
-                txId = txs[txs.length - 1].transactionIdentifier;
-            }
+            const txId = extractPurchaseTxId(transaction, customerInfo, productIdentifier || pack?.product?.identifier);
 
             return { success: true, customerInfo, transactionId: txId };
         } catch (e) {
@@ -131,14 +146,6 @@ export const PurchaseService = {
 
             const products = await Purchases.getProducts([productIdentifier], purchaseType);
 
-            const extractTxId = (customerInfo) => {
-                if (customerInfo?.nonSubscriptionTransactions?.length > 0) {
-                    const txs = customerInfo.nonSubscriptionTransactions;
-                    return txs[txs.length - 1].transactionIdentifier || null;
-                }
-                return null;
-            };
-
             if (products && products.length > 0) {
                 const storeProduct = products[0];
                 console.log(`[Purchases] Found storeProduct: ${storeProduct.identifier}, defaultOption: ${storeProduct.defaultOption?.id || 'none'}`);
@@ -153,13 +160,13 @@ export const PurchaseService = {
                 } else {
                     purchaseResult = await Purchases.purchaseProduct(productIdentifier, null, purchaseType);
                 }
-                const txId = extractTxId(purchaseResult.customerInfo);
+                const txId = extractPurchaseTxId(purchaseResult.transaction, purchaseResult.customerInfo, productIdentifier);
                 return { success: true, customerInfo: purchaseResult.customerInfo, transactionId: txId };
             }
 
             console.log(`[Purchases] getProducts returned empty list, using purchaseProduct fallback for ${productIdentifier}...`);
-            const { customerInfo } = await Purchases.purchaseProduct(productIdentifier, null, purchaseType);
-            const txId = extractTxId(customerInfo);
+            const { customerInfo, transaction } = await Purchases.purchaseProduct(productIdentifier, null, purchaseType);
+            const txId = extractPurchaseTxId(transaction, customerInfo, productIdentifier);
             return { success: true, customerInfo, transactionId: txId };
         } catch (e) {
             if (!e.userCancelled) {

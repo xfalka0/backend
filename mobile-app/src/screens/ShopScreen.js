@@ -396,7 +396,7 @@ export default function ShopScreen({ navigation, route }) {
 
     const handlePurchase = async (pack) => {
         try {
-            let transactionId = `test_${Date.now()}`;
+            let transactionId = null;
             let success = false;
 
             if (pack.isLocal) {
@@ -458,6 +458,7 @@ export default function ShopScreen({ navigation, route }) {
                 const parsedCoinAmount = parseInt(coinAmountStr, 10) || 0;
                 const productId = product.identifier || (parsedCoinAmount ? `coins_${parsedCoinAmount}` : null) || pack.id;
 
+                let isPendingWebhook = false;
                 try {
                     const syncRes = await axios.post(`${API_URL}/purchase`, {
                         productId: productId,
@@ -468,22 +469,31 @@ export default function ShopScreen({ navigation, route }) {
 
                     if (syncRes.data && syncRes.data.balance !== undefined) {
                         liveBalance = syncRes.data.balance;
-                        coinsCredited = syncRes.data.coins_added || parsedCoinAmount;
+                        coinsCredited = syncRes.data.coins_added || 0;
+                        isPendingWebhook = Boolean(syncRes.data.pending);
                     }
                 } catch (syncError) {
                     console.error('[SHOP] Purchase sync error:', syncError.message);
-                    try {
-                        const balRes = await axios.get(`${API_URL}/users/balance`, {
-                            headers: { 'Authorization': `Bearer ${token}` }
-                        });
-                        if (balRes.data && balRes.data.balance !== undefined) {
-                            liveBalance = balRes.data.balance;
-                        }
-                    } catch (e) {}
+                    isPendingWebhook = true;
                 }
 
-                if (!coinsCredited && parsedCoinAmount > 0) {
-                    coinsCredited = parsedCoinAmount;
+                if (isPendingWebhook) {
+                    for (let attempt = 0; attempt < 2; attempt++) {
+                        await new Promise((r) => setTimeout(r, 1200));
+                        try {
+                            const balRes = await axios.get(`${API_URL}/users/balance`, {
+                                headers: { 'Authorization': `Bearer ${token}` }
+                            });
+                            if (balRes.data && balRes.data.balance !== undefined) {
+                                liveBalance = balRes.data.balance;
+                                if (liveBalance > (balance || 0)) {
+                                    coinsCredited = liveBalance - (balance || 0);
+                                    isPendingWebhook = false;
+                                    break;
+                                }
+                            }
+                        } catch (_) {}
+                    }
                 }
 
                 // Force update UI and storage
@@ -500,6 +510,7 @@ export default function ShopScreen({ navigation, route }) {
 
                 try {
                     const storeUser = useAppStore.getState().user;
+                    useAppStore.getState().setBalance?.(liveBalance || 0);
                     if (storeUser) {
                         useAppStore.getState().setUser({ ...storeUser, balance: liveBalance, hearts: liveBalance });
                     }
@@ -508,7 +519,9 @@ export default function ShopScreen({ navigation, route }) {
                 setAlertConfig({
                     visible: true,
                     title: 'Tebrikler!',
-                    message: `Satın alım başarılı.\n${coinsCredited ? `+${coinsCredited} Coin hesabınıza tanımlandı.\n` : ''}Yeni Bakiye: ${liveBalance}`,
+                    message: isPendingWebhook && !coinsCredited
+                        ? `Satın alım onaylandı. Bakiyeniz birkaç saniye içinde otomatik güncellenecektir.\nMevcut Bakiye: ${liveBalance}`
+                        : `Satın alım başarılı.\n${coinsCredited ? `+${coinsCredited} Coin hesabınıza tanımlandı.\n` : ''}Yeni Bakiye: ${liveBalance}`,
                     type: 'success'
                 });
             }

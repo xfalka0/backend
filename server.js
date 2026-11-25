@@ -39,6 +39,8 @@ require('dotenv').config({ path: require('path').join(__dirname, '.env') });
 const bcrypt = require('bcrypt');
 const { authenticateToken, authorizeRole, SECRET_KEY } = require('./middleware/auth');
 const { getVipLevel, getVipProgress } = require('./utils/vipUtils');
+const { withTransaction } = require('./utils/dbUtils');
+const { isSyntheticTransactionId, verifyRevenueCatPurchase, creditCoinPurchaseAtomic, autoClaimPendingWebhookPurchase } = require('./utils/revenuecatUtils');
 const { recordOperatorCommission } = require('./utils/commissionUtils');
 const { AGENCY_SYSTEM_ENABLED } = require('./utils/featureFlags');
 const jwt = require('jsonwebtoken');
@@ -1158,6 +1160,9 @@ const initializeDatabase = async () => {
             await db.query(`ALTER TABLE processed_webhook_events ADD COLUMN IF NOT EXISTS coins INTEGER`);
             await db.query(`ALTER TABLE processed_webhook_events ADD COLUMN IF NOT EXISTS transaction_id VARCHAR(255)`);
             await db.query(`ALTER TABLE processed_webhook_events ADD COLUMN IF NOT EXISTS price DECIMAL(10,2)`);
+            await db.query(`ALTER TABLE payments ADD COLUMN IF NOT EXISTS external_tx_id VARCHAR(255)`);
+            await db.query(`CREATE INDEX IF NOT EXISTS idx_payments_external_tx_id ON payments(external_tx_id)`);
+            await db.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_payments_transaction_id_unique ON payments(transaction_id) WHERE transaction_id IS NOT NULL`).catch(() => {});
             await db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS is_premium BOOLEAN DEFAULT FALSE`);
             await db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS premium_start_date TIMESTAMPTZ`);
             await db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS premium_expire_date TIMESTAMPTZ`);
@@ -3741,44 +3746,21 @@ app.post(['/api/block', '/api/blocks'], authenticateToken, async (req, res) => {
 
 // ... (existing admin routes) ...
 
-// SECURE PURCHASE ENDPOINT
+// SECURE PURCHASE ENDPOINT (Idempotent + RevenueCat verified + serialized per user)
 app.post('/api/purchase', authenticateToken, async (req, res) => {
-    // Note: authenticateToken is safer, but ShopScreen currently might not send auth header?
-    // ShopScreen uses axios.post but doesn't explicitly add header in the snippet I saw.
-    // However, user IS logged in. Let's assume auth header is handled by global axios interceptor or add it.
-    // If ShopScreen.js doesn't send token, this will break. 
-    // SAFEST: Check if req.user exists, if not try to find by userId (insecure fallback but consistent with current state)
-    // For now, I will NOT force authenticateToken middleware yet if it risks breaking flow, 
-    // but I WILL validate the input.
-
     const { productId, transactionId } = req.body;
-    const userId = req.user.id; // Use authenticated ID
+    const userId = req.user.id;
 
     if (!userId || !productId) {
         return res.status(400).json({ error: 'Eksik parametreler.' });
     }
 
+    const cleanTxId = typeof transactionId === 'string' && transactionId.trim() ? transactionId.trim() : null;
+    const syntheticTx = isSyntheticTransactionId(cleanTxId);
+
     try {
-        await db.query('BEGIN');
-
-        // Deduplicate transaction to prevent double-crediting if webhook or repeat call already processed it
-        if (transactionId) {
-            const existingTx = await db.query('SELECT id FROM payments WHERE transaction_id = $1', [transactionId]);
-            if (existingTx.rows.length > 0) {
-                await db.query('ROLLBACK');
-                const balRes = await db.query('SELECT balance FROM users WHERE id = $1', [userId]);
-                const currentBalance = balRes.rows[0]?.balance ?? 0;
-                console.log(`[PURCHASE ALREADY PROCESSED] Transaction ${transactionId} for user ${userId}. Returning balance: ${currentBalance}`);
-                return res.json({ success: true, message: 'Transaction already processed', balance: currentBalance });
-            }
-        }
-
         // 1. Validate Package and Get Price/Coins from DB
-        let price = 0;
-        let coinsToAdd = 0;
-        let packageName = '';
-
-        const cleanProductId = (productId || '').toString().split(':')[0].trim();
+        const cleanProductId = String(productId).split(':')[0].trim();
         const pkgRes = await db.query(
             `SELECT * FROM coin_packages 
              WHERE id = $1 
@@ -3794,84 +3776,193 @@ app.post('/api/purchase', authenticateToken, async (req, res) => {
         );
 
         if (pkgRes.rows.length === 0) {
-            await db.query('ROLLBACK');
             return res.status(404).json({ error: 'Paket bulunamadı.' });
         }
 
-        price = parseFloat(pkgRes.rows[0].price);
-        coinsToAdd = parseInt(pkgRes.rows[0].coins);
-        packageName = pkgRes.rows[0].name;
+        const price = parseFloat(pkgRes.rows[0].price);
+        const coinsToAdd = parseInt(pkgRes.rows[0].coins, 10);
+        const packageName = pkgRes.rows[0].name;
         const packageId = pkgRes.rows[0].id;
+        const rcLookupProductId = pkgRes.rows[0].revenuecat_id || cleanProductId;
 
-        // 2. Perform Atomic Update (SET balance = balance + $1)
-        // Uses COALESCE to safely handle NULL values in balance or total_spent
-        const updateRes = await db.query(
-            `UPDATE users 
-             SET total_spent = COALESCE(total_spent, 0) + $1, 
-                 balance = COALESCE(balance, 0) + $2
-             WHERE id = $3 
-             RETURNING balance, total_spent`,
-            [price, coinsToAdd, userId]
+        // Helper: find whether webhook/auto-claim already credited this purchase in the last 120s
+        const findRecentCreditedPayment = async () => {
+            const recentRes = await db.query(
+                `SELECT p.id, p.transaction_id, u.balance, u.vip_level
+                 FROM payments p
+                 JOIN users u ON u.id::text = p.user_id::text
+                 WHERE p.user_id::text = $1::text
+                   AND p.coin_amount = $2::integer
+                   AND p.status = 'completed'
+                   AND p.payment_method IN ('revenuecat', 'revenuecat_autoclaim', 'revenuecat_verified', 'google_play+revenuecat', 'revenuecat+client')
+                   AND p.created_at > NOW() - INTERVAL '120 seconds'
+                 ORDER BY p.id DESC
+                 LIMIT 1`,
+                [String(userId), coinsToAdd]
+            );
+            return recentRes.rows[0] || null;
+        };
+
+        // 2. Verify with RevenueCat REST API when REVENUECAT_SECRET_KEY is configured
+        const rcResult = await verifyRevenueCatPurchase(userId, rcLookupProductId, cleanTxId);
+        let chosenTx = null;
+
+        if (rcResult.verified === true && Array.isArray(rcResult.entries) && rcResult.entries.length > 0) {
+            if (rcResult.matchedExact) {
+                chosenTx = rcResult.entries[0];
+            } else {
+                // Synthetic/null txId (e.g. legacy client fallback): pick first RC tx not already in payments
+                const candidateIds = rcResult.entries
+                    .flatMap((e) => [e.store_transaction_id, e.id])
+                    .filter(Boolean);
+                const existingRes = candidateIds.length > 0
+                    ? await db.query(
+                        `SELECT transaction_id, external_tx_id FROM payments
+                         WHERE transaction_id = ANY($1::text[]) OR external_tx_id = ANY($1::text[])`,
+                        [candidateIds]
+                    )
+                    : { rows: [] };
+                const recordedSet = new Set(
+                    existingRes.rows.flatMap((r) => [r.transaction_id, r.external_tx_id]).filter(Boolean)
+                );
+                chosenTx = rcResult.entries.find(
+                    (e) => ![e.store_transaction_id, e.id].some((id) => id && recordedSet.has(id))
+                ) || rcResult.entries[0];
+            }
+        } else if (rcResult.verified === false) {
+            // RevenueCat API responded cleanly and did not confirm a new transaction: check if webhook already credited
+            for (let attempt = 0; attempt < 2; attempt++) {
+                const recent = await findRecentCreditedPayment();
+                if (recent) {
+                    const bal = parseInt(recent.balance, 10) || 0;
+                    return res.json({
+                        success: true,
+                        already_processed: true,
+                        message: 'Transaction already processed by webhook',
+                        balance: bal,
+                        hearts: bal,
+                        vip_level: parseInt(recent.vip_level, 10) || 0,
+                        coins_added: coinsToAdd,
+                    });
+                }
+                if (attempt === 0) await new Promise((r) => setTimeout(r, 700));
+            }
+            return res.status(402).json({
+                error: 'Satın alma RevenueCat tarafından doğrulanamadı. Ödeme tamamlandıysa bakiyeniz birkaç saniye içinde otomatik güncellenecektir.'
+            });
+        }
+
+        // 3. Guard against unverified synthetic client IDs (test_*, manual_*, rc_*, null) when webhooks are enabled
+        const webhooksActive = Boolean((process.env.REVENUECAT_WEBHOOK_SECRET || '').trim());
+        if (rcResult.fallback && syntheticTx && webhooksActive) {
+            for (let attempt = 0; attempt < 2; attempt++) {
+                const recent = await findRecentCreditedPayment();
+                if (recent) {
+                    const bal = parseInt(recent.balance, 10) || 0;
+                    return res.json({
+                        success: true,
+                        already_processed: true,
+                        message: 'Transaction processed via webhook',
+                        balance: bal,
+                        hearts: bal,
+                        vip_level: parseInt(recent.vip_level, 10) || 0,
+                        coins_added: coinsToAdd,
+                    });
+                }
+                if (attempt === 0) await new Promise((r) => setTimeout(r, 700));
+            }
+
+            const uRes = await db.query('SELECT balance, vip_level FROM users WHERE id::text = $1::text', [String(userId)]);
+            const curBal = parseInt(uRes.rows[0]?.balance, 10) || 0;
+            const curVip = parseInt(uRes.rows[0]?.vip_level, 10) || 0;
+            return res.json({
+                success: true,
+                pending: true,
+                balance: curBal,
+                hearts: curBal,
+                vip_level: curVip,
+                coins_added: 0,
+                message: 'Ödemeniz işleniyor, bakiyeniz birkaç saniye içinde otomatik güncellenecektir.'
+            });
+        }
+
+        // 4. Credit atomically inside a single dedicated DB transaction with user row lock
+        const canonicalTxId = chosenTx?.store_transaction_id || chosenTx?.id || cleanTxId || `manual_${Date.now()}`;
+        const externalTxId = chosenTx?.id && chosenTx.id !== canonicalTxId
+            ? chosenTx.id
+            : (!syntheticTx && cleanTxId !== canonicalTxId ? cleanTxId : null);
+        const alternateTxIds = [...new Set([
+            chosenTx?.store_transaction_id,
+            chosenTx?.id,
+            syntheticTx ? null : cleanTxId,
+        ].filter(Boolean))];
+
+        const txResult = await withTransaction(db, (client) =>
+            creditCoinPurchaseAtomic(client, {
+                userId,
+                coinsToAdd,
+                price,
+                packageId,
+                packageName,
+                primaryTxId: canonicalTxId,
+                alternateTxIds,
+                externalTxId,
+                paymentMethod: chosenTx ? 'revenuecat_verified' : 'google_play',
+                txDescription: `${packageName} satın alındı`,
+                allowPairSourceMethods: ['revenuecat', 'revenuecat_autoclaim'],
+                pairFromClientToCanonical: false,
+            })
         );
 
-        if (updateRes.rows.length === 0) {
-            await db.query('ROLLBACK');
+        if (txResult.userNotFound) {
             return res.status(404).json({ error: 'Kullanıcı güncellenemedi.' });
         }
 
-        const newBalance = updateRes.rows[0].balance;
-        const newTotalSpent = parseFloat(updateRes.rows[0].total_spent);
+        if (txResult.alreadyProcessed) {
+            console.log(`[PURCHASE ALREADY PROCESSED] Transaction ${canonicalTxId} for user ${userId}. Returning balance: ${txResult.balance}`);
+            return res.json({
+                success: true,
+                already_processed: true,
+                message: 'Transaction already processed',
+                balance: txResult.balance,
+                hearts: txResult.balance,
+                vip_level: txResult.vipLevel,
+                coins_added: coinsToAdd,
+            });
+        }
 
-        // 3. Determine and Update VIP Level based on total spent
-        let newVipLevel = 0;
-        if (newTotalSpent >= 5000) newVipLevel = 5;
-        else if (newTotalSpent >= 3500) newVipLevel = 4;
-        else if (newTotalSpent >= 2000) newVipLevel = 3;
-        else if (newTotalSpent >= 1000) newVipLevel = 2;
-        else if (newTotalSpent >= 500) newVipLevel = 1;
+        console.log(`[PURCHASE SUCCESS] User ${txResult.resolvedUserId}: Added ${coinsToAdd} coins. New Balance: ${txResult.balance}. Total Spent: ${txResult.totalSpent}. VIP: ${txResult.vipLevel}`);
 
-        await db.query('UPDATE users SET vip_level = $1 WHERE id = $2', [newVipLevel, userId]);
-
-        console.log(`[PURCHASE SUCCESS] User ${userId}: Added ${coinsToAdd} coins. New Balance: ${newBalance}. Total Spent: ${newTotalSpent}. VIP: ${newVipLevel}`);
-
-        // 4. Record Payment
-        await db.query(
-            'INSERT INTO payments (user_id, package_id, transaction_id, amount, coin_amount, payment_method, package_name_snapshot, status) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
-            [userId, packageId, transactionId || `manual_${Date.now()}`, price, coinsToAdd, 'google_play', packageName, 'completed']
-        );
-
-        // 5. Record Transaction
-        await db.query(
-            'INSERT INTO transactions (user_id, amount, type, description) VALUES ($1, $2, $3, $4)',
-            [userId, coinsToAdd, 'purchase', `${packageName} satın alındı`]
-        );
-
-        await db.query('COMMIT');
-
-        // Emit real-time update
+        // Emit real-time update scoped strictly to purchasing user
         const io = req.app.get('io');
         if (io) {
-            io.emit('balance_update', { userId, newBalance });
+            io.to(`user_${txResult.resolvedUserId}`).emit('balance_update', {
+                userId: txResult.resolvedUserId,
+                balance: txResult.balance,
+                newBalance: txResult.balance,
+                hearts: txResult.balance,
+                vip_level: txResult.vipLevel,
+                vip_xp: txResult.vipXp,
+            });
             io.emit('new_payment', {
-                user_id: userId,
+                user_id: txResult.resolvedUserId,
                 package_id: packageId,
                 amount: price,
-                transaction_id: transactionId,
+                transaction_id: txResult.transactionId,
                 status: 'completed',
                 created_at: new Date().toISOString()
             });
-            io.emit('admin_payment_update', { type: 'purchase', user_id: userId });
+            io.emit('admin_payment_update', { type: 'purchase', user_id: txResult.resolvedUserId });
         }
 
         res.json({
             success: true,
-            balance: newBalance,
-            hearts: newBalance, // Sync hearts (used by some UI components)
-            vip_level: newVipLevel,
+            balance: txResult.balance,
+            hearts: txResult.balance,
+            vip_level: txResult.vipLevel,
             coins_added: coinsToAdd
         });
     } catch (err) {
-        await db.query('ROLLBACK');
         console.error('CRITICAL PURCHASE ERROR:', err);
         res.status(500).json({
             error: 'Satın alım işlenirken bir hata oluştu.',
@@ -6915,81 +7006,11 @@ app.get('/api/users/balance', authenticateToken, async (req, res) => {
     try {
         const userId = req.user.id;
 
-        // Auto-claim any unassigned anonymous purchase from the last 15 minutes
+        // Auto-claim any unassigned anonymous purchase from the last 15 minutes inside a real transaction
         try {
-            const pending = await db.query(
-                `SELECT * FROM processed_webhook_events 
-                 WHERE claimed = FALSE 
-                   AND coins > 0 
-                   AND created_at > NOW() - INTERVAL '15 minutes' 
-                 ORDER BY id DESC LIMIT 1 FOR UPDATE SKIP LOCKED`
-            );
-
-            if (pending.rows.length > 0) {
-                const claimItem = pending.rows[0];
-                const coinsToAdd = parseInt(claimItem.coins, 10) || 0;
-                const claimPrice = parseFloat(claimItem.price) || 0;
-                const txId = claimItem.transaction_id || `claim_${Date.now()}`;
-
-                if (coinsToAdd > 0) {
-                    await db.query('BEGIN');
-                    const isStarterClaim = isStarterProductId(claimItem.product_id);
-                    const canCreditStarter = !isStarterClaim || await claimStarterPackLock(db, String(userId), coinsToAdd);
-
-                    if (canCreditStarter) {
-                        await db.query(
-                            `UPDATE users 
-                             SET balance = COALESCE(balance, 0) + $1, 
-                                 total_spent = COALESCE(total_spent, 0) + $2 
-                             WHERE id = $3`,
-                            [coinsToAdd, claimPrice, userId]
-                        );
-
-                        await db.query(
-                            `INSERT INTO payments (user_id, transaction_id, amount, coin_amount, payment_method, package_name_snapshot, status) 
-                             VALUES ($1, $2, $3, $4, 'revenuecat_autoclaim', $5, 'completed') 
-                             ON CONFLICT (transaction_id) DO NOTHING`,
-                            [userId, txId, claimPrice || coinsToAdd, coinsToAdd, claimItem.product_id]
-                        );
-
-                        await db.query(
-                            `INSERT INTO transactions (user_id, amount, type, description) 
-                             VALUES ($1, $2, 'purchase', $3)`,
-                            [userId, coinsToAdd, `Otomatik Eşleşen Coin (${claimItem.product_id})`]
-                        );
-                    }
-
-                    await db.query(
-                        `UPDATE processed_webhook_events 
-                         SET claimed = TRUE, app_user_id = $1 
-                         WHERE id = $2`,
-                        [String(userId), claimItem.id]
-                    );
-
-                    await db.query('COMMIT');
-                    if (canCreditStarter) {
-                        console.log(`[AUTO-CLAIM SUCCESS] Credited ${coinsToAdd} coins to user ${userId} from tx ${txId}`);
-                        try {
-                            const claimIo = req.app.get('io');
-                            if (claimIo) {
-                                claimIo.emit('new_payment', {
-                                    user_id: userId,
-                                    amount: claimPrice || coinsToAdd,
-                                    transaction_id: txId,
-                                    status: 'completed',
-                                    created_at: new Date().toISOString()
-                                });
-                                claimIo.emit('admin_payment_update', { type: 'auto-claim', user_id: userId });
-                            }
-                        } catch (_) {}
-                    } else {
-                        console.log(`[AUTO-CLAIM SKIP] Starter pack already credited to user ${userId} (tx: ${txId})`);
-                    }
-                }
-            }
+            await autoClaimPendingWebhookPurchase(db, userId, req.app.get('io'));
         } catch (claimErr) {
             console.error('[AUTO-CLAIM ERROR]', claimErr.message);
-            try { await db.query('ROLLBACK'); } catch (_) {}
         }
 
         const result = await db.query('SELECT balance, vip_level, vip_xp FROM users WHERE id = $1', [userId]);

@@ -8,6 +8,8 @@ const {
     isStarterProductId,
     claimStarterPackLock,
 } = require('../utils/starterPackUtils');
+const { withTransaction } = require('../utils/dbUtils');
+const { creditCoinPurchaseAtomic, ensurePaymentSchema } = require('../utils/revenuecatUtils');
 
 // Server-side product catalogs (fixed truth source)
 const COIN_PRODUCT_MAPPING = {
@@ -116,6 +118,7 @@ router.post('/revenuecat', async (req, res) => {
     // 4. PROCESS EVENT TYPE
     try {
         const io = req.app.get('io');
+        await ensurePaymentSchema(db);
 
         switch (event.type) {
             case 'INITIAL_PURCHASE':
@@ -125,21 +128,26 @@ router.post('/revenuecat', async (req, res) => {
                 if (!processResult.success) {
                     return res.status(processResult.statusCode || 400).json({ error: processResult.error });
                 }
+                if (processResult.pendingClaim) {
+                    return res.json({ success: true, pendingClaim: true });
+                }
                 break;
             }
             case 'CANCELLATION':
             case 'EXPIRATION':
                 console.log(`[PAYMENT] User ${userId} subscription expired/cancelled`);
+                await db.query(
+                    'INSERT INTO processed_webhook_events (event_id, app_user_id, event_type, product_id, claimed) VALUES ($1, $2, $3, $4, TRUE) ON CONFLICT (event_id) DO NOTHING',
+                    [eventId, userId || null, event.type || null, productId || null]
+                );
                 break;
             default:
                 console.log(`[PAYMENT] Ignored unhandled event type: ${event.type}`);
+                await db.query(
+                    'INSERT INTO processed_webhook_events (event_id, app_user_id, event_type, product_id, claimed) VALUES ($1, $2, $3, $4, TRUE) ON CONFLICT (event_id) DO NOTHING',
+                    [eventId, userId || null, event.type || null, productId || null]
+                );
         }
-
-        // Record in processed_webhook_events after successful handling
-        await db.query(
-            'INSERT INTO processed_webhook_events (event_id, app_user_id, event_type, product_id) VALUES ($1, $2, $3, $4) ON CONFLICT (event_id) DO NOTHING',
-            [eventId, userId || null, event.type || null, productId || null]
-        );
 
         return res.json({ success: true });
     } catch (err) {
@@ -151,7 +159,9 @@ router.post('/revenuecat', async (req, res) => {
 async function handleSuccessfulPayment(userId, event, io) {
     const rawProductId = event.product_id || event.productId || '';
     const cleanProductId = rawProductId.toString().split(':')[0].trim();
-    const transactionId = event.transaction_id || event.id || `rc_${Date.now()}`;
+    const transactionId = String(event.transaction_id || event.id || `rc_${Date.now()}`);
+    const originalTransactionId = event.original_transaction_id ? String(event.original_transaction_id) : null;
+    const eventId = String(event.id);
 
     // 1. Resolve Target User ID (support anonymous alias merging)
     let targetUserId = userId;
@@ -218,85 +228,75 @@ async function handleSuccessfulPayment(userId, event, io) {
         return { success: false, statusCode: 400, error: 'Missing or unresolvable app_user_id' };
     }
 
-    // A) Process Coin Products
+    // A) Process Coin Products inside a dedicated transaction client (user row locked FOR UPDATE)
     if (isCoinProduct && coinAmount > 0) {
         try {
-            await db.query('BEGIN');
-
-            const existingTx = await db.query('SELECT id FROM payments WHERE transaction_id = $1', [transactionId]);
-            if (existingTx.rows.length === 0) {
-                const userRes = await db.query('SELECT id, balance, vip_xp, vip_level, total_spent FROM users WHERE id::text = $1::text FOR UPDATE', [targetUserId]);
-                if (userRes.rows.length === 0) {
-                    await db.query('ROLLBACK');
-                    return { success: false, statusCode: 404, error: 'User not found' };
+            const txResult = await withTransaction(db, async (client) => {
+                // Atomically claim event_id so concurrent retries for the same event cannot double-execute
+                const eventClaim = await client.query(
+                    `INSERT INTO processed_webhook_events (event_id, app_user_id, event_type, product_id, claimed)
+                     VALUES ($1, $2, $3, $4, TRUE)
+                     ON CONFLICT (event_id) DO NOTHING
+                     RETURNING id`,
+                    [eventId, String(targetUserId), event.type || null, cleanProductId || null]
+                );
+                if (eventClaim.rows.length === 0) {
+                    return { duplicateEvent: true };
                 }
 
-                const resolvedUser = userRes.rows[0];
-                const resolvedUserId = resolvedUser.id;
+                const result = await creditCoinPurchaseAtomic(client, {
+                    userId: targetUserId,
+                    coinsToAdd: coinAmount,
+                    price,
+                    packageId,
+                    packageName: cleanProductId,
+                    primaryTxId: transactionId,
+                    alternateTxIds: [originalTransactionId].filter(Boolean),
+                    paymentMethod: 'revenuecat',
+                    txDescription: `RevenueCat webhook: ${cleanProductId}`,
+                    allowPairSourceMethods: ['google_play', 'in_app', 'starter_pack', 'revenuecat_verified'],
+                    pairFromClientToCanonical: true,
+                    beforeCreditHook: isStarterProduct
+                        ? (txClient, resolvedId) => claimStarterPackLock(txClient, String(resolvedId), coinAmount)
+                        : null,
+                });
+                return result;
+            });
 
-                // Prevent double-crediting starter pack when /api/starter-pack/purchase already claimed it
-                if (isStarterProduct) {
-                    const claimedNow = await claimStarterPackLock(db, String(resolvedUserId), coinAmount);
-                    if (!claimedNow) {
-                        await db.query(
-                            'INSERT INTO payments (user_id, package_id, transaction_id, amount, coin_amount, payment_method, package_name_snapshot, status) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
-                            [resolvedUserId, packageId, transactionId, price || coinAmount, coinAmount, 'revenuecat', cleanProductId, 'completed']
-                        );
-                        await db.query('COMMIT');
-                        console.log(`[WEBHOOK SKIP] Starter pack already credited to user ${resolvedUserId} (tx: ${transactionId})`);
-                        return { success: true, alreadyClaimed: true };
-                    }
-                }
-
-                const currentBalance = parseInt(resolvedUser.balance, 10) || 0;
-                const currentVipXp = parseInt(resolvedUser.vip_xp, 10) || 0;
-                const currentVipLevel = parseInt(resolvedUser.vip_level, 10) || 0;
-                const currentTotalSpent = parseFloat(resolvedUser.total_spent) || 0;
-
-                const newBalance = currentBalance + coinAmount;
-                const newVipXp = currentVipXp + coinAmount;
-                const calculatedLevel = getVipLevel(newVipXp);
-                const newVipLevel = Math.max(currentVipLevel, calculatedLevel);
-                const newTotalSpent = currentTotalSpent + (price || 0);
-
-                await db.query(
-                    'UPDATE users SET balance = $1, vip_xp = $2, vip_level = $3, total_spent = $4 WHERE id = $5',
-                    [newBalance, newVipXp, newVipLevel, newTotalSpent, resolvedUserId]
-                );
-
-                await db.query(
-                    'INSERT INTO payments (user_id, package_id, transaction_id, amount, coin_amount, payment_method, package_name_snapshot, status) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
-                    [resolvedUserId, packageId, transactionId, price || coinAmount, coinAmount, 'revenuecat', cleanProductId, 'completed']
-                );
-                await db.query(
-                    'INSERT INTO transactions (user_id, amount, type, description) VALUES ($1, $2, $3, $4)',
-                    [resolvedUserId, coinAmount, 'purchase', `RevenueCat webhook: ${cleanProductId}`]
-                );
-
-                console.log(`[WEBHOOK SUCCESS] Added ${coinAmount} coins to user ${resolvedUserId} for tx ${transactionId}`);
-
-                if (io) {
-                    io.to(`user_${resolvedUserId}`).emit('balance_update', {
-                        balance: newBalance,
-                        hearts: newBalance,
-                        vip_level: newVipLevel,
-                        vip_xp: newVipXp
-                    });
-                    io.emit('new_payment', {
-                        user_id: resolvedUserId,
-                        amount: price || coinAmount,
-                        package_id: packageId,
-                        transaction_id: transactionId,
-                        status: 'completed',
-                        created_at: new Date().toISOString()
-                    });
-                    io.emit('admin_payment_update', { type: 'coins', user_id: resolvedUserId });
-                }
+            if (txResult.duplicateEvent) {
+                console.log(`[WEBHOOK DUPLICATE] Event ${eventId} already claimed atomically.`);
+                return { success: true, duplicate: true };
             }
-            await db.query('COMMIT');
+            if (txResult.userNotFound) {
+                return { success: false, statusCode: 404, error: 'User not found' };
+            }
+            if (txResult.alreadyProcessed) {
+                console.log(`[WEBHOOK SKIP] Transaction ${transactionId} already credited/paired for user ${txResult.resolvedUserId}`);
+                return { success: true, alreadyClaimed: true };
+            }
+
+            console.log(`[WEBHOOK SUCCESS] Added ${coinAmount} coins to user ${txResult.resolvedUserId} for tx ${transactionId}`);
+
+            if (io) {
+                io.to(`user_${txResult.resolvedUserId}`).emit('balance_update', {
+                    balance: txResult.balance,
+                    newBalance: txResult.balance,
+                    hearts: txResult.balance,
+                    vip_level: txResult.vipLevel,
+                    vip_xp: txResult.vipXp
+                });
+                io.emit('new_payment', {
+                    user_id: txResult.resolvedUserId,
+                    amount: price || coinAmount,
+                    package_id: packageId,
+                    transaction_id: transactionId,
+                    status: 'completed',
+                    created_at: new Date().toISOString()
+                });
+                io.emit('admin_payment_update', { type: 'coins', user_id: txResult.resolvedUserId });
+            }
             return { success: true };
         } catch (err) {
-            await db.query('ROLLBACK');
             console.error('[WEBHOOK PAYMENT ERROR]', err.message);
             return { success: false, statusCode: 500, error: err.message };
         }
@@ -307,66 +307,140 @@ async function handleSuccessfulPayment(userId, event, io) {
     if (isVipProduct) {
         const months = VIP_PRODUCT_MAPPING[cleanProductId] || VIP_PRODUCT_MAPPING[rawProductId] || 1;
         try {
-            await db.query('BEGIN');
-            const userRes = await db.query(
-                'SELECT id, vip_expire_date, is_vip, vip_level FROM users WHERE id::text = $1::text FOR UPDATE',
-                [targetUserId]
-            );
-            if (userRes.rows.length === 0) {
-                await db.query('ROLLBACK');
+            const vipResult = await withTransaction(db, async (client) => {
+                const eventClaim = await client.query(
+                    `INSERT INTO processed_webhook_events (event_id, app_user_id, event_type, product_id, claimed)
+                     VALUES ($1, $2, $3, $4, TRUE)
+                     ON CONFLICT (event_id) DO NOTHING
+                     RETURNING id`,
+                    [eventId, String(targetUserId), event.type || null, cleanProductId || null]
+                );
+                if (eventClaim.rows.length === 0) {
+                    return { duplicateEvent: true };
+                }
+
+                const existingTx = await client.query(
+                    'SELECT id FROM payments WHERE transaction_id = $1',
+                    [transactionId]
+                );
+                if (existingTx.rows.length > 0) {
+                    return { duplicateEvent: true };
+                }
+
+                const userRes = await client.query(
+                    'SELECT id, premium_expire_date, vip_expire_date, premium_start_date, vip_start_date, is_vip, vip_level FROM users WHERE id::text = $1::text FOR UPDATE',
+                    [String(targetUserId)]
+                );
+                if (userRes.rows.length === 0) {
+                    return { userNotFound: true };
+                }
+
+                const user = userRes.rows[0];
+                const resolvedUserId = user.id;
+                const now = new Date();
+                const existingExpire = user.premium_expire_date || user.vip_expire_date;
+                const hasActiveFutureExpire = Boolean(existingExpire && new Date(existingExpire) > now);
+                const startDate = hasActiveFutureExpire
+                    ? (user.premium_start_date || user.vip_start_date || now)
+                    : now;
+
+                const isSandbox = String(event.environment || '').toUpperCase() === 'SANDBOX';
+                const msExpire = Number(event.expiration_at_ms);
+                const hasStoreExpire = Number.isFinite(msExpire) && msExpire > now.getTime();
+
+                let baseDate;
+                let skipExtend = false;
+
+                if (!isSandbox && hasStoreExpire) {
+                    // Production RevenueCat expiration_at_ms is authoritative — never stack onto it
+                    baseDate = new Date(msExpire);
+                } else if (event.type === 'RENEWAL' && hasActiveFutureExpire) {
+                    // Sandbox subscriptions renew every few minutes; keep the active test window instead of stacking months
+                    baseDate = new Date(existingExpire);
+                    skipExtend = true;
+                } else if (hasActiveFutureExpire) {
+                    // Check if the client (/api/vip/upgrade-direct) already credited this purchase in the last 120s
+                    const recentVipPayment = await client.query(
+                        `SELECT id FROM payments
+                         WHERE user_id::text = $1::text
+                           AND status = 'completed_vip'
+                           AND created_at > NOW() - INTERVAL '120 seconds'
+                         LIMIT 1`,
+                        [String(resolvedUserId)]
+                    );
+                    if (recentVipPayment.rows.length > 0) {
+                        baseDate = new Date(existingExpire);
+                        skipExtend = true;
+                    } else {
+                        baseDate = new Date(existingExpire);
+                        baseDate.setMonth(baseDate.getMonth() + months);
+                    }
+                } else {
+                    baseDate = new Date(now);
+                    baseDate.setMonth(baseDate.getMonth() + months);
+                }
+
+                if (!skipExtend) {
+                    await client.query(
+                        `UPDATE users 
+                         SET is_premium = true, 
+                             premium_start_date = $1::timestamptz, 
+                             premium_expire_date = $2::timestamptz, 
+                             vip_start_date = $1::timestamptz, 
+                             vip_expire_date = $2::timestamp 
+                         WHERE id = $3`,
+                        [startDate, baseDate, resolvedUserId]
+                    );
+                }
+
+                await client.query(
+                    `INSERT INTO payments (user_id, transaction_id, amount, payment_method, package_name_snapshot, status)
+                     VALUES ($1, $2, $3, $4, $5, $6)
+                     ON CONFLICT (transaction_id) DO NOTHING`,
+                    [resolvedUserId, transactionId, price || months, 'revenuecat', cleanProductId, 'completed_vip']
+                );
+
+                return {
+                    duplicateEvent: false,
+                    skipExtend,
+                    resolvedUserId,
+                    vipLevel: Math.max(user.vip_level || 0, 1),
+                    baseDate,
+                };
+            });
+
+            if (vipResult.duplicateEvent) {
+                return { success: true, duplicate: true };
+            }
+            if (vipResult.userNotFound) {
                 return { success: false, statusCode: 404, error: 'User not found' };
             }
-
-            const user = userRes.rows[0];
-            const resolvedUserId = user.id;
-            let baseDate = new Date();
-            let startDate = new Date();
-
-            if (user.vip_expire_date && new Date(user.vip_expire_date) > baseDate) {
-                baseDate = new Date(user.vip_expire_date);
+            if (vipResult.skipExtend) {
+                console.log(`[WEBHOOK VIP SKIP] Skipped stacking ${months}m for user ${vipResult.resolvedUserId} (${event.type}, env=${event.environment || 'unknown'}), expire stays ${vipResult.baseDate.toISOString()}`);
+                return { success: true };
             }
 
-            baseDate.setMonth(baseDate.getMonth() + months);
-
-            await db.query(
-                `UPDATE users 
-                 SET is_premium = true, 
-                     premium_start_date = $1::timestamptz, 
-                     premium_expire_date = $2::timestamptz, 
-                     vip_start_date = $1::timestamptz, 
-                     vip_expire_date = $2::timestamp 
-                 WHERE id = $3`,
-                [startDate, baseDate, resolvedUserId]
-            );
-
-            await db.query(
-                'INSERT INTO payments (user_id, transaction_id, amount, payment_method, package_name_snapshot, status) VALUES ($1, $2, $3, $4, $5, $6)',
-                [resolvedUserId, transactionId, price || months, 'revenuecat', cleanProductId, 'completed_vip']
-            );
-
-            await db.query('COMMIT');
-            console.log(`[WEBHOOK VIP SUCCESS] Activated ${months} months VIP for user ${resolvedUserId} until ${baseDate.toISOString()}`);
+            console.log(`[WEBHOOK VIP SUCCESS] Activated ${months} months VIP for user ${vipResult.resolvedUserId} until ${vipResult.baseDate.toISOString()}`);
 
             if (io) {
-                io.to(`user_${resolvedUserId}`).emit('vip_level_up', {
+                io.to(`user_${vipResult.resolvedUserId}`).emit('vip_level_up', {
                     is_vip: true,
                     is_premium: true,
-                    vip_level: Math.max(user.vip_level || 0, 1),
-                    premium_expire_date: baseDate,
-                    vip_expire_date: baseDate
+                    vip_level: vipResult.vipLevel,
+                    premium_expire_date: vipResult.baseDate,
+                    vip_expire_date: vipResult.baseDate
                 });
                 io.emit('new_payment', {
-                    user_id: resolvedUserId,
+                    user_id: vipResult.resolvedUserId,
                     amount: price || months,
                     transaction_id: transactionId,
                     status: 'completed_vip',
                     created_at: new Date().toISOString()
                 });
-                io.emit('admin_payment_update', { type: 'vip', user_id: resolvedUserId });
+                io.emit('admin_payment_update', { type: 'vip', user_id: vipResult.resolvedUserId });
             }
             return { success: true };
         } catch (vipErr) {
-            await db.query('ROLLBACK');
             console.error('[WEBHOOK VIP ERROR]', vipErr.message);
             return { success: false, statusCode: 500, error: vipErr.message };
         }

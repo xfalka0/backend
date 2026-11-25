@@ -173,9 +173,10 @@ export default function StoreScreen({ navigation, route }) {
                 try {
                     const syncRes = await axios.post(`${API_URL}/vip/upgrade-direct`, {
                         months: months,
+                        productId: subId,
                         isSync: true,
                         expireDate: rcExpireRaw || null,
-                        transactionId: customerInfo.originalAppUserId || `rc_sync_${Date.now()}`
+                        transactionId: null
                     }, {
                         headers: { Authorization: `Bearer ${token}` }
                     });
@@ -232,17 +233,21 @@ export default function StoreScreen({ navigation, route }) {
             );
             if (result.success) {
                 const token = await AsyncStorage.getItem('token');
+                const rcExpireRaw =
+                    result.customerInfo?.allExpirationDates?.[plan.productId] ||
+                    Object.values(result.customerInfo?.entitlements?.active || {})[0]?.expirationDate ||
+                    null;
                 let newExpireDate = null;
                 try {
                     const syncRes = await axios.post(`${API_URL}/vip/upgrade-direct`, {
                         months: plan.months,
-                        transactionId: result.customerInfo?.originalAppUserId || `rc_${Date.now()}`
+                        productId: plan.productId,
+                        expireDate: rcExpireRaw,
+                        transactionId: result.transactionId || null
                     }, {
                         headers: { Authorization: `Bearer ${token}` }
                     });
-                    if (syncRes.data?.vip_expire_date) {
-                        newExpireDate = syncRes.data.vip_expire_date;
-                    }
+                    newExpireDate = syncRes.data?.premium_expire_date || syncRes.data?.vip_expire_date || null;
                 } catch (err) {
                     console.log('Backend sync error:', err.message);
                 }

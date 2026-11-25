@@ -33,7 +33,7 @@ function cleanAiResponse(text) {
  * Gemini API ile operatör profilini ve sohbet geçmişini analiz edip flörtöz yanıt üretir.
  */
 async function generateAiReply({ operator, userMessage, chatHistory = [] }) {
-    const apiKey = process.env.GEMINI_API_KEY;
+    const apiKey = (process.env.GEMINI_API_KEY || '').trim();
     if (!apiKey) {
         console.warn('[AI_CHAT] GEMINI_API_KEY eksik, fallback yanıt kullanılıyor.');
         return FALLBACK_RESPONSES[Math.floor(Math.random() * FALLBACK_RESPONSES.length)];
@@ -58,14 +58,20 @@ KESİNLİKLE UYMAN GEREKEN KURALLAR:
 
     try {
         const contents = [];
-        
-        // Son birkaç mesajlık geçmiş ekle (varsa)
+        const normalizedUserMsg = (userMessage || 'selam').trim();
+
+        // Son birkaç mesajlık geçmiş ekle (son kullanıcı mesajı zaten DB'den geldiyse tekrarlama)
         if (Array.isArray(chatHistory) && chatHistory.length > 0) {
-            chatHistory.slice(-4).forEach(m => {
-                const role = m.is_user ? 'user' : 'model';
+            const recent = chatHistory.slice(-5).filter(m => m && typeof m.content === 'string' && m.content.trim().length > 0);
+            const last = recent[recent.length - 1];
+            const prior = (last && last.is_user && last.content.trim() === normalizedUserMsg)
+                ? recent.slice(0, -1)
+                : recent;
+
+            prior.forEach(m => {
                 contents.push({
-                    role: role,
-                    parts: [{ text: m.content || '' }]
+                    role: m.is_user ? 'user' : 'model',
+                    parts: [{ text: m.content.trim() }]
                 });
             });
         }
@@ -73,7 +79,7 @@ KESİNLİKLE UYMAN GEREKEN KURALLAR:
         // Kullanıcının son mesajı
         contents.push({
             role: 'user',
-            parts: [{ text: userMessage || 'selam' }]
+            parts: [{ text: normalizedUserMsg }]
         });
 
         const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent?key=${apiKey}`;
@@ -89,28 +95,34 @@ KESİNLİKLE UYMAN GEREKEN KURALLAR:
                 contents: contents,
                 generationConfig: {
                     temperature: 0.95,
-                    maxOutputTokens: 50
+                    maxOutputTokens: 150
                 }
             })
         });
         clearTimeout(timeout);
 
         if (!res.ok) {
-            console.warn(`[AI_CHAT] Gemini API HTTP ${res.status}, fallback yanıt dönülüyor.`);
+            const errBody = await res.text().catch(() => '');
+            console.warn(`[AI_CHAT] Gemini API HTTP ${res.status}, fallback yanıt dönülüyor. Detay: ${errBody.slice(0, 500)}`);
             return FALLBACK_RESPONSES[Math.floor(Math.random() * FALLBACK_RESPONSES.length)];
         }
 
         const data = await res.json();
-        const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+        const candidate = data.candidates?.[0];
+        const rawText = candidate?.content?.parts?.map(p => p.text || '').join(' ').trim();
         const cleaned = cleanAiResponse(rawText);
 
         if (!cleaned || cleaned.length < 2) {
+            const finishReason = candidate?.finishReason || 'unknown';
+            const blockReason = data.promptFeedback?.blockReason || 'none';
+            console.warn(`[AI_CHAT] Gemini boş/geçersiz yanıt döndü, fallback kullanılıyor. finishReason=${finishReason}, blockReason=${blockReason}, raw="${(rawText || '').slice(0, 120)}"`);
             return FALLBACK_RESPONSES[Math.floor(Math.random() * FALLBACK_RESPONSES.length)];
         }
 
+        console.log(`[AI_CHAT] Gemini yanıt üretti (finishReason=${candidate?.finishReason || 'unknown'}): "${cleaned}"`);
         return cleaned;
     } catch (err) {
-        console.error('[AI_CHAT] Gemini API Hatası:', err.message);
+        console.error(`[AI_CHAT] Gemini API Hatası (${err.name || 'Error'}):`, err.message);
         return FALLBACK_RESPONSES[Math.floor(Math.random() * FALLBACK_RESPONSES.length)];
     }
 }

@@ -4,6 +4,7 @@ const db = require('../db');
 const { authenticateToken } = require('../middleware/auth');
 const { getVipLevel, getVipProgress } = require('../utils/vipUtils');
 const { logActivity } = require('../utils/helpers');
+const { insertPaymentIfAbsent } = require('../utils/revenuecatUtils');
 const { withTransaction } = require('../utils/dbUtils');
 
 // VIP XP PURCHASE ENDPOINT
@@ -256,19 +257,14 @@ router.post('/upgrade-direct', authenticateToken, async (req, res) => {
 
             if (!isSync) {
                 const auditTxId = realTxId || `vip_client_${user.id}_${Date.now()}`;
-                await client.query(
-                    `INSERT INTO payments (user_id, transaction_id, amount, payment_method, package_name_snapshot, status)
-                     VALUES ($1, $2, $3, $4, $5, $6)
-                     ON CONFLICT (transaction_id) DO NOTHING`,
-                    [
-                        user.id,
-                        auditTxId,
-                        parsedMonths,
-                        'revenuecat_client',
-                        productId || `premium_${parsedMonths}_months`,
-                        'completed_vip'
-                    ]
-                );
+                await insertPaymentIfAbsent(client, {
+                    userId: user.id,
+                    transactionId: auditTxId,
+                    amount: parsedMonths,
+                    paymentMethod: 'revenuecat_client',
+                    packageNameSnapshot: productId || `premium_${parsedMonths}_months`,
+                    status: 'completed_vip',
+                });
             }
 
             return {

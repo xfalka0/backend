@@ -9,7 +9,7 @@ const {
     claimStarterPackLock,
 } = require('../utils/starterPackUtils');
 const { withTransaction } = require('../utils/dbUtils');
-const { creditCoinPurchaseAtomic, ensurePaymentSchema } = require('../utils/revenuecatUtils');
+const { creditCoinPurchaseAtomic, ensurePaymentSchema, insertPaymentIfAbsent } = require('../utils/revenuecatUtils');
 
 // Server-side product catalogs (fixed truth source)
 const COIN_PRODUCT_MAPPING = {
@@ -393,12 +393,14 @@ async function handleSuccessfulPayment(userId, event, io) {
                     );
                 }
 
-                await client.query(
-                    `INSERT INTO payments (user_id, transaction_id, amount, payment_method, package_name_snapshot, status)
-                     VALUES ($1, $2, $3, $4, $5, $6)
-                     ON CONFLICT (transaction_id) DO NOTHING`,
-                    [resolvedUserId, transactionId, price || months, 'revenuecat', cleanProductId, 'completed_vip']
-                );
+                await insertPaymentIfAbsent(client, {
+                    userId: resolvedUserId,
+                    transactionId,
+                    amount: price || months,
+                    paymentMethod: 'revenuecat',
+                    packageNameSnapshot: cleanProductId,
+                    status: 'completed_vip',
+                });
 
                 return {
                     duplicateEvent: false,

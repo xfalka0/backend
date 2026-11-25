@@ -277,21 +277,17 @@ async function creditCoinPurchaseAtomic(client, {
         const shouldProceed = await beforeCreditHook(client, resolvedUserId);
         if (!shouldProceed) {
             if (primaryTxId) {
-                await client.query(
-                    `INSERT INTO payments (user_id, package_id, transaction_id, external_tx_id, amount, coin_amount, payment_method, package_name_snapshot, status)
-                     VALUES ($1, $2, $3::varchar, $4::varchar, $5::numeric, $6::integer, $7::varchar, $8::varchar, 'completed')
-                     ON CONFLICT (transaction_id) DO NOTHING`,
-                    [
-                        resolvedUserId,
-                        packageId,
-                        String(primaryTxId),
-                        externalTxId ? String(externalTxId) : null,
-                        parseFloat(price) || coinsToAdd,
-                        coinsToAdd,
-                        paymentMethod,
-                        packageName,
-                    ]
-                );
+                await insertPaymentIfAbsent(client, {
+                    userId: resolvedUserId,
+                    packageId,
+                    transactionId: String(primaryTxId),
+                    externalTxId: externalTxId ? String(externalTxId) : null,
+                    amount: parseFloat(price) || coinsToAdd,
+                    coinAmount: coinsToAdd,
+                    paymentMethod,
+                    packageNameSnapshot: packageName,
+                    status: 'completed',
+                });
             }
             return {
                 alreadyProcessed: true,
@@ -310,24 +306,19 @@ async function creditCoinPurchaseAtomic(client, {
     const cleanExternalTxId = externalTxId && String(externalTxId) !== finalTxId ? String(externalTxId) : null;
     const numericPrice = parseFloat(price) || 0;
 
-    const insertPayRes = await client.query(
-        `INSERT INTO payments (user_id, package_id, transaction_id, external_tx_id, amount, coin_amount, payment_method, package_name_snapshot, status)
-         VALUES ($1, $2, $3::varchar, $4::varchar, $5::numeric, $6::integer, $7::varchar, $8::varchar, 'completed')
-         ON CONFLICT (transaction_id) DO NOTHING
-         RETURNING id`,
-        [
-            resolvedUserId,
-            packageId,
-            finalTxId,
-            cleanExternalTxId,
-            numericPrice || coinsToAdd,
-            coinsToAdd,
-            paymentMethod,
-            packageName,
-        ]
-    );
+    const insertedPaymentId = await insertPaymentIfAbsent(client, {
+        userId: resolvedUserId,
+        packageId,
+        transactionId: finalTxId,
+        externalTxId: cleanExternalTxId,
+        amount: numericPrice || coinsToAdd,
+        coinAmount: coinsToAdd,
+        paymentMethod,
+        packageNameSnapshot: packageName,
+        status: 'completed',
+    });
 
-    if (insertPayRes.rows.length === 0) {
+    if (!insertedPaymentId) {
         return {
             alreadyProcessed: true,
             resolvedUserId,
@@ -373,6 +364,54 @@ async function creditCoinPurchaseAtomic(client, {
         totalSpent: newTotalSpent,
         transactionId: finalTxId,
     };
+}
+
+/**
+ * Inserts a payment row only if transaction_id is not already present, protected by a transaction-scoped advisory lock.
+ * Works safely even if payments.transaction_id lacks a PostgreSQL UNIQUE constraint.
+ */
+async function insertPaymentIfAbsent(client, {
+    userId,
+    packageId = null,
+    transactionId,
+    externalTxId = null,
+    amount = 0,
+    coinAmount = null,
+    paymentMethod = 'revenuecat',
+    packageNameSnapshot = null,
+    status = 'completed',
+}) {
+    await ensurePaymentSchema(client);
+    const txKey = String(transactionId);
+    await client.query('SELECT pg_advisory_xact_lock(hashtext($1::text))', [txKey]);
+
+    const existing = await client.query(
+        `SELECT id FROM payments
+         WHERE transaction_id = $1::varchar OR external_tx_id = $1::varchar
+         LIMIT 1`,
+        [txKey]
+    );
+    if (existing.rows.length > 0) {
+        return null;
+    }
+
+    const inserted = await client.query(
+        `INSERT INTO payments (user_id, package_id, transaction_id, external_tx_id, amount, coin_amount, payment_method, package_name_snapshot, status)
+         VALUES ($1, $2, $3::varchar, $4::varchar, $5::numeric, $6::integer, $7::varchar, $8::varchar, $9::varchar)
+         RETURNING id`,
+        [
+            userId,
+            packageId,
+            txKey,
+            externalTxId ? String(externalTxId) : null,
+            parseFloat(amount) || 0,
+            coinAmount !== null && coinAmount !== undefined ? parseInt(coinAmount, 10) : null,
+            paymentMethod,
+            packageNameSnapshot,
+            status,
+        ]
+    );
+    return inserted.rows[0]?.id || null;
 }
 
 /**
@@ -449,6 +488,7 @@ module.exports = {
     isSyntheticTransactionId,
     normalizeProductKeys,
     ensurePaymentSchema,
+    insertPaymentIfAbsent,
     verifyRevenueCatPurchase,
     creditCoinPurchaseAtomic,
     autoClaimPendingWebhookPurchase,

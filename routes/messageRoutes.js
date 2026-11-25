@@ -5,6 +5,7 @@ const { authenticateToken, authorizeRole } = require('../middleware/auth');
 const { sanitizeUser } = require('../utils/helpers');
 const { sendPushNotification } = require('../utils/notificationUtils');
 const { recordOperatorCommission } = require('../utils/commissionUtils');
+const { processAiAutoReply } = require('../services/aiChatService');
 
 // GET MESSAGES FOR A CHAT
 router.get('/:chatId', async (req, res) => {
@@ -88,6 +89,16 @@ router.post('/send-hi', async (req, res) => {
             const senderName = senderRes.rows[0]?.display_name || 'Bir kullanıcı';
             await sendPushNotification(finalReceiverId, { title: 'Yeni Mesaj!', body: `${senderName}: ${finalContent}`, data: { chatId: chatId.toString(), type: 'message' } });
         } catch (e) { /* non-blocking */ }
+
+        // Trigger AI auto-reply for eligible new users on "Merhaba" / REST send
+        const io = req.app.get('io');
+        processAiAutoReply({
+            io,
+            chatId,
+            userId: finalSenderId,
+            operatorId: finalReceiverId,
+            userMessage: finalContent
+        }).catch(() => {});
 
         res.json({ success: true, chatId, newBalance: currentBalance - HI_COST, sentMessage: msgResult.rows[0] });
     } catch (err) {

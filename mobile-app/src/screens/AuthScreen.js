@@ -444,6 +444,11 @@ export default function AuthScreen({ navigation, route }) {
                 <Text style={styles.resendNotice}>
                     Kodu almanız 1 dakikaya kadar sürebilir.
                 </Text>
+                {authMethod === 'email' && (
+                    <Text style={[styles.resendNotice, { color: 'rgba(251, 191, 36, 0.9)', marginTop: 4, marginBottom: 4, fontSize: 12, textAlign: 'center' }]}>
+                        E-postayı göremiyorsanız Spam / Gereksiz klasörünü kontrol etmeyi unutmayın.
+                    </Text>
+                )}
                 <TouchableOpacity 
                     style={[styles.resendButton, resendCountdown > 0 && styles.resendButtonDisabled]} 
                     onPress={handleRequestOtp}

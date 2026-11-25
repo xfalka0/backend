@@ -115,18 +115,37 @@ KESİNLİKLE UYMAN GEREKEN KURALLAR:
     }
 }
 
+let aiColumnsVerified = false;
+async function ensureAiColumns() {
+    if (aiColumnsVerified) return;
+    await db.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS ai_messages_count INTEGER DEFAULT 0');
+    await db.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS ai_hook_sent BOOLEAN DEFAULT FALSE');
+    aiColumnsVerified = true;
+}
+
 /**
  * Yeni kullanıcının operatöre attığı mesaja otomatik AI yanıtı üretir ve süreci yönetir.
  */
 async function processAiAutoReply({ io, chatId, userId, operatorId, userMessage }) {
     try {
+        await ensureAiColumns();
+
         const userIdStr = userId.toString();
         const opIdStr = operatorId.toString();
         const chatIdStr = chatId.toString();
 
-        // 1. Kullanıcı uygunluk kontrolü (Sadece yeni üyeler, ai_messages_count < 5, hiç coin almamış)
+        // 1. Kullanıcı uygunluk kontrolü (Sadece yeni üyeler, ai_messages_count < 5, hiç gerçek ödeme yapmamış)
         const userRes = await db.query(
-            'SELECT id, username, role, balance, COALESCE(total_spent, 0) as total_spent, COALESCE(ai_messages_count, 0) as ai_messages_count, COALESCE(ai_hook_sent, false) as ai_hook_sent FROM users WHERE id = $1',
+            `SELECT u.id, u.username, u.role, u.balance,
+                    COALESCE(u.ai_messages_count, 0) as ai_messages_count,
+                    COALESCE(u.ai_hook_sent, false) as ai_hook_sent,
+                    EXISTS (
+                        SELECT 1 FROM payments p
+                        WHERE p.user_id::text = u.id::text
+                          AND COALESCE(p.status, 'completed') = 'completed'
+                    ) as has_real_payment
+             FROM users u
+             WHERE u.id = $1`,
             [userId]
         );
         if (userRes.rows.length === 0) return;
@@ -135,11 +154,17 @@ async function processAiAutoReply({ io, chatId, userId, operatorId, userMessage 
         // Sadece normal müşteri rolü için geçerli
         if (user.role !== 'user' && user.role !== 'customer') return;
 
-        // Daha önce harcama yapmışsa (eski/ödeyen üye) yapay zeka devreden çıkar
-        if (parseFloat(user.total_spent) > 0) return;
+        // Gerçek ödeme yapmışsa (ödeyen üye) yapay zeka devreden çıkar
+        if (user.has_real_payment) {
+            console.log(`[AI_CHAT] Atlandı (${user.username}): gerçek ödeme kaydı mevcut.`);
+            return;
+        }
 
         // 5 mesaj kotası dolduysa AI artık cevap vermez
-        if (user.ai_messages_count >= 5) return;
+        if (user.ai_messages_count >= 5) {
+            console.log(`[AI_CHAT] Atlandı (${user.username}): 5 mesaj kotası doldu (${user.ai_messages_count}/5).`);
+            return;
+        }
 
         // 2. Operatör bilgilerini çek
         const opRes = await db.query(
@@ -148,6 +173,7 @@ async function processAiAutoReply({ io, chatId, userId, operatorId, userMessage 
         );
         if (opRes.rows.length === 0) return;
         const operator = opRes.rows[0];
+        const opDisplayName = operator.display_name || operator.name || operator.username || 'Fiora';
 
         // 3. Son mesaj geçmişini al (AI bağlamı için)
         const historyRes = await db.query(
@@ -208,7 +234,9 @@ async function processAiAutoReply({ io, chatId, userId, operatorId, userMessage 
                 const msgToEmit = {
                     ...savedMsg,
                     chat_id: chatIdStr,
-                    sender_name: operator.display_name,
+                    type: savedMsg.content_type || 'text',
+                    sender_id: opIdStr,
+                    sender_name: opDisplayName,
                     sender_username: operator.username,
                     sender_avatar: operator.avatar_url,
                     created_at: savedMsg.created_at || new Date().toISOString()
@@ -227,12 +255,12 @@ async function processAiAutoReply({ io, chatId, userId, operatorId, userMessage 
 
                 // Push bildirimi
                 sendPushNotification(userId, {
-                    title: operator.display_name,
+                    title: opDisplayName,
                     body: aiReplyText,
                     data: {
                         chatId: chatIdStr,
                         senderId: opIdStr,
-                        senderName: operator.display_name,
+                        senderName: opDisplayName,
                         senderAvatar: operator.avatar_url,
                         type: 'message'
                     }
@@ -240,7 +268,7 @@ async function processAiAutoReply({ io, chatId, userId, operatorId, userMessage 
 
                 // Kullanıcının AI sayaç değerini artır
                 const updatedUserRes = await db.query(
-                    'UPDATE users SET ai_messages_count = ai_messages_count + 1 WHERE id = $1 RETURNING ai_messages_count, balance, ai_hook_sent',
+                    'UPDATE users SET ai_messages_count = COALESCE(ai_messages_count, 0) + 1 WHERE id = $1 RETURNING ai_messages_count, balance, ai_hook_sent',
                     [userId]
                 );
                 const updatedUser = updatedUserRes.rows[0];
@@ -280,7 +308,9 @@ async function processAiAutoReply({ io, chatId, userId, operatorId, userMessage 
                             const hookMsgToEmit = {
                                 ...savedHookMsg,
                                 chat_id: chatIdStr,
-                                sender_name: operator.display_name,
+                                type: savedHookMsg.content_type || 'text',
+                                sender_id: opIdStr,
+                                sender_name: opDisplayName,
                                 sender_username: operator.username,
                                 sender_avatar: operator.avatar_url,
                                 created_at: savedHookMsg.created_at || new Date().toISOString()
@@ -298,12 +328,12 @@ async function processAiAutoReply({ io, chatId, userId, operatorId, userMessage 
 
                             // Push bildirimi
                             sendPushNotification(userId, {
-                                title: operator.display_name,
+                                title: opDisplayName,
                                 body: 'Numara Paylaşımı Onayı!',
                                 data: {
                                     chatId: chatIdStr,
                                     senderId: opIdStr,
-                                    senderName: operator.display_name,
+                                    senderName: opDisplayName,
                                     senderAvatar: operator.avatar_url,
                                     type: 'message'
                                 }

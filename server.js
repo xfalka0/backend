@@ -1163,7 +1163,9 @@ const initializeDatabase = async () => {
             await db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS premium_expire_date TIMESTAMPTZ`);
             await db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS vip_xp INTEGER DEFAULT 0`);
             await db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS vip_level INTEGER DEFAULT 0`);
-            console.log('[DB] processed_webhook_events table and premium columns verified');
+            await db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS ai_messages_count INTEGER DEFAULT 0`);
+            await db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS ai_hook_sent BOOLEAN DEFAULT FALSE`);
+            console.log('[DB] processed_webhook_events table and premium/ai columns verified');
         } catch (mErr) {
             console.error('[DB] Error verifying webhook table / columns:', mErr.message);
         }

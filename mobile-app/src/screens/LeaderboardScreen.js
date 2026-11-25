@@ -9,6 +9,7 @@ import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_URL } from '../config';
 import GradientText from '../components/ui/GradientText';
+import { resolveImageUrl } from '../utils/imageUtils';
 
 const { width } = Dimensions.get('window');
 
@@ -33,43 +34,63 @@ export default function LeaderboardScreen({ navigation }) {
         fetchLeaderboard();
     }, [activeTab]);
 
+    const handleProfilePress = (item) => {
+        if (!item || !item.id) return;
+        navigation.navigate('OperatorProfile', {
+            operator: {
+                id: item.id,
+                name: item.name,
+                avatar_url: item.avatar,
+                vip_level: item.level,
+                is_online: item.is_online,
+                category: item.category,
+                bio: item.bio
+            }
+        });
+    };
+
     const fetchLeaderboard = async () => {
         try {
             setLoading(true);
             const token = await AsyncStorage.getItem('token');
-            const res = await axios.get(`${API_URL}/discovery?tab=Tümü`, {
-                headers: { Authorization: `Bearer ${token}` }
+            const res = await axios.get(`${API_URL}/leaderboard?period=${encodeURIComponent(activeTab)}`, {
+                headers: token ? { Authorization: `Bearer ${token}` } : {}
             });
-            const data = res.data?.data || res.data || [];
-            
-            // Sadece kadınları ve admin panelinden oluşturulanları (operator) filtrele
-            let females = data.filter(op => {
-                const g = (op.gender || '').toLowerCase();
-                const isFemale = g === 'female' || g === 'kadin' || g === 'kadın' || g === 'woman';
-                const isOperator = op.role === 'operator';
-                return isFemale && isOperator;
-            });
-
-            // Gerçek operatörlere puan ekle
-            const withScores = females.map((op, i) => ({
-                id: op.id || String(i),
-                name: op.name || op.username || 'Gizli',
-                avatar: op.avatar_url || 'https://i.pravatar.cc/150?u=' + i,
-                level: op.vip_level || Math.floor(Math.random() * 5),
-                score: Math.floor(Math.random() * 40000) + 10000 // random score
-            }));
-            
-            withScores.sort((a, b) => b.score - a.score);
-            
-            const ranked = withScores.map((op, index) => ({
-                ...op,
-                rank: index + 1,
-                score: op.score.toLocaleString('tr-TR')
-            }));
-            
-            setLeaderboard(ranked);
+            const data = res.data?.data || [];
+            if (data.length > 0) {
+                const formatted = data.map(item => ({
+                    ...item,
+                    avatar: resolveImageUrl(item.avatar, 'avatar')
+                }));
+                setLeaderboard(formatted);
+            } else {
+                setLeaderboard(MOCK_LEADERBOARD);
+            }
         } catch(e) {
-            console.log('Leaderboard error:', e);
+            console.log('Leaderboard API error, using discovery fallback:', e.message);
+            try {
+                const token = await AsyncStorage.getItem('token');
+                const discRes = await axios.get(`${API_URL}/discovery?tab=Önerilen`, {
+                    headers: token ? { Authorization: `Bearer ${token}` } : {}
+                });
+                const discData = discRes.data?.data || discRes.data || [];
+                const ops = discData.filter(u => u.role === 'operator' || u.is_operator);
+                if (ops.length >= 3) {
+                    const ranked = ops.slice(0, 30).map((op, idx) => ({
+                        id: op.id,
+                        name: op.name || op.username,
+                        avatar: resolveImageUrl(op.avatar_url, 'avatar'),
+                        level: op.vip_level || 1,
+                        score: (50000 - (idx * 1200)).toLocaleString('tr-TR'),
+                        rank: idx + 1,
+                        is_online: op.is_online,
+                        category: op.category,
+                        bio: op.bio
+                    }));
+                    setLeaderboard(ranked);
+                    return;
+                }
+            } catch(fallbackErr) {}
             setLeaderboard(MOCK_LEADERBOARD);
         } finally {
             setLoading(false);
@@ -82,7 +103,11 @@ export default function LeaderboardScreen({ navigation }) {
         return (
             <View style={styles.topThreeContainer}>
                 {/* Second Place */}
-                <View style={[styles.topThreeItem, { marginTop: 40 }]}>
+                <TouchableOpacity 
+                    activeOpacity={0.85}
+                    onPress={() => handleProfilePress(topThree[1])}
+                    style={[styles.topThreeItem, { marginTop: 40 }]}
+                >
                     <View style={styles.avatarWrapper}>
                         <VipFrame level={topThree[1].level} avatar={topThree[1].avatar} size={75} isStatic={true} />
                         <View style={[styles.rankBadge, { backgroundColor: '#c0c0c0', borderColor: '#e2e8f0' }]}>
@@ -94,10 +119,14 @@ export default function LeaderboardScreen({ navigation }) {
                         <Ionicons name="star" size={12} color="#f59e0b" />
                         <Text style={styles.topScore}>{topThree[1].score}</Text>
                     </View>
-                </View>
+                </TouchableOpacity>
 
                 {/* First Place */}
-                <View style={[styles.topThreeItem, { zIndex: 10 }]}>
+                <TouchableOpacity 
+                    activeOpacity={0.85}
+                    onPress={() => handleProfilePress(topThree[0])}
+                    style={[styles.topThreeItem, { zIndex: 10 }]}
+                >
                     <View style={styles.avatarWrapper}>
                         {/* Glow effect for 1st place */}
                         <View style={styles.firstPlaceGlow} />
@@ -111,10 +140,14 @@ export default function LeaderboardScreen({ navigation }) {
                         <Ionicons name="star" size={14} color="#fbbf24" />
                         <Text style={[styles.topScore, { color: '#fbbf24', fontSize: 14, fontWeight: '900' }]}>{topThree[0].score}</Text>
                     </View>
-                </View>
+                </TouchableOpacity>
 
                 {/* Third Place */}
-                <View style={[styles.topThreeItem, { marginTop: 50 }]}>
+                <TouchableOpacity 
+                    activeOpacity={0.85}
+                    onPress={() => handleProfilePress(topThree[2])}
+                    style={[styles.topThreeItem, { marginTop: 50 }]}
+                >
                     <View style={styles.avatarWrapper}>
                         <VipFrame level={topThree[2].level} avatar={topThree[2].avatar} size={65} isStatic={true} />
                         <View style={[styles.rankBadge, { backgroundColor: '#cd7f32', borderColor: '#fef3c7' }]}>
@@ -126,7 +159,7 @@ export default function LeaderboardScreen({ navigation }) {
                         <Ionicons name="star" size={12} color="#f59e0b" />
                         <Text style={styles.topScore}>{topThree[2].score}</Text>
                     </View>
-                </View>
+                </TouchableOpacity>
             </View>
         );
     };
@@ -134,7 +167,11 @@ export default function LeaderboardScreen({ navigation }) {
     const renderItem = ({ item }) => {
         if (item.rank <= 3) return null;
         return (
-            <View style={[styles.listItem, { backgroundColor: 'rgba(255, 255, 255, 0.03)', borderColor: 'rgba(255,255,255,0.1)' }]}>
+            <TouchableOpacity 
+                activeOpacity={0.8}
+                onPress={() => handleProfilePress(item)}
+                style={[styles.listItem, { backgroundColor: 'rgba(255, 255, 255, 0.03)', borderColor: 'rgba(255,255,255,0.1)' }]}
+            >
                 <Text style={[styles.listRank, { color: 'rgba(255,255,255,0.5)' }]}>{item.rank}</Text>
                 <VipFrame level={item.level} avatar={item.avatar} size={50} isStatic={true} />
                 <View style={styles.listInfo}>
@@ -145,7 +182,7 @@ export default function LeaderboardScreen({ navigation }) {
                     <Text style={[styles.listScore, { color: theme.colors.primary }]}>{item.score}</Text>
                     <Ionicons name="star" size={14} color="#f59e0b" style={{ marginLeft: 6 }} />
                 </View>
-            </View>
+            </TouchableOpacity>
         );
     };
 

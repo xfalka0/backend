@@ -61,7 +61,7 @@ export default function LegalScreen({ route, navigation }) {
             id: 4,
             title: 'Telif Hakları',
             icon: 'copy-outline',
-            content: 'Uygulama içerisindeki tasarımlar ve içerikler Fiva ekibine aittir, izinsiz kopyalanamaz.'
+            content: 'Uygulama içerisindeki tasarımlar ve içerikler Fiora ekibine aittir, izinsiz kopyalanamaz.'
         }
     ];
 

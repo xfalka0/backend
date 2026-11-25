@@ -25,7 +25,7 @@ const REACTION_EMOJIS = [
     { type: 'like', icon: '👍' },
 ];
 
-const MessageBubble = React.memo(({ children, messageId, isMine, animateEntrance = false, isRead, avatar, vipLevel = 0, timestamp, reaction, onReaction, isReplied, earnedDiamonds, isOperator, onAvatarPress }) => {
+const MessageBubble = React.memo(({ children, messageId, isMine, animateEntrance = false, isRead, avatar, vipLevel = 0, timestamp, reaction, onReaction, isReplied, earnedDiamonds, isOperator, onAvatarPress, disableBubblePress = false }) => {
     const { theme, themeMode } = useTheme();
     const { isLowPerf, reducedMotion } = useMotionPreferences();
     const disableMotion = isLowPerf || reducedMotion;
@@ -155,7 +155,61 @@ const MessageBubble = React.memo(({ children, messageId, isMine, animateEntrance
 
             <View style={[styles.bubbleAndActions, isMine && { flexDirection: 'row-reverse' }]}>
                 <Animated.View style={[styles.bubbleWrapper, animatedStyle]}>
-                    <TouchableWithoutFeedback onPress={handlePress}>
+                    {disableBubblePress ? (
+                        <View>
+                            {isMine ? (
+                                <GlassCard
+                                    intensity={50}
+                                    tint={themeMode === 'dark' ? 'dark' : 'light'}
+                                    style={[styles.bubble, styles.mine]}
+                                    noBorder={true}
+                                >
+                                    <LinearGradient
+                                        colors={['rgba(181, 18, 62, 0.62)', 'rgba(232, 62, 80, 0.78)']}
+                                        start={{ x: 0, y: 0 }}
+                                        end={{ x: 1, y: 1 }}
+                                        style={StyleSheet.absoluteFill}
+                                    />
+                                    <View style={[StyleSheet.absoluteFill, { borderRadius: 18, borderBottomRightRadius: 4 }]} />
+                                    <View style={{ position: 'relative', zIndex: 1 }}>
+                                        {renderContent()}
+                                    </View>
+                                </GlassCard>
+                            ) : (
+                                <GlassCard intensity={25} tint={themeMode === 'dark' ? 'dark' : 'light'} style={[styles.bubble, styles.theirs]} noBorder={true}>
+                                    <View style={[StyleSheet.absoluteFill, { borderRadius: 18, borderTopLeftRadius: 20, borderTopRightRadius: 20, borderBottomRightRadius: 20, borderBottomLeftRadius: 4 }]} />
+                                    <View style={{ position: 'relative', zIndex: 1 }}>
+                                        {renderContent()}
+                                    </View>
+                                </GlassCard>
+                            )}
+
+                            {reacted && (
+                                <Animated.View 
+                                    style={[
+                                        styles.reactionBadge,
+                                        badgeAnimatedStyle,
+                                        {
+                                            right: isMine ? undefined : -10, // Pushed further out
+                                            left: isMine ? -10 : undefined,   // Pushed further out
+                                            backgroundColor: themeMode === 'dark' ? '#1f2937' : '#ffffff',
+                                            borderColor: themeMode === 'dark' ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)',
+                                        }
+                                    ]}
+                                >
+                                    <TouchableOpacity 
+                                        activeOpacity={0.7}
+                                        onPress={() => onReaction && onReaction(null)}
+                                        style={{ width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center' }}
+                                    >
+                                        {reaction === 'heart' && <HeartBurst count={6} color="#ff5e95" />}
+                                        <Text style={{ fontSize: 10 }}>{getEmojiIcon(reaction)}</Text>
+                                    </TouchableOpacity>
+                                </Animated.View>
+                            )}
+                        </View>
+                    ) : (
+                        <TouchableWithoutFeedback onPress={handlePress}>
                         <View>
                             {isMine ? (
                                 <GlassCard
@@ -209,6 +263,7 @@ const MessageBubble = React.memo(({ children, messageId, isMine, animateEntrance
                             )}
                         </View>
                     </TouchableWithoutFeedback>
+                    )}
 
                     {false && !isMine && isReplied && parseFloat(earnedDiamonds) > 0 && (
                         <View style={styles.earningBadge}>

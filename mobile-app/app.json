@@ -1,8 +1,8 @@
 {
   "expo": {
-    "name": "Fiva",
-    "slug": "fiva-social",
-    "version": "1.0.8",
+    "name": "Fiora",
+    "slug": "fiora-social",
+    "version": "1.1.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -35,7 +35,7 @@
       },
       "package": "com.fivachat.app",
       "googleServicesFile": "./google-services.json",
-      "versionCode": 108,
+      "versionCode": 110,
       "permissions": [
         "android.permission.INTERNET"
       ]
@@ -44,7 +44,7 @@
       "favicon": "./assets/favicon.png"
     },
     "facebookAppId": "1399067395595701",
-    "facebookDisplayName": "Fiva",
+    "facebookDisplayName": "Fiora",
     "facebookScheme": "fb1399067395595701",
     "facebookAutoLogAppEventsEnabled": true,
     "facebookAdvertiserIDCollectionEnabled": true,
@@ -68,7 +68,7 @@
         "react-native-fbsdk-next",
         {
           "appID": "1399067395595701",
-          "displayName": "Fiva",
+          "displayName": "Fiora",
           "scheme": "fb1399067395595701",
           "autoLogAppEventsEnabled": true,
           "advertiserIDCollectionEnabled": true

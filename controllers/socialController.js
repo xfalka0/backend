@@ -212,6 +212,7 @@ exports.adminCreatePost = async (req, res) => {
             [operator_id, image_url, content]
         );
         log(`[SUCCESS] Post Inserted ID: ${result.rows[0].id}`);
+        try { req.app?.get('io')?.emit('new_social_post', { postId: result.rows[0].id }); } catch (e) {}
         res.json(result.rows[0]);
     } catch (err) {
         log(`[DB ERROR] ${err.message}`);
@@ -231,6 +232,7 @@ exports.adminCreateStory = async (req, res) => {
             "INSERT INTO stories (operator_id, image_url, expires_at) VALUES ($1, $2, NOW() + INTERVAL '24 hours') RETURNING *",
             [operator_id, image_url]
         );
+        try { req.app?.get('io')?.emit('new_social_story', { storyId: result.rows[0].id }); } catch (e) {}
         res.json(result.rows[0]);
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -249,6 +251,7 @@ exports.userCreatePost = async (req, res) => {
             'INSERT INTO posts (operator_id, image_url, content) VALUES ($1, $2, $3) RETURNING *',
             [userId, image_url, content || '']
         );
+        try { req.app?.get('io')?.emit('new_social_post', { postId: result.rows[0].id, userId }); } catch (e) {}
         res.json(result.rows[0]);
     } catch (err) {
         console.error('[SOCIAL] User Create Post Error:', err.message);
@@ -268,6 +271,7 @@ exports.userCreateStory = async (req, res) => {
             "INSERT INTO stories (operator_id, image_url, expires_at) VALUES ($1, $2, NOW() + INTERVAL '24 hours') RETURNING *",
             [userId, image_url]
         );
+        try { req.app?.get('io')?.emit('new_social_story', { storyId: result.rows[0].id, userId }); } catch (e) {}
         res.json(result.rows[0]);
     } catch (err) {
         console.error('[SOCIAL] User Create Story Error:', err.message);

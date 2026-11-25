@@ -29,7 +29,7 @@ const HeroSection = ({
                         style={{ width: 34, height: 34, borderRadius: 10, marginRight: 8 }} 
                     />
                     <Text style={{ color: '#fff', fontSize: 20, fontWeight: '900', letterSpacing: 0.5 }}>
-                        Fiva
+                        Fiora
                     </Text>
                 </View>
 

@@ -64,7 +64,7 @@ export default function VideoCallScreen({ route, navigation }) {
     useKeepAwake();
     const { receiver, isIncoming: initialIsIncoming, chatId: routeChatId, rtcToken: initialRtcToken, channelName: initialChannelName, appId: initialAppId, callId: initialCallId } = route.params || {};
     const otherUser = receiver || {};
-    const otherUserName = otherUser.name || otherUser.display_name || otherUser.username || 'Fiva Kullanıcısı';
+    const otherUserName = otherUser.name || otherUser.display_name || otherUser.username || 'Fiora Kullanıcısı';
     const otherUserImage = resolveImageUrl(otherUser.avatar_url || otherUser.avatar);
 
     const { socket } = useChat();

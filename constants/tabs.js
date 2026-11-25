@@ -23,7 +23,9 @@ const TAB_MAPPING = {
     'cevrimici': 'Çevrimiçi',
     'yeni': 'Yeni',
     'popüler': 'Popüler',
-    'populer': 'Popüler'
+    'populer': 'Popüler',
+    'tümü': 'Önerilen',
+    'tumu': 'Önerilen'
 };
 
 function resolveTab(rawTab) {

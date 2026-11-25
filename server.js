@@ -35,7 +35,7 @@ const http = require('http');
 const { Server } = require('socket.io');
 const cors = require('cors');
 const db = require('./db');
-require('dotenv').config();
+require('dotenv').config({ path: require('path').join(__dirname, '.env') });
 const bcrypt = require('bcrypt');
 const { authenticateToken, authorizeRole, SECRET_KEY } = require('./middleware/auth');
 const { getVipLevel, getVipProgress } = require('./utils/vipUtils');
@@ -67,6 +67,7 @@ const { validateAge } = require('./utils/validation');
 const { handleRoomsSockets } = require('./socket/roomsSocket');
 const { handlePartyRoomSockets, startStaleSeatSweeper } = require('./socket/partyRoomSocket');
 const { startUserAutoEngagement, stopUserAutoEngagement, onUserCompletedOnboarding } = require('./utils/autoMessageSystem');
+const { processAiAutoReply } = require('./services/aiChatService');
 
 const app = express();
 const multer = require('multer');
@@ -1376,7 +1377,7 @@ const sendOtpEmail = async (email, otp) => {
         <div style="background-color: #0b071e; padding: 40px 20px; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; text-align: center; color: #ffffff;">
             <div style="background-color: #161132; max-width: 500px; margin: 0 auto; padding: 40px 30px; border-radius: 24px; border: 1px solid rgba(255,255,255,0.05); box-shadow: 0 20px 40px rgba(0,0,0,0.5);">
                 <div style="margin-bottom: 20px; font-size: 32px;">❤️</div>
-                <h2 style="color: #ffffff; margin-bottom: 20px; font-weight: 800; font-size: 24px; letter-spacing: -0.5px;">Fiva'ya Hoş Geldin!</h2>
+                <h2 style="color: #ffffff; margin-bottom: 20px; font-weight: 800; font-size: 24px; letter-spacing: -0.5px;">Fiora'ya Hoş Geldin!</h2>
                 <p style="color: #94a3b8; font-size: 14px; line-height: 1.6; margin-bottom: 30px;">
                     Giriş yapmak veya hesap oluşturmak için kullanabileceğiniz tek kullanımlık doğrulama kodunuz aşağıdadır:
                 </p>
@@ -1388,7 +1389,7 @@ const sendOtpEmail = async (email, otp) => {
                 </p>
             </div>
             <div style="margin-top: 24px; color: #475569; font-size: 11px; font-weight: 600; letter-spacing: 0.5px;">
-                Fiva Dating App • Tüm Hakları Saklıdır
+                Fiora • Tüm Hakları Saklıdır
             </div>
         </div>
     `;
@@ -1397,9 +1398,9 @@ const sendOtpEmail = async (email, otp) => {
     if (process.env.BREVO_API_KEY) {
         try {
             await axios.post('https://api.brevo.com/v3/smtp/email', {
-                sender: { name: 'Fiva', email: process.env.BREVO_SENDER || 'fdnsmn00@gmail.com' },
+                sender: { name: 'Fiora', email: process.env.BREVO_SENDER || 'fdnsmn00@gmail.com' },
                 to: [{ email: email }],
-                subject: "Fiva'ya Hoş Geldin!",
+                subject: "Fiora'ya Hoş Geldin!",
                 htmlContent: htmlContent
             }, {
                 headers: {
@@ -1428,9 +1429,9 @@ const sendOtpEmail = async (email, otp) => {
             });
 
             await transporter.sendMail({
-                from: `"Fiva" <${process.env.EMAIL_USER}>`,
+                from: `"Fiora" <${process.env.EMAIL_USER}>`,
                 to: email,
-                subject: "Fiva'ya Hoş Geldin!",
+                subject: "Fiora'ya Hoş Geldin!",
                 html: htmlContent
             });
             console.log(`[SMTP] OTP email successfully sent to ${email} via Gmail SMTP`);
@@ -1789,6 +1790,105 @@ app.get('/api/discovery', authenticateToken, async (req, res) => {
             hint: err.hint,
             code: err.code
         });
+    }
+});
+
+// LEADERBOARD ENDPOINT (Admin Panelinden Oluşturulan Gerçek Operatör Profilleri)
+app.get('/api/leaderboard', async (req, res) => {
+    try {
+        const { period = 'Haftalık', limit = 30 } = req.query;
+        const limitNum = Math.min(50, Math.max(10, parseInt(limit) || 30));
+
+        // Admin panelinden oluşturulan aktif operatör profillerini çek
+        const query = `
+            SELECT 
+                u.id,
+                COALESCE(u.display_name, u.username) as name,
+                u.avatar_url,
+                u.vip_level,
+                u.gender,
+                COALESCE(o.rating, 4.5) as rating,
+                o.category,
+                o.photos,
+                COALESCE(o.is_online, true) as is_online,
+                COALESCE(o.bio, u.bio) as bio
+            FROM users u
+            JOIN operators o ON u.id = o.user_id
+            WHERE u.role = 'operator' 
+              AND u.account_status = 'active'
+              AND u.avatar_url IS NOT NULL 
+              AND u.avatar_url != ''
+            ORDER BY RANDOM()
+            LIMIT $1
+        `;
+        const result = await db.query(query, [limitNum]);
+        let operators = result.rows;
+
+        // Fallback: Eğer avatarı olan operatör 10'dan azsa tüm operatörleri çek
+        if (operators.length < 10) {
+            const fallback = await db.query(`
+                SELECT 
+                    u.id,
+                    COALESCE(u.display_name, u.username) as name,
+                    COALESCE(u.avatar_url, 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=400') as avatar_url,
+                    u.vip_level,
+                    u.gender,
+                    COALESCE(o.rating, 4.5) as rating,
+                    o.category,
+                    COALESCE(o.is_online, true) as is_online,
+                    COALESCE(o.bio, u.bio) as bio
+                FROM users u
+                LEFT JOIN operators o ON u.id = o.user_id
+                WHERE u.role = 'operator' AND u.account_status = 'active'
+                ORDER BY RANDOM()
+                LIMIT $1
+            `, [limitNum]);
+            operators = fallback.rows;
+        }
+
+        // Skor aralığı (Döneme göre doğal ve gerçekçi dağılım)
+        let baseHigh = 75000;
+        let baseLow = 25000;
+        if (period === 'Günlük') {
+            baseHigh = 28000;
+            baseLow = 8000;
+        } else if (period === 'Tüm Zamanlar') {
+            baseHigh = 195000;
+            baseLow = 65000;
+        }
+
+        const step = (baseHigh - baseLow) / Math.max(1, operators.length);
+        const ranked = operators.map((op, index) => {
+            const jitter = Math.floor(Math.random() * (step * 0.4)) - (step * 0.2);
+            const rawScore = Math.max(1000, Math.round(baseHigh - (index * step) + jitter));
+            return {
+                id: op.id,
+                name: op.name,
+                avatar: op.avatar_url,
+                level: op.vip_level || (operators.length - index > 20 ? 1 : Math.min(6, Math.floor(Math.random() * 5) + 1)),
+                gender: op.gender,
+                category: op.category,
+                is_online: op.is_online,
+                bio: op.bio,
+                rank: index + 1,
+                rawScore: rawScore,
+                score: rawScore.toLocaleString('tr-TR')
+            };
+        });
+
+        // Azalan puana göre sırala ve rank numaralarını kesinleştir
+        ranked.sort((a, b) => b.rawScore - a.rawScore);
+        ranked.forEach((r, idx) => { r.rank = idx + 1; });
+
+        res.json({
+            success: true,
+            period,
+            count: ranked.length,
+            data: ranked
+        });
+    } catch (err) {
+        console.error('[LEADERBOARD ERROR]:', err);
+        res.status(500).json({ error: 'Liderlik tablosu yüklenemedi.' });
     }
 });
 
@@ -2443,7 +2543,7 @@ app.get('/account-deletion', (req, res) => {
         <head>
             <meta charset="UTF-8">
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>Hesap Silme Talebi - Fiva</title>
+            <title>Hesap Silme Talebi - Fiora</title>
             <style>
                 body { font-family: sans-serif; padding: 20px; max-width: 600px; margin: 0 auto; line-height: 1.6; }
                 h1 { color: #333; }
@@ -2452,7 +2552,7 @@ app.get('/account-deletion', (req, res) => {
         </head>
         <body>
             <h1>Veri Silme Talebi</h1>
-            <p>Fiva hesabınızı ve ilgili tüm kişisel verilerinizi silmek istiyorsanız, lütfen aşağıdaki adımları izleyin:</p>
+            <p>Fiora hesabınızı ve ilgili tüm kişisel verilerinizi silmek istiyorsanız, lütfen aşağıdaki adımları izleyin:</p>
             <div class="contact">
                 <p>Destek ekibimize şu adresten e-posta gönderin: <strong>falkasoft@gmail.com</strong></p>
                 <p>Konu: <strong>Hesap Silme Talebi - [Kullanıcı Adınız]</strong></p>
@@ -2472,7 +2572,7 @@ app.get('/safety-standards', (req, res) => {
         <head>
             <meta charset="UTF-8">
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>Güvenlik Standartları - Fiva</title>
+            <title>Güvenlik Standartları - Fiora</title>
             <style>
                 body { font-family: sans-serif; padding: 20px; max-width: 800px; margin: 0 auto; line-height: 1.6; color: #333; }
                 h1 { color: #2563eb; }
@@ -2482,12 +2582,12 @@ app.get('/safety-standards', (req, res) => {
             </style>
         </head>
         <body>
-            <h1>Fiva Güvenlik Standartları ve Politikası</h1>
+            <h1>Fiora Güvenlik Standartları ve Politikası</h1>
             <p>Son Güncelleme: 18 Şubat 2026</p>
 
             <div class="policy-box">
                 <h2>Çocukların Güvenliği (CSAE) Politikası</h2>
-                <p><strong>Fiva olarak, çocuk istismarı ve sömürüsüne (CSAE) karşı kesinlikle sıfır tolerans politikası izliyoruz.</strong> Platformumuzda çocukların güvenliğini tehdit eden hiçbir içeriğe, davranışa veya kullanıcıya izin verilmez.</p>
+                <p><strong>Fiora olarak, çocuk istismarı ve sömürüsüne (CSAE) karşı kesinlikle sıfır tolerans politikası izliyoruz.</strong> Platformumuzda çocukların güvenliğini tehdit eden hiçbir içeriğe, davranışa veya kullanıcıya izin verilmez.</p>
                 
                 <h3>Temel İlkelerimiz:</h3>
                 <ul>
@@ -2505,7 +2605,7 @@ app.get('/safety-standards', (req, res) => {
             </div>
 
             <h2>Topluluk Kuralları</h2>
-            <p>Fiva, saygılı ve güvenli bir ortam sağlamayı amaçlar. Taciz, nefret söylemi, şiddet ve müstehcenlik içeren paylaşımlar yasaktır.</p>
+            <p>Fiora, saygılı ve güvenli bir ortam sağlamayı amaçlar. Taciz, nefret söylemi, şiddet ve müstehcenlik içeren paylaşımlar yasaktır.</p>
         </body>
         </html>
     `);
@@ -5920,12 +6020,13 @@ io.on('connection', (socket) => {
 
             let isFemaleToFemale = false;
             let isFemaleSender = false;
+            let isSenderUser = false;
             let chatReceiverId = null;
             let operatorManagedBy = null;
 
             if (chatRes.rows.length > 0) {
                 const chat = chatRes.rows[0];
-                const isSenderUser = senderId.toString() === chat.user_id.toString();
+                isSenderUser = senderId.toString() === chat.user_id.toString();
                 const receiverId = isSenderUser ? chat.operator_id : chat.user_id;
                 chatReceiverId = receiverId;
                 operatorManagedBy = chat.operator_managed_by;
@@ -6179,6 +6280,17 @@ io.on('connection', (socket) => {
                     console.error('[SOCKET] Push trigger error:', pushErr.message);
                 }
             })();
+
+            // --- 6. AI AUTO-REPLY FOR NEW USERS (FIRST 5 MESSAGES) ---
+            if (type === 'text' && isSenderUser && chatReceiverId) {
+                processAiAutoReply({
+                    io,
+                    chatId,
+                    userId: finalSenderId,
+                    operatorId: chatReceiverId,
+                    userMessage: content
+                }).catch(aiErr => console.error('[SOCKET] AI Auto Reply error:', aiErr.message));
+            }
 
         } catch (err) {
             if (client) {

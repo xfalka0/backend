@@ -167,7 +167,7 @@ export default function SplashScreen({ navigation }) {
             </View>
 
             <View pointerEvents="none" style={styles.contentContainer}>
-                <Text style={styles.brandText}>Fiva</Text>
+                <Text style={styles.brandText}>Fiora</Text>
             </View>
         </View>
     );

@@ -215,7 +215,7 @@ export default function WelcomeScreen({ navigation }) {
                     {/* Middle Section (Vertically Centered Title & Subtitle) */}
                     <View style={styles.middleSection}>
                         <Animated.View entering={FadeInUp.delay(400).duration(800)} style={styles.titleWrapper}>
-                            <Text style={styles.title}>Fiva</Text>
+                            <Text style={styles.title}>Fiora</Text>
                             <Text style={styles.subtitle}>Gerçek bağlantılar, samimi sohbetler.</Text>
                         </Animated.View>
                     </View>

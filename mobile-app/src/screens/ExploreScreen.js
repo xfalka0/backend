@@ -21,6 +21,8 @@ import axios from 'axios';
 import { useFocusEffect } from '@react-navigation/native';
 import { useAlert } from '../contexts/AlertContext';
 import { useStarterPack } from '../contexts/StarterPackContext';
+import { useAppStore } from '../store/useAppStore';
+import SocketService from '../services/SocketService';
 
 const { height, width } = Dimensions.get('window');
 
@@ -148,6 +150,11 @@ export default function ExploreScreen({ navigation, route }) {
     const [selectedPostForOptions, setSelectedPostForOptions] = useState(null);
     const scrollY = useSharedValue(0);
     const lastFetchedUserId = useRef(null);
+    const flatListRef = useRef(null);
+    const [refreshing, setRefreshing] = useState(false);
+    const lastHandledRefreshTimestamp = useRef(0);
+    const lastHandledStoreRefresh = useRef(0);
+    const feedRefreshTimestamp = useAppStore(state => state.feedRefreshTimestamp);
 
     const [chatMap, setChatMap] = useState({}); // { [operatorId]: chatId }
     const [favoriteIds, setFavoriteIds] = useState(new Set()); // Set of operator IDs favorited by user
@@ -387,9 +394,21 @@ export default function ExploreScreen({ navigation, route }) {
                             setUser(parsedUser);
                         }
                     }
+
+                    const refreshParam = route?.params?.refreshTimestamp;
+                    const hasRefreshParam = refreshParam && refreshParam !== lastHandledRefreshTimestamp.current;
                     
-                    if (posts.length === 0 || (currentUser && currentUser.id !== lastFetchedUserId.current)) {
+                    if (posts.length === 0 || (currentUser && currentUser.id !== lastFetchedUserId.current) || hasRefreshParam) {
+                        if (hasRefreshParam) {
+                            lastHandledRefreshTimestamp.current = refreshParam;
+                            setActiveFeedTab('new');
+                        }
                         await fetchExploreData(currentUser);
+                        if (hasRefreshParam) {
+                            setTimeout(() => {
+                                flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
+                            }, 250);
+                        }
                     }
                     if (currentUser) {
                         await fetchUserChats(currentUser);
@@ -401,8 +420,32 @@ export default function ExploreScreen({ navigation, route }) {
             };
 
             loadAndFetch();
-        }, [posts.length, user])
+        }, [posts.length, user, route?.params?.refreshTimestamp])
     );
+
+    useEffect(() => {
+        if (feedRefreshTimestamp && feedRefreshTimestamp > lastHandledStoreRefresh.current) {
+            lastHandledStoreRefresh.current = feedRefreshTimestamp;
+            setActiveFeedTab('new');
+            fetchExploreData(user);
+            setTimeout(() => {
+                flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
+            }, 300);
+        }
+    }, [feedRefreshTimestamp, user]);
+
+    useEffect(() => {
+        const unsubPost = SocketService.on('new_social_post', () => {
+            fetchExploreData(user);
+        });
+        const unsubStory = SocketService.on('new_social_story', () => {
+            fetchExploreData(user);
+        });
+        return () => {
+            if (typeof unsubPost === 'function') unsubPost();
+            if (typeof unsubStory === 'function') unsubStory();
+        };
+    }, [user]);
 
     const fetchUser = async () => {
         try {
@@ -449,9 +492,11 @@ export default function ExploreScreen({ navigation, route }) {
         }
     };
 
-    const fetchExploreData = async (currentUser) => {
+    const fetchExploreData = async (currentUser, options = {}) => {
+        const { isPull = false, keepPrevious = true } = options;
         try {
-            setLoading(true);
+            if (!keepPrevious && posts.length === 0) setLoading(true);
+            if (isPull) setRefreshing(true);
             const token = await AsyncStorage.getItem('token');
             const [exploreRes, operatorsRes] = await Promise.all([
                 axios.get(`${API_URL}/social/explore`, {
@@ -471,15 +516,17 @@ export default function ExploreScreen({ navigation, route }) {
             
             const filteredPosts = exploreRes.data?.posts || [];
             const filteredStories = exploreRes.data?.stories || [];
-            setPosts(filteredPosts);
-            fetchPostCommentPreviews(filteredPosts);
+            if (filteredPosts.length > 0 || !keepPrevious) {
+                setPosts(filteredPosts);
+                fetchPostCommentPreviews(filteredPosts);
+            }
             setStories(filteredStories);
             setOperators(operatorsRes.data || []);
         } catch (err) {
-            setStories([]);
-            setPosts([]);
+            console.error('[Explore] fetchExploreData error:', err);
         } finally {
             setLoading(false);
+            setRefreshing(false);
         }
     };
 
@@ -1188,13 +1235,22 @@ export default function ExploreScreen({ navigation, route }) {
             </View>
 
             <Animated.FlatList
+                ref={flatListRef}
                 onScroll={scrollHandler}
                 data={visiblePosts}
-                keyExtractor={item => item.id}
+                keyExtractor={item => item?.id?.toString() || Math.random().toString()}
                 renderItem={renderPost}
                 showsVerticalScrollIndicator={false}
                 contentContainerStyle={styles.feedList}
                 scrollEventThrottle={16}
+                refreshControl={
+                    <RefreshControl
+                        refreshing={refreshing}
+                        onRefresh={() => fetchExploreData(user, { isPull: true })}
+                        tintColor={theme.colors.primary}
+                        colors={[theme.colors.primary]}
+                    />
+                }
                 ListHeaderComponent={renderHeader}
                 ListEmptyComponent={() => (
                     <View style={styles.emptyFeed}>

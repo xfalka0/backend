@@ -165,7 +165,7 @@ router.post('/:messageId/unlock', authenticateToken, async (req, res) => {
             const io = req.app.get('io');
             if (io) {
                 const unlockPayload = {
-                    messageId: parseInt(messageId, 10),
+                    messageId: messageId.toString(),
                     chatId: msg.chat_id,
                     is_unlocked: true,
                     message: updatedMsg

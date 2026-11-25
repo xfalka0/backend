@@ -7,6 +7,7 @@ import axios from 'axios';
 import { API_URL } from '../config';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAlert } from '../contexts/AlertContext';
+import { useAppStore } from '../store/useAppStore';
 
 export default function CreatePostScreen({ route, navigation }) {
     const { showAlert } = useAlert();
@@ -82,11 +83,20 @@ export default function CreatePostScreen({ route, navigation }) {
                 headers: { Authorization: `Bearer ${token}` }
             });
 
+            // Feed'i anında yenilemesi için global store tetikleyicisi
+            useAppStore.getState().triggerFeedRefresh();
+
             showAlert({
                 title: 'Başarılı',
                 message: isStory ? 'Hikayen paylaşıldı!' : 'Gönderin paylaşıldı!',
                 type: 'success',
-                onConfirm: () => navigation.goBack()
+                onConfirm: () => {
+                    useAppStore.getState().triggerFeedRefresh();
+                    navigation.navigate('Main', {
+                        screen: 'Keşfet',
+                        params: { refreshTimestamp: Date.now() }
+                    });
+                }
             });
         } catch (err) {
             console.error('[SHARE_ERROR] Full error:', err);

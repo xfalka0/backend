@@ -83,10 +83,10 @@ export default function VoiceCallScreen({ route, navigation }) {
     useKeepAwake();
     const { receiver, isIncoming: initialIsIncoming, chatId: routeChatId, rtcToken: initialRtcToken, channelName: initialChannelName, appId: initialAppId, callId: initialCallId } = route.params || {};
     const otherUser = receiver || {};
-    const otherUserName = otherUser.name || otherUser.display_name || otherUser.username || 'Fiva Kullanıcısı';
+    const otherUserName = otherUser.name || otherUser.display_name || otherUser.username || 'Fiora Kullanıcısı';
     const otherUserImage = resolveImageUrl(otherUser.avatar_url || otherUser.avatar);
     const vipLevel = otherUser.vip_level || 0;
-    const agencyName = otherUser.agency_name || 'FİVA VIP';
+    const agencyName = otherUser.agency_name || 'FİORA VIP';
 
     const { socket } = useChat();
     const role = useAppStore(state => state.role);

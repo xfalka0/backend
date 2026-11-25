@@ -39,7 +39,7 @@ export default function InviteScreen({ navigation, route }) {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
         try {
             await Share.share({
-                message: `Fiva'ya gel! Kayıt olurken benim kodumu kullan: ${inviteCode} \n\nUygulamayı hemen indir!`,
+                message: `Fiora'ya gel! Kayıt olurken benim kodumu kullan: ${inviteCode} \n\nUygulamayı hemen indir!`,
             });
         } catch (error) {
             console.error(error);
@@ -208,7 +208,7 @@ export default function InviteScreen({ navigation, route }) {
                         <View style={styles.modalContent}>
                             {/* Red Gift Banner */}
                             <LinearGradient colors={['#FF5F6D', '#FFC371']} style={styles.modalBanner} start={{x:0, y:0}} end={{x:1, y:1}}>
-                                <Text style={styles.modalBannerTitle}>Fiva'ya Katıl</Text>
+                                <Text style={styles.modalBannerTitle}>Fiora'ya Katıl</Text>
                                 <Text style={styles.modalBannerTitle}>Ödülü Al</Text>
                                 <Text style={styles.modalBannerTitle}>Arkadaş Edin</Text>
                                 <Ionicons name="gift" size={110} color="rgba(255,255,255,0.25)" style={styles.modalBannerIcon} />
@@ -221,7 +221,7 @@ export default function InviteScreen({ navigation, route }) {
                                 </View>
                                 <View style={styles.qrInfo}>
                                     <Text style={styles.qrCodeText}>Davet Kodu: {inviteCode}</Text>
-                                    <Text style={styles.qrUserText}>Davetçi: {user?.name || 'Fiva Kullanıcısı'}</Text>
+                                    <Text style={styles.qrUserText}>Davetçi: {user?.name || 'Fiora Kullanıcısı'}</Text>
                                 </View>
                             </View>
 
@@ -230,7 +230,7 @@ export default function InviteScreen({ navigation, route }) {
                                 <View style={styles.copyInputBox}>
                                     <Ionicons name="link-outline" size={16} color="#9CA3AF" style={{ marginRight: 5 }} />
                                     <Text style={styles.copyInputText} numberOfLines={1}>
-                                        Arkadaşınız sizi Fiva'yı indirmeye davet ediyor...
+                                        Arkadaşınız sizi Fiora'yı indirmeye davet ediyor...
                                     </Text>
                                 </View>
                                 <TouchableOpacity style={styles.copyButtonSolid} onPress={copyToClipboard}>

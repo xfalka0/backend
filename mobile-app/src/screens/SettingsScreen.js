@@ -422,7 +422,7 @@ export default function SettingsScreen({ navigation, route }) {
 
                 <View style={{ alignItems: 'center', marginTop: 16, marginBottom: 8 }}>
                     <Image source={require('../../assets/icon.png')} style={{ width: 44, height: 44, borderRadius: 12, marginBottom: 8 }} />
-                    <Text style={[styles.versionText, { color: theme.colors.textSecondary }]}>Fiva v1.0.6</Text>
+                    <Text style={[styles.versionText, { color: theme.colors.textSecondary }]}>Fiora v1.1.0</Text>
                 </View>
                 <View style={{ height: 50 }} />
             </ScrollView>

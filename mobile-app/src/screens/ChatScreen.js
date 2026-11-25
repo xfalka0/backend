@@ -177,11 +177,25 @@ export default function ChatScreen({ route, navigation }) {
     const messagesRef = useRef([]);
     const initialLoadedRef = useRef(false);
     const [isKeyboardVisible, setKeyboardVisible] = useState(false);
+    const flatListRef = useRef(null);
+
+    const scrollToBottom = useCallback((animated = true) => {
+        requestAnimationFrame(() => {
+            try {
+                flatListRef.current?.scrollToOffset({ offset: 0, animated });
+            } catch (e) {
+                // ignore
+            }
+        });
+    }, []);
 
     useEffect(() => {
         const showSub = Keyboard.addListener(
             Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
-            () => setKeyboardVisible(true)
+            () => {
+                setKeyboardVisible(true);
+                scrollToBottom(true);
+            }
         );
         const hideSub = Keyboard.addListener(
             Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
@@ -191,7 +205,7 @@ export default function ChatScreen({ route, navigation }) {
             showSub.remove();
             hideSub.remove();
         };
-    }, []);
+    }, [scrollToBottom]);
 
     useEffect(() => {
         const onBackPress = () => {
@@ -380,9 +394,18 @@ export default function ChatScreen({ route, navigation }) {
     const [audioLevel, setAudioLevel] = useState(0);
     const timerRef = useRef(null);
     const socketRef = useRef(null);
-    const flatListRef = useRef(null);
     const recordingRef = useRef(null);
     const isRecordingRef = useRef(false);
+
+    // Yeni mesaj geldiğinde veya mesaj gönderildiğinde otomatik en aşağı kaydır
+    const latestMessageKey = messages[0]?.id || messages[0]?._clientKey;
+    useEffect(() => {
+        if (latestMessageKey) {
+            scrollToBottom(true);
+            const t = setTimeout(() => scrollToBottom(true), 120);
+            return () => clearTimeout(t);
+        }
+    }, [latestMessageKey, scrollToBottom]);
     const typingTimeoutRef = useRef(null);
     const waveAnim = useRef(new Animated.Value(0)).current;
     const blinkAnim = useRef(new Animated.Value(1)).current;
@@ -826,7 +849,10 @@ export default function ChatScreen({ route, navigation }) {
                 tempId: tempId
             };
 
-            setTimeout(() => setMessages(prev => [optimisticMsg, ...prev]), 0);
+            setTimeout(() => {
+            setMessages(prev => [optimisticMsg, ...prev]);
+            scrollToBottom(true);
+        }, 0);
         } catch (err) {
             console.error('[ChatScreen] Send location error:', err);
             showAlert({ title: 'Hata', message: 'Konum gönderilemedi.', type: 'error' });
@@ -1125,6 +1151,7 @@ export default function ChatScreen({ route, navigation }) {
 
                 return newMessages;
             });
+            scrollToBottom(true);
         };
 
         const handleMessageError = (data) => {
@@ -1411,6 +1438,10 @@ export default function ChatScreen({ route, navigation }) {
                 ));
                 setCurrentBalance(prev => Math.max(0, prev - cost));
                 Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                // Fotoğraf açıldığı gibi otomatik tam ekran görüntüleyiciyi de aç
+                setTimeout(() => {
+                    setSelectedImage(msg.content);
+                }, 300);
             } else {
                 showAlert({ title: 'Hata', message: res.data?.error || 'Fotoğraf açılamadı.', type: 'error' });
             }
@@ -1490,7 +1521,10 @@ export default function ChatScreen({ route, navigation }) {
 
             liveAnimatedIdsRef.current.add(tempId);
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-            setTimeout(() => setMessages(prev => [optimisticMsg, ...prev]), 0);
+            setTimeout(() => {
+            setMessages(prev => [optimisticMsg, ...prev]);
+            scrollToBottom(true);
+        }, 0);
 
             sendQueueRef.current = sendQueueRef.current
                 .catch(() => {})
@@ -1555,7 +1589,10 @@ export default function ChatScreen({ route, navigation }) {
             is_optimistic: true
         };
 
-        setTimeout(() => setMessages(prev => [optimisticMsg, ...prev]), 0);
+        setTimeout(() => {
+            setMessages(prev => [optimisticMsg, ...prev]);
+            scrollToBottom(true);
+        }, 0);
 
         const msgData = {
             chatId: chatId,
@@ -1623,7 +1660,10 @@ export default function ChatScreen({ route, navigation }) {
             created_at: new Date().toISOString(),
             is_optimistic: true
         };
-        setTimeout(() => setMessages(prev => [optimisticMsg, ...prev]), 0);
+        setTimeout(() => {
+            setMessages(prev => [optimisticMsg, ...prev]);
+            scrollToBottom(true);
+        }, 0);
 
         const msgData = {
             chatId: chatId,
@@ -1702,7 +1742,10 @@ export default function ChatScreen({ route, navigation }) {
                 created_at: new Date().toISOString(),
                 is_optimistic: true
             };
-            setTimeout(() => setMessages(prev => [optimisticMsg, ...prev]), 0);
+            setTimeout(() => {
+            setMessages(prev => [optimisticMsg, ...prev]);
+            scrollToBottom(true);
+        }, 0);
 
             const msgData = {
                 chatId: chatId,
@@ -1858,6 +1901,7 @@ export default function ChatScreen({ route, navigation }) {
                 content: audioUrl, type: 'audio', content_type: 'audio',
                 duration: durationStr, created_at: new Date().toISOString(), is_optimistic: true
             }, ...prev]);
+            scrollToBottom(true);
             socketRef.current && socketRef.current.emit('send_message', {
                 chatId: chatId, senderId: user.id, content: audioUrl,
                 type: 'audio', tempId: tempId, duration: durationStr
@@ -2223,7 +2267,10 @@ export default function ChatScreen({ route, navigation }) {
                             </View>
                         )}
                         {isLocked && (
-                            <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(15, 23, 42, 0.88)', borderRadius: 16 }}>
+                            <View 
+                                pointerEvents="none"
+                                style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(15, 23, 42, 0.88)', borderRadius: 16 }}
+                            >
                                 <LinearGradient
                                     colors={['rgba(236, 72, 153, 0.9)', 'rgba(139, 92, 246, 0.95)']}
                                     start={{ x: 0, y: 0 }}
@@ -2252,7 +2299,10 @@ export default function ChatScreen({ route, navigation }) {
                         >
                             <View style={{ width: 220, height: 220, borderRadius: 16, backgroundColor: '#0f172a', justifyContent: 'center', alignItems: 'center' }}>
                                 <Ionicons name="videocam" size={48} color="rgba(255,255,255,0.1)" />
-                                <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(15, 23, 42, 0.88)', borderRadius: 16 }}>
+                                <View 
+                                    pointerEvents="none"
+                                    style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(15, 23, 42, 0.88)', borderRadius: 16 }}
+                                >
                                     <LinearGradient
                                         colors={['rgba(236, 72, 153, 0.9)', 'rgba(139, 92, 246, 0.95)']}
                                         start={{ x: 0, y: 0 }}
@@ -2459,8 +2509,17 @@ export default function ChatScreen({ route, navigation }) {
             );
         }
 
+        const isInteractive = item.content_type === 'image' || item.type === 'image' || 
+                              item.content_type === 'locked_image' || item.type === 'locked_image' ||
+                              item.content_type === 'video' || item.type === 'video' ||
+                              item.content_type === 'locked_video' || item.type === 'locked_video' ||
+                              item.content_type === 'audio' || item.type === 'audio' ||
+                              item.content_type === 'location' || item.type === 'location' ||
+                              item.content_type === 'call_stub' || item.type === 'call_stub';
+
         return (
             <MessageBubble
+                disableBubblePress={isInteractive}
                 isMine={isUser}
                 messageId={item.id}
                     animateEntrance={index === 0 && liveAnimatedIdsRef.current.has(String(item._clientKey || item.id))}

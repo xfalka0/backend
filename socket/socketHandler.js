@@ -1,6 +1,7 @@
 const db = require('../db');
 const { recordOperatorCommission } = require('../utils/commissionUtils');
 const { sendPushNotification } = require('../utils/notificationUtils');
+const { processAiAutoReply } = require('../services/aiChatService');
 
 function pushPayoutLog(entry) {
     if (!global.payoutLogs) global.payoutLogs = [];
@@ -609,10 +610,11 @@ function initializeSockets(io) {
                 let isFemaleToFemale = false;
                 let chatReceiverId = null;
                 let operatorManagedBy = null;
+                let isSenderUser = false;
 
                 if (chatRes.rows.length > 0) {
                     const chat = chatRes.rows[0];
-                    const isSenderUser = senderId.toString() === chat.user_id.toString();
+                    isSenderUser = senderId.toString() === chat.user_id.toString();
                     const receiverId = isSenderUser ? chat.operator_id : chat.user_id;
                     chatReceiverId = receiverId;
                     operatorManagedBy = chat.operator_managed_by;
@@ -889,6 +891,17 @@ function initializeSockets(io) {
                         console.error('[SOCKET] Push trigger error:', pushErr.message);
                     }
                 })();
+
+                // --- 6. AI AUTO-REPLY (For new users first 5 messages) ---
+                if (type === 'text' && isSenderUser && chatReceiverId) {
+                    processAiAutoReply({
+                        io,
+                        chatId,
+                        userId: finalSenderId,
+                        operatorId: chatReceiverId,
+                        userMessage: content
+                    }).catch(aiErr => console.error('[SOCKET] AI Auto Reply error:', aiErr.message));
+                }
 
             } catch (err) {
                 if (client) {

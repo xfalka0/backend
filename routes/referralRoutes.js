@@ -24,9 +24,9 @@ router.get('/r/:code', async (req, res) => {
             console.log(`[REFERRAL_DEBUG] Bot ignored: ${userAgent}`);
         }
 
-        // Redirect to App Store / Play Store (Official Fiva URL)
+        // Redirect to App Store / Play Store (Official Fiora URL)
         const androidUrl = 'https://play.google.com/store/apps/details?id=com.fivachat.app'; 
-        const iosUrl = 'https://apps.apple.com/app/fiva-dating';
+        const iosUrl = 'https://apps.apple.com/app/fiora-dating';
         
         const isIos = /iPhone|iPad|iPod/i.test(userAgent);
         res.redirect(isIos ? iosUrl : androidUrl);

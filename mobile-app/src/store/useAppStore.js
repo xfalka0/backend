@@ -35,7 +35,9 @@ export const useAppStore = create((set, get) => ({
     serverUserSynced: false,
     lastAuthMeAt: 0,
     bootAuthMeInFlight: false,
+    feedRefreshTimestamp: 0,
 
+    triggerFeedRefresh: () => set({ feedRefreshTimestamp: Date.now() }),
     setSessionStatus: (sessionStatus) => set({ sessionStatus }),
     setBootAuthMeInFlight: (inFlight) => set({ bootAuthMeInFlight: !!inFlight }),
     setServerAuthSync: (synced) => set({

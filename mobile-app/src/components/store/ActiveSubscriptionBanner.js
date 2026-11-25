@@ -50,7 +50,7 @@ export default function ActiveSubscriptionBanner({ startDate, expireDate }) {
                             <FontAwesome5 name="crown" size={14} color="#FFC53D" />
                         </View>
                         <View>
-                            <Text style={styles.title}>Fiva Premium</Text>
+                            <Text style={styles.title}>Fiora Premium</Text>
                             <Text style={styles.subtitle}>Tüm ayrıcalıklar aktif</Text>
                         </View>
                     </View>

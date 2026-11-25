@@ -4,7 +4,7 @@ const db = require('../db');
 const { authenticateToken } = require('../middleware/auth');
 const { getVipLevel, getVipProgress } = require('../utils/vipUtils');
 const { logActivity } = require('../utils/helpers');
-const { insertPaymentIfAbsent } = require('../utils/revenuecatUtils');
+const { insertPaymentIfAbsent, ensurePaymentSchema } = require('../utils/revenuecatUtils');
 const { withTransaction } = require('../utils/dbUtils');
 
 // VIP XP PURCHASE ENDPOINT
@@ -139,6 +139,7 @@ router.post('/upgrade-direct', authenticateToken, async (req, res) => {
         const isSyntheticTx = !rawTx || rawTx === String(userId) || rawTx.startsWith('rc_');
         const realTxId = isSyntheticTx ? null : rawTx;
 
+        await ensurePaymentSchema(db);
         const outcome = await withTransaction(db, async (client) => {
             const userRes = await client.query(
                 'SELECT id, premium_expire_date, vip_expire_date, is_premium, premium_start_date, vip_start_date FROM users WHERE id::text = $1::text FOR UPDATE',

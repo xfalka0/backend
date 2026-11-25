@@ -9,13 +9,23 @@ const REVENUECAT_API_BASE = 'https://api.revenuecat.com/v1';
 let paymentSchemaPromise = null;
 
 /**
- * Ensures payments.external_tx_id exists using the autocommit pool (never inside a rollbackable tx).
+ * Verifies payments.external_tx_id exists without acquiring locks when the column is already present.
+ * Never runs ALTER TABLE if another connection already migrated the schema (prevents AccessExclusiveLock deadlocks).
  */
-async function ensurePaymentSchema() {
+async function ensurePaymentSchema(queryable = dbPool) {
     if (!paymentSchemaPromise) {
         paymentSchemaPromise = (async () => {
-            await dbPool.query(`ALTER TABLE payments ADD COLUMN IF NOT EXISTS external_tx_id VARCHAR(255)`);
-            await dbPool.query(`CREATE INDEX IF NOT EXISTS idx_payments_external_tx_id ON payments(external_tx_id)`);
+            const colCheck = await queryable.query(
+                `SELECT 1 FROM information_schema.columns
+                 WHERE table_name = 'payments' AND column_name = 'external_tx_id'
+                 LIMIT 1`
+            );
+            if (colCheck.rows.length > 0) {
+                return true;
+            }
+            await queryable.query(`ALTER TABLE payments ADD COLUMN IF NOT EXISTS external_tx_id VARCHAR(255)`);
+            await queryable.query(`CREATE INDEX IF NOT EXISTS idx_payments_external_tx_id ON payments(external_tx_id)`);
+            return true;
         })().catch((err) => {
             paymentSchemaPromise = null;
             throw err;
@@ -175,7 +185,7 @@ async function creditCoinPurchaseAtomic(client, {
     pairWindowSeconds = 180,
     beforeCreditHook = null,
 }) {
-    await ensurePaymentSchema();
+    await ensurePaymentSchema(client);
 
     const userRes = await client.query(
         'SELECT id, balance, vip_xp, vip_level, total_spent FROM users WHERE id::text = $1::text FOR UPDATE',
@@ -382,7 +392,7 @@ async function insertPaymentIfAbsent(client, {
     packageNameSnapshot = null,
     status = 'completed',
 }) {
-    await ensurePaymentSchema();
+    await ensurePaymentSchema(client);
     const txKey = String(transactionId);
     await client.query('SELECT pg_advisory_xact_lock(hashtext($1::text))', [txKey]);
 

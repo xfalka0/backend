@@ -14,9 +14,15 @@ const authenticateToken = async (req, res, next) => {
         return res.status(401).json({ error: 'Erişim reddedildi. Token bulunamadı.' });
     }
 
+    let decoded;
     try {
-        const decoded = jwt.verify(token, SECRET_KEY);
+        decoded = jwt.verify(token, SECRET_KEY);
+    } catch (jwtErr) {
+        console.error("[AUTH] 403: Invalid token error:", jwtErr.message);
+        return res.status(403).json({ error: 'Geçersiz token.' });
+    }
 
+    try {
         // Verify user still exists and is active
         const result = await db.query('SELECT id, username, email, role, account_status, display_name, avatar_url, gender, onboarding_completed FROM users WHERE id::text = $1::text', [decoded.id]);
 
@@ -44,9 +50,10 @@ const authenticateToken = async (req, res, next) => {
 
         req.user = user;
         next();
-    } catch (err) {
-        console.error("[AUTH] 403: Invalid token error:", err.message);
-        return res.status(403).json({ error: 'Geçersiz token.' });
+    } catch (dbErr) {
+        // Never return 403 on transient DB/pool errors — 403 logs users out on mobile & admin!
+        console.error("[AUTH] 503: Database check failed:", dbErr.message);
+        return res.status(503).json({ error: 'Sunucu geçici olarak meşgul, lütfen tekrar deneyin.' });
     }
 };
 

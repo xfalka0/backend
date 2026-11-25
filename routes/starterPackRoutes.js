@@ -10,6 +10,7 @@ const {
 } = require('../utils/starterPackUtils');
 const {
     isSyntheticTransactionId,
+    ensurePaymentSchema,
     verifyRevenueCatPurchase,
     creditCoinPurchaseAtomic,
 } = require('../utils/revenuecatUtils');
@@ -89,6 +90,7 @@ router.post('/purchase', authenticateToken, async (req, res) => {
     const syntheticTx = isSyntheticTransactionId(cleanTxId);
 
     try {
+        await ensurePaymentSchema(db);
         const rcResult = await verifyRevenueCatPurchase(userId, 'starter300', cleanTxId);
         let chosenTx = null;
 

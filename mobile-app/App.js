@@ -7,7 +7,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useFonts, Outfit_800ExtraBold, Outfit_500Medium, Outfit_400Regular } from '@expo-google-fonts/outfit';
+import { useFonts, Outfit_800ExtraBold, Outfit_500Medium, Outfit_400Regular, Outfit_300Light } from '@expo-google-fonts/outfit';
 import { StatusBar } from 'expo-status-bar';
 import * as SplashScreenNative from 'expo-splash-screen';
 import axios from 'axios';
@@ -280,6 +280,7 @@ export default function App() {
         Outfit_800ExtraBold,
         Outfit_500Medium,
         Outfit_400Regular,
+        Outfit_300Light,
     });
     const sessionStatus = useAppStore(state => state.sessionStatus);
     const storeUserId = useAppStore(state => state.user?.id);

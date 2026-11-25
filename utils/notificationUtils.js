@@ -133,6 +133,8 @@ async function sendDirectFcmNotification(userId, fcmToken, { title, body, data, 
                     priority: 'HIGH',
                     ttl: '86400s',
                     notification: {
+                        icon: 'notification_icon',
+                        color: '#EC4899',
                         channel_id: String(channelId || 'default'),
                         sound: 'default',
                     },

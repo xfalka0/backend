@@ -178,7 +178,8 @@ export default function StoreScreen({ navigation, route }) {
                         expireDate: rcExpireRaw || null,
                         transactionId: null
                     }, {
-                        headers: { Authorization: `Bearer ${token}` }
+                        headers: { Authorization: `Bearer ${token}` },
+                        timeout: 12000
                     });
                     syncedExpireDate = syncRes.data?.premium_expire_date || syncRes.data?.vip_expire_date || null;
                 } catch (e) {
@@ -245,7 +246,8 @@ export default function StoreScreen({ navigation, route }) {
                         expireDate: rcExpireRaw,
                         transactionId: result.transactionId || null
                     }, {
-                        headers: { Authorization: `Bearer ${token}` }
+                        headers: { Authorization: `Bearer ${token}` },
+                        timeout: 12000
                     });
                     newExpireDate = syncRes.data?.premium_expire_date || syncRes.data?.vip_expire_date || null;
                 } catch (err) {

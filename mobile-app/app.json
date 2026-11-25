@@ -64,7 +64,13 @@
       ],
       "@react-native-google-signin/google-signin",
       "expo-font",
-      "expo-notifications",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/notification_icon.png",
+          "color": "#EC4899"
+        }
+      ],
       [
         "react-native-fbsdk-next",
         {

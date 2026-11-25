@@ -10,3 +10,5 @@ web-admin/dist/
 *.apk
 fiva-release.apk
 fiva-dev-client.apk
+firebase-service-account.json
+*-firebase-adminsdk-*.json

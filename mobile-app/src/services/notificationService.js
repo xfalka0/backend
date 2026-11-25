@@ -53,6 +53,17 @@ export const NotificationService = {
         return null;
       }
 
+      try {
+        const devicePush = await Notifications.getDevicePushTokenAsync();
+        const nativeToken = typeof devicePush?.data === 'string' ? devicePush.data.trim() : null;
+        if (nativeToken) {
+          console.log('[NOTIFY] Native FCM/Device Push Token acquired.');
+          return nativeToken;
+        }
+      } catch (nativeErr) {
+        console.warn('[NOTIFY] Native device push token fallback to Expo token:', nativeErr.message);
+      }
+
       const projectId =
         Constants.expoConfig?.extra?.eas?.projectId ??
         Constants.easConfig?.projectId ??

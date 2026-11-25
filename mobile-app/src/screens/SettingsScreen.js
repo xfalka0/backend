@@ -359,12 +359,6 @@ export default function SettingsScreen({ navigation, route }) {
                         colors={['#4DD0E1', '#00ACC1']}
                         onPress={() => setAlert({ visible: true, title: 'Dil Değiştir', message: 'Şu an sadece Türkçe desteklenmektedir.', type: 'info' })}
                     />
-                    <SettingItem
-                        icon="ban-outline"
-                        label="Engellenen Kişiler"
-                        colors={['#FFB74D', '#F57C00']}
-                        onPress={() => setAlert({ visible: true, title: 'Geliştiriliyor', message: 'Engellenen listesi yakında eklenecektir.', type: 'info' })}
-                    />
                 </View>
 
                 <SectionHeader title="DESTEK VE BİLGİ" />

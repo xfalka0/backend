@@ -308,42 +308,8 @@ export default function App() {
                 const user = userData ? JSON.parse(userData) : null;
                 const appUserID = user?.id ? String(user.id) : null;
                 
-                // Initialize RevenueCat
+                // Initialize RevenueCat (subscription sync runs after session is verified below)
                 await PurchaseService.init(appUserID);
-
-                // Auto-sync active Google Play / RevenueCat subscription if present
-                try {
-                    const info = await PurchaseService.getCustomerInfo();
-                    const activeSubs = info?.activeSubscriptions || [];
-                    const activeEntitlements = info?.entitlements?.active || {};
-                    if (activeSubs.length > 0 || Object.keys(activeEntitlements).length > 0) {
-                        const subId = activeSubs[0] || Object.keys(activeEntitlements)[0];
-                        let months = 1;
-                        if (subId?.includes('3_month') || subId?.includes('3_ay')) months = 3;
-                        else if (subId?.includes('6_month') || subId?.includes('6_ay')) months = 6;
-                        else if (subId?.includes('12_month') || subId?.includes('1_year')) months = 12;
-
-                        let expireDate = info?.allExpirationDates?.[subId] || activeEntitlements[subId]?.expirationDate;
-                        if (!expireDate) {
-                            const d = new Date();
-                            d.setMonth(d.getMonth() + months);
-                            expireDate = d.toISOString();
-                        }
-                        const curUser = useAppStore.getState().user;
-                        if (curUser) {
-                            const updated = {
-                                ...curUser,
-                                is_premium: true,
-                                premium_expire_date: expireDate,
-                                vip_expire_date: expireDate
-                            };
-                            useAppStore.getState().setUser(updated);
-                            await AsyncStorage.setItem('user', JSON.stringify(updated));
-                        }
-                    }
-                } catch (subErr) {
-                    console.log('[App] Auto subscription check error:', subErr.message);
-                }
 
                 // 3. Initialize Performance Mode
                 try {
@@ -393,35 +359,49 @@ export default function App() {
                     else if (subId?.includes('6_month') || subId?.includes('6_ay')) months = 6;
                     else if (subId?.includes('12_month') || subId?.includes('1_year')) months = 12;
 
-                    let expireDate = info?.allExpirationDates?.[subId] || activeEntitlements[subId]?.expirationDate;
-                    if (!expireDate) {
-                        const d = new Date();
-                        d.setMonth(d.getMonth() + months);
-                        expireDate = d.toISOString();
+                    const rcExpireRaw = info?.allExpirationDates?.[subId] || activeEntitlements[subId]?.expirationDate;
+                    const now = new Date();
+                    if (rcExpireRaw && new Date(rcExpireRaw) <= now) {
+                        return;
                     }
 
                     const curUser = useAppStore.getState().user;
                     const curExpire = curUser?.premium_expire_date || curUser?.vip_expire_date;
-                    const needsServerSync = curUser && !(curUser.is_premium && curExpire && new Date(curExpire) > new Date());
+                    const needsServerSync = curUser && !(curUser.is_premium && curExpire && new Date(curExpire) > now);
 
+                    let syncedExpire = null;
                     if (needsServerSync) {
                         const authToken = await AsyncStorage.getItem('token');
                         if (authToken) {
-                            await axios.post(`${API_URL}/vip/upgrade-direct`, {
+                            const syncRes = await axios.post(`${API_URL}/vip/upgrade-direct`, {
                                 months,
+                                isSync: true,
+                                expireDate: rcExpireRaw || null,
                                 transactionId: info?.originalAppUserId || `rc_boot_${Date.now()}`
                             }, {
                                 headers: { Authorization: `Bearer ${authToken}` }
-                            }).catch(() => {});
+                            }).catch(() => null);
+                            syncedExpire = syncRes?.data?.premium_expire_date || syncRes?.data?.vip_expire_date || null;
                         }
+                    }
+
+                    const bestExpire = [curExpire, syncedExpire, rcExpireRaw]
+                        .filter(d => d && !isNaN(new Date(d).getTime()) && new Date(d) > now)
+                        .sort((a, b) => new Date(b).getTime() - new Date(a).getTime())[0];
+
+                    let finalExpireDate = bestExpire;
+                    if (!finalExpireDate) {
+                        const d = new Date();
+                        d.setMonth(d.getMonth() + months);
+                        finalExpireDate = d.toISOString();
                     }
 
                     if (curUser) {
                         const updated = {
                             ...curUser,
                             is_premium: true,
-                            premium_expire_date: expireDate,
-                            vip_expire_date: expireDate
+                            premium_expire_date: finalExpireDate,
+                            vip_expire_date: finalExpireDate
                         };
                         useAppStore.getState().setUser(updated);
                         await AsyncStorage.setItem('user', JSON.stringify(updated));

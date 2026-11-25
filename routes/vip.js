@@ -122,13 +122,14 @@ router.get('/progress', authenticateToken, async (req, res) => {
 });
 
 // PREMIUM UPGRADE DIRECT
-// Mobile app calls this when purchase is successful
+// Mobile app calls this when purchase is successful or when syncing an active store subscription
 router.post('/upgrade-direct', authenticateToken, async (req, res) => {
-    const { months, transactionId } = req.body;
+    const { months, transactionId, isSync = false, expireDate: clientExpireDate } = req.body;
     const userId = req.user.id;
     
     try {
-        if (!months || months <= 0) {
+        const parsedMonths = parseInt(months, 10);
+        if (!parsedMonths || parsedMonths <= 0) {
             return res.status(400).json({ error: 'Geçersiz süre.' });
         }
         
@@ -139,18 +140,40 @@ router.post('/upgrade-direct', authenticateToken, async (req, res) => {
         }
         
         const user = userRes.rows[0];
-        let baseDate = new Date();
+        const now = new Date();
         const existingExpire = user.premium_expire_date || user.vip_expire_date;
-        let startDate = user.premium_start_date || user.vip_start_date || new Date();
+        const hasActiveFutureExpire = Boolean(existingExpire && new Date(existingExpire) > now);
+
+        // Prevent automatic sync/restore calls from stacking extra months onto an already-active subscription
+        if (isSync && hasActiveFutureExpire) {
+            if (!user.is_premium) {
+                await db.query('UPDATE users SET is_premium = true WHERE id = $1', [userId]);
+            }
+            return res.json({
+                success: true,
+                already_active: true,
+                is_premium: true,
+                premium_start_date: user.premium_start_date || user.vip_start_date || now,
+                premium_expire_date: existingExpire,
+                vip_expire_date: existingExpire
+            });
+        }
+
+        let baseDate = new Date();
+        let startDate = user.premium_start_date || user.vip_start_date || now;
         
-        if (existingExpire && new Date(existingExpire) > baseDate) {
+        if (hasActiveFutureExpire) {
             baseDate = new Date(existingExpire);
         } else {
             startDate = new Date();
         }
         
-        // Add months
-        baseDate.setMonth(baseDate.getMonth() + months);
+        // Use valid future store expireDate on first sync if provided, otherwise add purchased months
+        if (isSync && clientExpireDate && !isNaN(new Date(clientExpireDate).getTime()) && new Date(clientExpireDate) > now) {
+            baseDate = new Date(clientExpireDate);
+        } else {
+            baseDate.setMonth(baseDate.getMonth() + parsedMonths);
+        }
         
         // Update user: Premium is the subscription with start and expire dates
         await db.query(
@@ -164,7 +187,7 @@ router.post('/upgrade-direct', authenticateToken, async (req, res) => {
             [startDate, baseDate, userId]
         );
         
-        logActivity(userId, 'premium_upgrade', `${months} aylık premium satın aldı. (Tx: ${transactionId})`);
+        logActivity(userId, 'premium_upgrade', `${parsedMonths} aylık premium ${isSync ? 'senkronize edildi' : 'satın aldı'}. (Tx: ${transactionId})`);
         
         res.json({
             success: true,

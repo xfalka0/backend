@@ -12,6 +12,83 @@ const BOOST_CONFIG = {
     }
 };
 
+function getVipBoostDailyLimit(vipLevel) {
+    const level = parseInt(vipLevel || 0, 10);
+    if (level === 1) return 1;
+    if (level === 2) return 2;
+    if (level === 3) return 3;
+    if (level === 4) return 5;
+    if (level === 5) return 8;
+    if (level >= 6) return 12;
+    return 0;
+}
+
+// Claim Free Daily VIP Boost (MUST be defined before /:userId wildcard route)
+router.post('/claim-free-boost', authenticateToken, async (req, res) => {
+    const userId = req.user.id;
+
+    try {
+        await pool.query('BEGIN');
+
+        // 1. Fetch user's VIP level
+        const userRes = await pool.query('SELECT vip_level FROM users WHERE id = $1', [userId]);
+        if (userRes.rows.length === 0) {
+            await pool.query('ROLLBACK');
+            return res.status(404).json({ error: 'Kullanıcı bulunamadı.' });
+        }
+
+        const vipLevel = parseInt(userRes.rows[0].vip_level || 0, 10);
+        if (vipLevel < 1) {
+            await pool.query('ROLLBACK');
+            return res.status(403).json({ error: 'Bu özellikten yararlanmak için en az VIP 1 olmalısınız.' });
+        }
+
+        const dailyLimit = getVipBoostDailyLimit(vipLevel);
+
+        // 2. Count claims today
+        const claimCountRes = await pool.query(`
+            SELECT COUNT(*)::int 
+            FROM daily_vip_boost_claims 
+            WHERE user_id = $1 AND claimed_at >= CURRENT_DATE
+        `, [userId]);
+
+        const claimsToday = claimCountRes.rows[0].count;
+        if (claimsToday >= dailyLimit) {
+            await pool.query('ROLLBACK');
+            return res.status(400).json({ error: 'Bugün için ücretsiz VIP boost limitinize ulaştınız.' });
+        }
+
+        // 3. Insert mini-boost (30 minutes)
+        const boostDurationMinutes = 30;
+        const boostRes = await pool.query(`
+            INSERT INTO boosts (user_id, start_time, end_time) 
+            VALUES ($1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP + ($2 * interval '1 minute'))
+            RETURNING end_time
+        `, [userId, boostDurationMinutes]);
+
+        // 4. Record claim
+        await pool.query(`
+            INSERT INTO daily_vip_boost_claims (user_id) 
+            VALUES ($1)
+        `, [userId]);
+
+        await pool.query('COMMIT');
+
+        res.json({
+            success: true,
+            message: `Ücretsiz VIP Öne Çıkarma aktifleşti! (Süre: ${boostDurationMinutes} dakika)`,
+            endTime: boostRes.rows[0].end_time,
+            claimsRemaining: dailyLimit - claimsToday - 1,
+            totalLimit: dailyLimit
+        });
+
+    } catch (err) {
+        await pool.query('ROLLBACK');
+        console.error('Claim Free Boost Error:', err);
+        res.status(500).json({ error: 'Server error: ' + err.message });
+    }
+});
+
 // Activate Boost
 router.post('/:userId', authenticateToken, async (req, res) => {
     const { userId } = req.params;
@@ -87,79 +164,6 @@ router.get('/status/:userId', async (req, res) => {
     }
 });
 
-// Claim Free Daily VIP Boost
-router.post('/claim-free-boost', authenticateToken, async (req, res) => {
-    const userId = req.user.id;
-
-    try {
-        await pool.query('BEGIN');
-
-        // 1. Fetch user's VIP level
-        const userRes = await pool.query('SELECT vip_level FROM users WHERE id = $1', [userId]);
-        if (userRes.rows.length === 0) {
-            await pool.query('ROLLBACK');
-            return res.status(404).json({ error: 'Kullanıcı bulunamadı.' });
-        }
-
-        const vipLevel = parseInt(userRes.rows[0].vip_level || 0, 10);
-        if (vipLevel < 1) {
-            await pool.query('ROLLBACK');
-            return res.status(403).json({ error: 'Bu özellikten yararlanmak için en az VIP 1 olmalısınız.' });
-        }
-
-        // Determine limits
-        let dailyLimit = 0;
-        if (vipLevel === 1) dailyLimit = 1;
-        else if (vipLevel === 2) dailyLimit = 2;
-        else if (vipLevel === 3) dailyLimit = 3;
-        else if (vipLevel === 4) dailyLimit = 5;
-        else if (vipLevel === 5) dailyLimit = 8;
-        else if (vipLevel >= 6) dailyLimit = 12;
-
-        // 2. Count claims today
-        const claimCountRes = await pool.query(`
-            SELECT COUNT(*)::int 
-            FROM daily_vip_boost_claims 
-            WHERE user_id = $1 AND claimed_at >= CURRENT_DATE
-        `, [userId]);
-
-        const claimsToday = claimCountRes.rows[0].count;
-        if (claimsToday >= dailyLimit) {
-            await pool.query('ROLLBACK');
-            return res.status(400).json({ error: 'Bugün için ücretsiz VIP boost limitinize ulaştınız.' });
-        }
-
-        // 3. Insert mini-boost (30 minutes)
-        const boostDurationMinutes = 30;
-        const boostRes = await pool.query(`
-            INSERT INTO boosts (user_id, start_time, end_time) 
-            VALUES ($1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP + ($2 * interval '1 minute'))
-            RETURNING end_time
-        `, [userId, boostDurationMinutes]);
-
-        // 4. Record claim
-        await pool.query(`
-            INSERT INTO daily_vip_boost_claims (user_id) 
-            VALUES ($1)
-        `, [userId]);
-
-        await pool.query('COMMIT');
-
-        res.json({
-            success: true,
-            message: `Ücretsiz VIP Öne Çıkarma aktifleşti! (Süre: ${boostDurationMinutes} dakika)`,
-            endTime: boostRes.rows[0].end_time,
-            claimsRemaining: dailyLimit - claimsToday - 1,
-            totalLimit: dailyLimit
-        });
-
-    } catch (err) {
-        await pool.query('ROLLBACK');
-        console.error('Claim Free Boost Error:', err);
-        res.status(500).json({ error: 'Server error: ' + err.message });
-    }
-});
-
 // Check daily free boost claim status
 router.get('/free-claims-status/:userId', authenticateToken, async (req, res) => {
     const { userId } = req.params;
@@ -170,13 +174,7 @@ router.get('/free-claims-status/:userId', authenticateToken, async (req, res) =>
         }
 
         const vipLevel = parseInt(userRes.rows[0].vip_level || 0, 10);
-        let dailyLimit = 0;
-        if (vipLevel === 1) dailyLimit = 1;
-        else if (vipLevel === 2) dailyLimit = 2;
-        else if (vipLevel === 3) dailyLimit = 3;
-        else if (vipLevel === 4) dailyLimit = 5;
-        else if (vipLevel === 5) dailyLimit = 8;
-        else if (vipLevel >= 6) dailyLimit = 12;
+        const dailyLimit = getVipBoostDailyLimit(vipLevel);
 
         const claimCountRes = await pool.query(`
             SELECT COUNT(*)::int 

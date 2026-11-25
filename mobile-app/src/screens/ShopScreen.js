@@ -385,8 +385,12 @@ export default function ShopScreen({ navigation, route }) {
         if (dealer) {
             navigation.navigate('OperatorProfile', { operator: dealer, user: { id: currentUserId } });
         } else {
-            // Fallback if dealer not found in list
-            navigation.navigate('CoinDealer', { user: { id: currentUserId } });
+            setAlertConfig({
+                visible: true,
+                title: 'Coin Bayisi',
+                message: 'Şu an aktif coin bayisi bulunamadı. Paket satın almak için uygulama içi coin paketlerini kullanabilirsiniz.',
+                type: 'info'
+            });
         }
     };
 

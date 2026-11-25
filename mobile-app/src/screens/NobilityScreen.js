@@ -544,6 +544,7 @@ export function NobilityDualActionButtons({
     return (
         <View style={premiumStyles.buttonsRow}>
             {/* ── SECONDARY BUTTON: Dağıt ── */}
+            {onGift ? (
             <Animated.View style={[premiumStyles.btnOuter, premiumStyles.btnSecondaryOuter, { transform: [{ scale: pressScaleSecondary }] }]}>
                 {/* Static subtle silver border */}
                 <View style={premiumStyles.secondaryBorderFill}>
@@ -572,6 +573,7 @@ export function NobilityDualActionButtons({
                     </TouchableOpacity>
                 </View>
             </Animated.View>
+            ) : null}
 
             {/* ── PRIMARY BUTTON: Etkinleştir ── */}
             <Animated.View style={[
@@ -1163,11 +1165,6 @@ export default function NobilityScreen({ navigation }) {
                             translateY: purchaseEntrance.interpolate({ inputRange: [0, 1], outputRange: [54, 0] }),
                         }],
                     }}
-                    onGift={() => showAlert({
-                        title: 'Hediye Et',
-                        message: 'Unvan hediye etme seçeneği yakında kullanıma açılacak.',
-                        type: 'info',
-                    })}
                     onActivate={() => setConfirmationVisible(true)}
                 />
             </SafeAreaView>

@@ -32,12 +32,14 @@ const WEEKLY_SOCIAL_PROOF = '2.340';
 
 export default function StoreScreen({ navigation, route }) {
     const { user: initialUser } = route.params || {};
-    const { refreshUser } = useChat() || {};
+    const { user: contextUser, refreshUser } = useChat() || {};
+    const storeUser = useAppStore(state => state.user);
+    const storeBalance = useAppStore(state => state.balance);
     const insets = useSafeAreaInsets();
     const tabOffset = LAYOUT.tabBarHeight + LAYOUT.tabBarBottomOffset;
 
-    const [currentUser, setCurrentUser] = useState(initialUser || null);
-    const [balance, setBalance] = useState(initialUser?.balance || 0);
+    const [currentUser, setCurrentUser] = useState(initialUser || storeUser || contextUser || null);
+    const [balance, setBalance] = useState(initialUser?.balance ?? storeUser?.balance ?? 0);
     const [purchasing, setPurchasing] = useState(false);
     
     const defaultIndex = Math.max(0, PREMIUM_PLANS.findIndex(p => p.badge === 'POPÜLER'));
@@ -45,14 +47,28 @@ export default function StoreScreen({ navigation, route }) {
     const [alertConfig, setAlertConfig] = useState({ visible: false, title: '', message: '', type: 'info' });
     const [premiumSuccessVisible, setPremiumSuccessVisible] = useState(false);
 
+    // Combine reactive user sources (initialUser lowest priority, storeUser/currentUser highest)
+    const effectiveUser = {
+        ...(initialUser || {}),
+        ...(contextUser || {}),
+        ...(currentUser || {}),
+        ...(storeUser || {}),
+    };
+    const displayBalance = Number(balance ?? storeBalance ?? effectiveUser?.balance ?? 0);
+
     // Premium is the timed subscription that expires. VIP is permanent level progression.
-    const premiumExpireDate = currentUser?.premium_expire_date || currentUser?.vip_expire_date;
+    const premiumExpireDate = effectiveUser?.premium_expire_date || effectiveUser?.vip_expire_date;
     const hasActiveExpire = Boolean(
         premiumExpireDate && new Date(premiumExpireDate) > new Date()
     );
+    const isPremiumFlag = Boolean(
+        effectiveUser?.is_premium === true ||
+        effectiveUser?.is_premium === 'true' ||
+        effectiveUser?.is_premium === 1
+    );
     const isPremium = Boolean(
         hasActiveExpire || 
-        (currentUser?.is_premium && (!premiumExpireDate || hasActiveExpire))
+        (isPremiumFlag && (!premiumExpireDate || hasActiveExpire))
     );
 
     // Fetch user profile and balance
@@ -67,19 +83,39 @@ export default function StoreScreen({ navigation, route }) {
                 if (parsedUser.balance !== undefined) setBalance(Number(parsedUser.balance));
             }
 
-            const targetId = parsedUser?.id || initialUser?.id;
+            const targetId = parsedUser?.id || useAppStore.getState().user?.id || contextUser?.id || initialUser?.id;
             if (targetId && token) {
                 const res = await axios.get(`${API_URL}/users/${targetId}`, {
                     headers: { Authorization: `Bearer ${token}` }
                 });
                 if (res.data) {
-                    const freshUser = res.data;
+                    const latestStoreUser = useAppStore.getState().user;
+                    const localExpire = latestStoreUser?.premium_expire_date || latestStoreUser?.vip_expire_date;
+                    const hasLocalActivePremium = Boolean(
+                        latestStoreUser?.is_premium && (!localExpire || new Date(localExpire) > new Date())
+                    );
+                    const serverExpire = res.data.premium_expire_date || res.data.vip_expire_date;
+                    const hasServerActivePremium = Boolean(
+                        res.data.is_premium || (serverExpire && new Date(serverExpire) > new Date())
+                    );
+
+                    const freshUser = (!hasServerActivePremium && hasLocalActivePremium)
+                        ? {
+                            ...res.data,
+                            is_premium: true,
+                            premium_start_date: latestStoreUser.premium_start_date,
+                            premium_expire_date: latestStoreUser.premium_expire_date,
+                            vip_expire_date: latestStoreUser.vip_expire_date,
+                          }
+                        : res.data;
+
                     setCurrentUser(freshUser);
                     if (freshUser.balance !== undefined) {
                         setBalance(Number(freshUser.balance));
                     }
+                    useAppStore.getState().setUser(freshUser);
                     await AsyncStorage.setItem('user', JSON.stringify(freshUser));
-                    PurchaseService.identifyUser(freshUser.id);
+                    await PurchaseService.identifyUser(freshUser.id);
                 }
             } else if (token) {
                 const balRes = await axios.get(`${API_URL}/users/balance`, {
@@ -117,36 +153,58 @@ export default function StoreScreen({ navigation, route }) {
         else if (subId?.includes('6_month') || subId?.includes('6_ay')) months = 6;
         else if (subId?.includes('12_month') || subId?.includes('1_year')) months = 12;
 
-        let expireDate = customerInfo.allExpirationDates?.[subId] || 
-                         activeEntitlements[subId]?.expirationDate;
-        if (!expireDate) {
-            const d = new Date();
-            d.setMonth(d.getMonth() + months);
-            expireDate = d.toISOString();
+        const rcExpireRaw = customerInfo.allExpirationDates?.[subId] || activeEntitlements[subId]?.expirationDate;
+        const now = new Date();
+        // Sandbox cache often retains an already-expired timestamp; never overwrite valid server premium with it
+        if (rcExpireRaw && new Date(rcExpireRaw) <= now) {
+            return false;
         }
 
-        const token = await AsyncStorage.getItem('token');
-        if (token) {
-            try {
-                await axios.post(`${API_URL}/vip/upgrade-direct`, {
-                    months: months,
-                    transactionId: customerInfo.originalAppUserId || `rc_sync_${Date.now()}`
-                }, {
-                    headers: { Authorization: `Bearer ${token}` }
-                });
-            } catch (e) {
-                console.log('[STORE] Subscription sync error:', e.message);
+        const latestUser = useAppStore.getState().user || currentUser;
+        const existingExpire = latestUser?.premium_expire_date || latestUser?.vip_expire_date;
+        const hasValidServerPremium = Boolean(
+            latestUser?.is_premium && existingExpire && new Date(existingExpire) > now
+        );
+
+        let syncedExpireDate = null;
+        if (!hasValidServerPremium) {
+            const token = await AsyncStorage.getItem('token');
+            if (token) {
+                try {
+                    const syncRes = await axios.post(`${API_URL}/vip/upgrade-direct`, {
+                        months: months,
+                        isSync: true,
+                        expireDate: rcExpireRaw || null,
+                        transactionId: customerInfo.originalAppUserId || `rc_sync_${Date.now()}`
+                    }, {
+                        headers: { Authorization: `Bearer ${token}` }
+                    });
+                    syncedExpireDate = syncRes.data?.premium_expire_date || syncRes.data?.vip_expire_date || null;
+                } catch (e) {
+                    console.log('[STORE] Subscription sync error:', e.message);
+                }
             }
         }
 
-        const storeUser = useAppStore.getState().user;
+        // Choose the furthest future expiration date across server, existing user, and RevenueCat
+        const candidates = [existingExpire, syncedExpireDate, rcExpireRaw]
+            .filter(d => d && !isNaN(new Date(d).getTime()) && new Date(d) > now)
+            .sort((a, b) => new Date(b).getTime() - new Date(a).getTime());
+
+        let finalExpireDate = candidates[0];
+        if (!finalExpireDate) {
+            const d = new Date();
+            d.setMonth(d.getMonth() + months);
+            finalExpireDate = d.toISOString();
+        }
+
         const updatedUser = {
-            ...(storeUser || currentUser || {}),
+            ...(latestUser || {}),
             is_premium: true,
-            premium_expire_date: expireDate,
-            premium_start_date: storeUser?.premium_start_date || new Date().toISOString(),
-            vip_expire_date: expireDate,
-            vip_start_date: storeUser?.vip_start_date || new Date().toISOString()
+            premium_expire_date: finalExpireDate,
+            premium_start_date: latestUser?.premium_start_date || new Date().toISOString(),
+            vip_expire_date: finalExpireDate,
+            vip_start_date: latestUser?.vip_start_date || new Date().toISOString()
         };
         useAppStore.getState().setUser(updatedUser);
         setCurrentUser(updatedUser);
@@ -305,7 +363,7 @@ export default function StoreScreen({ navigation, route }) {
                 {/* 1. Header (Back button + Title + Wallet Chip) */}
                 <StoreHeader
                     onBack={() => navigation.goBack()}
-                    balance={balance}
+                    balance={displayBalance}
                     onRecharge={() => navigation.navigate('Shop')}
                 />
 
@@ -318,7 +376,7 @@ export default function StoreScreen({ navigation, route }) {
                     {/* Active Subscription Banner for Premium Users */}
                     {isPremium ? (
                         <ActiveSubscriptionBanner
-                            startDate={currentUser?.premium_start_date || currentUser?.vip_start_date || currentUser?.created_at}
+                            startDate={effectiveUser?.premium_start_date || effectiveUser?.vip_start_date || effectiveUser?.created_at}
                             expireDate={premiumExpireDate || new Date(Date.now() + 30 * 24 * 3600 * 1000).toISOString()}
                         />
                     ) : null}

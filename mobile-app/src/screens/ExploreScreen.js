@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { View, Text, StyleSheet, Image, TouchableOpacity, Dimensions, Modal, TextInput, FlatList, Alert, ActivityIndicator, RefreshControl, Platform } from 'react-native';
+import { View, Text, StyleSheet, Image, TouchableOpacity, Dimensions, Modal, TextInput, FlatList, Alert, ActivityIndicator, RefreshControl, Platform, Share } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Animated, {
     useSharedValue,
@@ -1121,7 +1121,14 @@ export default function ExploreScreen({ navigation, route }) {
                         </TouchableOpacity>
 
                         {/* Share Action */}
-                        <TouchableOpacity onPress={() => {}} style={styles.footerActionBtn}>
+                        <TouchableOpacity
+                            onPress={() => {
+                                const author = item.operator_name || item.username || 'Fiora';
+                                const text = item.content ? `${author}: "${item.content}"` : `${author} Fiora'da bir gönderi paylaştı!`;
+                                Share.share({ message: `${text}\n\nFiora'da keşfet!` }).catch(() => {});
+                            }}
+                            style={styles.footerActionBtn}
+                        >
                             <Ionicons name="paper-plane-outline" size={20} color={actionMuted} />
                         </TouchableOpacity>
 

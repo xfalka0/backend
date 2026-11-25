@@ -355,6 +355,7 @@ const ProfileScreen = ({ route }) => {
             if (profileData) {
                 const updatedUser = { ...user, ...profileData };
                 setUser(updatedUser);
+                useAppStore.getState().setUser(updatedUser);
                 if (profileData.photos) {
                     setUserPhotos(profileData.photos);
                 }

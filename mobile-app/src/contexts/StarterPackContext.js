@@ -18,11 +18,31 @@ export const StarterPackProvider = ({ children }) => {
     const [showModal, setShowModal] = useState(false);
     const [showBubble, setShowBubble] = useState(false);
     const [isEligible, setIsEligible] = useState(true);
+    const isEligibleRef = useRef(true);
     const pulseAnim = useRef(new Animated.Value(1)).current;
     const { showAlert } = useAlert();
     const navigation = useNavigation();
     const sessionStatus = useAppStore(state => state.sessionStatus);
     const storeUser = useAppStore(state => state.user);
+    const storeBalance = useAppStore(state => state.balance);
+
+    const checkBackendEligibility = async (isCancelled = () => false) => {
+        const token = await AsyncStorage.getItem('token');
+        if (!token || isCancelled()) return false;
+        const res = await axios.get(`${API_URL}/starter-pack/check`, {
+            headers: { Authorization: `Bearer ${token}` }
+        });
+        if (isCancelled()) return true;
+        const eligible = Boolean(res.data?.eligible);
+        isEligibleRef.current = eligible;
+        setIsEligible(eligible);
+        if (!eligible) {
+            setShowModal(false);
+            setShowBubble(false);
+            await AsyncStorage.setItem('starter_pack_bubble_visible', 'false');
+        }
+        return true;
+    };
 
     // Load persisted state and check eligibility ONLY after session is verified (never before /auth/me)
     useEffect(() => {
@@ -47,22 +67,13 @@ export const StarterPackProvider = ({ children }) => {
                 }
 
                 // 2. Check eligibility from backend
-                const res = await axios.get(`${API_URL}/starter-pack/check`, {
-                    headers: { Authorization: `Bearer ${token}` }
-                });
-                if (cancelled) return;
-                setIsEligible(res.data.eligible);
-
-                // If not eligible anymore, hide bubble
-                if (!res.data.eligible) {
-                    setShowBubble(false);
-                    await AsyncStorage.setItem('starter_pack_bubble_visible', 'false');
-                }
+                await checkBackendEligibility(() => cancelled);
             } catch (e) {
                 if (![401, 403].includes(e.response?.status)) {
                     console.error('[StarterPack] Error loading state/eligibility:', e);
                 }
                 if (!cancelled) {
+                    isEligibleRef.current = false;
                     setIsEligible(false);
                     setShowBubble(false);
                 }
@@ -72,6 +83,19 @@ export const StarterPackProvider = ({ children }) => {
         loadStateAndCheck();
         return () => { cancelled = true; };
     }, [sessionStatus, storeUser?.id]);
+
+    // Re-check eligibility if balance updates during an active session (e.g. webhook credited coins)
+    useEffect(() => {
+        let cancelled = false;
+        if (sessionStatus !== 'verified' || !storeUser?.id || !isEligibleRef.current || storeBalance <= 0) {
+            return;
+        }
+
+        checkBackendEligibility(() => cancelled).catch(() => {
+            // Keep current state on transient network error
+        });
+        return () => { cancelled = true; };
+    }, [storeBalance, sessionStatus, storeUser?.id]);
 
     // Save state and run a single lightweight entrance spring (no continuous idle loop)
     useEffect(() => {
@@ -107,19 +131,26 @@ export const StarterPackProvider = ({ children }) => {
     }, [showBubble, sessionStatus]);
 
     const openStarterPack = () => {
+        if (!isEligibleRef.current) {
+            setShowModal(false);
+            setShowBubble(false);
+            return;
+        }
         setShowModal(true);
         setShowBubble(false);
     };
 
     const closeStarterPack = () => {
         setShowModal(false);
-        setShowBubble(true);
+        setShowBubble(isEligibleRef.current);
     };
 
     const completeStarterPack = () => {
+        isEligibleRef.current = false;
         setShowModal(false);
         setShowBubble(false);
         setIsEligible(false);
+        AsyncStorage.setItem('starter_pack_bubble_visible', 'false').catch(() => {});
     };
 
     const handleInsufficientCoins = () => {

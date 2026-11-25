@@ -30,19 +30,38 @@ router.get('/check', authenticateToken, async (req, res) => {
 
         // Get user balance and total_spent
         const userRes = await db.query(
-            'SELECT balance, total_spent FROM users WHERE id = $1',
+            'SELECT balance, total_spent FROM users WHERE id::text = $1::text',
             [userId]
         );
         if (userRes.rows.length === 0) return res.status(404).json({ error: 'User not found' });
 
         const { balance, total_spent } = userRes.rows[0];
 
-        // Only show if total_spent is 0 (never bought) AND balance is low (< 50 coins)
         const totalSpent = parseFloat(total_spent || 0);
         const currentBalance = parseInt(balance || 0);
 
         if (totalSpent > 0) {
             return res.json({ eligible: false, reason: 'not_first_time' });
+        }
+
+        // Fallback check: older webhook or payment records before starter_pack_purchases backfill
+        const [paymentRes, txRes] = await Promise.all([
+            db.query(
+                `SELECT 1 FROM payments
+                 WHERE user_id::text = $1::text AND status IN ('completed', 'completed_vip')
+                 LIMIT 1`,
+                [userId]
+            ),
+            db.query(
+                `SELECT 1 FROM transactions
+                 WHERE user_id::text = $1::text AND type IN ('starter_pack', 'purchase')
+                 LIMIT 1`,
+                [userId]
+            )
+        ]);
+
+        if (paymentRes.rows.length > 0 || txRes.rows.length > 0) {
+            return res.json({ eligible: false, reason: 'already_purchased' });
         }
 
         res.json({
@@ -138,8 +157,8 @@ router.post('/purchase', authenticateToken, async (req, res) => {
             if (cleanTxId) {
                 await client.query(
                     `INSERT INTO payments (user_id, package_id, transaction_id, amount, coin_amount, payment_method, package_name_snapshot, status)
-                     SELECT $1, NULL, $2, $3, $4, 'starter_pack', $5, 'completed'
-                     WHERE NOT EXISTS (SELECT 1 FROM payments WHERE transaction_id = $2)`,
+                     VALUES ($1, NULL, $2::varchar, $3::numeric, $4::integer, 'starter_pack', $5::varchar, 'completed')
+                     ON CONFLICT (transaction_id) DO NOTHING`,
                     [userId, cleanTxId, STARTER_PACK.discounted_price, STARTER_PACK.coins, `${STARTER_PACK.label} (Başlangıç Paketi)`]
                 );
             }

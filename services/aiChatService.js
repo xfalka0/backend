@@ -187,8 +187,11 @@ async function processAiAutoReply({ io, chatId, userId, operatorId, userMessage 
 
         console.log(`[AI_CHAT] Yeni kullanıcı (${user.username}, Mesaj #${user.ai_messages_count + 1}) için AI yanıtı hazırlanıyor...`);
 
-        // 4. Doğallık için 800ms sonra "Yazıyor..." animasyonunu başlat
+        // 4. Doğallık için 5-10 saniye arasında "Yazıyor..." animasyonunu başlat
         const startTime = Date.now();
+        const typingDelayMs = Math.floor(Math.random() * 5000) + 5000; // 5.000 - 10.000 ms (5-10 sn)
+        const totalReplyDelayMs = Math.floor(Math.random() * 10000) + 20000; // 20.000 - 30.000 ms (20-30 sn)
+
         setTimeout(() => {
             if (io) {
                 io.to(chatIdStr).emit('display_typing', {
@@ -196,7 +199,7 @@ async function processAiAutoReply({ io, chatId, userId, operatorId, userMessage 
                     chatId: chatIdStr
                 });
             }
-        }, 800);
+        }, typingDelayMs);
 
         // 5. AI yanıtını üret (arka planda)
         const aiReplyText = await generateAiReply({
@@ -205,9 +208,9 @@ async function processAiAutoReply({ io, chatId, userId, operatorId, userMessage 
             chatHistory: chatHistory
         });
 
-        // 6. En az 3.5 saniye toplam süre geçmesini sağla (insansı yazma hissi)
+        // 6. Cevabı 20-30 saniye aralığında gönder (insansı bekleme ve yazma hissi)
         const elapsed = Date.now() - startTime;
-        const remainingDelay = Math.max(0, 3500 - elapsed);
+        const remainingDelay = Math.max(0, totalReplyDelayMs - elapsed);
 
         setTimeout(async () => {
             try {

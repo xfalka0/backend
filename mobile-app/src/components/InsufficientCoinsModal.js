@@ -72,12 +72,17 @@ export default function InsufficientCoinsModal({ visible, onClose, onBuyCoins, o
                 headers: { Authorization: `Bearer ${token}` },
                 timeout: 3000
             });
-            setIsEligible(true); 
-            if (res.data.eligible) {
+            const eligible = Boolean(res.data?.eligible);
+            setIsEligible(eligible);
+            if (eligible) {
                 setStarterPack(res.data.pack);
+            } else {
+                completeStarterPack();
             }
         } catch (error) {
-            setIsEligible(![401, 403].includes(error.response?.status));
+            if ([401, 403].includes(error.response?.status)) {
+                setIsEligible(false);
+            }
         }
     };
 
@@ -208,7 +213,6 @@ export default function InsufficientCoinsModal({ visible, onClose, onBuyCoins, o
                     type: "info",
                     onConfirm: () => {
                         completeStarterPack();
-                        onClose();
                     }
                 });
             } else {

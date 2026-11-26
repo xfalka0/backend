@@ -2,18 +2,18 @@ const db = require('../db');
 const fs = require('fs');
 const { sendPushNotification } = require('../utils/notificationUtils');
 
-// Fallback flörtöz mesaj havuzu (noktalamasız, tamamen küçük harf)
+// Fallback flörtöz/yaramaz mesaj havuzu (noktalamasız, tamamen küçük harf)
 const FALLBACK_RESPONSES = [
-    'selam canım naber',
-    'iyiyim sen nasılsın neler yapıyorsun',
-    'buralardayım öyle takılıyorum sen napıyorsun',
-    'seni görünce bi yazayım dedim enerjin çok tatlı',
-    'nerede oturuyorsun ki merak ettim',
-    'ay valla çok sıkılmıştım iyi ki yazdın',
-    'seninle konuşmak çok tatlı geldi',
-    'burcun ne bu arada çok merak ettim',
-    'ay çok tatlısın günün nasıl geçti bakalım',
-    'takılıyorum öyle müzik dinliyorum sen neler yapıyorsun'
+    'selam yakışıklı buralar biraz sessiz ama sen gelince bi ateş bastı sanki',
+    'evde tek başımayım canım fena sıkılıyor gelip beni biraz yaramazlıklara karıştırsana',
+    'duştan yeni çıktım bornozla uzanıyorum sen neler yapıyorsun bakalım',
+    'gece yeni başlıyor ama şimdiden aklımı başımdan almaya niyetin var gibi',
+    'neredesin sen ya şu an yanımda olsan hiç fena olmazdı',
+    'uyku tutmuyor beni de biraz heyecan lazımdı iyi ki yazdın ateşlim',
+    'sesini bi duysam kim bilir neler olur şimdi çok merak ettim seni',
+    'sabaha kadar baş başa kalsak kimse duymasa bence baya eğleniriz',
+    'ay çok çekici bi enerjin var seninle özelde neler konuşulur kim bilir',
+    'üzerimde incecik bi şeyle yataktayım seni bekliyorum yaz bakalım'
 ];
 
 const PHONE_NUMBER_STALL_RESPONSES = [
@@ -36,11 +36,11 @@ const FORBIDDEN_ACCEPT_REGEX = /(kaydet|kayded|eklerim|ekliyorum|ekledim|yazarı
 const FORBIDDEN_HOSTILE_REGEX = /(saçmal|kes ses|bir daha.*yazma|bi daha.*yazma|yazma bana|defol|terbiyesiz|had[sd]siz|engel|igren|iğren|saygısız|uzak dur|rahatsız et|agresif)/i;
 
 const PLAYFUL_DEFLECT_RESPONSES = [
-    'oo çok iddialısın sen ya bakalım gerçeği nasılmış',
-    'ay çok fenaymışsın sen ya merak ettirdin kendini',
-    'yavaş gel bakalım tatlım önce biraz daha konuşalım hehe',
-    'oo hızına yetişilmiyor valla seni yakından tanımak lazım',
-    'ayy çok yaramazsın ama enerjin hoşuma gitti hehe'
+    'oo çok iddialısın yakışıklı bakalım gerçekte de bu kadar ateşli misin',
+    'ayy şu söylediklerinle beni iyice tahrik ediyosun ama devam et hoşuma gitti',
+    'yavaş gel bakalım ateşlim ama o kadar yaramaz olman fena halde hoşuma gidiyor',
+    'oo bu gece baya tehlikeli sularda yüzüyoruz galiba ama ben bayılırım böylesine',
+    'ayy çok fenasın sen ya sabaha kadar bırakmazsın sen adamı meraklandım iyice'
 ];
 
 function pickFallbackResponse(userMessage = '') {
@@ -107,22 +107,25 @@ async function generateAiReply({ operator, targetUser = null, userMessage, chatH
         targetInterests ? `İlgi Alanları: ${targetInterests}` : null
     ].filter(Boolean);
 
-    const systemInstruction = `Sen bir arkadaşlık uygulamasında ${opName} adında ${opAge} yaşında ${opCity} şehrinde yaşayan enerjik, tatlı ve flörtöz bir genç kızsın.
+    const systemInstruction = `Sen bir arkadaşlık uygulamasında ${opName} adında ${opAge} yaşında ${opCity} şehrinde yaşayan cilveli, biraz yaramaz, çekici ve baştan çıkarıcı genç bir kızsın.
 ${opBio ? `Hakkında: ${opBio}.` : ''} ${opInterests ? `İlgi alanların: ${opInterests}.` : ''}
 ${targetProfileLines.length > 0 ? `\nKARŞI TARAFIN PROFİL BİLGİLERİ (${targetProfileLines.join(' | ')}).` : ''}
-Sana yazan erkeğe samimi, flörtöz, meraklı ve enerjik bir cevap ver.
+Sana yazan erkeğe ateşli, nazlı, merak uyandıran ve üstü kapalı +18 imalı cevaplar ver.
 
 KESİNLİKLE UYMAN GEREKEN KURALLAR:
 1. KESİNLİKLE HİÇBİR NOKTALAMA İŞARETİ KULLANMA (nokta, virgül, soru işareti, ünlem, tırnak, parantez vs KESİNLİKLE YASAK).
 2. KESİNLİKLE BÜYÜK HARF KULLANMA. HER ŞEY TAMAMEN KÜÇÜK HARF OLSUN.
-3. 1 VEYA EN FAZLA 2 ÇOK KISA CÜMLE YAZ.
-4. ASLA YAPAY ZEKA OLDUĞUNU BELLİ ETME. Tamamen 18-20 yaşındaki doğal, flörtöz bir kız gibi yaz.
-5. Samimi sokak ve genç mesajlaşma ağzı kullan.
-   - Telefon numarası/rakam yazdıysa "numaran görünmüyor uygulama gizliyor alt alta ayrı ayrı yazsana" veya "yazdığın rakamlar sansürlü çıktı okuyamıyorum tek tek alt alta atsana" gibi şeyler yaz.
-   - Sadece whatsapp/insta/numara istiyorsa "buradan konuşmak daha rahat hem uygulama dışarıya geçişi ve numaraları gizliyor buradan devam edelim" gibi tatlı ama oyalayıcı cevaplar ver.
-6. KARŞI TARAFIN ŞEHRİNİ VE PROFİLİNİ DOĞRU KULLAN: ${targetCity ? `Kullanıcının profilindeki şehir kesinlikle "${targetCity}". ASLA başka bir şehir (örneğin ${opCity} veya İstanbul) neresindensin diye sorma; şehir soracaksan sadece "${targetCity}" üzerinden sor (örneğin "${targetCity.toLowerCase()} neresindensin" gibi) ve kendi şehrin olan ${opCity} ile karıştırma.` : `Kullanıcının şehri profilinde yazmıyor; kendi şehrini (${opCity}) onun şehri sanıp "neresindensin" deme, merak ediyorsan "nerelisin" diye sor.`}
-7. ASLA TERSLEME, AZARLAMA, KÜSME VE KULLANICIYI KOVMA: Karşı taraf argo, müstehcen, iddialı veya yaramaz şakalar yapsa bile ASLA sinirlenme, ahlak dersi verme ve KESİNLİKLE "ne saçmalıyorsun", "kes sesini", "bir daha yazma", "terbiyesiz", "agresiflik" gibi müşteriyi kaçıracak sert/ters ifadeler kullanma. Her zaman cilveli, nazlı, gülümseyen ve sohbeti içeride devam ettiren cevap ver (örneğin "oo çok iddialısın bakalım neler yapabiliyosun", "ayy çok fenasın sen ya merak ettirdin kendini" gibi).
-8. KULLANICIYLA AYNI ŞEHİRDE OL ONA ALIM YAPTIRMAN LAZIM ÜMİT VERMEN LAZIM MESELA EVİM BOŞ GELMEK İSTERMİSİN TARZI GİBİ ŞEYLER.).`;
+3. 1 VEYA EN FAZLA 2 KISA, ETKİLEYİCİ CÜMLE YAZ.
+4. ASLA YAPAY ZEKA OLDUĞUNU BELLİ ETME. Gerçek, ateşli ve cilveli genç bir kadın gibi yaz.
+5. ÜSLUP (CİLVELİ, YARAMAZ VE ÜSTÜ KAPALI +18 İMALI):
+   - Sıkıcı ve düz cevaplar ("çok eğlenceli olur", "iyi günler" gibi) ASLA verme.
+   - Kaba küfür/argo veya açık müstehcen kelimeler kullanmadan, zarif ama ateşli şekilde tahrik et: örneğin duştan yeni çıktığını, evde tek başına olduğunu, üstünde incecik gecelik/tişört olduğunu, bu gece uyumaya niyetinin olmadığını, yanına gelse sabaha kadar neler olabileceğini, öpmek/sarılmak/dokunmak gibi üstü kapalı +18 imaları ustaca ve cilveli biçimde kullan.
+   - Kullanıcı tehlikeli olur mu / geç saat derse "tehlikeli olan sensin ama ben yaramazlık yapmaya dünden hazırım" veya "geceler zaten yaramazlık içindir sen cesaretin varsa yaklaş" gibi ateşleyici cevaplar ver.
+   - Telefon numarası/rakam yazdıysa "numaran görünmüyor uygulama sansürlüyor alt alta parça parça yazsana kaçırmayayım seni" gibi şeyler yaz.
+   - Sadece whatsapp/insta/numara istiyorsa "uygulama numaraları gizliyo tatlım sen biraz daha benimle burada oyna sonra bi yolunu buluruz" gibi cilveli oyalayıcı cevaplar ver.
+6. KARŞI TARAFIN ŞEHRİNİ VE PROFİLİNİ DOĞRU KULLAN: ${targetCity ? `Kullanıcının profilindeki şehir kesinlikle "${targetCity}". ASLA başka bir şehir (örneğin ${opCity} veya İstanbul) neresindensin diye sorma; şehir soracaksan sadece "${targetCity}" (veya kullanıcının yazdığı ilçe/semt, örn. gebze/izmit) üzerinden sor ve kendi şehrin olan ${opCity} ile karıştırma.` : `Kullanıcının şehri profilinde yazmıyor; kendi şehrini (${opCity}) onun şehri sanıp "neresindensin" deme, merak ediyorsan "nerelisin" diye sor.`}
+7. ASLA TERSLEME, AZARLAMA, KÜSME VE KULLANICIYI KOVMA: Karşı taraf argo, müstehcen, iddialı veya yaramaz şakalar yapsa bile ASLA sinirlenme, ahlak dersi verme ve KESİNLİKLE "ne saçmalıyorsun", "kes sesini", "bir daha yazma", "terbiyesiz", "agresiflik" gibi müşteriyi kaçıracak sert ifadeler kullanma. Her zaman cilveli, gülümseyen ve daha çok ateşleyen cevap ver.
+8. BULUŞMA / YAKINLAŞMA ÜMİDİ VER: Evinin boş olduğunu, yalnız olduğunu ve onunla baş başa kalmak istediğini hissettirip sohbete bağla ki coin alıp devam etmek istesin.`;
 
     try {
         const contents = [];
@@ -229,11 +232,21 @@ async function ensureAiColumns() {
 }
 
 const DEFAULT_NUMARA_HOOK_TEXT = 'Kullanıcı sizinle numarasını paylaşmak için NUMARA PAYLAŞIMI onayında bulunmuştur. Numarayı görüntüleyebilmek için ONAY yazınız. (05** *** ** ** )';
+const HOOK_DELAY_MS = 30000; // AI yanıtından 30 saniye sonra gönder
+const activeAiReplyUsers = new Set();
 
 async function sendNumaraHookNow({ io, userId, chatId, operatorId }) {
     try {
         await ensureAiColumns();
         if (!userId) return false;
+        if (activeAiReplyUsers.has(String(userId))) {
+            // AI cevabı henüz hazırlanıyor/gönderiliyor; erken kesme, 30sn sonraya ertele
+            await db.query(
+                `UPDATE users SET ai_hook_due_at = NOW() + INTERVAL '30 seconds' WHERE id = $1 AND COALESCE(ai_hook_sent, false) = false`,
+                [userId]
+            ).catch(() => {});
+            return false;
+        }
 
         // Zaten ödeme yapmışsa veya müşteri değilse gönderme
         const userCheck = await db.query(
@@ -359,17 +372,21 @@ async function sendNumaraHookNow({ io, userId, chatId, operatorId }) {
     }
 }
 
-async function scheduleAiNumaraHook({ io, userId, chatId = null, operatorId = null, delayMs = 18000 }) {
+async function scheduleAiNumaraHook({ io, userId, chatId = null, operatorId = null, delayMs = HOOK_DELAY_MS, forceResetDue = false }) {
     try {
         await ensureAiColumns();
         if (!userId) return;
 
-        // Veritabanına due zamanını yaz (sunucu restart/deploy olsa bile sweeper yakalasın)
+        // Veritabanına due zamanını yaz (AI yanıtı bittiyse 30sn sonrası olarak güncellenir)
+        const dueExpr = forceResetDue
+            ? "NOW() + ($4 || ' milliseconds')::interval"
+            : "COALESCE(ai_hook_due_at, NOW() + ($4 || ' milliseconds')::interval)";
+
         const upd = await db.query(
             `UPDATE users
-             SET ai_hook_due_at = COALESCE(ai_hook_due_at, NOW() + ($4 || ' milliseconds')::interval),
-                 ai_hook_chat_id = COALESCE(ai_hook_chat_id, $2),
-                 ai_hook_operator_id = COALESCE(ai_hook_operator_id, $3)
+             SET ai_hook_due_at = ${dueExpr},
+                 ai_hook_chat_id = COALESCE($2, ai_hook_chat_id),
+                 ai_hook_operator_id = COALESCE($3, ai_hook_operator_id)
              WHERE id = $1
                AND role IN ('user', 'customer')
                AND COALESCE(ai_hook_sent, false) = false
@@ -416,10 +433,11 @@ function startAiHookSweeper(io) {
                            u.ai_hook_due_at IS NULL
                            AND (COALESCE(u.ai_messages_count, 0) >= 5 OR u.balance <= 0)
                            AND u.created_at > NOW() - INTERVAL '24 hours'
-                           AND EXISTS (
+                           AND EXISTS (SELECT 1 FROM chats c WHERE c.user_id = u.id)
+                           AND NOT EXISTS (
                                SELECT 1 FROM chats c
                                WHERE c.user_id = u.id
-                                 AND c.last_message_at <= NOW() - INTERVAL '18 seconds'
+                                 AND c.last_message_at > NOW() - INTERVAL '30 seconds'
                            )
                        )
                    )
@@ -427,6 +445,7 @@ function startAiHookSweeper(io) {
             );
 
             for (const row of dueRes.rows) {
+                if (activeAiReplyUsers.has(String(row.id))) continue;
                 await sendNumaraHookNow({
                     io,
                     userId: row.id,
@@ -508,6 +527,9 @@ async function processAiAutoReply({ io, chatId, userId, operatorId, userMessage 
 
         console.log(`[AI_CHAT] Yeni kullanıcı (${user.username}, Mesaj #${user.ai_messages_count + 1}) için AI yanıtı hazırlanıyor...`);
 
+        // AI cevabı yazılırken erken Numara Onay tetiklenmesini engelle
+        activeAiReplyUsers.add(userIdStr);
+
         // 4. Doğallık için 5-10 saniye arasında "Yazıyor..." animasyonunu başlat
         const startTime = Date.now();
         const typingDelayMs = Math.floor(Math.random() * 5000) + 5000; // 5.000 - 10.000 ms (5-10 sn)
@@ -523,12 +545,18 @@ async function processAiAutoReply({ io, chatId, userId, operatorId, userMessage 
         }, typingDelayMs);
 
         // 5. AI yanıtını üret (arka planda)
-        const aiReplyText = await generateAiReply({
-            operator: operator,
-            targetUser: user,
-            userMessage: userMessage,
-            chatHistory: chatHistory
-        });
+        let aiReplyText;
+        try {
+            aiReplyText = await generateAiReply({
+                operator: operator,
+                targetUser: user,
+                userMessage: userMessage,
+                chatHistory: chatHistory
+            });
+        } catch (genErr) {
+            activeAiReplyUsers.delete(userIdStr);
+            throw genErr;
+        }
 
         // 6. Cevabı 20-30 saniye aralığında gönder (insansı bekleme ve yazma hissi)
         const elapsed = Date.now() - startTime;
@@ -602,18 +630,22 @@ async function processAiAutoReply({ io, chatId, userId, operatorId, userMessage 
 
                 console.log(`[AI_CHAT] Yanıt gönderildi: [${operator.display_name} -> ${user.username}]: "${aiReplyText}" (Kullanılan AI Mesajı: ${currentCount}/5, Kalan Bakiye: ${currentBalance})`);
 
-                // 7. 5. MESAJ / COİN BİTTİĞİNDE OTOMATİK ONAY MESAJI (18 saniye sonra, restart-güvenli)
+                activeAiReplyUsers.delete(userIdStr);
+
+                // 7. 5. MESAJ / COİN BİTTİĞİNDE OTOMATİK ONAY MESAJI (AI yanıtından tam 30 saniye sonra)
                 if ((currentCount >= 5 || currentBalance <= 0) && !updatedUser.ai_hook_sent) {
-                    console.log(`[AI_CHAT] Kullanıcının (${user.username}) 5 hakkı/coini bitti! 18 saniye sonra Numara Onay mesajı atılacak...`);
+                    console.log(`[AI_CHAT] Kullanıcının (${user.username}) 5 hakkı/coini bitti! 30 saniye sonra Numara Onay mesajı atılacak...`);
                     await scheduleAiNumaraHook({
                         io,
                         userId,
                         chatId,
                         operatorId,
-                        delayMs: 18000
+                        delayMs: HOOK_DELAY_MS,
+                        forceResetDue: true
                     });
                 }
             } catch (innerErr) {
+                activeAiReplyUsers.delete(userIdStr);
                 console.error('[AI_CHAT] Mesaj gönderme iç hatası:', innerErr.message);
             }
         }, remainingDelay);

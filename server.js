@@ -6131,10 +6131,10 @@ io.on('connection', (socket) => {
             // --- 1. COIN DEDUCTION LOGIC ---
             const userRole = (socket.user.role || '').toLowerCase();
             
-            // Strictly role-based management check (staff/operators), disabled if female-to-female conversation
-            const isManagement = !isFemaleToFemale && ['admin', 'super_admin', 'moderator', 'staff', 'operator'].includes(userRole);
+            // Management roles are always free senders (regardless of gender matchup)
+            const isManagement = ['admin', 'super_admin', 'moderator', 'staff', 'operator'].includes(userRole);
             
-            // Free sender: Only management roles (admin/staff/operator). All users (male & female) pay coins.
+            // Free sender: Only management roles. All regular users (male & female) MUST pay coins.
             const isFreeSender = isManagement;
             
             let commissionDataToRunLater = null;

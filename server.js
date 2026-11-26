@@ -6134,8 +6134,8 @@ io.on('connection', (socket) => {
             // Strictly role-based management check (staff/operators), disabled if female-to-female conversation
             const isManagement = !isFemaleToFemale && ['admin', 'super_admin', 'moderator', 'staff', 'operator'].includes(userRole);
             
-            // Free sender: Management OR any female messaging a male (not female-to-female)
-            const isFreeSender = isManagement || (isFemaleSender && !isFemaleToFemale);
+            // Free sender: Only management roles (admin/staff/operator). All users (male & female) pay coins.
+            const isFreeSender = isManagement;
             
             let commissionDataToRunLater = null;
             

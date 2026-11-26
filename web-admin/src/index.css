@@ -66,63 +66,59 @@
 .stagger-4 { animation-delay: 0.4s; }
 .stagger-5 { animation-delay: 0.5s; }
 
-/* Soft Executive Welcome Lighting & Text Motion */
+/* Soft Executive Welcome Lighting & Text Motion (5s Slow Smooth) */
 @keyframes soft-glow-breathe {
-    0% { opacity: 0; transform: scale(0.82); }
-    45% { opacity: 0.65; transform: scale(1.06); }
-    100% { opacity: 0.42; transform: scale(1); }
+    0% { opacity: 0; transform: scale(0.75); }
+    45% { opacity: 0.55; transform: scale(1.04); }
+    75% { opacity: 0.72; transform: scale(1.1); }
+    100% { opacity: 0.5; transform: scale(1.02); }
 }
 
 @keyframes soft-text-rise {
-    0% { opacity: 0; transform: translateY(14px); filter: blur(6px); }
+    0% { opacity: 0; transform: translateY(18px); filter: blur(8px); }
     100% { opacity: 1; transform: translateY(0); filter: blur(0); }
 }
 
 @keyframes soft-line-expand {
     0% { opacity: 0; transform: scaleX(0); }
-    100% { opacity: 0.9; transform: scaleX(1); }
+    100% { opacity: 0.85; transform: scaleX(1); }
 }
 
 @keyframes soft-light-sweep {
-    0% { background-position: -150% 0; }
-    100% { background-position: 150% 0; }
+    0% { background-position: 180% 0; }
+    100% { background-position: -120% 0; }
 }
 
 .animate-soft-glow {
-    animation: soft-glow-breathe 2.2s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+    animation: soft-glow-breathe 4.4s cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
 
 .animate-soft-rise-1 {
     opacity: 0;
-    animation: soft-text-rise 0.95s cubic-bezier(0.22, 1, 0.36, 1) 0.1s forwards;
-}
-
-.animate-soft-rise-2 {
-    opacity: 0;
-    animation: soft-text-rise 1.05s cubic-bezier(0.22, 1, 0.36, 1) 0.35s forwards;
+    animation: soft-text-rise 1.6s cubic-bezier(0.22, 1, 0.36, 1) 0.2s forwards;
 }
 
 .animate-soft-rise-3 {
     opacity: 0;
-    animation: soft-text-rise 0.95s cubic-bezier(0.22, 1, 0.36, 1) 0.72s forwards;
+    animation: soft-text-rise 1.6s cubic-bezier(0.22, 1, 0.36, 1) 1.7s forwards;
 }
 
 .animate-soft-line {
     opacity: 0;
     transform-origin: center;
-    animation: soft-line-expand 1s cubic-bezier(0.22, 1, 0.36, 1) 0.52s forwards;
+    animation: soft-line-expand 1.7s cubic-bezier(0.22, 1, 0.36, 1) 1.25s forwards;
 }
 
 .soft-shimmer-text {
     background-image: linear-gradient(
         110deg,
         #cbd5e1 0%,
-        #ffffff 38%,
-        #e0f2fe 50%,
-        #ffffff 62%,
+        #f8fafc 35%,
+        #bae6fd 50%,
+        #f8fafc 65%,
         #94a3b8 100%
     );
-    background-size: 220% 100%;
-    animation: soft-text-rise 1.05s cubic-bezier(0.22, 1, 0.36, 1) 0.35s forwards,
-               soft-light-sweep 2.4s ease-in-out 0.6s infinite;
+    background-size: 240% 100%;
+    animation: soft-text-rise 1.85s cubic-bezier(0.22, 1, 0.36, 1) 0.55s forwards,
+               soft-light-sweep 4.5s ease-in-out 0.8s infinite;
 }

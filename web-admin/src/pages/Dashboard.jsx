@@ -53,7 +53,7 @@ export default function Dashboard() {
         setTimeout(() => {
             setShowIntro(false);
             setIntroFading(false);
-        }, 650);
+        }, 900);
     };
 
     const replayIntro = () => {
@@ -63,11 +63,11 @@ export default function Dashboard() {
 
     useEffect(() => {
         if (!showIntro || isOperator) return undefined;
-        const fadeTimer = setTimeout(() => setIntroFading(true), 2100);
+        const fadeTimer = setTimeout(() => setIntroFading(true), 4000);
         const closeTimer = setTimeout(() => {
             setShowIntro(false);
             setIntroFading(false);
-        }, 2750);
+        }, 5000);
         return () => {
             clearTimeout(fadeTimer);
             clearTimeout(closeTimer);
@@ -164,22 +164,22 @@ export default function Dashboard() {
     const welcomeOverlay = showIntro && !isOperator ? (
         <div
             onClick={dismissIntro}
-            className={`fixed inset-0 z-[100] flex items-center justify-center bg-[#020617]/95 backdrop-blur-2xl cursor-pointer transition-all duration-700 ease-out ${introFading ? 'opacity-0 scale-[1.015] pointer-events-none' : 'opacity-100 scale-100'}`}
+            className={`fixed inset-0 z-[100] flex items-center justify-center bg-[#020617]/95 backdrop-blur-2xl cursor-pointer transition-all duration-1000 ease-out ${introFading ? 'opacity-0 scale-[1.015] pointer-events-none' : 'opacity-100 scale-100'}`}
         >
-            <div className="relative text-center px-8 py-10 max-w-2xl">
+            <div className="relative text-center px-6 py-10 max-w-3xl">
                 {/* Soft breathing ambient light */}
-                <div className="absolute -inset-24 bg-gradient-to-tr from-blue-500/20 via-indigo-400/15 to-emerald-400/15 blur-[90px] rounded-full pointer-events-none animate-soft-glow" />
-                <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-72 h-24 bg-white/10 blur-[65px] rounded-full pointer-events-none animate-soft-glow" />
+                <div className="absolute -inset-28 bg-gradient-to-tr from-blue-500/20 via-indigo-400/15 to-emerald-400/15 blur-[100px] rounded-full pointer-events-none animate-soft-glow" />
+                <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-80 h-28 bg-white/10 blur-[70px] rounded-full pointer-events-none animate-soft-glow" />
 
                 <p className="relative text-[11px] font-bold uppercase tracking-[0.42em] text-blue-300/80 animate-soft-rise-1">
                     Yönetim Özeti
                 </p>
 
-                <h1 className="relative mt-4 text-4xl sm:text-5xl md:text-6xl font-black tracking-tight text-transparent bg-clip-text soft-shimmer-text opacity-0 drop-shadow-[0_0_25px_rgba(147,197,253,0.22)]">
+                <h1 className="relative mt-4 text-3xl sm:text-5xl font-black tracking-tight sm:whitespace-nowrap text-transparent bg-clip-text soft-shimmer-text opacity-0 drop-shadow-[0_0_28px_rgba(147,197,253,0.28)]">
                     Hoş geldiniz, {adminTitleName}
                 </h1>
 
-                <div className="relative mx-auto mt-5 h-px w-48 bg-gradient-to-r from-transparent via-blue-300/60 to-transparent shadow-[0_0_12px_rgba(147,197,253,0.65)] animate-soft-line" />
+                <div className="relative mx-auto mt-5 h-px w-52 bg-gradient-to-r from-transparent via-blue-300/65 to-transparent shadow-[0_0_14px_rgba(147,197,253,0.7)] animate-soft-line" />
 
                 <p className="relative mt-4 text-sm font-medium text-slate-400 animate-soft-rise-3">
                     Canlı gelir ve günlük analizleriniz hazırlanıyor...
@@ -188,17 +188,11 @@ export default function Dashboard() {
         </div>
     ) : null;
 
-    if (loading) {
-        return (
-            <>
-                {welcomeOverlay}
-                {!showIntro && <div className="p-20 flex justify-center"><Loader2 className="animate-spin text-purple-500" size={40} /></div>}
-            </>
-        );
-    }
-
     // Operator legacy dashboard preserved cleanly
     if (isOperator) {
+        if (loading) {
+            return <div className="p-20 flex justify-center"><Loader2 className="animate-spin text-purple-500" size={40} /></div>;
+        }
         const operatorStatItems = [
             { title: 'Bugünkü Mesajlarım', value: personalStats.today.messages || 0, icon: <MessageCircle />, color: 'text-blue-400', bg: 'bg-blue-500/10' },
             { title: 'Bugünkü Kazancım', value: `${personalStats.today.coins || 0} Coin`, icon: <Award />, color: 'text-emerald-400', bg: 'bg-emerald-500/10' },
@@ -278,6 +272,10 @@ export default function Dashboard() {
         <div className="relative p-6 md:p-10 space-y-8">
             {welcomeOverlay}
 
+            {loading ? (
+                !showIntro && <div className="p-20 flex justify-center"><Loader2 className="animate-spin text-purple-500" size={40} /></div>
+            ) : (
+                <>
             {/* Header */}
             <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 animate-fade-up">
                 <div className="space-y-1">
@@ -928,6 +926,8 @@ export default function Dashboard() {
 
             {/* Interactive KPI Detail Drawer */}
             <KpiDetailDrawer openTab={drawerTab} initialRange={drawerRange} onClose={() => { setDrawerTab(null); setDrawerRange(null); }} stats={stats} />
+                </>
+            )}
         </div>
     );
 }

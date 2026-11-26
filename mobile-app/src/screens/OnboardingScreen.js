@@ -52,7 +52,7 @@ const STEPS = [
     { id: 'relationship', title: 'Ne Arıyorsun?', subtitle: 'İlgini çekenleri seç, sana uygun kişiler ve odalar önerelim.' },
     { id: 'details', title: 'Hakkında birkaç bilgi', subtitle: 'Profilini tamamlayalım ve sana daha uygun kişiler önerelim.' },
     { id: 'interests', title: 'İlgi Alanların?', subtitle: 'Sana benzer kişiler ve canlı odalar önerelim.' },
-    { id: 'photo', title: 'Son Dokunuş', subtitle: 'Harika bir profil fotoğrafı seç.' }
+    { id: 'photo', title: 'Son Dokunuş', subtitle: 'İstersen fotoğraf ekle veya şimdilik geç.' }
 ];
 
 const BAD_WORDS = ['argo', 'kufur', 'slang', 'serefsiz', 'pic', 'piç', 'amk', 'aq', 'got', 'göt', 'sex', 'seks', 'sik', 'yarrak', 'amcik', 'amcık', 'orospu'];
@@ -579,7 +579,7 @@ export default function OnboardingScreen({ navigation, route }) {
         }
     };
 
-    const handleComplete = async () => {
+    const handleComplete = async ({ skipPhoto = false } = {}) => {
         if (!gender || (gender !== 'erkek' && gender !== 'kadin')) {
             setAlert({ visible: true, title: 'Cinsiyet Seçimi Zorunludur ⚠️', message: 'Uygulamaya devam edebilmek için Erkek veya Kadın seçeneğini belirlemeniz gerekmektedir.', type: 'warning' });
             return;
@@ -589,16 +589,14 @@ export default function OnboardingScreen({ navigation, route }) {
             // --- TOKEN FALLBACK SYSTEM ---
             let activeToken = token;
             let activeUserId = userId;
+            const userJson = await AsyncStorage.getItem('user');
+            const parsedStoredUser = userJson ? JSON.parse(userJson) : null;
 
             if (!activeToken || !activeUserId) {
                 console.log('[Onboarding] Missing params, checking AsyncStorage...');
                 const storedToken = await AsyncStorage.getItem('token');
-                const storedUserJson = await AsyncStorage.getItem('user');
                 if (storedToken) activeToken = storedToken;
-                if (storedUserJson) {
-                    const parsed = JSON.parse(storedUserJson);
-                    if (parsed.id) activeUserId = parsed.id;
-                }
+                if (parsedStoredUser?.id) activeUserId = parsedStoredUser.id;
             }
 
             if (!activeToken) {
@@ -607,7 +605,7 @@ export default function OnboardingScreen({ navigation, route }) {
             // -----------------------------
 
             let photoUrl = '';
-            if (photo) {
+            if (photo && !skipPhoto) {
                 const formData = new FormData();
                 formData.append('file', {
                     uri: photo,
@@ -631,6 +629,11 @@ export default function OnboardingScreen({ navigation, route }) {
                 });
             }
 
+            const existingAvatar = parsedStoredUser?.avatar_url || '';
+            const hasValidExistingAvatar = Boolean(existingAvatar && !existingAvatar.includes('via.placeholder.com'));
+            const plainDefaultAvatar = `https://ui-avatars.com/api/?name=${encodeURIComponent((name || 'U').trim().slice(0, 2).toUpperCase())}&background=475569&color=f8fafc&size=256&bold=true&format=png`;
+            const finalAvatarUrl = photoUrl || (hasValidExistingAvatar ? undefined : plainDefaultAvatar);
+
             // Update user profile
             const updateRes = await axios.put(`${API_URL}/users/${activeUserId}/profile`, {
                 display_name: name,
@@ -642,16 +645,15 @@ export default function OnboardingScreen({ navigation, route }) {
                 boy: boy || null,
                 city: city || null,
                 onboarding_completed: true,
-                avatar_url: photoUrl || undefined
+                avatar_url: finalAvatarUrl
             }, {
                 headers: { 'Authorization': `Bearer ${activeToken}` }
             });
 
             const updatedUser = updateRes.data;
 
-            const userJson = await AsyncStorage.getItem('user');
-            if (userJson) {
-                const userData = { ...JSON.parse(userJson), ...updatedUser, onboarding_completed: true };
+            if (parsedStoredUser) {
+                const userData = { ...parsedStoredUser, ...updatedUser, onboarding_completed: true };
                 await AsyncStorage.setItem('user', JSON.stringify(userData));
             }
 
@@ -1010,7 +1012,7 @@ export default function OnboardingScreen({ navigation, route }) {
             return !!(isAgeValid && isBoyValid && isCityValid);
         }
         if (step.id === 'interests') return interests.length >= 3;
-        if (step.id === 'photo') return photo !== null;
+        if (step.id === 'photo') return true;
         return true;
     };
 
@@ -1055,13 +1057,22 @@ export default function OnboardingScreen({ navigation, route }) {
                 </KeyboardAvoidingView>
 
                 <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom + 25, 48), marginBottom: Platform.OS === 'android' ? 12 : 0 }]}>
-                    <GradientButton
-                        title={currentStep === STEPS.length - 1 ? 'TAMAMLA' : 'DEVAM ET'}
-                        onPress={nextStep}
-                        disabled={!isStepValid()}
-                        loading={loading}
-                        style={styles.nextButton}
-                    />
+                    {currentStep === STEPS.length - 1 && !photo ? (
+                        <GradientButton
+                            title="ŞİMDİLİK GEÇ"
+                            onPress={() => handleComplete({ skipPhoto: true })}
+                            loading={loading}
+                            style={styles.nextButton}
+                        />
+                    ) : (
+                        <GradientButton
+                            title={currentStep === STEPS.length - 1 ? 'TAMAMLA' : 'DEVAM ET'}
+                            onPress={nextStep}
+                            disabled={!isStepValid()}
+                            loading={loading}
+                            style={styles.nextButton}
+                        />
+                    )}
                 </View>
             </SafeAreaView>
 

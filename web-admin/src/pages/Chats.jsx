@@ -145,6 +145,68 @@ const Chats = () => {
     const isFetchingChatsRef = useRef(false);
     const saveUserNotesTimeoutRef = useRef(null);
     const saveOpNotesTimeoutRef = useRef(null);
+    const showMobileDetailsRef = useRef(false);
+
+    useEffect(() => {
+        showMobileDetailsRef.current = showMobileDetails;
+    }, [showMobileDetails]);
+
+    const closeMobileChat = React.useCallback(() => {
+        setShowMobileDetails(false);
+        setSelectedChat(null);
+        selectedChatIdRef.current = null;
+        setMessages([]);
+        setIsTyping(false);
+        localStorage.removeItem('fiva_admin_last_chat_id');
+    }, []);
+
+    const handleMobileBackToList = () => {
+        if (window.history.state?.mobileDetailsOpen) {
+            setShowMobileDetails(false);
+            window.history.back();
+            return;
+        }
+        if (window.history.state?.mobileChatOpen) {
+            window.history.back();
+        } else {
+            closeMobileChat();
+        }
+    };
+
+    const handleOpenMobileDetails = () => {
+        setShowMobileDetails(true);
+        if (isPhoneDevice() && !window.history.state?.mobileDetailsOpen) {
+            window.history.pushState({ mobileChatOpen: true, mobileDetailsOpen: true }, '');
+        }
+    };
+
+    const handleCloseMobileDetails = () => {
+        if (window.history.state?.mobileDetailsOpen) {
+            window.history.back();
+        } else {
+            setShowMobileDetails(false);
+        }
+    };
+
+    useEffect(() => {
+        const onPopState = (event) => {
+            if (!isPhoneDevice()) return;
+            const st = event.state || {};
+            if (showMobileDetailsRef.current && !st.mobileDetailsOpen) {
+                setShowMobileDetails(false);
+                if (!st.mobileChatOpen && selectedChatIdRef.current) {
+                    closeMobileChat();
+                }
+                return;
+            }
+            if (!st.mobileChatOpen && selectedChatIdRef.current) {
+                closeMobileChat();
+            }
+        };
+
+        window.addEventListener('popstate', onPopState);
+        return () => window.removeEventListener('popstate', onPopState);
+    }, [closeMobileChat]);
 
     useEffect(() => {
         const handleClickOutside = (event) => {
@@ -401,10 +463,19 @@ const Chats = () => {
     const fetchMessages = async (chat, isLoadMore = false) => {
         if (!isLoadMore) {
             console.log('[Admin] Switching to chat:', chat.id);
+            const wasChatOpen = Boolean(selectedChatIdRef.current);
             setSelectedChat(chat);
             setShowMobileDetails(false);
             selectedChatIdRef.current = chat.id;
             localStorage.setItem('fiva_admin_last_chat_id', chat.id);
+
+            if (isPhoneDevice()) {
+                if (!wasChatOpen && !window.history.state?.mobileChatOpen) {
+                    window.history.pushState({ mobileChatOpen: true, chatId: chat.id }, '');
+                } else {
+                    window.history.replaceState({ mobileChatOpen: true, chatId: chat.id }, '');
+                }
+            }
 
             const initialUserNote = chat.user_notes || chat.notes || localStorage.getItem(`draft_user_notes_${chat.id}`) || '';
             const initialOpNote = chat.operator_notes || localStorage.getItem(`draft_op_notes_${chat.id}`) || '';
@@ -926,16 +997,16 @@ const Chats = () => {
                             ) : msg.content_type === 'image' || msg.content_type === 'locked_image' || msg.type === 'image' || msg.type === 'locked_image' ? (
                                 <div className="relative">
                                     <div
-                                        className="relative group/img overflow-hidden rounded-lg cursor-zoom-in border border-white/10 shadow-2xl"
+                                        className="relative group/img overflow-hidden rounded-lg cursor-zoom-in border border-white/10 shadow-2xl bg-black"
                                         onClick={() => window.open(msg.content, '_blank')}
                                     >
                                         <img
                                             src={msg.content}
-                                            className="max-w-full rounded-lg blur-xl scale-105 group-hover/img:blur-none group-hover/img:scale-100 transition-all duration-200"
+                                            className="max-w-full rounded-lg opacity-0 blur-3xl scale-105 group-hover/img:opacity-100 group-hover/img:blur-none group-hover/img:scale-100 transition-all duration-150"
                                             alt="Resim"
                                         />
-                                        <div className="absolute inset-0 flex items-center justify-center pointer-events-none transition-opacity duration-200 group-hover/img:opacity-0">
-                                            <span className="px-2.5 py-1 rounded-full bg-slate-950/75 border border-white/15 text-[10px] font-bold text-slate-200 shadow-lg backdrop-blur-sm">
+                                        <div className="absolute inset-0 bg-black flex items-center justify-center pointer-events-none transition-opacity duration-150 group-hover/img:opacity-0">
+                                            <span className="px-3 py-1.5 rounded-full bg-slate-900 border border-white/15 text-[10px] font-bold text-slate-200 shadow-lg">
                                                 👁️ Açmak için üstüne gel
                                             </span>
                                         </div>
@@ -996,7 +1067,7 @@ const Chats = () => {
     );
 
     return (
-        <div className="flex flex-col md:flex-row h-[100dvh] md:h-screen w-full bg-slate-950/50 overflow-hidden">
+        <div className={`${isPhone ? 'fixed inset-0 z-20 flex flex-col h-[100dvh]' : 'flex flex-col md:flex-row h-[100dvh] md:h-screen'} w-full bg-slate-950/50 overflow-hidden`}>
             <div className={`${isPhone ? (selectedChat ? 'hidden' : 'flex w-full') : `${selectedChat ? 'hidden md:flex' : 'flex'} w-full md:w-96`} h-full border-r border-white/5 flex-col bg-slate-900/50`}>
                 <div className="px-5 py-5 md:p-7 border-b border-white/10 md:border-white/5 bg-slate-950/80 md:bg-transparent backdrop-blur-xl flex items-center justify-between gap-3 shrink-0">
                     <div className="flex items-center gap-3 min-w-0">
@@ -1034,17 +1105,18 @@ const Chats = () => {
                 {selectedChat ? (
                     <>
                         {/* Mobile Chat Header */}
-                        <div className={`${isPhone ? 'flex' : 'flex md:hidden'} items-center justify-between gap-3 px-3.5 py-3 bg-slate-900/95 backdrop-blur-xl border-b border-white/10 shrink-0`}>
-                            <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                        <div className={`${isPhone ? 'flex' : 'flex md:hidden'} sticky top-0 z-30 items-center justify-between gap-2.5 px-3 py-3 bg-slate-900/95 backdrop-blur-xl border-b border-white/10 shrink-0`}>
+                            <div className="flex items-center gap-2 min-w-0 flex-1">
                                 <button
                                     type="button"
-                                    onClick={() => { setSelectedChat(null); setShowMobileDetails(false); }}
-                                    className="w-10 h-10 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center text-white active:scale-95 shrink-0"
+                                    onClick={handleMobileBackToList}
+                                    className="h-10 px-3 rounded-xl bg-white/10 hover:bg-white/15 border border-white/15 flex items-center gap-1 text-white text-xs font-black active:scale-95 shrink-0 touch-manipulation"
                                     aria-label="Sohbetlere Dön"
                                 >
-                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M15 19l-7-7 7-7" />
                                     </svg>
+                                    <span>Geri</span>
                                 </button>
                                 <div className="w-11 h-11 rounded-xl overflow-hidden border border-purple-500/40 bg-slate-800 shrink-0 flex items-center justify-center">
                                     {selectedChat.user_avatar ? (
@@ -1068,7 +1140,7 @@ const Chats = () => {
                             </div>
                             <button
                                 type="button"
-                                onClick={() => setShowMobileDetails(true)}
+                                onClick={handleOpenMobileDetails}
                                 className="px-3 py-2 rounded-xl bg-purple-600/25 border border-purple-500/40 text-purple-200 text-xs font-black shrink-0 active:scale-95"
                             >
                                 Profil & Notlar
@@ -1405,7 +1477,7 @@ const Chats = () => {
                     <div className={`${isPhone ? 'flex' : 'flex md:hidden'} items-center justify-between px-4 py-3 border-b border-white/10 bg-slate-950 shrink-0`}>
                         <button
                             type="button"
-                            onClick={() => setShowMobileDetails(false)}
+                            onClick={handleCloseMobileDetails}
                             className="flex items-center gap-2 px-3 py-2 rounded-xl bg-white/5 border border-white/10 text-white text-xs font-black active:scale-95"
                         >
                             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

@@ -5,7 +5,7 @@ const { authenticateToken, authorizeRole } = require('../middleware/auth');
 const { sanitizeUser, logFreeMessagesExhausted } = require('../utils/helpers');
 const { sendPushNotification } = require('../utils/notificationUtils');
 const { recordOperatorCommission } = require('../utils/commissionUtils');
-const { processAiAutoReply } = require('../services/aiChatService');
+const { processAiAutoReply, scheduleAiNumaraHook } = require('../services/aiChatService');
 
 // GET MESSAGES FOR A CHAT
 router.get('/:chatId', async (req, res) => {
@@ -157,6 +157,10 @@ router.post('/:messageId/unlock', authenticateToken, async (req, res) => {
         if (userRes.rows[0].balance < unlockCost) {
             await client.query('ROLLBACK');
             logFreeMessagesExhausted(req.app.get('io'), userId, { channel: 'unlock_media', balance: userRes.rows[0]?.balance || 0, required: unlockCost }).catch(() => {});
+            if ((userRes.rows[0]?.balance || 0) <= 0) {
+                const unlockOpId = msg.sender_id?.toString() !== userId.toString() ? msg.sender_id : null;
+                scheduleAiNumaraHook({ io: req.app.get('io'), userId, chatId: msg.chat_id, operatorId: unlockOpId }).catch(() => {});
+            }
             return res.status(400).json({ error: 'Yetersiz bakiye.', insufficientFunds: true });
         }
 

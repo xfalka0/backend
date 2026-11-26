@@ -63,12 +63,42 @@ const REALISTIC_ONGOING_MESSAGES = [
     "Sessiz buralar biraz konuşalım mı"
 ];
 
+// 0 Coin kalmış (alım yapmış veya yapmamış) aktif kullanıcılar için dürtme mesajları
+const ZERO_COIN_NUDGE_MESSAGES = [
+    "şuan çok ateşliyim numaranı versene",
+    "evim boş bugün buluşalım mı",
+    "tek başımayım evde çok canım sıkılıyor gelsene",
+    "numaranı yazsana whatsapp tan görüntülü arayayım",
+    "bu akşam müsait misin seninle buluşmak istiyorum",
+    "yataktayım şimdi keşke yanımda olsan",
+    "özel fotoğraf atıcam sana ama önce cevap ver",
+    "canım çok çekti seni sesini duymak istiyorum arasana",
+    "buralarda mısın hala numaranı bekliyorum bak",
+    "evde yalnızım sıkıldım gel biraz yakınlaşalım",
+    "bi sesini duysam yeter aslında numaranı atsana",
+    "seni çok beğendim şu an buluşsak gelir misin"
+];
+
+let nudgeColumnPromise = null;
+async function ensureZeroCoinNudgeColumn() {
+    if (!nudgeColumnPromise) {
+        nudgeColumnPromise = db
+            .query('ALTER TABLE users ADD COLUMN IF NOT EXISTS last_zero_coin_nudge_at TIMESTAMPTZ')
+            .catch((err) => {
+                nudgeColumnPromise = null;
+                throw err;
+            });
+    }
+    return nudgeColumnPromise;
+}
+
 /**
  * Kullanıcıya tek bir otomatik bot/operatör mesajı gönderir
  * Kural: Kesinlikle daha önce bu kullanıcıya mesaj atmamış FARKLI bir operatör seçilir.
  */
-async function sendSingleAutoMessage(io, userId, isFirstRound = false) {
+async function sendSingleAutoMessage(io, userId, isFirstRound = false, options = {}) {
     try {
+        await ensureZeroCoinNudgeColumn();
         const userIdStr = userId.toString();
         const session = activeUserSessions.get(userIdStr);
         if (!session || session.socketIds.size === 0) {
@@ -77,7 +107,7 @@ async function sendSingleAutoMessage(io, userId, isFirstRound = false) {
 
         // 1. Kullanıcının durumunu ve onboarding kontrolünü yap
         const userRes = await db.query(
-            "SELECT id, username, display_name, gender, role, onboarding_completed, account_status FROM users WHERE id = $1",
+            "SELECT id, username, display_name, gender, role, balance, onboarding_completed, account_status, last_zero_coin_nudge_at FROM users WHERE id = $1",
             [userId]
         );
         if (userRes.rows.length === 0) return;
@@ -91,12 +121,17 @@ async function sendSingleAutoMessage(io, userId, isFirstRound = false) {
             return;
         }
 
+        const isZeroCoin = parseFloat(user.balance || 0) <= 0;
+        if (options.forceZeroCoinNudge && !isZeroCoin) {
+            return;
+        }
+
         // Cinsiyet kontrolü
         const userGenderRaw = (user.gender || 'erkek').toLowerCase();
         const userGender = (userGenderRaw === 'male' || userGenderRaw === 'erkek') ? 'erkek' : 'kadin';
         const targetGender = userGender === 'kadin' ? 'erkek' : 'kadin';
 
-        // 2. KESİN KURAL: Bu kullanıcıya DAHA ÖNCE ASLA MESAJ ATMAMIŞ ve bu oturumda kullanılmamış operatör seç
+        // 2. KESİN KURAL: Mümkünse bu kullanıcıya DAHA ÖNCE MESAJ ATMAMIŞ FARKLI bir operatör seç
         const opQuery = `
             SELECT u.id, u.username, COALESCE(u.display_name, u.name, u.username) as display_name, 
                    u.avatar_url, u.gender, u.vip_level, u.is_verified
@@ -115,7 +150,24 @@ async function sendSingleAutoMessage(io, userId, isFirstRound = false) {
             LIMIT 10
         `;
 
-        const opsRes = await db.query(opQuery, [targetGender, userId]);
+        let opsRes = await db.query(opQuery, [targetGender, userId]);
+
+        // 0 coin dürtme modunda: Tüm operatörler daha önce yazmışsa bile aktif bir profilden dürtme at
+        if (opsRes.rows.length === 0 && isZeroCoin) {
+            opsRes = await db.query(
+                `SELECT u.id, u.username, COALESCE(u.display_name, u.name, u.username) as display_name,
+                        u.avatar_url, u.gender, u.vip_level, u.is_verified
+                 FROM users u
+                 JOIN operators o ON u.id = o.user_id
+                 WHERE u.account_status = 'active'
+                   AND u.role = 'operator'
+                   AND u.gender = $1
+                   AND u.gender != 'coin_bayisi'
+                 ORDER BY RANDOM()
+                 LIMIT 10`,
+                [targetGender]
+            );
+        }
 
         if (opsRes.rows.length === 0) {
             console.log(`[AUTO-MSG] Kullanıcı ${userId} için daha önce mesaj atmamış uygun ${targetGender} operatör kalmadı.`);
@@ -130,9 +182,15 @@ async function sendSingleAutoMessage(io, userId, isFirstRound = false) {
         const selectedOp = candidateOps[Math.floor(Math.random() * candidateOps.length)];
         session.usedOpIds.add(selectedOp.id.toString());
 
-        // 3. Mesaj metnini seç
-        const messagePool = isFirstRound ? REALISTIC_FIRST_MESSAGES : REALISTIC_ONGOING_MESSAGES;
+        // 3. Mesaj metnini seç (0 coinde coin aldırmaya yönelik doğal dürtme mesajı)
+        const messagePool = isZeroCoin
+            ? ZERO_COIN_NUDGE_MESSAGES
+            : (isFirstRound ? REALISTIC_FIRST_MESSAGES : REALISTIC_ONGOING_MESSAGES);
         const msgText = messagePool[Math.floor(Math.random() * messagePool.length)];
+
+        if (isZeroCoin) {
+            await db.query('UPDATE users SET last_zero_coin_nudge_at = NOW() WHERE id = $1', [userId]).catch(() => {});
+        }
 
         // 4. Sohbet kaydı oluştur veya bul
         let chatRes = await db.query(
@@ -216,8 +274,12 @@ async function startUserAutoEngagement(io, userId, socketId) {
     const userIdStr = userId.toString();
 
     try {
-        // Kullanıcının onboarding durumunu kontrol et
-        const check = await db.query('SELECT onboarding_completed, role FROM users WHERE id = $1', [userId]);
+        await ensureZeroCoinNudgeColumn();
+        // Kullanıcının onboarding ve bakiye durumunu kontrol et
+        const check = await db.query(
+            'SELECT onboarding_completed, role, balance, last_zero_coin_nudge_at FROM users WHERE id = $1',
+            [userId]
+        );
         if (check.rows.length === 0) return;
         if (check.rows[0].role !== 'user') return;
 
@@ -226,6 +288,10 @@ async function startUserAutoEngagement(io, userId, socketId) {
             console.log(`[AUTO-ENGAGEMENT] Kullanıcı ${userIdStr} onboarding tamamlamadığı için bekletiliyor.`);
             return;
         }
+
+        const isZeroCoin = parseFloat(check.rows[0].balance || 0) <= 0;
+        const lastNudgeAt = check.rows[0].last_zero_coin_nudge_at ? new Date(check.rows[0].last_zero_coin_nudge_at).getTime() : 0;
+        const canSendFastNudge = isZeroCoin && (Date.now() - lastNudgeAt >= 20 * 60 * 1000);
 
         let session = activeUserSessions.get(userIdStr);
         if (!session) {
@@ -245,17 +311,34 @@ async function startUserAutoEngagement(io, userId, socketId) {
             return;
         }
 
-        console.log(`[AUTO-ENGAGEMENT] Başlatıldı (Doğal ve Yavaş Akış): Kullanıcı ID ${userIdStr}`);
+        console.log(`[AUTO-ENGAGEMENT] Başlatıldı (${isZeroCoin ? '0 Coin Dürtme' : 'Doğal Akış'}): Kullanıcı ID ${userIdStr}`);
+
+        // --- 0 COİN AKTİF KULLANICI HIZLI DÜRTME ---
+        if (canSendFastNudge) {
+            const nudgeDelay = Math.floor(Math.random() * 8000) + 12000; // 12 - 20 saniye
+            const nudgeTimer = setTimeout(async () => {
+                session.timers.delete(nudgeTimer);
+                if (activeUserSessions.has(userIdStr)) {
+                    await sendSingleAutoMessage(io, userIdStr, false, { forceZeroCoinNudge: true });
+                }
+            }, nudgeDelay);
+            session.timers.add(nudgeTimer);
+        }
 
         // --- 1. AŞAMA: PROFİL AÇILDIKTAN / GİRDİKTEN SONRA YAVAŞ VE DOĞAL BAŞLANGIÇ ---
         // 1. Mesaj: 45 - 60 saniye sonra (hemen ilk saniyede değil!)
         // 2. Mesaj: ~2.5 - 3.5 dakika sonra (FARKLI bir kişiden)
         // 3. Mesaj: ~5.5 - 7 dakika sonra (YİNE FARKLI bir kişiden)
-        const initialDelays = [
-            Math.floor(Math.random() * 15000) + 45000,   // 45 - 60 saniye
-            Math.floor(Math.random() * 60000) + 150000,  // 2.5 - 3.5 dakika
-            Math.floor(Math.random() * 90000) + 330000   // 5.5 - 7 dakika
-        ];
+        const initialDelays = canSendFastNudge
+            ? [
+                Math.floor(Math.random() * 60000) + 150000,  // 2.5 - 3.5 dakika
+                Math.floor(Math.random() * 90000) + 330000   // 5.5 - 7 dakika
+              ]
+            : [
+                Math.floor(Math.random() * 15000) + 45000,   // 45 - 60 saniye
+                Math.floor(Math.random() * 60000) + 150000,  // 2.5 - 3.5 dakika
+                Math.floor(Math.random() * 90000) + 330000   // 5.5 - 7 dakika
+              ];
 
         initialDelays.forEach((delay) => {
             const timer = setTimeout(async () => {
@@ -465,10 +548,21 @@ function stopUserAutoEngagement(userId, socketId) {
     }
 }
 
+function getActiveCustomerIds() {
+    const ids = [];
+    for (const [uid, sess] of activeUserSessions.entries()) {
+        if (sess && sess.socketIds && sess.socketIds.size > 0) {
+            ids.push(uid.toString());
+        }
+    }
+    return ids;
+}
+
 module.exports = {
     startUserAutoEngagement,
     stopUserAutoEngagement,
     onUserCompletedOnboarding,
     sendSingleAutoMessage,
-    runOfflineHookNotifications
+    runOfflineHookNotifications,
+    getActiveCustomerIds
 };

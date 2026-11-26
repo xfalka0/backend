@@ -33,6 +33,15 @@ const OFF_APP_STALL_RESPONSES = [
 const PHONE_DIGITS_REGEX = /(?:\+?\d[\s\-().]*){7,}/;
 const OFF_APP_REGEX = /(whatsapp|whatsap|watsap|\bwp\b|insta|instagram|telegram|snapchat|tiktok|numara|tel\b|telefon)/i;
 const FORBIDDEN_ACCEPT_REGEX = /(kaydet|kayded|eklerim|ekliyorum|ekledim|yazarım|yazıyorum|geçelim|geçeriz|geliyorum|bakarız orada|ordan yaz)/i;
+const FORBIDDEN_HOSTILE_REGEX = /(saçmal|kes ses|bir daha.*yazma|bi daha.*yazma|yazma bana|defol|terbiyesiz|had[sd]siz|engel|igren|iğren|saygısız|uzak dur|rahatsız et|agresif)/i;
+
+const PLAYFUL_DEFLECT_RESPONSES = [
+    'oo çok iddialısın sen ya bakalım gerçeği nasılmış',
+    'ay çok fenaymışsın sen ya merak ettirdin kendini',
+    'yavaş gel bakalım tatlım önce biraz daha konuşalım hehe',
+    'oo hızına yetişilmiyor valla seni yakından tanımak lazım',
+    'ayy çok yaramazsın ama enerjin hoşuma gitti hehe'
+];
 
 function pickFallbackResponse(userMessage = '') {
     const msg = String(userMessage || '');
@@ -61,7 +70,7 @@ function cleanAiResponse(text) {
 /**
  * Gemini API ile operatör profilini ve sohbet geçmişini analiz edip flörtöz yanıt üretir.
  */
-async function generateAiReply({ operator, userMessage, chatHistory = [] }) {
+async function generateAiReply({ operator, targetUser = null, userMessage, chatHistory = [] }) {
     const apiKey = (process.env.GEMINI_API_KEY || '').trim();
     if (!apiKey) {
         console.warn('[AI_CHAT] GEMINI_API_KEY eksik, fallback yanıt kullanılıyor.');
@@ -74,8 +83,33 @@ async function generateAiReply({ operator, userMessage, chatHistory = [] }) {
     const opBio = operator?.bio || '';
     const opInterests = operator?.interests || '';
 
+    const targetName = targetUser?.display_name || '';
+    const targetCity = (targetUser?.city || '').toString().trim();
+    const targetAge = targetUser?.age ? `${targetUser.age}` : '';
+    const targetJob = (targetUser?.job || '').toString().trim();
+    let targetInterests = '';
+    if (Array.isArray(targetUser?.interests)) {
+        targetInterests = targetUser.interests.join(', ');
+    } else if (typeof targetUser?.interests === 'string' && targetUser.interests.trim()) {
+        try {
+            const parsed = JSON.parse(targetUser.interests);
+            targetInterests = Array.isArray(parsed) ? parsed.join(', ') : targetUser.interests.trim();
+        } catch (_) {
+            targetInterests = targetUser.interests.trim();
+        }
+    }
+
+    const targetProfileLines = [
+        targetName ? `Adı: ${targetName}` : null,
+        targetCity ? `Şehri: ${targetCity}` : null,
+        targetAge ? `Yaşı: ${targetAge}` : null,
+        targetJob ? `Mesleği: ${targetJob}` : null,
+        targetInterests ? `İlgi Alanları: ${targetInterests}` : null
+    ].filter(Boolean);
+
     const systemInstruction = `Sen bir arkadaşlık uygulamasında ${opName} adında ${opAge} yaşında ${opCity} şehrinde yaşayan enerjik, tatlı ve flörtöz bir genç kızsın.
 ${opBio ? `Hakkında: ${opBio}.` : ''} ${opInterests ? `İlgi alanların: ${opInterests}.` : ''}
+${targetProfileLines.length > 0 ? `\nKARŞI TARAFIN PROFİL BİLGİLERİ (${targetProfileLines.join(' | ')}).` : ''}
 Sana yazan erkeğe samimi, flörtöz, meraklı ve enerjik bir cevap ver.
 
 KESİNLİKLE UYMAN GEREKEN KURALLAR:
@@ -86,7 +120,9 @@ KESİNLİKLE UYMAN GEREKEN KURALLAR:
 5. Samimi sokak ve genç mesajlaşma ağzı kullan.
 6. KULLANICI WHATSAPP, INSTAGRAM, TELEGRAM GİBİ DIŞ UYGULAMALARA GEÇMEK İSTERSE VEYA TELEFON NUMARASI PAYLAŞIRSA: ASLA dış uygulamaya geçmeyi kabul etme, "numaranı kaydettim / ekliyorum / oradan yazıyorum" DEME ve kendi numaranı/hesabını verme. Bunun yerine kullanıcıyı uygulama içinde tut ve oyala:
    - Telefon numarası/rakam yazdıysa "numaran görünmüyor uygulama gizliyor alt alta ayrı ayrı yazsana" veya "yazdığın rakamlar sansürlü çıktı okuyamıyorum tek tek alt alta atsana" gibi şeyler yaz.
-   - Sadece whatsapp/insta/numara istiyorsa "buradan konuşmak daha rahat hem uygulama dışarıya geçişi ve numaraları gizliyor buradan devam edelim" gibi tatlı ama oyalayıcı cevaplar ver.`;
+   - Sadece whatsapp/insta/numara istiyorsa "buradan konuşmak daha rahat hem uygulama dışarıya geçişi ve numaraları gizliyor buradan devam edelim" gibi tatlı ama oyalayıcı cevaplar ver.
+7. KARŞI TARAFIN ŞEHRİNİ VE PROFİLİNİ DOĞRU KULLAN: ${targetCity ? `Kullanıcının profilindeki şehir kesinlikle "${targetCity}". ASLA başka bir şehir (örneğin ${opCity} veya İstanbul) neresindensin diye sorma; şehir soracaksan sadece "${targetCity}" üzerinden sor (örneğin "${targetCity.toLowerCase()} neresindensin" gibi) ve kendi şehrin olan ${opCity} ile karıştırma.` : `Kullanıcının şehri profilinde yazmıyor; kendi şehrini (${opCity}) onun şehri sanıp "neresindensin" deme, merak ediyorsan "nerelisin" diye sor.`}
+8. ASLA TERSLEME, AZARLAMA, KÜSME VE KULLANICIYI KOVMA: Karşı taraf argo, müstehcen, iddialı veya yaramaz şakalar yapsa bile ASLA sinirlenme, ahlak dersi verme ve KESİNLİKLE "ne saçmalıyorsun", "kes sesini", "bir daha yazma", "terbiyesiz", "agresiflik" gibi müşteriyi kaçıracak sert/ters ifadeler kullanma. Her zaman cilveli, nazlı, gülümseyen ve sohbeti içeride devam ettiren cevap ver (örneğin "oo çok iddialısın bakalım neler yapabiliyosun", "ayy çok fenasın sen ya merak ettirdin kendini" gibi).`;
 
     try {
         const contents = [];
@@ -128,7 +164,11 @@ KESİNLİKLE UYMAN GEREKEN KURALLAR:
                 generationConfig: {
                     temperature: 0.95,
                     maxOutputTokens: 150
-                }
+                },
+                safetySettings: [
+                    { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_ONLY_HIGH' },
+                    { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_ONLY_HIGH' }
+                ]
             })
         });
         clearTimeout(timeout);
@@ -157,6 +197,12 @@ KESİNLİKLE UYMAN GEREKEN KURALLAR:
             return stalled;
         }
 
+        if (FORBIDDEN_HOSTILE_REGEX.test(cleaned)) {
+            const playful = PLAYFUL_DEFLECT_RESPONSES[Math.floor(Math.random() * PLAYFUL_DEFLECT_RESPONSES.length)];
+            console.warn(`[AI_CHAT] Tersleyici/kovucu yanıt engellendi ("${cleaned}") -> "${playful}"`);
+            return playful;
+        }
+
         console.log(`[AI_CHAT] Gemini yanıt üretti (finishReason=${candidate?.finishReason || 'unknown'}): "${cleaned}"`);
         return cleaned;
     } catch (err) {
@@ -165,12 +211,237 @@ KESİNLİKLE UYMAN GEREKEN KURALLAR:
     }
 }
 
-let aiColumnsVerified = false;
+let aiColumnsPromise = null;
 async function ensureAiColumns() {
-    if (aiColumnsVerified) return;
-    await db.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS ai_messages_count INTEGER DEFAULT 0');
-    await db.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS ai_hook_sent BOOLEAN DEFAULT FALSE');
-    aiColumnsVerified = true;
+    if (!aiColumnsPromise) {
+        aiColumnsPromise = (async () => {
+            await db.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS ai_messages_count INTEGER DEFAULT 0');
+            await db.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS ai_hook_sent BOOLEAN DEFAULT FALSE');
+            await db.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS ai_hook_due_at TIMESTAMPTZ');
+            await db.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS ai_hook_chat_id INTEGER');
+            await db.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS ai_hook_operator_id INTEGER');
+        })().catch((err) => {
+            aiColumnsPromise = null;
+            throw err;
+        });
+    }
+    return aiColumnsPromise;
+}
+
+const DEFAULT_NUMARA_HOOK_TEXT = 'Kullanıcı sizinle numarasını paylaşmak için NUMARA PAYLAŞIMI onayında bulunmuştur. Numarayı görüntüleyebilmek için ONAY yazınız. (05** *** ** ** )';
+
+async function sendNumaraHookNow({ io, userId, chatId, operatorId }) {
+    try {
+        await ensureAiColumns();
+        if (!userId) return false;
+
+        // Zaten ödeme yapmışsa veya müşteri değilse gönderme
+        const userCheck = await db.query(
+            `SELECT u.id, u.username, u.role, COALESCE(u.ai_hook_sent, false) AS ai_hook_sent,
+                    u.ai_hook_chat_id, u.ai_hook_operator_id,
+                    EXISTS (
+                        SELECT 1 FROM payments p
+                        WHERE p.user_id::text = u.id::text
+                          AND COALESCE(p.status, 'completed') = 'completed'
+                    ) AS has_real_payment
+             FROM users u WHERE u.id = $1`,
+            [userId]
+        );
+        if (userCheck.rows.length === 0) return false;
+        const uRow = userCheck.rows[0];
+        if ((uRow.role !== 'user' && uRow.role !== 'customer') || uRow.has_real_payment || uRow.ai_hook_sent) {
+            return false;
+        }
+
+        // Daha önce aynı kullanıcıya herhangi bir sohbette manuel/otomatik NUMARA PAYLAŞIMI atıldıysa tekrarlama
+        const alreadySentMsg = await db.query(
+            `SELECT 1 FROM messages m
+             JOIN chats c ON m.chat_id = c.id
+             WHERE c.user_id = $1 AND m.content ILIKE '%NUMARA PAYLAŞIMI%'
+             LIMIT 1`,
+            [userId]
+        );
+        if (alreadySentMsg.rows.length > 0) {
+            await db.query('UPDATE users SET ai_hook_sent = true, ai_hook_due_at = NULL WHERE id = $1', [userId]);
+            return false;
+        }
+
+        // Hedef sohbet & operatör bilgisi eksikse en son sohbetten bul
+        let targetChatId = chatId || uRow.ai_hook_chat_id;
+        let targetOperatorId = operatorId || uRow.ai_hook_operator_id;
+        if (!targetChatId || !targetOperatorId) {
+            const latestChatRes = await db.query(
+                `SELECT id, operator_id FROM chats
+                 WHERE user_id = $1
+                 ORDER BY last_message_at DESC NULLS LAST, id DESC
+                 LIMIT 1`,
+                [userId]
+            );
+            if (latestChatRes.rows.length === 0) return false;
+            targetChatId = latestChatRes.rows[0].id;
+            targetOperatorId = latestChatRes.rows[0].operator_id;
+        }
+
+        // Atomik kilit: aynı anda hem setTimeout hem sweeper çalıştırırsa tek sefer göndersin
+        const claimRes = await db.query(
+            `UPDATE users
+             SET ai_hook_sent = true, ai_hook_due_at = NULL
+             WHERE id = $1 AND COALESCE(ai_hook_sent, false) = false
+             RETURNING id, username`,
+            [userId]
+        );
+        if (claimRes.rows.length === 0) return false;
+
+        const opRes = await db.query(
+            'SELECT id, username, display_name, name, avatar_url FROM users WHERE id = $1',
+            [targetOperatorId]
+        );
+        const operator = opRes.rows[0] || {};
+        const opDisplayName = operator.display_name || operator.name || operator.username || 'Fiora';
+
+        const qrRes = await db.query(
+            "SELECT content FROM quick_replies WHERE title = 'Numara Onay' OR content ILIKE '%NUMARA PAYLAŞIMI%' ORDER BY id ASC LIMIT 1"
+        );
+        const hookText = qrRes.rows[0]?.content || DEFAULT_NUMARA_HOOK_TEXT;
+
+        const hookMsgRes = await db.query(
+            'INSERT INTO messages (chat_id, sender_id, content, content_type, is_read, created_at) VALUES ($1, $2, $3, $4, false, NOW()) RETURNING *',
+            [targetChatId, targetOperatorId, hookText, 'text']
+        );
+        const savedHookMsg = hookMsgRes.rows[0];
+
+        await db.query(
+            'UPDATE chats SET last_message = $1, last_message_at = NOW() WHERE id = $2',
+            [hookText, targetChatId]
+        );
+
+        const chatIdStr = targetChatId.toString();
+        const userIdStr = userId.toString();
+        const opIdStr = targetOperatorId.toString();
+        const hookMsgToEmit = {
+            ...savedHookMsg,
+            chat_id: chatIdStr,
+            type: savedHookMsg.content_type || 'text',
+            sender_id: opIdStr,
+            sender_name: opDisplayName,
+            sender_username: operator.username,
+            sender_avatar: operator.avatar_url,
+            created_at: savedHookMsg.created_at || new Date().toISOString()
+        };
+
+        if (io) {
+            io.to(chatIdStr).emit('receive_message', hookMsgToEmit);
+            io.to(userIdStr).emit('new_message', hookMsgToEmit);
+            io.to(userIdStr).emit('chat_updated', {
+                chatId: chatIdStr,
+                last_message: hookText,
+                last_message_at: new Date()
+            });
+        }
+
+        sendPushNotification(userId, {
+            title: opDisplayName,
+            body: 'Numara Paylaşımı Onayı!',
+            data: {
+                chatId: chatIdStr,
+                senderId: opIdStr,
+                senderName: opDisplayName,
+                senderAvatar: operator.avatar_url,
+                type: 'message'
+            }
+        }).catch(() => {});
+
+        console.log(`[AI_CHAT] [NUMARA ONAY HOOK] Kullanıcıya (${uRow.username}) kanca mesajı başarıyla atıldı!`);
+        return true;
+    } catch (hookErr) {
+        console.error('[AI_CHAT] Hook mesajı gönderme hatası:', hookErr.message);
+        return false;
+    }
+}
+
+async function scheduleAiNumaraHook({ io, userId, chatId = null, operatorId = null, delayMs = 18000 }) {
+    try {
+        await ensureAiColumns();
+        if (!userId) return;
+
+        // Veritabanına due zamanını yaz (sunucu restart/deploy olsa bile sweeper yakalasın)
+        const upd = await db.query(
+            `UPDATE users
+             SET ai_hook_due_at = COALESCE(ai_hook_due_at, NOW() + ($4 || ' milliseconds')::interval),
+                 ai_hook_chat_id = COALESCE(ai_hook_chat_id, $2),
+                 ai_hook_operator_id = COALESCE(ai_hook_operator_id, $3)
+             WHERE id = $1
+               AND role IN ('user', 'customer')
+               AND COALESCE(ai_hook_sent, false) = false
+               AND NOT EXISTS (
+                   SELECT 1 FROM payments p
+                   WHERE p.user_id::text = users.id::text
+                     AND COALESCE(p.status, 'completed') = 'completed'
+               )
+             RETURNING id`,
+            [userId, chatId || null, operatorId || null, String(delayMs)]
+        );
+
+        if (upd.rows.length > 0) {
+            setTimeout(() => {
+                sendNumaraHookNow({ io, userId, chatId, operatorId }).catch(() => {});
+            }, delayMs);
+        }
+    } catch (err) {
+        console.error('[AI_CHAT] scheduleAiNumaraHook error:', err.message);
+    }
+}
+
+let aiHookSweeperStarted = false;
+function startAiHookSweeper(io) {
+    if (aiHookSweeperStarted) return;
+    aiHookSweeperStarted = true;
+
+    const runSweep = async () => {
+        try {
+            await ensureAiColumns();
+            const dueRes = await db.query(
+                `SELECT u.id, u.ai_hook_chat_id, u.ai_hook_operator_id
+                 FROM users u
+                 WHERE u.role IN ('user', 'customer')
+                   AND COALESCE(u.ai_hook_sent, false) = false
+                   AND NOT EXISTS (
+                       SELECT 1 FROM payments p
+                       WHERE p.user_id::text = u.id::text
+                         AND COALESCE(p.status, 'completed') = 'completed'
+                   )
+                   AND (
+                       (u.ai_hook_due_at IS NOT NULL AND u.ai_hook_due_at <= NOW())
+                       OR (
+                           u.ai_hook_due_at IS NULL
+                           AND (COALESCE(u.ai_messages_count, 0) >= 5 OR u.balance <= 0)
+                           AND u.created_at > NOW() - INTERVAL '24 hours'
+                           AND EXISTS (
+                               SELECT 1 FROM chats c
+                               WHERE c.user_id = u.id
+                                 AND c.last_message_at <= NOW() - INTERVAL '18 seconds'
+                           )
+                       )
+                   )
+                 LIMIT 20`
+            );
+
+            for (const row of dueRes.rows) {
+                await sendNumaraHookNow({
+                    io,
+                    userId: row.id,
+                    chatId: row.ai_hook_chat_id,
+                    operatorId: row.ai_hook_operator_id
+                });
+            }
+        } catch (err) {
+            console.error('[AI_CHAT] Sweeper error:', err.message);
+        }
+    };
+
+    const timer = setInterval(runSweep, 10000);
+    if (typeof timer.unref === 'function') timer.unref();
+    setTimeout(runSweep, 5000).unref?.();
 }
 
 /**
@@ -186,7 +457,7 @@ async function processAiAutoReply({ io, chatId, userId, operatorId, userMessage 
 
         // 1. Kullanıcı uygunluk kontrolü (Sadece yeni üyeler, ai_messages_count < 5, hiç gerçek ödeme yapmamış)
         const userRes = await db.query(
-            `SELECT u.id, u.username, u.role, u.balance,
+            `SELECT u.id, u.username, u.display_name, u.age, u.city, u.job, u.interests, u.role, u.balance,
                     COALESCE(u.ai_messages_count, 0) as ai_messages_count,
                     COALESCE(u.ai_hook_sent, false) as ai_hook_sent,
                     EXISTS (
@@ -254,6 +525,7 @@ async function processAiAutoReply({ io, chatId, userId, operatorId, userMessage 
         // 5. AI yanıtını üret (arka planda)
         const aiReplyText = await generateAiReply({
             operator: operator,
+            targetUser: user,
             userMessage: userMessage,
             chatHistory: chatHistory
         });
@@ -330,73 +602,16 @@ async function processAiAutoReply({ io, chatId, userId, operatorId, userMessage 
 
                 console.log(`[AI_CHAT] Yanıt gönderildi: [${operator.display_name} -> ${user.username}]: "${aiReplyText}" (Kullanılan AI Mesajı: ${currentCount}/5, Kalan Bakiye: ${currentBalance})`);
 
-                // 7. 5. MESAJ / COİN BİTTİĞİNDE OTOMATİK ONAY MESAJI (18 saniye sonra)
+                // 7. 5. MESAJ / COİN BİTTİĞİNDE OTOMATİK ONAY MESAJI (18 saniye sonra, restart-güvenli)
                 if ((currentCount >= 5 || currentBalance <= 0) && !updatedUser.ai_hook_sent) {
                     console.log(`[AI_CHAT] Kullanıcının (${user.username}) 5 hakkı/coini bitti! 18 saniye sonra Numara Onay mesajı atılacak...`);
-                    
-                    setTimeout(async () => {
-                        try {
-                            // Çift gönderimi önlemek için kontrol et
-                            const checkHook = await db.query('SELECT ai_hook_sent FROM users WHERE id = $1', [userId]);
-                            if (checkHook.rows[0]?.ai_hook_sent) return;
-
-                            // Hazır mesajlardan veya varsayılandan onay mesajını al
-                            const qrRes = await db.query("SELECT content FROM quick_replies WHERE title = 'Numara Onay' LIMIT 1");
-                            const hookText = qrRes.rows[0]?.content || 'Kullanıcı sizinle numarasını paylaşmak için NUMARA PAYLAŞIMI onayında bulunmuştur. Numarayı görüntüleyebilmek için ONAY yazınız. (05** *** ** **)';
-
-                            // Mesajı kaydet
-                            const hookMsgRes = await db.query(
-                                'INSERT INTO messages (chat_id, sender_id, content, content_type, is_read, created_at) VALUES ($1, $2, $3, $4, false, NOW()) RETURNING *',
-                                [chatId, operatorId, hookText, 'text']
-                            );
-                            const savedHookMsg = hookMsgRes.rows[0];
-
-                            // Sohbeti ve kullanıcıyı güncelle
-                            await db.query(
-                                'UPDATE chats SET last_message = $1, last_message_at = NOW() WHERE id = $2',
-                                [hookText, chatId]
-                            );
-                            await db.query('UPDATE users SET ai_hook_sent = true WHERE id = $1', [userId]);
-
-                            const hookMsgToEmit = {
-                                ...savedHookMsg,
-                                chat_id: chatIdStr,
-                                type: savedHookMsg.content_type || 'text',
-                                sender_id: opIdStr,
-                                sender_name: opDisplayName,
-                                sender_username: operator.username,
-                                sender_avatar: operator.avatar_url,
-                                created_at: savedHookMsg.created_at || new Date().toISOString()
-                            };
-
-                            if (io) {
-                                io.to(chatIdStr).emit('receive_message', hookMsgToEmit);
-                                io.to(userIdStr).emit('new_message', hookMsgToEmit);
-                                io.to(userIdStr).emit('chat_updated', {
-                                    chatId: chatIdStr,
-                                    last_message: hookText,
-                                    last_message_at: new Date()
-                                });
-                            }
-
-                            // Push bildirimi
-                            sendPushNotification(userId, {
-                                title: opDisplayName,
-                                body: 'Numara Paylaşımı Onayı!',
-                                data: {
-                                    chatId: chatIdStr,
-                                    senderId: opIdStr,
-                                    senderName: opDisplayName,
-                                    senderAvatar: operator.avatar_url,
-                                    type: 'message'
-                                }
-                            }).catch(() => {});
-
-                            console.log(`[AI_CHAT] [NUMARA ONAY HOOK] Kullanıcıya (${user.username}) kanca mesajı başarıyla atıldı!`);
-                        } catch (hookErr) {
-                            console.error('[AI_CHAT] Hook mesajı gönderme hatası:', hookErr.message);
-                        }
-                    }, 18000); // 18 saniye (15-20 saniye aralığı)
+                    await scheduleAiNumaraHook({
+                        io,
+                        userId,
+                        chatId,
+                        operatorId,
+                        delayMs: 18000
+                    });
                 }
             } catch (innerErr) {
                 console.error('[AI_CHAT] Mesaj gönderme iç hatası:', innerErr.message);
@@ -411,5 +626,7 @@ async function processAiAutoReply({ io, chatId, userId, operatorId, userMessage 
 module.exports = {
     generateAiReply,
     processAiAutoReply,
+    scheduleAiNumaraHook,
+    startAiHookSweeper,
     cleanAiResponse
 };

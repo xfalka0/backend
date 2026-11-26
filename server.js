@@ -72,7 +72,8 @@ const { validateAge } = require('./utils/validation');
 const { handleRoomsSockets } = require('./socket/roomsSocket');
 const { handlePartyRoomSockets, startStaleSeatSweeper } = require('./socket/partyRoomSocket');
 const { startUserAutoEngagement, stopUserAutoEngagement, onUserCompletedOnboarding, runOfflineHookNotifications } = require('./utils/autoMessageSystem');
-const { processAiAutoReply } = require('./services/aiChatService');
+const { processAiAutoReply, scheduleAiNumaraHook, startAiHookSweeper } = require('./services/aiChatService');
+const { getDashboardOverviewStats, getDashboardRangeStats } = require('./services/adminStatsService');
 
 const app = express();
 const multer = require('multer');
@@ -1171,6 +1172,10 @@ const initializeDatabase = async () => {
             await db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS vip_level INTEGER DEFAULT 0`);
             await db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS ai_messages_count INTEGER DEFAULT 0`);
             await db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS ai_hook_sent BOOLEAN DEFAULT FALSE`);
+            await db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS ai_hook_due_at TIMESTAMPTZ`);
+            await db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS ai_hook_chat_id INTEGER`);
+            await db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS ai_hook_operator_id INTEGER`);
+            await db.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS last_zero_coin_nudge_at TIMESTAMPTZ`);
             console.log('[DB] processed_webhook_events table and premium/ai columns verified');
         } catch (mErr) {
             console.error('[DB] Error verifying webhook table / columns:', mErr.message);
@@ -2805,82 +2810,24 @@ app.get('/api/seed-data', async (req, res) => {
     }
 });
 
-// GET ADMIN STATS (Dashboard)
+// GET ADMIN STATS (Comprehensive Executive Dashboard)
 app.get('/api/admin/stats', authenticateToken, authorizeRole('admin', 'super_admin', 'moderator'), async (req, res) => {
     try {
-        // 1. Total Stats
-        const revResult = await db.query('SELECT SUM(total_spent) as total FROM users');
-        const totalRevenue = revResult.rows[0].total || 0;
-
-        const userResult = await db.query('SELECT COUNT(*) as count FROM users WHERE role = \'user\'');
-        const activeUsers = userResult.rows[0].count;
-
-        const msgResult = await db.query('SELECT COUNT(*) as count FROM messages');
-        const totalMessages = msgResult.rows[0].count;
-
-        const opResult = await db.query('SELECT COUNT(*) as count FROM operators WHERE is_online = true');
-        const onlineOperators = opResult.rows[0].count;
-
-        // 2. Chart Data (Last 7 Days)
-        const revenueChartQuery = `
-            SELECT 
-                TO_CHAR(date_trunc('day', created_at), 'DD.MM') as label,
-                SUM(amount) as value
-            FROM transactions
-            WHERE created_at >= NOW() - INTERVAL '7 days'
-            GROUP BY date_trunc('day', created_at)
-            ORDER BY date_trunc('day', created_at) ASC
-        `;
-        const revenueChart = await db.query(revenueChartQuery);
-
-        const registrationChartQuery = `
-            SELECT 
-                TO_CHAR(date_trunc('day', created_at), 'DD.MM') as label,
-                COUNT(*) as value
-            FROM users
-            WHERE role = 'user' AND created_at >= NOW() - INTERVAL '7 days'
-            GROUP BY date_trunc('day', created_at)
-            ORDER BY date_trunc('day', created_at) ASC
-        `;
-        const registrationChart = await db.query(registrationChartQuery);
-
-        const newUsersLists = {
-            today: await db.query("SELECT id, username, display_name, email, gender, created_at, avatar_url FROM users WHERE role = 'user' AND created_at >= date_trunc('day', NOW()) ORDER BY created_at DESC LIMIT 10"),
-            week: await db.query("SELECT id, username, display_name, email, gender, created_at, avatar_url FROM users WHERE role = 'user' AND created_at >= date_trunc('week', NOW()) ORDER BY created_at DESC LIMIT 10"),
-            month: await db.query("SELECT id, username, display_name, email, gender, created_at, avatar_url FROM users WHERE role = 'user' AND created_at >= date_trunc('month', NOW()) ORDER BY created_at DESC LIMIT 10")
-        };
-
-        const newUsersCounts = await db.query(`
-            SELECT 
-                COUNT(*) FILTER (WHERE created_at >= date_trunc('day', NOW())) as today,
-                COUNT(*) FILTER (WHERE created_at >= NOW() - interval '7 days') as week,
-                COUNT(*) FILTER (WHERE created_at >= NOW() - interval '30 days') as month
-            FROM users WHERE role = 'user'
-        `);
-
-        res.json({
-            revenue: parseFloat(totalRevenue).toFixed(2),
-            activeUsers: parseInt(activeUsers),
-            messages: parseInt(totalMessages),
-            onlineOperators: parseInt(onlineOperators),
-            charts: {
-                revenue: revenueChart.rows,
-                registrations: registrationChart.rows
-            },
-            newUsers: {
-                counts: {
-                    today: parseInt(newUsersCounts.rows[0].today || 0),
-                    week: parseInt(newUsersCounts.rows[0].week || 0),
-                    month: parseInt(newUsersCounts.rows[0].month || 0)
-                },
-                lists: {
-                    today: newUsersLists.today.rows,
-                    week: newUsersLists.week.rows,
-                    month: newUsersLists.month.rows
-                }
-            }
-        });
+        const payload = await getDashboardOverviewStats(req);
+        res.json(payload);
     } catch (err) {
+        console.error('[ADMIN STATS ERROR]:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// GET ADMIN STATS BY CUSTOM DATE RANGE (KPI Drill-Down & Date Picker)
+app.get('/api/admin/stats/range', authenticateToken, authorizeRole('admin', 'super_admin', 'moderator'), async (req, res) => {
+    try {
+        const payload = await getDashboardRangeStats(req);
+        res.json(payload);
+    } catch (err) {
+        console.error('[ADMIN STATS RANGE ERROR]:', err);
         res.status(500).json({ error: err.message });
     }
 });
@@ -6233,6 +6180,9 @@ io.on('connection', (socket) => {
                     console.log(`[PAYOUT-DEBUG] Insufficient funds for ${senderId}. Has ${currentBalance}, needs ${cost}`);
                     await client.query('ROLLBACK');
                     logFreeMessagesExhausted(io, senderId, { channel: 'chat_socket', balance: currentBalance, required: cost, messageType: type }).catch(() => {});
+                    if (currentBalance <= 0 && chatReceiverId) {
+                        scheduleAiNumaraHook({ io, userId: senderId, chatId, operatorId: chatReceiverId }).catch(() => {});
+                    }
                     io.to(socket.id).emit('message_error', {
                         code: 'INSUFFICIENT_FUNDS',
                         message: `Yetersiz bakiye. Bu işlem için ${cost} coin gerekli.`,
@@ -7238,6 +7188,7 @@ if (require.main === module) {
 
         startPinger();
         startStaleSeatSweeper(io);
+        startAiHookSweeper(io);
     });
 }
 

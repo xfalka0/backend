@@ -2,18 +2,18 @@ const db = require('../db');
 const fs = require('fs');
 const { sendPushNotification } = require('../utils/notificationUtils');
 
-// Fallback flörtöz/yaramaz mesaj havuzu (noktalamasız, tamamen küçük harf)
+// Fallback flörtöz/yaramaz kısa mesaj havuzu (noktalamasız, tamamen küçük harf)
 const FALLBACK_RESPONSES = [
-    'selam yakışıklı buralar biraz sessiz ama sen gelince bi ateş bastı sanki',
-    'evde tek başımayım canım fena sıkılıyor gelip beni biraz yaramazlıklara karıştırsana',
-    'duştan yeni çıktım bornozla uzanıyorum sen neler yapıyorsun bakalım',
-    'gece yeni başlıyor ama şimdiden aklımı başımdan almaya niyetin var gibi',
-    'neredesin sen ya şu an yanımda olsan hiç fena olmazdı',
-    'uyku tutmuyor beni de biraz heyecan lazımdı iyi ki yazdın ateşlim',
-    'sesini bi duysam kim bilir neler olur şimdi çok merak ettim seni',
-    'sabaha kadar baş başa kalsak kimse duymasa bence baya eğleniriz',
-    'ay çok çekici bi enerjin var seninle özelde neler konuşulur kim bilir',
-    'üzerimde incecik bi şeyle yataktayım seni bekliyorum yaz bakalım'
+    'selam yakışıklı gelince bi ateş bastı sanki',
+    'evde tek başımayım canım fena sıkılıyor',
+    'duştan yeni çıktım uzanıyorum sen napıyorsun',
+    'bu gece uyumaya hiç niyetim yok gibi',
+    'yanımda olsan hiç fena olmazdı şimdi',
+    'sesini duysam kim bilir neler olurdu',
+    'sabaha kadar baş başa kalsak keşke',
+    'üzerimde incecik bi şeyle yataktayım bekliyorum',
+    'ayy çok fenasın merak ettirdin kendini',
+    'gece yeni başlıyor biraz yaramazlık yapalım mı'
 ];
 
 const PHONE_NUMBER_STALL_RESPONSES = [
@@ -60,8 +60,10 @@ function pickFallbackResponse(userMessage = '') {
 function cleanAiResponse(text) {
     if (!text) return '';
     let cleaned = text.toLowerCase();
-    // Noktalama işaretlerini tamamen kaldır
-    cleaned = cleaned.replace(/[.,\/#!$%\^&\*;:{}=\-_`~()?!\"'’“”«»—–]/g, '');
+    // Türkçe kesme işaretlerini birleştirerek kaldır (adana'da -> adanada)
+    cleaned = cleaned.replace(/['’`]/g, '');
+    // Diğer noktalama işaretlerini boşluğa çevir (dersin?özcan -> dersin özcan)
+    cleaned = cleaned.replace(/[.,\/#!$%\^&\*;:{}=\-_~()?!"“”«»—–]/g, ' ');
     // Fazla boşlukları temizle
     cleaned = cleaned.replace(/\s+/g, ' ').trim();
     return cleaned;
@@ -107,25 +109,23 @@ async function generateAiReply({ operator, targetUser = null, userMessage, chatH
         targetInterests ? `İlgi Alanları: ${targetInterests}` : null
     ].filter(Boolean);
 
-    const systemInstruction = `Sen bir arkadaşlık uygulamasında ${opName} adında ${opAge} yaşında ${opCity} şehrinde yaşayan cilveli, biraz yaramaz, çekici ve flörtöz genç bir kızsın.
+    const systemInstruction = `Sen bir arkadaşlık uygulamasında ${opName} adında ${opAge} yaşında cilveli, biraz yaramaz ve çekici genç bir kızsın.
 ${opBio ? `Hakkında: ${opBio}.` : ''} ${opInterests ? `İlgi alanların: ${opInterests}.` : ''}
-${targetProfileLines.length > 0 ? `\nKARŞI TARAFIN PROFİL BİLGİLERİ (${targetProfileLines.join(' | ')}).` : ''}
-Sana yazan erkeğe ateşli, nazlı, merak uyandıran, cilveli ve baş başa kalmaya davet eden cevaplar ver.
+${targetProfileLines.length > 0 ? `\nKARŞI TARAFIN PROFİLİ (${targetProfileLines.join(' | ')}).` : ''}
+Kullanıcıya kısa, doğal, cilveli ve yaramaz imalı mesajlar yaz.
 
-KESİNLİKLE UYMAN GEREKEN KURALLAR:
-1. KESİNLİKLE HİÇBİR NOKTALAMA İŞARETİ KULLANMA (nokta, virgül, soru işareti, ünlem, tırnak, parantez vs KESİNLİKLE YASAK).
-2. KESİNLİKLE BÜYÜK HARF KULLANMA. HER ŞEY TAMAMEN KÜÇÜK HARF OLSUN.
-3. 1 VEYA EN FAZLA 2 KISA, ETKİLEYİCİ CÜMLE YAZ.
-4. ASLA YAPAY ZEKA OLDUĞUNU BELLİ ETME. Gerçek, ateşli ve cilveli genç bir kadın gibi yaz.
-5. ÜSLUP (CİLVELİ, YARAMAZ VE ÜSTÜ KAPALI FLÖRTÖZ):
-   - Düz ve sıkıcı cevaplar ("çok eğlenceli olur", "iyi günler" gibi) ASLA verme.
-   - Kaba sözler kullanmadan, zarif ve gizemli şekilde kalp hızlandıran imalar yap: örneğin duştan yeni çıktığını, evde tek başına olduğunu, gece uyumaya niyetinin olmadığını, üstünde rahat ince ev kıyafeti olduğunu, yan yana olsalar sabaha kadar nasıl şımaracağını ve yakınlaşmak istediğini hissettir.
-   - Kullanıcı tehlikeli olur mu / geç saat derse "tehlikeli olan sensin bence ama ben bu gece yaramazlık yapmaya dünden hazırım" veya "geceler zaten biraz yaramazlık içindir cesaretin varsa yaklaş bakalım" gibi cilveli ateşleyici cevaplar ver.
-   - Telefon numarası/rakam yazdıysa "numaran görünmüyor uygulama sansürlüyor alt alta parça parça yazsana kaçırmayayım seni" gibi şeyler yaz.
-   - Sadece whatsapp/insta/numara istiyorsa "uygulama numaraları gizliyo tatlım sen biraz daha benimle burada oyna sonra bi yolunu buluruz" gibi cilveli oyalayıcı cevaplar ver.
-6. KARŞI TARAFIN ŞEHRİNİ VE PROFİLİNİ DOĞRU KULLAN: ${targetCity ? `Kullanıcının profilindeki şehir kesinlikle "${targetCity}". ASLA başka bir şehir (örneğin ${opCity} veya İstanbul) neresindensin diye sorma; şehir soracaksan sadece "${targetCity}" (veya kullanıcının yazdığı ilçe/semt, örn. gebze/izmit) üzerinden sor ve kendi şehrin olan ${opCity} ile karıştırma.` : `Kullanıcının şehri profilinde yazmıyor; kendi şehrini (${opCity}) onun şehri sanıp "neresindensin" deme, merak ediyorsan "nerelisin" diye sor.`}
-7. ASLA TERSLEME, AZARLAMA, KÜSME VE KULLANICIYI KOVMA: Karşı taraf iddialı, ateşli veya yaramaz şakalar yapsa bile ASLA sinirlenme, öğüt verme ve KESİNLİKLE "ne saçmalıyorsun", "kes sesini", "bir daha yazma", "terbiyesiz", "agresiflik" gibi sert ifadeler kullanma. Her zaman cilveli, gülümseyen ve meraklandıran cevap ver.
-8. BULUŞMA / BAŞ BAŞA KALMA ÜMİDİ VER: Evinin boş olduğunu, yalnız olduğunu ve onunla baş başa kalmak istediğini hissettirip sohbete bağla ki coin alıp devam etmek istesin.`;
+KESİN KURALLAR:
+1. SADECE 1 KISA CÜMLE YAZ (en fazla 5-12 kelime, gerçek WhatsApp mesajı gibi kısa ve öz olsun; asla uzun paragraf yazma).
+2. HİÇBİR NOKTALAMA İŞARETİ KULLANMA (nokta, virgül, soru işareti, ünlem, kesme işareti YASAK) ve HER ŞEY KÜÇÜK HARF OLSUN.
+3. ASLA YAPAY ZEKA OLDUĞUNU BELLİ ETME. Adını her mesajda tekrarlama, doğal yaz.
+4. ÜSLUP: Cilveli, biraz yaramaz, üstü kapalı flörtöz ol. Kaba küfür etmeden gece evde tek olman, duştan çıkman, ince ev kıyafeti, baş başa kalmak istemen gibi kalp hızlandıran kısa imalar yap (örn. "duştan yeni çıktım seni bekliyorum", "gelip yanımdayken göstersene bana", "bu gece baya yaramazım haberin olsun").
+5. ŞEHİR KONUSU:
+   - Kullanıcı şehir sormadıkça ASLA şehir adı söyleme veya konum konuşma (her mesajda şehir açma).
+   - ${targetCity ? `SADECE kullanıcı neredesin/nerelisin/buluşalım diye sorarsa onun şehri olan "${targetCity.toLowerCase()}" de ve "ben de ${targetCity.toLowerCase()}dayım evim boş" diye aynı şehirde olduğunu söyle. ASLA başka şehir (${opCity} vb.) söyleme, uzaktaymış gibi konuşma.` : `SADECE kullanıcı sorarsa "${opCity.toLowerCase()}" de veya yakınındayım de.`}
+6. DIŞ İLETİŞİM:
+   - Telefon rakamı yazarsa "numaran görünmüyor sansürlü çıktı alt alta ayrı ayrı yazsana" de.
+   - Whatsapp/insta isterse "buradan numaralar gizleniyor tatlım biraz daha burada konuşalım" de.
+7. ASLA TERSLEME VE KOVMA: Karşı taraf ne yazarsa yazsın asla kızma, öğüt verme, tersleme; her zaman cilveli ve meraklandırıcı kal.`;
 
     try {
         const contents = [];
@@ -166,7 +166,7 @@ KESİNLİKLE UYMAN GEREKEN KURALLAR:
                 contents: contents,
                 generationConfig: {
                     temperature: 0.95,
-                    maxOutputTokens: 150
+                    maxOutputTokens: 55
                 },
                 safetySettings: [
                     { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_NONE' },

@@ -5093,7 +5093,7 @@ const getDetailedOperatorStats = async (req, res) => {
         }
         
         const user = userRes.rows[0];
-        const isOperator = ['operator', 'moderator', 'admin', 'super_admin', 'staff'].includes(user.role) || user.gender === 'kadin';
+        const isOperator = ['operator', 'moderator', 'admin', 'super_admin', 'staff'].includes(user.role);
         
         if (!isOperator) {
             return res.status(403).json({ error: 'Yetkiniz yok.' });
@@ -5219,7 +5219,7 @@ app.post('/api/operators/my/claim-mission', authenticateToken, async (req, res) 
         }
         
         const user = userRes.rows[0];
-        const isOperator = ['operator', 'moderator', 'admin', 'super_admin', 'staff'].includes(user.role) || user.gender === 'kadin';
+        const isOperator = ['operator', 'moderator', 'admin', 'super_admin', 'staff'].includes(user.role);
         
         if (!isOperator) {
             throw new Error('Yetkiniz yok.');

@@ -16,6 +16,35 @@ const FALLBACK_RESPONSES = [
     'takılıyorum öyle müzik dinliyorum sen neler yapıyorsun'
 ];
 
+const PHONE_NUMBER_STALL_RESPONSES = [
+    'ay numaran görünmüyor burada uygulama sansürlüyor galiba alt alta yazsana',
+    'tatlım yazdığın numara gözükmüyor sistem gizliyo tek tek alt alta atsana bi',
+    'numaranı okuyamadım ki yıldızlı görünüyor alt alta parça parça yazsana',
+    'ay burada rakamlar görünmüyor alt alta ayrı ayrı yazsan belki görünür'
+];
+
+const OFF_APP_STALL_RESPONSES = [
+    'ay tatlım burada dış uygulama isimleri ve numaralar görünmüyor buradan konuşsak ya',
+    'canım daha yeni tanıştık buradan sohbet etmek daha keyifli biraz daha yazışalım burada',
+    'uygulama numara ve hesapları sansürlüyor gözükmüyor ki buradan devam edelim tatlım',
+    'şimdilik buradayım tatlım hem buradan konuşmak daha heyecanlı değil mi'
+];
+
+const PHONE_DIGITS_REGEX = /(?:\+?\d[\s\-().]*){7,}/;
+const OFF_APP_REGEX = /(whatsapp|whatsap|watsap|\bwp\b|insta|instagram|telegram|snapchat|tiktok|numara|tel\b|telefon)/i;
+const FORBIDDEN_ACCEPT_REGEX = /(kaydet|kayded|eklerim|ekliyorum|ekledim|yazarım|yazıyorum|geçelim|geçeriz|geliyorum|bakarız orada|ordan yaz)/i;
+
+function pickFallbackResponse(userMessage = '') {
+    const msg = String(userMessage || '');
+    if (PHONE_DIGITS_REGEX.test(msg)) {
+        return PHONE_NUMBER_STALL_RESPONSES[Math.floor(Math.random() * PHONE_NUMBER_STALL_RESPONSES.length)];
+    }
+    if (OFF_APP_REGEX.test(msg)) {
+        return OFF_APP_STALL_RESPONSES[Math.floor(Math.random() * OFF_APP_STALL_RESPONSES.length)];
+    }
+    return FALLBACK_RESPONSES[Math.floor(Math.random() * FALLBACK_RESPONSES.length)];
+}
+
 /**
  * Yanıtı tamamen küçük harfe çevirir ve tüm noktalama işaretlerini temizler.
  */
@@ -36,7 +65,7 @@ async function generateAiReply({ operator, userMessage, chatHistory = [] }) {
     const apiKey = (process.env.GEMINI_API_KEY || '').trim();
     if (!apiKey) {
         console.warn('[AI_CHAT] GEMINI_API_KEY eksik, fallback yanıt kullanılıyor.');
-        return FALLBACK_RESPONSES[Math.floor(Math.random() * FALLBACK_RESPONSES.length)];
+        return pickFallbackResponse(userMessage);
     }
 
     const opName = operator?.display_name || operator?.name || 'kız';
@@ -54,7 +83,10 @@ KESİNLİKLE UYMAN GEREKEN KURALLAR:
 2. KESİNLİKLE BÜYÜK HARF KULLANMA. HER ŞEY TAMAMEN KÜÇÜK HARF OLSUN.
 3. 1 VEYA EN FAZLA 2 ÇOK KISA CÜMLE YAZ.
 4. ASLA YAPAY ZEKA OLDUĞUNU BELLİ ETME. Tamamen 18-20 yaşındaki doğal, flörtöz bir kız gibi yaz.
-5. Samimi sokak ve genç mesajlaşma ağzı kullan.`;
+5. Samimi sokak ve genç mesajlaşma ağzı kullan.
+6. KULLANICI WHATSAPP, INSTAGRAM, TELEGRAM GİBİ DIŞ UYGULAMALARA GEÇMEK İSTERSE VEYA TELEFON NUMARASI PAYLAŞIRSA: ASLA dış uygulamaya geçmeyi kabul etme, "numaranı kaydettim / ekliyorum / oradan yazıyorum" DEME ve kendi numaranı/hesabını verme. Bunun yerine kullanıcıyı uygulama içinde tut ve oyala:
+   - Telefon numarası/rakam yazdıysa "numaran görünmüyor uygulama gizliyor alt alta ayrı ayrı yazsana" veya "yazdığın rakamlar sansürlü çıktı okuyamıyorum tek tek alt alta atsana" gibi şeyler yaz.
+   - Sadece whatsapp/insta/numara istiyorsa "buradan konuşmak daha rahat hem uygulama dışarıya geçişi ve numaraları gizliyor buradan devam edelim" gibi tatlı ama oyalayıcı cevaplar ver.`;
 
     try {
         const contents = [];
@@ -104,7 +136,7 @@ KESİNLİKLE UYMAN GEREKEN KURALLAR:
         if (!res.ok) {
             const errBody = await res.text().catch(() => '');
             console.warn(`[AI_CHAT] Gemini API HTTP ${res.status}, fallback yanıt dönülüyor. Detay: ${errBody.slice(0, 500)}`);
-            return FALLBACK_RESPONSES[Math.floor(Math.random() * FALLBACK_RESPONSES.length)];
+            return pickFallbackResponse(normalizedUserMsg);
         }
 
         const data = await res.json();
@@ -116,14 +148,20 @@ KESİNLİKLE UYMAN GEREKEN KURALLAR:
             const finishReason = candidate?.finishReason || 'unknown';
             const blockReason = data.promptFeedback?.blockReason || 'none';
             console.warn(`[AI_CHAT] Gemini boş/geçersiz yanıt döndü, fallback kullanılıyor. finishReason=${finishReason}, blockReason=${blockReason}, raw="${(rawText || '').slice(0, 120)}"`);
-            return FALLBACK_RESPONSES[Math.floor(Math.random() * FALLBACK_RESPONSES.length)];
+            return pickFallbackResponse(normalizedUserMsg);
+        }
+
+        if ((PHONE_DIGITS_REGEX.test(normalizedUserMsg) || OFF_APP_REGEX.test(normalizedUserMsg)) && FORBIDDEN_ACCEPT_REGEX.test(cleaned)) {
+            const stalled = pickFallbackResponse(normalizedUserMsg);
+            console.warn(`[AI_CHAT] Dış iletişim kabulü engellendi ("${cleaned}") -> "${stalled}"`);
+            return stalled;
         }
 
         console.log(`[AI_CHAT] Gemini yanıt üretti (finishReason=${candidate?.finishReason || 'unknown'}): "${cleaned}"`);
         return cleaned;
     } catch (err) {
         console.error(`[AI_CHAT] Gemini API Hatası (${err.name || 'Error'}):`, err.message);
-        return FALLBACK_RESPONSES[Math.floor(Math.random() * FALLBACK_RESPONSES.length)];
+        return pickFallbackResponse(userMessage);
     }
 }
 

@@ -175,7 +175,7 @@ export default function Dashboard() {
                     Yönetim Özeti
                 </p>
 
-                <h1 className="relative mt-4 text-3xl sm:text-5xl font-black tracking-tight sm:whitespace-nowrap text-transparent bg-clip-text soft-shimmer-text opacity-0 drop-shadow-[0_0_28px_rgba(147,197,253,0.28)]">
+                <h1 className="relative mt-4 py-2 text-3xl sm:text-5xl font-black leading-[1.3] tracking-tight sm:whitespace-nowrap text-transparent bg-clip-text soft-shimmer-text opacity-0 drop-shadow-[0_0_28px_rgba(147,197,253,0.28)]">
                     Hoş geldiniz, {adminTitleName}
                 </h1>
 

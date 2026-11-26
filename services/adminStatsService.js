@@ -4,6 +4,9 @@ const { getActiveCustomerIds } = require('../utils/autoMessageSystem');
 const { isUserPremiumActive } = require('../utils/vipUtils');
 
 const TR_TZ = 'Europe/Istanbul';
+const NET_FACTOR = 0.65; // %35 Google Play / vergi kesintisi sonrası net gelir
+const toNet = (val) => Number((parseFloat(val || 0) * NET_FACTOR).toFixed(2));
+const toGross = (val) => Number(parseFloat(val || 0).toFixed(2));
 
 function calcDeltaPct(current, previous) {
     const cur = Number(current) || 0;
@@ -408,12 +411,13 @@ async function getDashboardOverviewStats(req) {
     const np = newUsersPeriodsRes.rows[0];
 
     const totalRevNum = parseFloat(rev.total_revenue || 0);
+    const netTotalRevNum = toNet(totalRevNum);
     const totalUsersNum = parseInt(usr.total_users || 0, 10);
     const payingUsersNum = parseInt(rev.paying_users || 0, 10);
 
     // Build 24-hour series (00..23)
     const regHourMap = new Map(peakHoursRegRes.rows.map((r) => [r.hour, r.count]));
-    const payHourMap = new Map(peakHoursPayRes.rows.map((r) => [r.hour, { count: r.count, revenue: parseFloat(r.revenue || 0) }]));
+    const payHourMap = new Map(peakHoursPayRes.rows.map((r) => [r.hour, { count: r.count, revenue: toNet(r.revenue || 0) }]));
     const peakHours = Array.from({ length: 24 }, (_, h) => ({
         hour: h,
         label: `${String(h).padStart(2, '0')}:00`,
@@ -436,22 +440,31 @@ async function getDashboardOverviewStats(req) {
         deltaPct: calcDeltaPct(count, prevCount),
         payingCount: parseInt(paying || 0, 10),
         payingRatePct: count > 0 ? Number(((paying / count) * 100).toFixed(1)) : 0,
-        revenue: Number(parseFloat(revAmt || 0).toFixed(2))
+        revenue: toNet(revAmt || 0),
+        grossRevenue: toGross(revAmt || 0)
     });
 
     return {
-        revenue: parseFloat(rev.total_revenue || 0).toFixed(2),
+        revenue: netTotalRevNum.toFixed(2),
+        grossRevenue: totalRevNum.toFixed(2),
         activeUsers: totalUsersNum,
         revenueBreakdown: {
-            total: Number(totalRevNum.toFixed(2)),
-            today: Number(parseFloat(rev.today_revenue || 0).toFixed(2)),
-            yesterday: Number(parseFloat(rev.yesterday_revenue || 0).toFixed(2)),
+            total: netTotalRevNum,
+            grossTotal: toGross(totalRevNum),
+            today: toNet(rev.today_revenue),
+            grossToday: toGross(rev.today_revenue),
+            yesterday: toNet(rev.yesterday_revenue),
+            grossYesterday: toGross(rev.yesterday_revenue),
             todayDeltaPct: calcDeltaPct(rev.today_revenue, rev.yesterday_revenue),
-            week: Number(parseFloat(rev.week_revenue || 0).toFixed(2)),
-            prevWeek: Number(parseFloat(rev.prev_week_revenue || 0).toFixed(2)),
+            week: toNet(rev.week_revenue),
+            grossWeek: toGross(rev.week_revenue),
+            prevWeek: toNet(rev.prev_week_revenue),
+            grossPrevWeek: toGross(rev.prev_week_revenue),
             weekDeltaPct: calcDeltaPct(rev.week_revenue, rev.prev_week_revenue),
-            month: Number(parseFloat(rev.month_revenue || 0).toFixed(2)),
-            prevMonth: Number(parseFloat(rev.prev_month_revenue || 0).toFixed(2)),
+            month: toNet(rev.month_revenue),
+            grossMonth: toGross(rev.month_revenue),
+            prevMonth: toNet(rev.prev_month_revenue),
+            grossPrevMonth: toGross(rev.prev_month_revenue),
             monthDeltaPct: calcDeltaPct(rev.month_revenue, rev.prev_month_revenue),
             totalOrders: parseInt(rev.total_orders || 0, 10),
             todayOrders: parseInt(rev.today_orders || 0, 10),
@@ -459,14 +472,16 @@ async function getDashboardOverviewStats(req) {
             byPackage: revByPkgRes.rows.map((r) => ({
                 name: r.name,
                 orders: r.orders,
-                revenue: Number(parseFloat(r.revenue || 0).toFixed(2)),
+                revenue: toNet(r.revenue),
+                grossRevenue: toGross(r.revenue),
                 coins: r.coins,
                 sharePct: totalRevNum > 0 ? Number(((parseFloat(r.revenue || 0) / totalRevNum) * 100).toFixed(1)) : 0
             })),
             byMethod: revByMethodRes.rows.map((r) => ({
                 method: r.method,
                 orders: r.orders,
-                revenue: Number(parseFloat(r.revenue || 0).toFixed(2))
+                revenue: toNet(r.revenue),
+                grossRevenue: toGross(r.revenue)
             }))
         },
         userGrowth: {
@@ -490,9 +505,9 @@ async function getDashboardOverviewStats(req) {
             repeatBuyers: parseInt(rev.repeat_buyers || 0, 10),
             conversionRatePct: totalUsersNum > 0 ? Number(((payingUsersNum / totalUsersNum) * 100).toFixed(1)) : 0,
             repeatRatePct: payingUsersNum > 0 ? Number(((parseInt(rev.repeat_buyers || 0, 10) / payingUsersNum) * 100).toFixed(1)) : 0,
-            arpu: totalUsersNum > 0 ? Number((totalRevNum / totalUsersNum).toFixed(2)) : 0,
-            arppu: payingUsersNum > 0 ? Number((totalRevNum / payingUsersNum).toFixed(2)) : 0,
-            avgOrderValue: rev.total_orders > 0 ? Number((totalRevNum / rev.total_orders).toFixed(2)) : 0
+            arpu: totalUsersNum > 0 ? Number((netTotalRevNum / totalUsersNum).toFixed(2)) : 0,
+            arppu: payingUsersNum > 0 ? Number((netTotalRevNum / payingUsersNum).toFixed(2)) : 0,
+            avgOrderValue: rev.total_orders > 0 ? Number((netTotalRevNum / rev.total_orders).toFixed(2)) : 0
         },
         livePulse: {
             liveOnlineCount: activeIds.length,
@@ -533,24 +548,28 @@ async function getDashboardOverviewStats(req) {
         },
         loyalBuyers: sanitizeAvatars(loyalBuyersRes.rows).map((r) => ({
             ...r,
-            total_tl: Number(parseFloat(r.total_tl || 0).toFixed(2)),
+            total_tl: toNet(r.total_tl || 0),
+            gross_total_tl: toGross(r.total_tl || 0),
             is_active_premium: isUserPremiumActive({ role: 'user', ...r })
         })),
         expiringPremiums: sanitizeAvatars(expiringPremiumRes.rows),
         peakHours,
         recentPayments: sanitizeAvatars(recentPaymentsRes.rows).map((p) => ({
             ...p,
-            amount: Number(parseFloat(p.amount || 0).toFixed(2))
+            amount: toGross(p.amount || 0),
+            netAmount: toNet(p.amount || 0)
         })),
         dailyReport: dailyReportRes.rows.map((row) => ({
             date: row.date,
             registered: row.registered,
             cohortPaying: row.cohort_paying,
             cohortRatePct: row.registered > 0 ? Number(((row.cohort_paying / row.registered) * 100).toFixed(1)) : 0,
-            cohortRevenue: Number(parseFloat(row.cohort_revenue || 0).toFixed(2)),
+            cohortRevenue: toNet(row.cohort_revenue || 0),
+            grossCohortRevenue: toGross(row.cohort_revenue || 0),
             totalBuyers: row.total_buyers,
             totalOrders: row.total_orders,
-            totalRevenue: Number(parseFloat(row.total_revenue || 0).toFixed(2))
+            totalRevenue: toNet(row.total_revenue || 0),
+            grossTotalRevenue: toGross(row.total_revenue || 0)
         })),
         newUsers: {
             counts: {
@@ -729,15 +748,17 @@ async function getDashboardRangeStats(req) {
     return {
         range: { start, end },
         revenue: {
-            total: Number(parseFloat(r.total_revenue || 0).toFixed(2)),
-            prevTotal: Number(parseFloat(r.prev_revenue || 0).toFixed(2)),
+            total: toNet(r.total_revenue || 0),
+            grossTotal: toGross(r.total_revenue || 0),
+            prevTotal: toNet(r.prev_revenue || 0),
+            grossPrevTotal: toGross(r.prev_revenue || 0),
             deltaPct: calcDeltaPct(r.total_revenue, r.prev_revenue),
             orders: r.total_orders || 0,
             prevOrders: r.prev_orders || 0,
             payingUsers: r.paying_users || 0,
-            daily: revDailyRes.rows.map((d) => ({ ...d, revenue: Number(parseFloat(d.revenue || 0).toFixed(2)) })),
-            byPackage: revPkgRes.rows.map((d) => ({ ...d, revenue: Number(parseFloat(d.revenue || 0).toFixed(2)) })),
-            payments: payListRes.rows.map((p) => ({ ...p, amount: Number(parseFloat(p.amount || 0).toFixed(2)) }))
+            daily: revDailyRes.rows.map((d) => ({ ...d, revenue: toNet(d.revenue || 0), grossRevenue: toGross(d.revenue || 0) })),
+            byPackage: revPkgRes.rows.map((d) => ({ ...d, revenue: toNet(d.revenue || 0), grossRevenue: toGross(d.revenue || 0) })),
+            payments: payListRes.rows.map((p) => ({ ...p, amount: toGross(p.amount || 0), netAmount: toNet(p.amount || 0) }))
         },
         users: {
             total: rangeTotalUsers,
@@ -745,7 +766,7 @@ async function getDashboardRangeStats(req) {
             deltaPct: calcDeltaPct(rangeTotalUsers, u.prev_users),
             payingCount: rangePayingUsers,
             payingRatePct: rangeTotalUsers > 0 ? Number(((rangePayingUsers / rangeTotalUsers) * 100).toFixed(1)) : 0,
-            cohortRevenue: Number(parseFloat(u.user_cohort_revenue || 0).toFixed(2)),
+            cohortRevenue: toNet(u.user_cohort_revenue || 0),
             daily: usersDailyRes.rows,
             list: customUsersListRes.rows.map((row) => {
                 const cleaned = sanitizeUser({ avatar_url: row.avatar_url }, req);

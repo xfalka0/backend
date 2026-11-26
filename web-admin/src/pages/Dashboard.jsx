@@ -346,13 +346,13 @@ export default function Dashboard() {
                     </div>
                     <div className="mt-4">
                         <div className="flex items-center gap-2">
-                            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">Toplam Gelir</p>
-                            <span className="px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-300 text-[9px] font-black uppercase">Toplam</span>
+                            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">Toplam Net Gelir</p>
+                            <span className="px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-300 text-[9px] font-black uppercase">-%35 Net</span>
                         </div>
                         <p className="text-3xl font-black text-white tracking-tight mt-1">₺{(revB.total || 0).toLocaleString('tr-TR')}</p>
                     </div>
                     <div className="mt-4 pt-3 border-t border-white/5 flex items-center justify-between text-xs">
-                        <span className="text-slate-400 font-semibold">Bugün: <strong className="text-emerald-400">₺{(revB.today || 0).toLocaleString('tr-TR')}</strong></span>
+                        <span className="text-slate-400 font-semibold">Bugün: <strong className="text-emerald-400">₺{(revB.today || 0).toLocaleString('tr-TR')}</strong> <span className="text-[10px] text-slate-500">(Brüt ₺{(revB.grossTotal || 0).toLocaleString('tr-TR')})</span></span>
                         <span className="text-[11px] font-black text-emerald-400 flex items-center gap-0.5 group-hover:translate-x-0.5 transition-transform">Detaylar <ArrowUpRight size={13} /></span>
                     </div>
                 </button>
@@ -736,7 +736,7 @@ export default function Dashboard() {
                                     <th className="py-3 px-3">Kayıt Olan</th>
                                     <th className="py-3 px-3">Bugünkü Kayıttan Yatıran</th>
                                     <th className="py-3 px-3">O Gün Alım Yapan (Tüm)</th>
-                                    <th className="py-3 px-3 text-right">Günlük Kazanç (TL)</th>
+                                    <th className="py-3 px-3 text-right">Günlük Net Kazanç (-%35)</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-white/5 text-xs">
@@ -764,7 +764,10 @@ export default function Dashboard() {
                                             {day.totalBuyers} kişi <span className="text-slate-500 font-medium">({day.totalOrders} sipariş)</span>
                                         </td>
                                         <td className="py-3 px-3 text-right font-black text-emerald-400 group-hover:underline">
-                                            ₺{day.totalRevenue.toLocaleString('tr-TR')}
+                                            <div>₺{day.totalRevenue.toLocaleString('tr-TR')}</div>
+                                            {day.grossTotalRevenue > 0 && (
+                                                <div className="text-[10px] font-medium text-slate-500 no-underline">Brüt: ₺{day.grossTotalRevenue.toLocaleString('tr-TR')}</div>
+                                            )}
                                         </td>
                                     </tr>
                                 ))}

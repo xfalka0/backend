@@ -4,6 +4,8 @@ const path = require('path');
 const { getSchemaAvailability } = require('./adminInsightsService');
 
 const TR_TZ = 'Europe/Istanbul';
+const NET_FACTOR = 0.65; // %35 kesinti sonrası net kazanç
+const toNet = (v) => Number((parseFloat(v || 0) * NET_FACTOR).toFixed(2));
 const toTrTs = (col) => `((${col}) AT TIME ZONE 'UTC' AT TIME ZONE '${TR_TZ}')`;
 
 const DEFAULT_THRESHOLDS = {
@@ -150,9 +152,9 @@ async function buildDailySummaryData(db) {
     const g = regRes.rows[0] || {};
     const m = miscRes.rows[0] || {};
 
-    const todayRevenue = parseFloat(r.today_revenue || 0);
-    const yesterdayRevenue = parseFloat(r.yesterday_revenue || 0);
-    const avg7Revenue = parseFloat(r.avg7_daily_revenue || 0);
+    const todayRevenue = toNet(r.today_revenue || 0);
+    const yesterdayRevenue = toNet(r.yesterday_revenue || 0);
+    const avg7Revenue = toNet(r.avg7_daily_revenue || 0);
     const todayRegistrations = g.today_registrations || 0;
     const yesterdayRegistrations = g.yesterday_registrations || 0;
     const avg7Registrations = parseFloat(g.avg7_daily_registrations || 0);
@@ -164,9 +166,11 @@ async function buildDailySummaryData(db) {
         trDate: trDateRes.rows[0].tr_date,
         trDateDisplay: trDateRes.rows[0].tr_date_display,
         todayRevenue,
+        grossTodayRevenue: Number(parseFloat(r.today_revenue || 0).toFixed(2)),
         todayOrders: r.today_orders || 0,
         todayPayingUsers,
-        totalRevenue: parseFloat(r.total_revenue || 0),
+        totalRevenue: toNet(r.total_revenue || 0),
+        grossTotalRevenue: Number(parseFloat(r.total_revenue || 0).toFixed(2)),
         yesterdayRevenue,
         revenueVsYesterdayPct: pct(todayRevenue, yesterdayRevenue),
         avg7Revenue,

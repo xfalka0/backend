@@ -1,4 +1,6 @@
 const TR_TZ = 'Europe/Istanbul';
+const NET_FACTOR = 0.65; // Google Play / vergi (%35 kesinti sonrası net gelir)
+const toNet = (v) => Number((parseFloat(v || 0) * NET_FACTOR).toFixed(2));
 
 const toTrTs = (col) => `((${col}) AT TIME ZONE 'UTC' AT TIME ZONE '${TR_TZ}')`;
 
@@ -303,7 +305,7 @@ async function getAcquisitionOverview(db, days = 30) {
     const sourceRows = sourcesRes.rows.map((r) => {
         const registrations = r.registrations || 0;
         const payingUsers = r.paying_users || 0;
-        const revenue = parseFloat(r.revenue || 0);
+        const revenue = toNet(r.revenue || 0);
         const spend = spendBySource.get(String(r.source || '').toLowerCase()) || 0;
         return {
             source: r.source,
@@ -560,7 +562,8 @@ async function getSubscriptionsOverview(db, { excludeTest = true } = {}) {
             label: planLabels[r.plan_bucket] || r.plan_bucket,
             orders: r.orders || 0,
             buyers: r.buyers || 0,
-            revenue: parseFloat(r.revenue || 0)
+            revenue: toNet(r.revenue || 0),
+            grossRevenue: parseFloat(r.revenue || 0)
         }))
     };
 }
@@ -649,7 +652,7 @@ async function getTargetsAndComparison(db, requestedMonth = null) {
 
     const c = cmpRes.rows[0] || {};
     const mp = monthProgressRes.rows[0] || {};
-    const actualRev = parseFloat(mp.month_revenue || 0);
+    const actualRev = toNet(mp.month_revenue || 0);
     const actualReg = parseInt(mp.month_registrations || 0, 10);
 
     const isCurrentMonth = monthKey === curTr.current_month;
@@ -669,19 +672,19 @@ async function getTargetsAndComparison(db, requestedMonth = null) {
         daysInMonth: curTr.days_in_month,
         comparisons: {
             weekVsPrevWeek: {
-                revenue: { current: parseFloat(c.w_rev || 0), previous: parseFloat(c.pw_rev || 0), deltaPct: pctDelta(c.w_rev, c.pw_rev) },
+                revenue: { current: toNet(c.w_rev || 0), previous: toNet(c.pw_rev || 0), deltaPct: pctDelta(c.w_rev, c.pw_rev) },
                 registrations: { current: c.w_reg || 0, previous: c.pw_reg || 0, deltaPct: pctDelta(c.w_reg, c.pw_reg), lowSample: (c.w_reg || 0) < 30 },
                 payingUsers: { current: c.w_payers || 0, previous: c.pw_payers || 0, deltaPct: pctDelta(c.w_payers, c.pw_payers) },
                 conversionPct: { current: wConv, previous: pwConv, deltaPct: pctDelta(wConv, pwConv), lowSample: (c.w_reg || 0) < 30 }
             },
             monthVsPrevMonth: {
-                revenue: { current: parseFloat(c.m_rev || 0), previous: parseFloat(c.pm_rev || 0), deltaPct: pctDelta(c.m_rev, c.pm_rev) },
+                revenue: { current: toNet(c.m_rev || 0), previous: toNet(c.pm_rev || 0), deltaPct: pctDelta(c.m_rev, c.pm_rev) },
                 registrations: { current: c.m_reg || 0, previous: c.pm_reg || 0, deltaPct: pctDelta(c.m_reg, c.pm_reg), lowSample: (c.m_reg || 0) < 30 },
                 payingUsers: { current: c.m_payers || 0, previous: c.pm_payers || 0, deltaPct: pctDelta(c.m_payers, c.pm_payers) },
                 conversionPct: { current: mConv, previous: pmConv, deltaPct: pctDelta(mConv, pmConv), lowSample: (c.m_reg || 0) < 30 }
             },
             last7VsPrev7: {
-                revenue: { current: parseFloat(c.l7_rev || 0), previous: parseFloat(c.pl7_rev || 0), deltaPct: pctDelta(c.l7_rev, c.pl7_rev) },
+                revenue: { current: toNet(c.l7_rev || 0), previous: toNet(c.pl7_rev || 0), deltaPct: pctDelta(c.l7_rev, c.pl7_rev) },
                 registrations: { current: c.l7_reg || 0, previous: c.pl7_reg || 0, deltaPct: pctDelta(c.l7_reg, c.pl7_reg), lowSample: (c.l7_reg || 0) < 30 }
             }
         },

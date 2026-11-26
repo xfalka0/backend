@@ -163,10 +163,10 @@ export default function KpiDetailDrawer({ openTab, initialRange, onClose, stats 
                         <>
                             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                                 {[
-                                    { label: 'Bugün', value: `₺${(revB.today || 0).toLocaleString('tr-TR')}`, sub: `${revB.todayOrders || 0} sipariş`, delta: revB.todayDeltaPct },
-                                    { label: 'Dün', value: `₺${(revB.yesterday || 0).toLocaleString('tr-TR')}`, sub: `${revB.yesterdayOrders || 0} sipariş` },
-                                    { label: 'Bu Hafta', value: `₺${(revB.week || 0).toLocaleString('tr-TR')}`, sub: `Önceki: ₺${(revB.prevWeek || 0).toLocaleString('tr-TR')}`, delta: revB.weekDeltaPct },
-                                    { label: 'Bu Ay', value: `₺${(revB.month || 0).toLocaleString('tr-TR')}`, sub: `Önceki: ₺${(revB.prevMonth || 0).toLocaleString('tr-TR')}`, delta: revB.monthDeltaPct }
+                                    { label: 'Bugün (Net -%35)', value: `₺${(revB.today || 0).toLocaleString('tr-TR')}`, sub: `${revB.todayOrders || 0} sip. • Brüt ₺${(revB.grossToday || 0).toLocaleString('tr-TR')}`, delta: revB.todayDeltaPct },
+                                    { label: 'Dün (Net -%35)', value: `₺${(revB.yesterday || 0).toLocaleString('tr-TR')}`, sub: `${revB.yesterdayOrders || 0} sip. • Brüt ₺${(revB.grossYesterday || 0).toLocaleString('tr-TR')}` },
+                                    { label: 'Bu Hafta (Net)', value: `₺${(revB.week || 0).toLocaleString('tr-TR')}`, sub: `Önceki: ₺${(revB.prevWeek || 0).toLocaleString('tr-TR')}`, delta: revB.weekDeltaPct },
+                                    { label: 'Bu Ay (Net)', value: `₺${(revB.month || 0).toLocaleString('tr-TR')}`, sub: `Önceki: ₺${(revB.prevMonth || 0).toLocaleString('tr-TR')}`, delta: revB.monthDeltaPct }
                                 ].map((c, idx) => (
                                     <div key={idx} className="p-4 rounded-2xl bg-slate-900/80 border border-white/10 space-y-1.5">
                                         <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">{c.label}</p>
@@ -193,7 +193,9 @@ export default function KpiDetailDrawer({ openTab, initialRange, onClose, stats 
                                         </div>
                                         <div className="text-right">
                                             <p className="text-xs font-bold text-slate-300">{rangeData.revenue.orders} Sipariş • {rangeData.revenue.payingUsers} Kişi</p>
-                                            <p className="text-[11px] text-slate-500">Önceki eşit aralık: ₺{rangeData.revenue.prevTotal.toLocaleString('tr-TR')}</p>
+                                            <p className="text-[11px] text-slate-500">
+                                                Brüt: ₺{(rangeData.revenue.grossTotal ?? rangeData.revenue.total).toLocaleString('tr-TR')} (-%35 Net) • Önceki: ₺{rangeData.revenue.prevTotal.toLocaleString('tr-TR')}
+                                            </p>
                                         </div>
                                     </div>
 

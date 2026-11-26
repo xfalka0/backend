@@ -6613,11 +6613,17 @@ app.get('/api/admin/analytics/summary', authenticateToken, authorizeRole('admin'
                 LIMIT 12
             `, [days])
         ]);
+        const row = result.rows[0] || {};
         res.json({
-            ...result.rows[0],
+            total_revenue: Number((parseFloat(row.total_revenue || 0) * 0.65).toFixed(2)),
+            gross_revenue: Number(parseFloat(row.total_revenue || 0).toFixed(2)),
+            total_purchases: row.total_purchases,
+            unique_buyers: row.unique_buyers,
+            avg_order: Number((parseFloat(row.avg_order || 0) * 0.65).toFixed(2)),
             package_breakdown: pkgRes.rows.map((r) => ({
                 ...r,
-                revenue: parseFloat(r.revenue || 0)
+                revenue: Number((parseFloat(r.revenue || 0) * 0.65).toFixed(2)),
+                gross_revenue: parseFloat(r.revenue || 0)
             }))
         });
     } catch (err) {

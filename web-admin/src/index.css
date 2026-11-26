@@ -65,3 +65,64 @@
 .stagger-3 { animation-delay: 0.3s; }
 .stagger-4 { animation-delay: 0.4s; }
 .stagger-5 { animation-delay: 0.5s; }
+
+/* Soft Executive Welcome Lighting & Text Motion */
+@keyframes soft-glow-breathe {
+    0% { opacity: 0; transform: scale(0.82); }
+    45% { opacity: 0.65; transform: scale(1.06); }
+    100% { opacity: 0.42; transform: scale(1); }
+}
+
+@keyframes soft-text-rise {
+    0% { opacity: 0; transform: translateY(14px); filter: blur(6px); }
+    100% { opacity: 1; transform: translateY(0); filter: blur(0); }
+}
+
+@keyframes soft-line-expand {
+    0% { opacity: 0; transform: scaleX(0); }
+    100% { opacity: 0.9; transform: scaleX(1); }
+}
+
+@keyframes soft-light-sweep {
+    0% { background-position: -150% 0; }
+    100% { background-position: 150% 0; }
+}
+
+.animate-soft-glow {
+    animation: soft-glow-breathe 2.2s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.animate-soft-rise-1 {
+    opacity: 0;
+    animation: soft-text-rise 0.95s cubic-bezier(0.22, 1, 0.36, 1) 0.1s forwards;
+}
+
+.animate-soft-rise-2 {
+    opacity: 0;
+    animation: soft-text-rise 1.05s cubic-bezier(0.22, 1, 0.36, 1) 0.35s forwards;
+}
+
+.animate-soft-rise-3 {
+    opacity: 0;
+    animation: soft-text-rise 0.95s cubic-bezier(0.22, 1, 0.36, 1) 0.72s forwards;
+}
+
+.animate-soft-line {
+    opacity: 0;
+    transform-origin: center;
+    animation: soft-line-expand 1s cubic-bezier(0.22, 1, 0.36, 1) 0.52s forwards;
+}
+
+.soft-shimmer-text {
+    background-image: linear-gradient(
+        110deg,
+        #cbd5e1 0%,
+        #ffffff 38%,
+        #e0f2fe 50%,
+        #ffffff 62%,
+        #94a3b8 100%
+    );
+    background-size: 220% 100%;
+    animation: soft-text-rise 1.05s cubic-bezier(0.22, 1, 0.36, 1) 0.35s forwards,
+               soft-light-sweep 2.4s ease-in-out 0.6s infinite;
+}

@@ -16,17 +16,12 @@ const SOCKET_URL = (window.location.hostname === 'localhost' || window.location.
     ? 'http://localhost:5000'
     : window.location.origin;
 
-const GREETING_KEY = 'falka_exec_intro_seen';
-
 export default function Dashboard() {
     const { user } = useAuth();
     const navigate = useNavigate();
     const isOperator = user?.role === 'operator';
 
-    const [showIntro, setShowIntro] = useState(() => {
-        if (typeof sessionStorage === 'undefined') return false;
-        return !sessionStorage.getItem(GREETING_KEY);
-    });
+    const [showIntro, setShowIntro] = useState(() => !isOperator);
     const [introFading, setIntroFading] = useState(false);
 
     const [stats, setStats] = useState(null);
@@ -55,11 +50,10 @@ export default function Dashboard() {
 
     const dismissIntro = () => {
         setIntroFading(true);
-        try { sessionStorage.setItem(GREETING_KEY, '1'); } catch (_) {}
         setTimeout(() => {
             setShowIntro(false);
             setIntroFading(false);
-        }, 450);
+        }, 650);
     };
 
     const replayIntro = () => {
@@ -69,12 +63,11 @@ export default function Dashboard() {
 
     useEffect(() => {
         if (!showIntro || isOperator) return undefined;
-        const fadeTimer = setTimeout(() => setIntroFading(true), 1250);
+        const fadeTimer = setTimeout(() => setIntroFading(true), 2100);
         const closeTimer = setTimeout(() => {
-            try { sessionStorage.setItem(GREETING_KEY, '1'); } catch (_) {}
             setShowIntro(false);
             setIntroFading(false);
-        }, 1700);
+        }, 2750);
         return () => {
             clearTimeout(fadeTimer);
             clearTimeout(closeTimer);
@@ -166,8 +159,42 @@ export default function Dashboard() {
         setTimeout(() => setCopiedSummary(false), 2500);
     };
 
+    const adminTitleName = user?.display_name || (user?.username?.toLowerCase().includes('furkan') ? 'Furkan Bey' : 'Furkan Bey');
+
+    const welcomeOverlay = showIntro && !isOperator ? (
+        <div
+            onClick={dismissIntro}
+            className={`fixed inset-0 z-[100] flex items-center justify-center bg-[#020617]/95 backdrop-blur-2xl cursor-pointer transition-all duration-700 ease-out ${introFading ? 'opacity-0 scale-[1.015] pointer-events-none' : 'opacity-100 scale-100'}`}
+        >
+            <div className="relative text-center px-8 py-10 max-w-2xl">
+                {/* Soft breathing ambient light */}
+                <div className="absolute -inset-24 bg-gradient-to-tr from-blue-500/20 via-indigo-400/15 to-emerald-400/15 blur-[90px] rounded-full pointer-events-none animate-soft-glow" />
+                <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-72 h-24 bg-white/10 blur-[65px] rounded-full pointer-events-none animate-soft-glow" />
+
+                <p className="relative text-[11px] font-bold uppercase tracking-[0.42em] text-blue-300/80 animate-soft-rise-1">
+                    Yönetim Özeti
+                </p>
+
+                <h1 className="relative mt-4 text-4xl sm:text-5xl md:text-6xl font-black tracking-tight text-transparent bg-clip-text soft-shimmer-text opacity-0 drop-shadow-[0_0_25px_rgba(147,197,253,0.22)]">
+                    Hoş geldiniz, {adminTitleName}
+                </h1>
+
+                <div className="relative mx-auto mt-5 h-px w-48 bg-gradient-to-r from-transparent via-blue-300/60 to-transparent shadow-[0_0_12px_rgba(147,197,253,0.65)] animate-soft-line" />
+
+                <p className="relative mt-4 text-sm font-medium text-slate-400 animate-soft-rise-3">
+                    Canlı gelir ve günlük analizleriniz hazırlanıyor...
+                </p>
+            </div>
+        </div>
+    ) : null;
+
     if (loading) {
-        return <div className="p-20 flex justify-center"><Loader2 className="animate-spin text-purple-500" size={40} /></div>;
+        return (
+            <>
+                {welcomeOverlay}
+                {!showIntro && <div className="p-20 flex justify-center"><Loader2 className="animate-spin text-purple-500" size={40} /></div>}
+            </>
+        );
     }
 
     // Operator legacy dashboard preserved cleanly
@@ -247,30 +274,9 @@ export default function Dashboard() {
     const maxPeakVal = Math.max(1, ...peakSeries.map((h) => (peakTab === 'revenue' ? h.revenue : h.registrations)));
     const topPeakHour = peakSeries.reduce((best, cur) => ((peakTab === 'revenue' ? cur.revenue : cur.registrations) > (peakTab === 'revenue' ? best.revenue : best.registrations) ? cur : best), peakSeries[0] || { label: '00:00', registrations: 0, revenue: 0 });
 
-    const adminTitleName = user?.display_name || (user?.username?.toLowerCase().includes('furkan') ? 'Furkan Bey' : 'Furkan Bey');
-
     return (
         <div className="relative p-6 md:p-10 space-y-8">
-            {/* Cinematic Welcome Overlay */}
-            {showIntro && (
-                <div
-                    onClick={dismissIntro}
-                    className={`fixed inset-0 z-[100] flex items-center justify-center bg-[#020617]/95 backdrop-blur-2xl cursor-pointer transition-opacity duration-500 ${introFading ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}
-                >
-                    <div className="relative text-center px-6 space-y-4">
-                        <div className="absolute -inset-24 bg-gradient-to-r from-blue-600/20 via-fuchsia-600/15 to-emerald-500/15 blur-3xl rounded-full pointer-events-none" />
-                        <p className="relative text-[11px] font-black uppercase tracking-[0.45em] text-blue-400 animate-pulse">
-                            Falka Executive Console
-                        </p>
-                        <h1 className="relative text-4xl sm:text-6xl font-black tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-white via-blue-100 to-slate-400">
-                            Hoş geldiniz, {adminTitleName}
-                        </h1>
-                        <p className="relative text-sm font-semibold text-slate-400">
-                            Canlı gelir, dönüşüm hunisi ve büyüme analizleri hazırlanıyor...
-                        </p>
-                    </div>
-                </div>
-            )}
+            {welcomeOverlay}
 
             {/* Header */}
             <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 animate-fade-up">

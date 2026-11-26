@@ -12,6 +12,48 @@ if (!process.env.JWT_SECRET && process.env.NODE_ENV === 'production') {
 }
 const SECRET_KEY = process.env.JWT_SECRET || 'falka_super_secret_2024_key_change_me';
 
+async function saveOptionalRegistrationMeta(userId, body = {}) {
+    try {
+        const acq = body.acquisitionSource || body.acquisition_source || body.utmSource || body.utm_source || (body.referralCode ? 'referans' : null);
+        const utmSource = body.utmSource || body.utm_source || null;
+        const utmMedium = body.utmMedium || body.utm_medium || null;
+        const utmCampaign = body.utmCampaign || body.utm_campaign || null;
+        const referrer = body.installReferrer || body.install_referrer || null;
+        const appVersion = body.appVersion || body.app_version || null;
+        if (acq || utmSource || utmMedium || utmCampaign || referrer || appVersion) {
+            await db.query(
+                `UPDATE users
+                 SET acquisition_source = COALESCE($1, acquisition_source),
+                     utm_source = COALESCE($2, utm_source),
+                     utm_medium = COALESCE($3, utm_medium),
+                     utm_campaign = COALESCE($4, utm_campaign),
+                     install_referrer = COALESCE($5, install_referrer),
+                     app_version = COALESCE($6, app_version)
+                 WHERE id = $7`,
+                [acq, utmSource, utmMedium, utmCampaign, referrer, appVersion, userId]
+            );
+        }
+    } catch (_) {
+        // Migration not yet applied on DB
+    }
+}
+
+async function touchUserSession(userId, body = {}) {
+    try {
+        const appVersion = body?.appVersion || body?.app_version || null;
+        const platform = body?.platform || null;
+        await db.query(
+            `INSERT INTO user_sessions (user_id, session_date, app_version, platform)
+             VALUES ($1, (NOW() AT TIME ZONE 'Europe/Istanbul')::date, $2, $3)
+             ON CONFLICT (user_id, session_date)
+             DO UPDATE SET last_seen_at = NOW(), app_version = COALESCE(EXCLUDED.app_version, user_sessions.app_version)`,
+            [userId, appVersion, platform]
+        );
+    } catch (_) {
+        // user_sessions migration not applied yet
+    }
+}
+
 // Google Auth
 exports.googleAuth = async (req, res) => {
     const { idToken, deviceId, referralCode } = req.body;
@@ -125,6 +167,8 @@ exports.googleAuth = async (req, res) => {
             }
 
             await assignFakeInteractions(user.id);
+            await saveOptionalRegistrationMeta(user.id, req.body);
+            await touchUserSession(user.id, req.body);
             await logActivity(io, user.id, 'register', 'Kullanıcı Google ile kayıt oldu.');
             if (io) io.emit('new_user', sanitizeUser(user, req));
         } else {
@@ -229,6 +273,8 @@ exports.registerEmail = async (req, res) => {
         );
 
         await logActivity(io, user.id, 'register', 'Yeni kullanıcı kayıt oldu.');
+        await saveOptionalRegistrationMeta(user.id, req.body);
+        await touchUserSession(user.id, req.body);
         if (io) io.emit('new_user', sanitizeUser(user, req));
         
         res.status(201).json({ user: sanitizeUser(user, req), token });
@@ -297,6 +343,8 @@ exports.loginEmail = async (req, res) => {
             { expiresIn: '30d' }
         );
 
+        await db.query('UPDATE users SET last_login_at = NOW() WHERE id = $1', [user.id]).catch(() => {});
+        await touchUserSession(user.id, req.body);
         await logActivity(io, user.id, 'login', 'Kullanıcı giriş yaptı.');
         res.json({ user: sanitizeUser(user, req), token });
     } catch (err) {

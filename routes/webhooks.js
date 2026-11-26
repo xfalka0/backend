@@ -46,6 +46,60 @@ const VIP_PRODUCT_MAPPING = {
     'vip_6_months': 6
 };
 
+const SUBSCRIPTION_LIFECYCLE_EVENTS = new Set([
+    'INITIAL_PURCHASE',
+    'RENEWAL',
+    'CANCELLATION',
+    'EXPIRATION',
+    'BILLING_ISSUE',
+    'UNCANCELLATION',
+    'PRODUCT_CHANGE',
+    'SUBSCRIPTION_PAUSED',
+]);
+
+async function recordSubscriptionEvent(queryable, event, resolvedUserId = null) {
+    if (!event || !event.id || !SUBSCRIPTION_LIFECYCLE_EVENTS.has(event.type)) return;
+    const rawProductId = String(event.product_id || event.productId || '');
+    const cleanProductId = rawProductId.split(':')[0].trim();
+    const isSubProduct = VIP_PRODUCT_MAPPING.hasOwnProperty(cleanProductId) || VIP_PRODUCT_MAPPING.hasOwnProperty(rawProductId);
+    if (!isSubProduct && (event.type === 'INITIAL_PURCHASE' || event.type === 'RENEWAL')) return;
+
+    const months = VIP_PRODUCT_MAPPING[cleanProductId] || VIP_PRODUCT_MAPPING[rawProductId] || null;
+    const expMs = Number(event.expiration_at_ms);
+    const expirationAt = Number.isFinite(expMs) && expMs > 0 ? new Date(expMs) : null;
+    const parsedPrice = event.price != null ? Number(event.price) : (event.price_in_purchased_currency != null ? Number(event.price_in_purchased_currency) : null);
+
+    try {
+        await queryable.query(
+            `INSERT INTO subscription_events
+             (event_id, user_id, app_user_id, event_type, product_id, duration_months, transaction_id, original_transaction_id, price, currency, store, environment, cancel_reason, expiration_at, raw_payload)
+             VALUES ($1, (SELECT id FROM users WHERE id::text = $2::text LIMIT 1), $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+             ON CONFLICT (event_id) DO NOTHING`,
+            [
+                String(event.id),
+                resolvedUserId != null ? String(resolvedUserId) : String(event.app_user_id || ''),
+                event.app_user_id ? String(event.app_user_id) : null,
+                String(event.type),
+                cleanProductId || null,
+                months,
+                event.transaction_id ? String(event.transaction_id) : null,
+                event.original_transaction_id ? String(event.original_transaction_id) : null,
+                Number.isFinite(parsedPrice) ? parsedPrice : null,
+                event.currency ? String(event.currency) : null,
+                event.store ? String(event.store) : null,
+                event.environment ? String(event.environment) : null,
+                event.cancel_reason ? String(event.cancel_reason) : null,
+                expirationAt,
+                JSON.stringify(event),
+            ]
+        );
+    } catch (err) {
+        if (err.code !== '42P01') {
+            console.warn('[WEBHOOK SUB EVENT LOG]', err.message);
+        }
+    }
+}
+
 // Webhook endpoint for RevenueCat events
 router.post('/revenuecat', async (req, res) => {
     const WEBHOOK_SECRET = process.env.REVENUECAT_WEBHOOK_SECRET;
@@ -135,7 +189,12 @@ router.post('/revenuecat', async (req, res) => {
             }
             case 'CANCELLATION':
             case 'EXPIRATION':
-                console.log(`[PAYMENT] User ${userId} subscription expired/cancelled`);
+            case 'BILLING_ISSUE':
+            case 'UNCANCELLATION':
+            case 'PRODUCT_CHANGE':
+            case 'SUBSCRIPTION_PAUSED':
+                console.log(`[PAYMENT] User ${userId} subscription lifecycle event: ${event.type}`);
+                await recordSubscriptionEvent(db, event, userId);
                 await db.query(
                     'INSERT INTO processed_webhook_events (event_id, app_user_id, event_type, product_id, claimed) VALUES ($1, $2, $3, $4, TRUE) ON CONFLICT (event_id) DO NOTHING',
                     [eventId, userId || null, event.type || null, productId || null]
@@ -401,6 +460,8 @@ async function handleSuccessfulPayment(userId, event, io) {
                     packageNameSnapshot: cleanProductId,
                     status: 'completed_vip',
                 });
+
+                await recordSubscriptionEvent(client, event, resolvedUserId);
 
                 return {
                     duplicateEvent: false,

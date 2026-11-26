@@ -208,7 +208,7 @@ async function getDashboardOverviewStats(req) {
 
         // 9. Ek Öneri 3: 24-hour Peak Hours (Registrations, 7 days, TR time)
         db.query(`
-            SELECT EXTRACT(HOUR FROM (created_at AT TIME ZONE '${TR_TZ}'))::int AS hour, COUNT(*)::int AS count
+            SELECT EXTRACT(HOUR FROM ((created_at AT TIME ZONE 'UTC') AT TIME ZONE '${TR_TZ}'))::int AS hour, COUNT(*)::int AS count
             FROM users
             WHERE role = 'user' AND created_at >= NOW() - INTERVAL '7 days'
             GROUP BY 1
@@ -217,7 +217,7 @@ async function getDashboardOverviewStats(req) {
 
         // 10. Ek Öneri 3: 24-hour Peak Hours (Payments, 7 days, TR time)
         db.query(`
-            SELECT EXTRACT(HOUR FROM (created_at AT TIME ZONE '${TR_TZ}'))::int AS hour,
+            SELECT EXTRACT(HOUR FROM ((created_at AT TIME ZONE 'UTC') AT TIME ZONE '${TR_TZ}'))::int AS hour,
                    COUNT(*)::int AS count,
                    COALESCE(SUM(amount), 0)::numeric(12,2) AS revenue
             FROM payments
@@ -348,7 +348,7 @@ async function getDashboardOverviewStats(req) {
             ),
             u_cohort AS (
                 SELECT
-                    (u.created_at AT TIME ZONE '${TR_TZ}')::date AS reg_day,
+                    ((u.created_at AT TIME ZONE 'UTC') AT TIME ZONE '${TR_TZ}')::date AS reg_day,
                     COUNT(*)::int AS registered_count,
                     COUNT(*) FILTER (WHERE EXISTS (
                         SELECT 1 FROM payments p
@@ -376,7 +376,7 @@ async function getDashboardOverviewStats(req) {
                 GROUP BY reg_day
             ),
             p_day_agg AS (
-                SELECT (p.created_at AT TIME ZONE '${TR_TZ}')::date AS day,
+                SELECT ((p.created_at AT TIME ZONE 'UTC') AT TIME ZONE '${TR_TZ}')::date AS day,
                        COUNT(DISTINCT p.user_id)::int AS day_buyers_count,
                        COUNT(*)::int AS day_orders_count,
                        COALESCE(SUM(p.amount), 0)::numeric(12,2) AS day_revenue
@@ -628,8 +628,8 @@ async function getDashboardRangeStats(req) {
         `, [start, end]),
 
         db.query(`
-            SELECT TO_CHAR(p.created_at AT TIME ZONE '${TR_TZ}', 'DD.MM') AS label,
-                   (p.created_at AT TIME ZONE '${TR_TZ}')::date AS day,
+            SELECT TO_CHAR(((p.created_at AT TIME ZONE 'UTC') AT TIME ZONE '${TR_TZ}'), 'DD.MM') AS label,
+                   ((p.created_at AT TIME ZONE 'UTC') AT TIME ZONE '${TR_TZ}')::date AS day,
                    COALESCE(SUM(p.amount), 0)::numeric(12,2) AS revenue,
                    COUNT(*)::int AS orders
             FROM payments p
@@ -686,8 +686,8 @@ async function getDashboardRangeStats(req) {
         `, [start, end]),
 
         db.query(`
-            SELECT TO_CHAR(created_at AT TIME ZONE '${TR_TZ}', 'DD.MM') AS label,
-                   (created_at AT TIME ZONE '${TR_TZ}')::date AS day,
+            SELECT TO_CHAR(((created_at AT TIME ZONE 'UTC') AT TIME ZONE '${TR_TZ}'), 'DD.MM') AS label,
+                   ((created_at AT TIME ZONE 'UTC') AT TIME ZONE '${TR_TZ}')::date AS day,
                    COUNT(*)::int AS count
             FROM users
             WHERE role = 'user'

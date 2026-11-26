@@ -50,6 +50,8 @@ export default function Dashboard() {
     const [customEnd, setCustomEnd] = useState(() => new Date(Date.now() + 3 * 3600 * 1000).toISOString().slice(0, 10));
     const [customNewUsers, setCustomNewUsers] = useState(null);
     const [copiedSummary, setCopiedSummary] = useState(false);
+    const [targetsInfo, setTargetsInfo] = useState(null);
+    const [alertHealth, setAlertHealth] = useState(null);
 
     const dismissIntro = () => {
         setIntroFading(true);
@@ -92,12 +94,16 @@ export default function Dashboard() {
                 setPersonalStats(statsRes.data);
                 setActivities(actsRes.data);
             } else {
-                const [statsRes, actsRes] = await Promise.all([
+                const [statsRes, actsRes, tgtRes, altRes] = await Promise.all([
                     axios.get(`${API_URL}/api/admin/stats`, { headers }),
-                    axios.get(`${API_URL}/api/admin/activities`, { headers })
+                    axios.get(`${API_URL}/api/admin/activities`, { headers }),
+                    axios.get(`${API_URL}/api/admin/targets`, { headers }).catch(() => ({ data: null })),
+                    axios.get(`${API_URL}/api/admin/alerts/status`, { headers }).catch(() => ({ data: null })),
                 ]);
                 setStats(statsRes.data);
                 setActivities(actsRes.data);
+                if (tgtRes?.data) setTargetsInfo(tgtRes.data);
+                if (altRes?.data?.health) setAlertHealth(altRes.data.health);
             }
         } catch (err) {
             console.error('Dashboard Data Error:', err);
@@ -303,6 +309,23 @@ export default function Dashboard() {
                 </div>
             </div>
 
+            {/* Scheduler Missed Day Warning */}
+            {alertHealth?.hasLogsTable && alertHealth?.yesterdayMissed && (
+                <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-between gap-4 flex-wrap">
+                    <div className="text-xs text-amber-200">
+                        <strong className="text-amber-300 uppercase tracking-wider">Gün Sonu Özeti Uyarısı:</strong>{' '}
+                        Dün otomatik 22:00 e-posta özeti tetiklenmemiş görünüyor (Bugün: {alertHealth.todayRunCount} kez çalıştı).
+                    </div>
+                    <button
+                        type="button"
+                        onClick={() => navigate('/settings')}
+                        className="px-3.5 py-1.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 text-xs font-black"
+                    >
+                        Özet & Alarm Ayarlarına Git
+                    </button>
+                </div>
+            )}
+
             {/* Row 1: 4 Interactive Clickable KPI Cards */}
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-5">
                 {/* 1. Toplam Gelir */}
@@ -315,10 +338,13 @@ export default function Dashboard() {
                         <div className="p-3.5 rounded-2xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
                             <DollarSign size={22} />
                         </div>
-                        <DeltaBadge pct={revB.todayDeltaPct} suffix="bugün" />
+                        <DeltaBadge pct={revB.todayDeltaPct} suffix="düne göre" />
                     </div>
                     <div className="mt-4">
-                        <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">Toplam Gelir</p>
+                        <div className="flex items-center gap-2">
+                            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">Toplam Gelir</p>
+                            <span className="px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-300 text-[9px] font-black uppercase">Toplam</span>
+                        </div>
                         <p className="text-3xl font-black text-white tracking-tight mt-1">₺{(revB.total || 0).toLocaleString('tr-TR')}</p>
                     </div>
                     <div className="mt-4 pt-3 border-t border-white/5 flex items-center justify-between text-xs">
@@ -340,7 +366,13 @@ export default function Dashboard() {
                         <DeltaBadge pct={usrG.todayDeltaPct} suffix="düne göre" />
                     </div>
                     <div className="mt-4">
-                        <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">Kullanıcı Sayısı</p>
+                        <div className="flex items-center gap-2">
+                            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">Kullanıcı Sayısı</p>
+                            <span className="px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-300 text-[9px] font-black uppercase">Toplam</span>
+                            {(usrG.total || 0) < 30 && (
+                                <span className="px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-300 text-[9px] font-black">az veri</span>
+                            )}
+                        </div>
                         <p className="text-3xl font-black text-white tracking-tight mt-1">{usrG.total || 0}</p>
                     </div>
                     <div className="mt-4 pt-3 border-t border-white/5 flex items-center justify-between text-xs">
@@ -364,7 +396,13 @@ export default function Dashboard() {
                         </span>
                     </div>
                     <div className="mt-4">
-                        <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">Ödeme Dönüşümü & ARPPU</p>
+                        <div className="flex items-center gap-2">
+                            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">Ödeme Dönüşümü & ARPPU</p>
+                            <span className="px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-300 text-[9px] font-black uppercase">Toplam</span>
+                            {(usrG.total || 0) < 30 && (
+                                <span className="px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-300 text-[9px] font-black">az veri</span>
+                            )}
+                        </div>
                         <div className="flex items-baseline gap-2.5 mt-1">
                             <p className="text-3xl font-black text-white tracking-tight">%{mon.conversionRatePct || 0}</p>
                             <span className="text-xs font-bold text-amber-400">({mon.payingUsers || 0} ödeyen)</span>
@@ -391,7 +429,10 @@ export default function Dashboard() {
                         </span>
                     </div>
                     <div className="mt-4">
-                        <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">Canlı Aktiflik & Huni Radarı</p>
+                        <div className="flex items-center gap-2">
+                            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">Canlı Aktiflik & Huni Radarı</p>
+                            <span className="px-1.5 py-0.5 rounded bg-rose-500/10 text-rose-300 text-[9px] font-black uppercase">Anlık</span>
+                        </div>
                         <div className="flex items-baseline gap-2.5 mt-1">
                             <p className="text-3xl font-black text-white tracking-tight">{pulse.liveOnlineCount || 0}</p>
                             <span className="text-xs font-bold text-slate-400">aktif üye</span>
@@ -403,6 +444,60 @@ export default function Dashboard() {
                     </div>
                 </button>
             </div>
+
+            {/* Period Comparison & Monthly Target Strip */}
+            {targetsInfo && (
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 animate-fade-up stagger-2">
+                    <div className="premium-card p-5 flex flex-col justify-between space-y-2">
+                        <div className="flex items-center justify-between">
+                            <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Bu Hafta vs Geçen Hafta</span>
+                            <DeltaBadge pct={targetsInfo.comparisons?.weekVsPrevWeek?.revenue?.deltaPct} />
+                        </div>
+                        <div className="flex items-baseline justify-between text-xs">
+                            <span className="text-lg font-black text-white">₺{(targetsInfo.comparisons?.weekVsPrevWeek?.revenue?.current || 0).toLocaleString('tr-TR')}</span>
+                            <span className="text-slate-400">
+                                {targetsInfo.comparisons?.weekVsPrevWeek?.registrations?.current || 0} kayıt • %{targetsInfo.comparisons?.weekVsPrevWeek?.conversionPct?.current || 0} dönüşüm
+                            </span>
+                        </div>
+                    </div>
+
+                    <div className="premium-card p-5 flex flex-col justify-between space-y-2">
+                        <div className="flex items-center justify-between">
+                            <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Bu Ay vs Geçen Ay</span>
+                            <DeltaBadge pct={targetsInfo.comparisons?.monthVsPrevMonth?.revenue?.deltaPct} />
+                        </div>
+                        <div className="flex items-baseline justify-between text-xs">
+                            <span className="text-lg font-black text-white">₺{(targetsInfo.comparisons?.monthVsPrevMonth?.revenue?.current || 0).toLocaleString('tr-TR')}</span>
+                            <span className="text-slate-400">
+                                {targetsInfo.comparisons?.monthVsPrevMonth?.registrations?.current || 0} kayıt • %{targetsInfo.comparisons?.monthVsPrevMonth?.conversionPct?.current || 0} dönüşüm
+                            </span>
+                        </div>
+                    </div>
+
+                    <button
+                        type="button"
+                        onClick={() => navigate('/analytics')}
+                        className="premium-card p-5 text-left hover:border-emerald-500/30 transition space-y-2"
+                    >
+                        <div className="flex items-center justify-between">
+                            <span className="text-[10px] font-black uppercase tracking-widest text-emerald-400">Aylık Hedef ({targetsInfo.monthKey})</span>
+                            <span className="text-[11px] font-black text-slate-300">
+                                Tahmin: ₺{(targetsInfo.target?.forecastRevenue || 0).toLocaleString('tr-TR')}
+                            </span>
+                        </div>
+                        <div className="h-2 bg-slate-800 rounded-full overflow-hidden">
+                            <div
+                                className="h-full bg-gradient-to-r from-emerald-500 to-teal-400 rounded-full"
+                                style={{ width: `${Math.min(100, targetsInfo.target?.revenueProgressPct || 0)}%` }}
+                            />
+                        </div>
+                        <p className="text-[11px] text-slate-400 flex justify-between">
+                            <span>₺{(targetsInfo.target?.actualRevenue || 0).toLocaleString('tr-TR')} / {targetsInfo.target?.revenueTarget > 0 ? `₺${targetsInfo.target.revenueTarget.toLocaleString('tr-TR')}` : 'Hedef tanımla →'}</span>
+                            <span>{targetsInfo.target?.actualRegistrations || 0} / {targetsInfo.target?.registrationsTarget || '—'} üye</span>
+                        </p>
+                    </button>
+                </div>
+            )}
 
             {/* Row 2: Replacing 2 Simple Charts with Actionable Decision Modules */}
             <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 animate-fade-up stagger-2">

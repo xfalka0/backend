@@ -298,6 +298,13 @@ export default function UsersPage() {
                                         <td className="px-8 py-5 text-right">
                                             <div className="flex items-center justify-end gap-2 opacity-0 group-hover/row:opacity-100 transition-opacity">
                                                 <button
+                                                    onClick={() => navigate(`/users/${user.id}`)}
+                                                    className="p-2 hover:bg-emerald-500/10 text-emerald-400 rounded-lg transition-colors"
+                                                    title="Kullanıcı Detay Sayfası (Salt-Okunur)"
+                                                >
+                                                    <User size={18} />
+                                                </button>
+                                                <button
                                                     onClick={() => navigate(`/crm?userId=${user.id}`)}
                                                     className="p-2 hover:bg-blue-500/10 text-blue-400 rounded-lg transition-colors"
                                                     title="360° CRM Profilini Aç"

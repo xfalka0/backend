@@ -62,6 +62,8 @@ const chatRoutes = require('./routes/chatRoutes');
 const messageRoutes = require('./routes/messageRoutes');
 const vipRoutes = require('./routes/vip');
 const adminCrmRoutes = require('./routes/adminCrm');
+const { adminInsightsRouter, cronInsightsRouter } = require('./routes/adminInsights');
+const { startDailySummaryScheduler } = require('./services/dailySummaryEmailService');
 const { sanitizeUser, logActivity, logFreeMessagesExhausted } = require('./utils/helpers');
 const { sendPushNotification } = require('./utils/notificationUtils');
 const { checkProfileText, checkPhotoSecurity } = require('./utils/moderationFilter');
@@ -1972,6 +1974,8 @@ app.use('/api/nobility', nobilityRoutes);
 app.use('/api/store', storeRoutes);
 app.use('/api/vip', vipRoutes);
 app.use('/api/admin/crm', adminCrmRoutes);
+app.use('/api/admin', adminInsightsRouter);
+app.use('/api/cron', cronInsightsRouter);
 
 // TEMPORARY: Fix Genders Route
 app.get('/api/admin/fix-genders', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
@@ -6582,17 +6586,40 @@ app.get('/api/admin/force-fix-social-schema', authenticateToken, authorizeRole('
 // 1. Analytics Summary
 app.get('/api/admin/analytics/summary', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
     try {
-        const days = parseInt(req.query.days) || 7;
-        const result = await db.query(`
-            SELECT 
-                COALESCE(SUM(amount), 0) as total_revenue,
-                COUNT(*) as total_purchases,
-                COUNT(DISTINCT user_id) as unique_buyers,
-                COALESCE(AVG(amount), 0) as avg_order
-            FROM payments 
-            WHERE status = 'completed' AND created_at > NOW() - interval '${days} days'
-        `);
-        res.json(result.rows[0]);
+        const days = Math.min(365, Math.max(1, parseInt(req.query.days, 10) || 7));
+        const [result, pkgRes] = await Promise.all([
+            db.query(`
+                SELECT 
+                    COALESCE(SUM(amount), 0) as total_revenue,
+                    COUNT(*) as total_purchases,
+                    COUNT(DISTINCT user_id) as unique_buyers,
+                    COALESCE(AVG(amount), 0) as avg_order
+                FROM payments 
+                WHERE COALESCE(status, 'completed') IN ('completed', 'completed_vip')
+                  AND created_at > NOW() - make_interval(days => $1)
+            `, [days]),
+            db.query(`
+                SELECT
+                    COALESCE(NULLIF(TRIM(p.package_name_snapshot), ''), cp.name, CONCAT(COALESCE(p.coin_amount, cp.coins, 0), ' Coin')) AS name,
+                    COUNT(*)::int AS orders,
+                    COALESCE(SUM(p.amount), 0)::numeric(12,2) AS revenue,
+                    COALESCE(SUM(COALESCE(p.coin_amount, cp.coins, 0)), 0)::int AS coins
+                FROM payments p
+                LEFT JOIN coin_packages cp ON p.package_id = cp.id
+                WHERE COALESCE(p.status, 'completed') IN ('completed', 'completed_vip')
+                  AND p.created_at > NOW() - make_interval(days => $1)
+                GROUP BY 1
+                ORDER BY revenue DESC
+                LIMIT 12
+            `, [days])
+        ]);
+        res.json({
+            ...result.rows[0],
+            package_breakdown: pkgRes.rows.map((r) => ({
+                ...r,
+                revenue: parseFloat(r.revenue || 0)
+            }))
+        });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
@@ -7189,6 +7216,7 @@ if (require.main === module) {
         startPinger();
         startStaleSeatSweeper(io);
         startAiHookSweeper(io);
+        startDailySummaryScheduler(db);
     });
 }
 

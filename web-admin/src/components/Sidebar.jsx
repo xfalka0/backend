@@ -75,10 +75,12 @@ export default function Sidebar() {
             items: [
                 { path: '/crm', icon: <Briefcase size={18} />, label: 'Müşteri CRM', roles: ['admin', 'super_admin'] },
                 { path: '/payments', icon: <CreditCard size={18} />, label: 'Ödemeler', roles: ['admin', 'super_admin'] },
+                { path: '/subscriptions', icon: <Crown size={18} />, label: 'Premium / Abonelikler', roles: ['admin', 'super_admin'] },
                 { path: '/withdrawals', icon: <Wallet size={18} />, label: 'Para Çekme', roles: ['admin', 'super_admin'] },
                 { path: '/gifts', icon: <Gift size={18} />, label: 'Hediyeler', roles: ['admin', 'super_admin'] },
                 { path: '/vip', icon: <Crown size={18} />, label: 'Coin Fiyatları', roles: ['admin', 'super_admin'] },
                 { path: '/analytics', icon: <BarChart2 size={18} />, label: 'Analiz / Gelir', roles: ['admin', 'super_admin'] },
+                { path: '/retention', icon: <Activity size={18} />, label: 'Retention / Elde Tutma', roles: ['admin', 'super_admin'] },
             ]
         },
         {

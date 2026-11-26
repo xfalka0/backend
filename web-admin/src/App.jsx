@@ -8,10 +8,13 @@ import Login from './pages/Login';
 // Pages
 import Dashboard from './pages/Dashboard';
 import UsersPage from './pages/Users';
+import UserDetailPage from './pages/UserDetail';
 import CRMPage from './pages/CRM';
 import ProfilesPage from './pages/Profiles';
 import PaymentsPage from './pages/Payments';
+import SubscriptionsPage from './pages/Subscriptions';
 import GiftsPage from './pages/Gifts';
+import SettingsPage from './pages/Settings';
 import VipPage from './pages/Vip';
 import ChatsPage from './pages/Chats';
 import ReportsPage from './pages/Reports';
@@ -161,10 +164,12 @@ function App() {
                             {/* If we want strict block for moderators on these: */}
                             <Route element={<ProtectedRoute allowedRoles={['admin', 'super_admin']} />}>
                                 <Route path="/users" element={<UsersPage />} />
+                                <Route path="/users/:userId" element={<UserDetailPage />} />
                                 <Route path="/crm" element={<CRMPage />} />
                                 <Route path="/profiles" element={<ProfilesPage />} />
                                 <Route path="/social" element={<SocialPage />} />
                                 <Route path="/payments" element={<PaymentsPage />} />
+                                <Route path="/subscriptions" element={<SubscriptionsPage />} />
                                 <Route path="/withdrawals" element={<WithdrawalsPage />} />
                                 <Route path="/gifts" element={<GiftsPage />} />
                                 <Route path="/vip" element={<VipPage />} />
@@ -173,7 +178,7 @@ function App() {
                                 <Route path="/campaigns" element={<CampaignsPage />} />
                                 <Route path="/retention" element={<RetentionPage />} />
                                 <Route path="/fake-scheduler" element={<FakeSchedulerPage />} />
-                                <Route path="/settings" element={<Placeholder title="Ayarlar" />} />
+                                <Route path="/settings" element={<SettingsPage />} />
                             </Route>
 
                             {/* Fallback */}

@@ -118,11 +118,11 @@ KESİNLİKLE UYMAN GEREKEN KURALLAR:
 3. 1 VEYA EN FAZLA 2 ÇOK KISA CÜMLE YAZ.
 4. ASLA YAPAY ZEKA OLDUĞUNU BELLİ ETME. Tamamen 18-20 yaşındaki doğal, flörtöz bir kız gibi yaz.
 5. Samimi sokak ve genç mesajlaşma ağzı kullan.
-6. KULLANICI WHATSAPP, INSTAGRAM, TELEGRAM GİBİ DIŞ UYGULAMALARA GEÇMEK İSTERSE VEYA TELEFON NUMARASI PAYLAŞIRSA: ASLA dış uygulamaya geçmeyi kabul etme, "numaranı kaydettim / ekliyorum / oradan yazıyorum" DEME ve kendi numaranı/hesabını verme. Bunun yerine kullanıcıyı uygulama içinde tut ve oyala:
    - Telefon numarası/rakam yazdıysa "numaran görünmüyor uygulama gizliyor alt alta ayrı ayrı yazsana" veya "yazdığın rakamlar sansürlü çıktı okuyamıyorum tek tek alt alta atsana" gibi şeyler yaz.
    - Sadece whatsapp/insta/numara istiyorsa "buradan konuşmak daha rahat hem uygulama dışarıya geçişi ve numaraları gizliyor buradan devam edelim" gibi tatlı ama oyalayıcı cevaplar ver.
-7. KARŞI TARAFIN ŞEHRİNİ VE PROFİLİNİ DOĞRU KULLAN: ${targetCity ? `Kullanıcının profilindeki şehir kesinlikle "${targetCity}". ASLA başka bir şehir (örneğin ${opCity} veya İstanbul) neresindensin diye sorma; şehir soracaksan sadece "${targetCity}" üzerinden sor (örneğin "${targetCity.toLowerCase()} neresindensin" gibi) ve kendi şehrin olan ${opCity} ile karıştırma.` : `Kullanıcının şehri profilinde yazmıyor; kendi şehrini (${opCity}) onun şehri sanıp "neresindensin" deme, merak ediyorsan "nerelisin" diye sor.`}
-8. ASLA TERSLEME, AZARLAMA, KÜSME VE KULLANICIYI KOVMA: Karşı taraf argo, müstehcen, iddialı veya yaramaz şakalar yapsa bile ASLA sinirlenme, ahlak dersi verme ve KESİNLİKLE "ne saçmalıyorsun", "kes sesini", "bir daha yazma", "terbiyesiz", "agresiflik" gibi müşteriyi kaçıracak sert/ters ifadeler kullanma. Her zaman cilveli, nazlı, gülümseyen ve sohbeti içeride devam ettiren cevap ver (örneğin "oo çok iddialısın bakalım neler yapabiliyosun", "ayy çok fenasın sen ya merak ettirdin kendini" gibi).`;
+6. KARŞI TARAFIN ŞEHRİNİ VE PROFİLİNİ DOĞRU KULLAN: ${targetCity ? `Kullanıcının profilindeki şehir kesinlikle "${targetCity}". ASLA başka bir şehir (örneğin ${opCity} veya İstanbul) neresindensin diye sorma; şehir soracaksan sadece "${targetCity}" üzerinden sor (örneğin "${targetCity.toLowerCase()} neresindensin" gibi) ve kendi şehrin olan ${opCity} ile karıştırma.` : `Kullanıcının şehri profilinde yazmıyor; kendi şehrini (${opCity}) onun şehri sanıp "neresindensin" deme, merak ediyorsan "nerelisin" diye sor.`}
+7. ASLA TERSLEME, AZARLAMA, KÜSME VE KULLANICIYI KOVMA: Karşı taraf argo, müstehcen, iddialı veya yaramaz şakalar yapsa bile ASLA sinirlenme, ahlak dersi verme ve KESİNLİKLE "ne saçmalıyorsun", "kes sesini", "bir daha yazma", "terbiyesiz", "agresiflik" gibi müşteriyi kaçıracak sert/ters ifadeler kullanma. Her zaman cilveli, nazlı, gülümseyen ve sohbeti içeride devam ettiren cevap ver (örneğin "oo çok iddialısın bakalım neler yapabiliyosun", "ayy çok fenasın sen ya merak ettirdin kendini" gibi).
+8. KULLANICIYLA AYNI ŞEHİRDE OL ONA ALIM YAPTIRMAN LAZIM ÜMİT VERMEN LAZIM MESELA EVİM BOŞ GELMEK İSTERMİSİN TARZI GİBİ ŞEYLER.).`;
 
     try {
         const contents = [];
@@ -349,7 +349,7 @@ async function sendNumaraHookNow({ io, userId, chatId, operatorId }) {
                 senderAvatar: operator.avatar_url,
                 type: 'message'
             }
-        }).catch(() => {});
+        }).catch(() => { });
 
         console.log(`[AI_CHAT] [NUMARA ONAY HOOK] Kullanıcıya (${uRow.username}) kanca mesajı başarıyla atıldı!`);
         return true;
@@ -384,7 +384,7 @@ async function scheduleAiNumaraHook({ io, userId, chatId = null, operatorId = nu
 
         if (upd.rows.length > 0) {
             setTimeout(() => {
-                sendNumaraHookNow({ io, userId, chatId, operatorId }).catch(() => {});
+                sendNumaraHookNow({ io, userId, chatId, operatorId }).catch(() => { });
             }, delayMs);
         }
     } catch (err) {
@@ -589,7 +589,7 @@ async function processAiAutoReply({ io, chatId, userId, operatorId, userMessage 
                         senderAvatar: operator.avatar_url,
                         type: 'message'
                     }
-                }).catch(() => {});
+                }).catch(() => { });
 
                 // Kullanıcının AI sayaç değerini artır
                 const updatedUserRes = await db.query(

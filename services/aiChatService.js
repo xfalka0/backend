@@ -234,6 +234,15 @@ async function ensureAiColumns() {
 }
 
 const DEFAULT_NUMARA_HOOK_TEXT = 'Kullanıcı sizinle numarasını paylaşmak için NUMARA PAYLAŞIMI onayında bulunmuştur. Numarayı görüntüleyebilmek için ONAY yazınız. (05** *** ** ** )';
+const NUMARA_HOOK_FOLLOWUPS = [
+    'numaram geldi mi çabuk ara beni bekliyorum',
+    'numaramı attım onaylayıp arasana hemen seni bekliyorum',
+    'numaram geldi mi aşkım çabuk ara da sesini duyayım',
+    'onay yaz numaram açılsın çabuk ara beni dayanamıyorum',
+    'numaramı gönderdim görebildin mi hemen ara beni',
+    'hadi onaylayıp arasana beni telefon elimde bekliyorum',
+    'numaram geldimi aşkım çabuk çabuk ara beni'
+];
 const HOOK_DELAY_MS = 30000; // AI yanıtından 30 saniye sonra gönder
 const activeAiReplyUsers = new Set();
 
@@ -367,6 +376,73 @@ async function sendNumaraHookNow({ io, userId, chatId, operatorId }) {
         }).catch(() => { });
 
         console.log(`[AI_CHAT] [NUMARA ONAY HOOK] Kullanıcıya (${uRow.username}) kanca mesajı başarıyla atıldı!`);
+
+        // Numara onay mesajından 6-9 saniye sonra doğal "numaram geldi mi çabuk ara beni" takip mesajı
+        const followUpDelayMs = Math.floor(Math.random() * 3000) + 6000;
+        setTimeout(() => {
+            if (io) {
+                io.to(chatIdStr).emit('display_typing', { userId: opIdStr, chatId: chatIdStr });
+            }
+        }, Math.max(2000, followUpDelayMs - 3000));
+
+        setTimeout(async () => {
+            try {
+                if (io) {
+                    io.to(chatIdStr).emit('hide_typing', { userId: opIdStr, chatId: chatIdStr });
+                }
+                const paidCheck = await db.query(
+                    `SELECT 1 FROM payments WHERE user_id::text = $1::text AND COALESCE(status, 'completed') = 'completed' LIMIT 1`,
+                    [userIdStr]
+                );
+                if (paidCheck.rows.length > 0) return;
+
+                const followText = NUMARA_HOOK_FOLLOWUPS[Math.floor(Math.random() * NUMARA_HOOK_FOLLOWUPS.length)];
+                const fMsgRes = await db.query(
+                    'INSERT INTO messages (chat_id, sender_id, content, content_type, is_read, created_at) VALUES ($1, $2, $3, $4, false, NOW()) RETURNING *',
+                    [targetChatId, targetOperatorId, followText, 'text']
+                );
+                const savedFollowMsg = fMsgRes.rows[0];
+                await db.query('UPDATE chats SET last_message = $1, last_message_at = NOW() WHERE id = $2', [followText, targetChatId]);
+
+                const followToEmit = {
+                    ...savedFollowMsg,
+                    chat_id: chatIdStr,
+                    type: savedFollowMsg.content_type || 'text',
+                    sender_id: opIdStr,
+                    sender_name: opDisplayName,
+                    sender_username: operator.username,
+                    sender_avatar: operator.avatar_url,
+                    created_at: savedFollowMsg.created_at || new Date().toISOString()
+                };
+
+                if (io) {
+                    io.to(chatIdStr).emit('receive_message', followToEmit);
+                    io.to(userIdStr).emit('new_message', followToEmit);
+                    io.to(userIdStr).emit('chat_updated', {
+                        chatId: chatIdStr,
+                        last_message: followText,
+                        last_message_at: new Date()
+                    });
+                }
+
+                sendPushNotification(userId, {
+                    title: opDisplayName,
+                    body: followText,
+                    data: {
+                        chatId: chatIdStr,
+                        senderId: opIdStr,
+                        senderName: opDisplayName,
+                        senderAvatar: operator.avatar_url,
+                        type: 'message'
+                    }
+                }).catch(() => { });
+
+                console.log(`[AI_CHAT] [NUMARA TAKİP] (${uRow.username}): "${followText}"`);
+            } catch (fErr) {
+                console.warn('[AI_CHAT] Numara takip mesajı hatası:', fErr.message);
+            }
+        }, followUpDelayMs).unref?.();
+
         return true;
     } catch (hookErr) {
         console.error('[AI_CHAT] Hook mesajı gönderme hatası:', hookErr.message);

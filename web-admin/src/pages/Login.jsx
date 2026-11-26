@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
+import { isPhoneDevice, canAccessChatsRole } from '../utils/mobile';
 
 export default function Login() {
     const [email, setEmail] = useState('');
@@ -28,7 +29,8 @@ export default function Login() {
 
         const result = await login(email, password);
         if (result.success) {
-            navigate('/');
+            const targetPath = isPhoneDevice() && canAccessChatsRole(result.user?.role) ? '/chats' : '/';
+            navigate(targetPath, { replace: true });
         } else {
             setError(result.error);
         }

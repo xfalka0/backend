@@ -1,6 +1,7 @@
 import React from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useIsPhone } from '../utils/mobile';
 import {
     LayoutDashboard,
     Users,
@@ -33,13 +34,14 @@ export default function Sidebar() {
     const location = useLocation();
     const { user, logout } = useAuth();
     const navigate = useNavigate();
+    const isPhone = useIsPhone();
 
     const handleLogout = () => {
         logout();
         navigate('/login');
     };
 
-    if (!user) return null;
+    if (!user || isPhone) return null;
 
     const categories = [
         {

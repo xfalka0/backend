@@ -32,6 +32,7 @@ import ReferralsPage from './pages/Referrals';
 import AffiliateDashboard from './pages/AffiliateDashboard';
 import SplashIntro from './components/SplashIntro';
 import WithdrawalsPage from './pages/Withdrawals';
+import { canAccessChatsRole, normalizeRole, useIsPhone } from './utils/mobile';
 
 // Placeholder Pages
 const Placeholder = ({ title }) => (
@@ -43,10 +44,16 @@ const Placeholder = ({ title }) => (
 
 const Home = () => {
     const { user } = useAuth();
-    if (user?.role === 'admin' || user?.role === 'super_admin' || user?.role === 'moderator') {
+    const isPhone = useIsPhone();
+    const role = normalizeRole(user?.role);
+
+    if (isPhone && canAccessChatsRole(role)) {
+        return <Navigate to="/chats" replace />;
+    }
+    if (role === 'admin' || role === 'super_admin' || role === 'moderator') {
         return <Dashboard />;
     }
-    if (user?.role === 'affiliater') {
+    if (role === 'affiliater') {
         return <AffiliateDashboard />;
     }
     return <StaffDashboard />;
@@ -54,7 +61,6 @@ const Home = () => {
 
 const ProtectedRoute = ({ allowedRoles }) => {
     const { user, token, loading } = useAuth();
-    const isOperator = user?.role === 'operator' || user?.role === 'staff';
 
     if (loading) return <div className="p-10 text-white">Yükleniyor...</div>;
 
@@ -62,7 +68,7 @@ const ProtectedRoute = ({ allowedRoles }) => {
         return <Navigate to="/login" replace />;
     }
 
-    if (allowedRoles && !allowedRoles.includes(user.role)) {
+    if (allowedRoles && !allowedRoles.includes(normalizeRole(user.role))) {
         return (
             <div className="p-8 text-white">
                 <h2 className="text-2xl font-bold text-red-500">Yetkisiz Erişim</h2>
@@ -74,31 +80,14 @@ const ProtectedRoute = ({ allowedRoles }) => {
     return <Outlet />;
 };
 
-const useIsMobile = () => {
-    const [isMobile, setIsMobile] = React.useState(() =>
-        typeof window !== 'undefined' ? window.matchMedia('(max-width: 767px)').matches : false
-    );
-
-    React.useEffect(() => {
-        if (typeof window === 'undefined') return undefined;
-        const mq = window.matchMedia('(max-width: 767px)');
-        const onChange = (e) => setIsMobile(e.matches);
-        setIsMobile(mq.matches);
-        mq.addEventListener('change', onChange);
-        return () => mq.removeEventListener('change', onChange);
-    }, []);
-
-    return isMobile;
-};
-
 const Layout = () => {
     const location = useLocation();
     const { user } = useAuth();
-    const isMobile = useIsMobile();
+    const isPhone = useIsPhone();
     const isChatsPage = location.pathname === '/chats' || location.pathname === '/formatted-chats';
-    const canViewChats = ['admin', 'super_admin', 'moderator', 'operator', 'staff'].includes(user?.role);
+    const canViewChats = canAccessChatsRole(user?.role);
 
-    if (isMobile && !isChatsPage && canViewChats) {
+    if (isPhone && !isChatsPage && canViewChats) {
         return <Navigate to="/chats" replace />;
     }
 
@@ -111,12 +100,12 @@ const Layout = () => {
             </div>
 
             <Sidebar />
-            <main className="flex-1 ml-0 md:ml-64 min-h-screen flex flex-col relative z-10 w-full min-w-0">
-                {!isChatsPage && <Navbar />}
+            <main className={`flex-1 ${isPhone ? 'ml-0' : 'ml-0 md:ml-64'} min-h-screen flex flex-col relative z-10 w-full min-w-0`}>
+                {!isChatsPage && !isPhone && <Navbar />}
                 <div className="flex-1 overflow-x-hidden flex flex-col">
                     <Outlet />
                 </div>
-                {!isChatsPage && (
+                {!isChatsPage && !isPhone && (
                     <footer className="hidden md:block p-10 text-center text-[11px] font-black uppercase tracking-[0.3em] text-slate-800 border-t border-white/5">
                         &copy; 2024 Falka Software Admin Dashboard • Premium Management Console
                     </footer>

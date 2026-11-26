@@ -3,6 +3,7 @@ import axios from 'axios';
 import io from 'socket.io-client';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { isPhoneDevice, useIsPhone } from '../utils/mobile';
 
 const API_URL = '';
 const SOCKET_URL = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
@@ -111,6 +112,7 @@ const getSmartHints = (chat) => {
 
 const Chats = () => {
     const { token, user, logout } = useAuth();
+    const isPhone = useIsPhone();
     const [chats, setChats] = useState([]);
     const [selectedChat, setSelectedChat] = useState(null);
     const [showMobileDetails, setShowMobileDetails] = useState(false);
@@ -371,7 +373,7 @@ const Chats = () => {
             } else {
                 setChats(res.data);
                 // Auto-restore last selected chat on desktop reload only; on phones start on the Sohbetler list
-                const isDesktop = typeof window === 'undefined' || window.innerWidth >= 768;
+                const isDesktop = !isPhoneDevice();
                 const lastChatId = localStorage.getItem('fiva_admin_last_chat_id');
                 if (isDesktop && lastChatId && !selectedChatIdRef.current) {
                     const matched = res.data.find(c => c.id.toString() === lastChatId.toString());
@@ -991,12 +993,12 @@ const Chats = () => {
 
     return (
         <div className="flex flex-col md:flex-row h-[100dvh] md:h-screen w-full bg-slate-950/50 overflow-hidden">
-            <div className={`${selectedChat ? 'hidden md:flex' : 'flex'} w-full md:w-96 h-full border-r border-white/5 flex-col bg-slate-900/50`}>
+            <div className={`${isPhone ? (selectedChat ? 'hidden' : 'flex w-full') : `${selectedChat ? 'hidden md:flex' : 'flex'} w-full md:w-96`} h-full border-r border-white/5 flex-col bg-slate-900/50`}>
                 <div className="px-5 py-5 md:p-7 border-b border-white/10 md:border-white/5 bg-slate-950/80 md:bg-transparent backdrop-blur-xl flex items-center justify-between gap-3 shrink-0">
                     <div className="flex items-center gap-3 min-w-0">
                         <h2 className="text-3xl md:text-2xl font-black tracking-tight text-white">Sohbetler</h2>
                         {totalUnreadChats > 0 && (
-                            <span className="md:hidden bg-fuchsia-600/25 border border-fuchsia-500/40 text-fuchsia-300 text-xs font-black px-2.5 py-1 rounded-full shrink-0">
+                            <span className={`${isPhone ? 'inline-flex' : 'md:hidden'} bg-fuchsia-600/25 border border-fuchsia-500/40 text-fuchsia-300 text-xs font-black px-2.5 py-1 rounded-full shrink-0`}>
                                 {totalUnreadChats} yeni
                             </span>
                         )}
@@ -1004,7 +1006,7 @@ const Chats = () => {
                     <button
                         type="button"
                         onClick={logout}
-                        className="md:hidden px-3 py-2 rounded-xl bg-white/5 hover:bg-rose-500/15 border border-white/10 text-slate-300 hover:text-rose-300 text-xs font-bold transition"
+                        className={`${isPhone ? 'inline-flex' : 'md:hidden'} px-3 py-2 rounded-xl bg-white/5 hover:bg-rose-500/15 border border-white/10 text-slate-300 hover:text-rose-300 text-xs font-bold transition`}
                     >
                         Çıkış
                     </button>
@@ -1024,11 +1026,11 @@ const Chats = () => {
                 </div>
             </div>
 
-            <div className={`${selectedChat && !showMobileDetails ? 'flex' : 'hidden md:flex'} flex-1 min-w-0 w-full h-full flex-col bg-slate-950/20`}>
+            <div className={`${isPhone ? (selectedChat && !showMobileDetails ? 'flex' : 'hidden') : (selectedChat && !showMobileDetails ? 'flex' : 'hidden md:flex')} flex-1 min-w-0 w-full h-full flex-col bg-slate-950/20`}>
                 {selectedChat ? (
                     <>
                         {/* Mobile Chat Header */}
-                        <div className="flex md:hidden items-center justify-between gap-3 px-3.5 py-3 bg-slate-900/95 backdrop-blur-xl border-b border-white/10 shrink-0">
+                        <div className={`${isPhone ? 'flex' : 'flex md:hidden'} items-center justify-between gap-3 px-3.5 py-3 bg-slate-900/95 backdrop-blur-xl border-b border-white/10 shrink-0`}>
                             <div className="flex items-center gap-2.5 min-w-0 flex-1">
                                 <button
                                     type="button"
@@ -1391,9 +1393,9 @@ const Chats = () => {
 
             {/* Right Sidebar - User & Operator Details */}
             {selectedChat && (
-                <div className={`${showMobileDetails ? 'flex fixed inset-0 z-40 w-full' : 'hidden'} md:static md:z-auto md:flex md:w-[410px] border-l border-white/10 bg-slate-950/95 md:bg-slate-900/90 backdrop-blur-xl flex-col shrink-0 h-full overflow-hidden shadow-2xl`}>
+                <div className={`${isPhone ? (showMobileDetails ? 'flex fixed inset-0 z-40 w-full' : 'hidden') : `${showMobileDetails ? 'flex fixed inset-0 z-40 w-full' : 'hidden'} md:static md:z-auto md:flex md:w-[410px]`} border-l border-white/10 bg-slate-950/95 md:bg-slate-900/90 backdrop-blur-xl flex-col shrink-0 h-full overflow-hidden shadow-2xl`}>
                     {/* Mobile Details Back Bar */}
-                    <div className="flex md:hidden items-center justify-between px-4 py-3 border-b border-white/10 bg-slate-950 shrink-0">
+                    <div className={`${isPhone ? 'flex' : 'flex md:hidden'} items-center justify-between px-4 py-3 border-b border-white/10 bg-slate-950 shrink-0`}>
                         <button
                             type="button"
                             onClick={() => setShowMobileDetails(false)}

@@ -63,7 +63,7 @@ export const AuthProvider = ({ children }) => {
             setUser(data.user);
             localStorage.setItem('token', data.token);
             localStorage.setItem('user', JSON.stringify(data.user));
-            return { success: true };
+            return { success: true, user: data.user };
         } catch (error) {
             console.error("Login Fail:", error);
             const userFriendlyMsg = error.message.includes('fetch') 

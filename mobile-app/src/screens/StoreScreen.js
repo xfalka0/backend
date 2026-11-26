@@ -228,9 +228,11 @@ export default function StoreScreen({ navigation, route }) {
 
         try {
             setPurchasing(true);
+            const fallbackPrice = parseFloat(String(plan.price || '0').replace(',', '.').replace(/[^0-9.]/g, '')) || 0;
             const result = await PurchaseService.purchaseProductByIdentifier(
                 plan.productId,
-                'SUBS'
+                'SUBS',
+                { price: fallbackPrice, currency: 'TRY' }
             );
             if (result.success) {
                 const token = await AsyncStorage.getItem('token');

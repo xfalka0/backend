@@ -2,7 +2,9 @@ const express = require('express');
 const router = express.Router();
 const db = require('../db');
 const { authenticateToken, authorizeRole } = require('../middleware/auth');
-const { sanitizeUser, logActivity } = require('../utils/helpers');
+const { sanitizeUser, logActivity, logFreeMessagesExhausted } = require('../utils/helpers');
+const { withTransaction } = require('../utils/dbUtils');
+const { isUserPremiumActive } = require('../utils/vipUtils');
 const { checkProfileText, checkPhotoSecurity } = require('../utils/moderationFilter');
 const { autoClaimPendingWebhookPurchase } = require('../utils/revenuecatUtils');
 
@@ -62,43 +64,110 @@ router.get('/:userId/balance', authenticateToken, async (req, res) => {
 router.post('/deduct-coins', authenticateToken, async (req, res) => {
     try {
         const userId = req.user.id;
-        const { amount, reason } = req.body;
-        const deductAmount = parseInt(amount, 10);
+        const { amount, reason, feature } = req.body;
+        const requestedAmount = parseInt(amount, 10);
+        const reasonStr = String(reason || '').toLowerCase();
+        const featureStr = String(feature || '').toLowerCase();
 
-        if (!deductAmount || deductAmount <= 0) {
+        let requiresPremium = false;
+        let enforcedAmount = requestedAmount;
+        let resolvedFeature = featureStr || 'feature';
+
+        if (featureStr === 'video_call' || reasonStr.includes('görüntülü') || reasonStr.includes('goruntulu')) {
+            requiresPremium = true;
+            enforcedAmount = 300;
+            resolvedFeature = 'video_call';
+        } else if (featureStr === 'voice_call' || reasonStr.includes('sesli')) {
+            requiresPremium = true;
+            enforcedAmount = 200;
+            resolvedFeature = 'voice_call';
+        } else if (featureStr === 'location' || reasonStr.includes('konum')) {
+            requiresPremium = true;
+            enforcedAmount = Math.max(requestedAmount || 400, 400);
+            resolvedFeature = 'location';
+        }
+
+        if (!enforcedAmount || enforcedAmount <= 0) {
             return res.status(400).json({ error: 'Geçersiz coin miktarı' });
         }
 
-        const userRes = await db.query('SELECT balance FROM users WHERE id = $1 FOR UPDATE', [userId]);
-        if (userRes.rows.length === 0) {
-            return res.status(404).json({ error: 'Kullanıcı bulunamadı' });
+        const outcome = await withTransaction(db, async (client) => {
+            const userRes = await client.query(
+                `SELECT balance, role, gender, is_premium, premium_expire_date, vip_expire_date
+                 FROM users WHERE id = $1 FOR UPDATE`,
+                [userId]
+            );
+            if (userRes.rows.length === 0) {
+                return { status: 404, body: { error: 'Kullanıcı bulunamadı' } };
+            }
+
+            const userRow = userRes.rows[0];
+            if (requiresPremium && !isUserPremiumActive(userRow)) {
+                return {
+                    status: 403,
+                    body: {
+                        error: 'Bu özellik için aktif Premium üyelik gereklidir.',
+                        requiresPremium: true
+                    }
+                };
+            }
+
+            const currentBalance = parseInt(userRow.balance || 0, 10);
+            if (currentBalance < enforcedAmount) {
+                return {
+                    status: 400,
+                    insufficient: true,
+                    currentBalance,
+                    body: {
+                        error: 'Yetersiz bakiye',
+                        insufficientFunds: true,
+                        currentBalance,
+                        required: enforcedAmount
+                    }
+                };
+            }
+
+            const updateRes = await client.query(
+                'UPDATE users SET balance = balance - $1, total_spent = COALESCE(total_spent, 0) + $1 WHERE id = $2 AND balance >= $1 RETURNING balance',
+                [enforcedAmount, userId]
+            );
+
+            if (updateRes.rows.length === 0) {
+                return {
+                    status: 400,
+                    insufficient: true,
+                    currentBalance,
+                    body: {
+                        error: 'Yetersiz bakiye',
+                        insufficientFunds: true,
+                        required: enforcedAmount
+                    }
+                };
+            }
+
+            const newBalance = parseInt(updateRes.rows[0].balance, 10);
+            await client.query(
+                `INSERT INTO transactions (user_id, amount, type, description)
+                 VALUES ($1, $2, 'spend_feature', $3)`,
+                [userId, -Math.round(enforcedAmount), reason || resolvedFeature]
+            );
+
+            return { status: 200, body: { success: true, balance: newBalance, deducted: enforcedAmount } };
+        });
+
+        if (outcome.insufficient) {
+            logFreeMessagesExhausted(req.app.get('io'), userId, {
+                channel: resolvedFeature,
+                balance: outcome.currentBalance,
+                required: enforcedAmount
+            }).catch(() => {});
         }
 
-        const currentBalance = parseInt(userRes.rows[0].balance || 0, 10);
-        if (currentBalance < deductAmount) {
-            return res.status(400).json({
-                error: 'Yetersiz bakiye',
-                currentBalance,
-                required: deductAmount
-            });
+        if (outcome.status === 200) {
+            console.log(`[DEDUCT-COINS] User ${userId} deducted ${enforcedAmount} coins for "${reason || resolvedFeature}". New balance: ${outcome.body.balance}`);
         }
 
-        const updateRes = await db.query(
-            'UPDATE users SET balance = balance - $1, total_spent = COALESCE(total_spent, 0) + $1 WHERE id = $2 AND balance >= $1 RETURNING balance',
-            [deductAmount, userId]
-        );
-
-        if (updateRes.rows.length === 0) {
-            return res.status(400).json({
-                error: 'Yetersiz bakiye',
-                insufficientFunds: true
-            });
-        }
-
-        const newBalance = parseInt(updateRes.rows[0].balance, 10);
-        console.log(`[DEDUCT-COINS] User ${userId} deducted ${deductAmount} coins for "${reason || 'işlem'}". New balance: ${newBalance}`);
-
-        res.json({ success: true, balance: newBalance });
+        return res.status(outcome.status).json(outcome.body);
     } catch (err) {
         console.error('[DEDUCT-COINS] Error:', err);
         res.status(500).json({ error: err.message });

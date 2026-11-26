@@ -153,7 +153,21 @@ export const StarterPackProvider = ({ children }) => {
         AsyncStorage.setItem('starter_pack_bubble_visible', 'false').catch(() => {});
     };
 
-    const handleInsufficientCoins = () => {
+    const lastExhaustedEventAtRef = useRef(0);
+
+    const handleInsufficientCoins = (meta = {}) => {
+        const now = Date.now();
+        if (now - lastExhaustedEventAtRef.current > 30000) {
+            lastExhaustedEventAtRef.current = now;
+            try {
+                const { trackFreeMessagesExhausted } = require('../utils/analytics');
+                trackFreeMessagesExhausted({
+                    is_starter_eligible: isEligibleRef.current ? 'true' : 'false',
+                    ...(meta && typeof meta === 'object' ? meta : {})
+                });
+            } catch (_) {}
+        }
+
         if (isEligible) {
             showAlert({
                 title: "Yetersiz Bakiye",

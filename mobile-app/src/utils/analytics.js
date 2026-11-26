@@ -37,16 +37,26 @@ export const trackRegistration = (method = 'unknown') => {
 /**
  * Track coin purchases
  */
-export const trackPurchase = (amount, currency, packageName) => {
+export const trackPurchase = (amount, currency = 'TRY', packageName = '') => {
     try {
         const logger = getLogger();
         if (logger) {
-            logger.logPurchase(Number(amount), currency, { package_name: packageName });
-            console.log(`[META_ADS] Tracked Purchase: ${amount} ${currency} (${packageName})`);
+            const parsedAmount = Number(amount);
+            const safeAmount = Number.isFinite(parsedAmount) && parsedAmount >= 0 ? parsedAmount : 0;
+            const safeCurrency = (currency || 'TRY').toString().toUpperCase();
+            logger.logPurchase(safeAmount, safeCurrency, { package_name: packageName || 'unknown' });
+            console.log(`[META_ADS] Tracked Purchase: ${safeAmount} ${safeCurrency} (${packageName})`);
         }
     } catch (error) {
         console.warn(`[META_ADS] Purchase tracking failed:`, error.message);
     }
+};
+
+/**
+ * Track when a user runs out of coins / free messages
+ */
+export const trackFreeMessagesExhausted = (params = {}) => {
+    trackEvent('FreeMessagesExhausted', params);
 };
 
 /**

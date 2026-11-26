@@ -2,6 +2,7 @@ const db = require('../db');
 const { recordOperatorCommission } = require('../utils/commissionUtils');
 const { sendPushNotification } = require('../utils/notificationUtils');
 const { processAiAutoReply } = require('../services/aiChatService');
+const { isUserPremiumActive } = require('../utils/vipUtils');
 
 function pushPayoutLog(entry) {
     if (!global.payoutLogs) global.payoutLogs = [];
@@ -981,7 +982,7 @@ function initializeSockets(io) {
             const { chatId: rawChatId, receiverId, callerName, callerAvatar, rtcToken, channelName, callId, callType } = data;
             const callerId = socket.user ? socket.user.id : (socket.handshake?.query?.userId || socket.handshake?.auth?.userId);
             const type = callType === 'video' ? 'video' : 'audio';
-            const cost = type === 'video' ? 120 : 50;
+            const cost = type === 'video' ? 300 : 200;
 
             console.log(`[CALL LOG 📞] call_request received: callerId=${callerId}, receiverId=${receiverId}, rawChatId=${rawChatId}, type=${type}`);
 
@@ -1051,18 +1052,26 @@ function initializeSockets(io) {
                     activeCallSessions.delete(chatId.toString());
                 }
 
-                // Balance check
-                const userRes = await db.query('SELECT balance, role, display_name FROM users WHERE id = $1', [callerId]);
+                // Balance & Premium check
+                const userRes = await db.query(
+                    'SELECT balance, role, display_name, gender, is_premium, premium_expire_date, vip_expire_date FROM users WHERE id = $1',
+                    [callerId]
+                );
                 if (userRes.rows.length === 0) throw new Error('Caller not found');
 
-                const balance = parseFloat(userRes.rows[0].balance || 0);
-                const userRole = userRes.rows[0].role;
-                const dbCallerName = userRes.rows[0].display_name || callerName || 'Bir kullanıcı';
+                const callerRow = userRes.rows[0];
+                const balance = parseFloat(callerRow.balance || 0);
+                const userRole = callerRow.role;
+                const dbCallerName = callerRow.display_name || callerName || 'Bir kullanıcı';
                 const isManagement = ['admin', 'super_admin', 'moderator', 'staff', 'operator'].includes(userRole);
-
-                const callerGenderRes = await db.query('SELECT gender FROM users WHERE id = $1', [callerId]);
-                const callerGender = (callerGenderRes.rows[0]?.gender || '').toLowerCase();
+                const callerGender = (callerRow.gender || '').toLowerCase();
                 const isFreeCaller = isManagement || callerGender === 'kadin';
+
+                if (!isFreeCaller && !isUserPremiumActive(callerRow)) {
+                    console.log(`[CALL LOG 👑] Premium required for caller ${callerId}.`);
+                    socket.emit('call_error', { message: 'Sesli ve görüntülü arama yapmak için Premium üye olmanız gerekmektedir.' });
+                    return;
+                }
 
                 if (!isFreeCaller && balance < cost) {
                     console.log(`[CALL LOG 💰] Insufficient balance for caller ${callerId}. Balance: ${balance}, Cost: ${cost}`);

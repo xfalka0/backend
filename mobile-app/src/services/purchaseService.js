@@ -139,7 +139,19 @@ export const PurchaseService = {
         }
     },
 
-    purchaseProductByIdentifier: async (productIdentifier, type = 'INAPP') => {
+    purchaseProductByIdentifier: async (productIdentifier, type = 'INAPP', trackingMeta = null) => {
+        const emitDirectPurchaseEvent = (storeProduct) => {
+            try {
+                const { trackPurchase } = require('../utils/analytics');
+                const price = storeProduct?.price ?? trackingMeta?.price ?? 0;
+                const currency = storeProduct?.currencyCode || trackingMeta?.currency || 'TRY';
+                const packageName = storeProduct?.identifier || productIdentifier;
+                trackPurchase(price, currency, packageName);
+            } catch (trackErr) {
+                console.error('[META_ADS] Direct purchase tracking error:', trackErr);
+            }
+        };
+
         try {
             const purchaseType = type === 'SUBS' ? Purchases.PURCHASE_TYPE.SUBS : Purchases.PURCHASE_TYPE.INAPP;
             console.log(`[Purchases] Fetching product details for ${productIdentifier} (${purchaseType})...`);
@@ -160,12 +172,14 @@ export const PurchaseService = {
                 } else {
                     purchaseResult = await Purchases.purchaseProduct(productIdentifier, null, purchaseType);
                 }
+                emitDirectPurchaseEvent(storeProduct);
                 const txId = extractPurchaseTxId(purchaseResult.transaction, purchaseResult.customerInfo, productIdentifier);
                 return { success: true, customerInfo: purchaseResult.customerInfo, transactionId: txId };
             }
 
             console.log(`[Purchases] getProducts returned empty list, using purchaseProduct fallback for ${productIdentifier}...`);
             const { customerInfo, transaction } = await Purchases.purchaseProduct(productIdentifier, null, purchaseType);
+            emitDirectPurchaseEvent(null);
             const txId = extractPurchaseTxId(transaction, customerInfo, productIdentifier);
             return { success: true, customerInfo, transactionId: txId };
         } catch (e) {

@@ -107,6 +107,32 @@ const logActivity = async (io, userId, actionType, description) => {
     }
 };
 
+// Helper: Log Free Messages / Coins Exhausted (deduplicated per 10-minute window)
+const logFreeMessagesExhausted = async (io, userId, details = {}) => {
+    if (!userId) return null;
+    try {
+        const recent = await db.query(
+            `SELECT 1 FROM activities
+             WHERE user_id = $1
+               AND action_type = 'free_messages_exhausted'
+               AND created_at > NOW() - INTERVAL '10 minutes'
+             LIMIT 1`,
+            [userId]
+        );
+        if (recent.rows.length > 0) {
+            return null;
+        }
+        const channel = details?.channel || 'chat';
+        const balance = details?.balance !== undefined ? details.balance : '?';
+        const required = details?.required !== undefined ? details.required : '?';
+        const description = `Ücretsiz mesaj hakkı / bakiye tükendi (${channel}, Bakiye: ${balance}, Gerekli: ${required}).`;
+        return await logActivity(io, userId, 'free_messages_exhausted', description);
+    } catch (err) {
+        console.error('Log FreeMessagesExhausted Error:', err.message);
+        return null;
+    }
+};
+
 // Add fake social interactions for new users (Favorites and Views)
 const assignFakeInteractions = async (newUserId) => {
     // %100 dogal ve gercek: otomatik sahte takip/goruntuleme kaldirildi
@@ -179,8 +205,7 @@ const MALE_NAME_PATTERN = '\\y(' + MALE_NAMES_ARRAY.join('|') + ')\\y';
 
 module.exports = {
     sanitizeUser,
-    logActivity,
-    assignFakeInteractions,
+    logActivity,    logFreeMessagesExhausted,    assignFakeInteractions,
     triggerAutoEngagement,
     triggerLoginAutoEngagement,
     MALE_NAMES_ARRAY,

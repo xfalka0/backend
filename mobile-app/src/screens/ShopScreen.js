@@ -401,7 +401,11 @@ export default function ShopScreen({ navigation, route }) {
 
             if (pack.isLocal) {
                 // Try purchasing directly via product identifier on RevenueCat / Google Play
-                const directRes = await PurchaseService.purchaseProductByIdentifier(pack.product.identifier);
+                const directRes = await PurchaseService.purchaseProductByIdentifier(
+                    pack.product.identifier,
+                    'INAPP',
+                    { price: pack.product.price, currency: pack.product.currencyCode || 'TRY' }
+                );
                 if (directRes.success) {
                     success = true;
                     transactionId = directRes.transactionId || transactionId;

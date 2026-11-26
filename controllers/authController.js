@@ -39,8 +39,10 @@ exports.googleAuth = async (req, res) => {
         }
         let userResult = await db.query("SELECT * FROM users WHERE LOWER(email) = $1 AND account_status != 'deleted'", [normalizedEmail]);
         let user;
+        let isNewUser = false;
 
         if (userResult.rows.length === 0) {
+            isNewUser = true;
             if (deviceId) {
                 const limitCheck = await db.query('SELECT count(*) FROM users WHERE device_id = $1 AND account_status != \'deleted\'', [deviceId]);
                 if (parseInt(limitCheck.rows[0].count, 10) >= 2) {
@@ -151,7 +153,7 @@ exports.googleAuth = async (req, res) => {
             { expiresIn: '30d' }
         );
 
-        res.json({ user: sanitizeUser(user, req), token });
+        res.status(isNewUser ? 201 : 200).json({ user: sanitizeUser(user, req), token, isNewUser });
     } catch (error) {
         console.error('------- [GOOGLE_AUTH_ERROR_DETAILS] -------');
         console.error('Error Message:', error.message);

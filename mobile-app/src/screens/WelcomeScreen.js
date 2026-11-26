@@ -141,9 +141,14 @@ export default function WelcomeScreen({ navigation }) {
             const res = await axios.post(`${API_URL}/auth/google`, { idToken });
 
             if (res.data.user) {
-                const { user, token } = res.data;
+                const { user, token, isNewUser } = res.data;
                 await AsyncStorage.setItem('token', token);
                 await AsyncStorage.setItem('user', JSON.stringify(user));
+
+                if (isNewUser || res.status === 201) {
+                    const { trackRegistration } = require('../utils/analytics');
+                    trackRegistration('google');
+                }
                 const store = useAppStore.getState();
                 store.setUser(user);
                 store.setServerAuthSync(true);

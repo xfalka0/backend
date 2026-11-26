@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const db = require('../db');
 const { authenticateToken, authorizeRole } = require('../middleware/auth');
-const { sanitizeUser } = require('../utils/helpers');
+const { sanitizeUser, logFreeMessagesExhausted } = require('../utils/helpers');
 const { sendPushNotification } = require('../utils/notificationUtils');
 const { recordOperatorCommission } = require('../utils/commissionUtils');
 const { processAiAutoReply } = require('../services/aiChatService');
@@ -64,6 +64,7 @@ router.post('/send-hi', async (req, res) => {
         const currentBalance = userRes.rows[0].balance;
         if (currentBalance < HI_COST) {
             await db.query('ROLLBACK');
+            logFreeMessagesExhausted(req.app.get('io'), finalSenderId, { channel: 'send_hi_route', balance: currentBalance, required: HI_COST }).catch(() => {});
             return res.status(400).json({ error: 'Yetersiz bakiye.', insufficientFunds: true });
         }
 
@@ -155,6 +156,7 @@ router.post('/:messageId/unlock', authenticateToken, async (req, res) => {
         const userRes = await client.query('SELECT balance FROM users WHERE id = $1', [userId]);
         if (userRes.rows[0].balance < unlockCost) {
             await client.query('ROLLBACK');
+            logFreeMessagesExhausted(req.app.get('io'), userId, { channel: 'unlock_media', balance: userRes.rows[0]?.balance || 0, required: unlockCost }).catch(() => {});
             return res.status(400).json({ error: 'Yetersiz bakiye.', insufficientFunds: true });
         }
 

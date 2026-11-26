@@ -168,6 +168,11 @@ async function sendDirectFcmNotification(userId, fcmToken, { title, body, data, 
 
         if (fcmErrorCode === 'UNREGISTERED' || fcmErrorCode === 'NOT_FOUND') {
             await db.query('UPDATE users SET push_token = NULL WHERE id::text = $1::text', [String(userId)]).catch(() => {});
+            await db.query(
+                `INSERT INTO activities (user_id, action_type, description)
+                 VALUES ($1, 'push_unregistered', $2)`,
+                [userId, `FCM push token geçersiz/silindi (${fcmErrorCode})`]
+            ).catch(() => {});
             console.log(`[NOTIFY] Cleared unregistered FCM token for user ${userId}`);
         }
 
@@ -224,6 +229,11 @@ const sendPushNotification = async (userId, { title, body, data, channelId = 'de
                 console.error(`[NOTIFY ERROR] Expo ticket error for user ${userId}: ${ticket.message}`, ticket.details || '');
                 if (ticket.details?.error === 'DeviceNotRegistered') {
                     await db.query('UPDATE users SET push_token = NULL WHERE id::text = $1::text', [String(userId)]).catch(() => {});
+                    await db.query(
+                        `INSERT INTO activities (user_id, action_type, description)
+                         VALUES ($1, 'push_unregistered', $2)`,
+                        [userId, 'Expo push token geçersiz/silindi (DeviceNotRegistered)']
+                    ).catch(() => {});
                     console.log(`[NOTIFY] Cleared unregistered push_token for user ${userId}`);
                 }
             }

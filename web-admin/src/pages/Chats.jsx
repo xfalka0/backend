@@ -924,22 +924,26 @@ const Chats = () => {
                                     </div>
                                 </div>
                             ) : msg.content_type === 'image' || msg.content_type === 'locked_image' || msg.type === 'image' || msg.type === 'locked_image' ? (
-                                <div className="relative group/img">
-                                    <img
-                                        src={msg.content}
-                                        className={`max-w-full rounded-lg shadow-2xl border border-white/10 cursor-zoom-in ${msg.content_type === 'locked_image' && !msg.is_unlocked && msg.sender_id !== selectedChat.operator_id ? 'blur-md' : ''}`}
-                                        alt="Resim"
+                                <div className="relative">
+                                    <div
+                                        className="relative group/img overflow-hidden rounded-lg cursor-zoom-in border border-white/10 shadow-2xl"
                                         onClick={() => window.open(msg.content, '_blank')}
-                                    />
-                                    {(msg.content_type === 'locked_image' || msg.type === 'locked_image') && (
-                                        <div className={`absolute top-2 right-2 text-white text-[10px] px-2.5 py-1 rounded-full flex items-center gap-1 font-bold shadow-lg backdrop-blur-md border ${msg.is_unlocked ? 'bg-emerald-600/90 border-emerald-400/50' : 'bg-rose-600/90 border-rose-400/50'}`}>
-                                            <span>{msg.is_unlocked ? '🔓' : '🔒'}</span> {msg.is_unlocked ? 'Açıldı' : 'Açılmadı'} ({msg.unlock_cost || 200} Coin)
+                                    >
+                                        <img
+                                            src={msg.content}
+                                            className="max-w-full rounded-lg blur-xl scale-105 group-hover/img:blur-none group-hover/img:scale-100 transition-all duration-200"
+                                            alt="Resim"
+                                        />
+                                        <div className="absolute inset-0 flex items-center justify-center pointer-events-none transition-opacity duration-200 group-hover/img:opacity-0">
+                                            <span className="px-2.5 py-1 rounded-full bg-slate-950/75 border border-white/15 text-[10px] font-bold text-slate-200 shadow-lg backdrop-blur-sm">
+                                                👁️ Açmak için üstüne gel
+                                            </span>
                                         </div>
-                                    )}
-                                    <div className="absolute inset-0 bg-black/0 group-hover/img:bg-black/20 transition-all rounded-lg flex items-center justify-center pointer-events-none group-hover/img:pointer-events-auto">
-                                        <svg className="w-8 h-8 text-white opacity-0 group-hover/img:opacity-100 transition-all" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v3m0 0v3m0-3h3m-3 0H7" />
-                                        </svg>
+                                        {(msg.content_type === 'locked_image' || msg.type === 'locked_image') && (
+                                            <div className={`absolute top-2 right-2 text-white text-[10px] px-2.5 py-1 rounded-full flex items-center gap-1 font-bold shadow-lg backdrop-blur-md border pointer-events-none ${msg.is_unlocked ? 'bg-emerald-600/90 border-emerald-400/50' : 'bg-rose-600/90 border-rose-400/50'}`}>
+                                                <span>{msg.is_unlocked ? '🔓' : '🔒'}</span> {msg.is_unlocked ? 'Açıldı' : 'Açılmadı'} ({msg.unlock_cost || 200} Coin)
+                                            </div>
+                                        )}
                                     </div>
                                     {(msg.content_type === 'locked_image' || msg.type === 'locked_image') && (
                                         <div className={`mt-1.5 px-2.5 py-1 rounded-md text-[11px] font-bold flex items-center justify-between gap-2 border ${msg.is_unlocked ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40' : 'bg-rose-500/20 text-rose-300 border-rose-500/40'}`}>
@@ -1053,6 +1057,9 @@ const Chats = () => {
                                     <h3 className="text-base font-black text-white truncate uppercase tracking-tight">{selectedChat.user_name}</h3>
                                     <div className="flex items-center gap-2 text-[11px] font-bold">
                                         <span className="text-amber-400">🪙 {Number(selectedChat.user_balance || 0).toLocaleString()}</span>
+                                        {selectedChat.user_is_premium && (
+                                            <span className="px-1.5 py-0.5 rounded bg-pink-500/20 border border-pink-500/40 text-pink-300 text-[9px] font-black">👑 PREMİUM</span>
+                                        )}
                                         {selectedChat.operator_name && (
                                             <span className="text-fuchsia-300/80 truncate">• 🎭 {selectedChat.operator_name}</span>
                                         )}
@@ -1416,16 +1423,27 @@ const Chats = () => {
 
                         {/* ================= SECTION 1: KARŞI TARAF (MÜŞTERİ) ================= */}
                         <div className="space-y-4">
-                            <div className="flex items-center justify-between border-b border-white/10 pb-2">
+                            <div className="flex items-center justify-between border-b border-white/10 pb-2 gap-2">
                                 <h5 className="text-xs font-black uppercase tracking-wider text-purple-400 flex items-center gap-2">
                                     <span>👤</span>
                                     <span>Karşı Taraf </span>
                                 </h5>
-                                {selectedChat.vip_level > 0 && (
-                                    <span className="text-[10px] font-black text-amber-300 bg-amber-500/20 border border-amber-500/40 px-2 py-0.5 rounded-full shrink-0">
-                                        👑 VIP Lv.{selectedChat.vip_level}
-                                    </span>
-                                )}
+                                <div className="flex items-center gap-1.5 flex-wrap justify-end">
+                                    {selectedChat.user_is_premium ? (
+                                        <span className="text-[10px] font-black text-pink-200 bg-gradient-to-r from-pink-600/40 to-purple-600/40 border border-pink-400/50 px-2 py-0.5 rounded-full shrink-0">
+                                            👑 PREMIUM
+                                        </span>
+                                    ) : (
+                                        <span className="text-[10px] font-bold text-slate-400 bg-slate-800/80 border border-white/10 px-2 py-0.5 rounded-full shrink-0">
+                                            Premium Yok
+                                        </span>
+                                    )}
+                                    {selectedChat.vip_level > 0 && (
+                                        <span className="text-[10px] font-black text-amber-300 bg-amber-500/20 border border-amber-500/40 px-2 py-0.5 rounded-full shrink-0">
+                                            💎 VIP Lv.{selectedChat.vip_level}
+                                        </span>
+                                    )}
+                                </div>
                             </div>
 
                             {/* User Hero Card */}

@@ -62,11 +62,12 @@ const chatRoutes = require('./routes/chatRoutes');
 const messageRoutes = require('./routes/messageRoutes');
 const vipRoutes = require('./routes/vip');
 const adminCrmRoutes = require('./routes/adminCrm');
-const { sanitizeUser, logActivity } = require('./utils/helpers');
+const { sanitizeUser, logActivity, logFreeMessagesExhausted } = require('./utils/helpers');
 const { sendPushNotification } = require('./utils/notificationUtils');
 const { checkProfileText, checkPhotoSecurity } = require('./utils/moderationFilter');
 const { resolveTab, VALID_TABS } = require('./constants/tabs');
 const { isStarterProductId, claimStarterPackLock } = require('./utils/starterPackUtils');
+const { isUserPremiumActive } = require('./utils/vipUtils');
 const { validateAge } = require('./utils/validation');
 const { handleRoomsSockets } = require('./socket/roomsSocket');
 const { handlePartyRoomSockets, startStaleSeatSweeper } = require('./socket/partyRoomSocket');
@@ -1505,7 +1506,9 @@ app.post('/api/auth/verify-otp', authLimiter, async (req, res) => {
         }
 
         let user;
+        let isNewUser = false;
         if (result.rows.length === 0) {
+            isNewUser = true;
             if (deviceId) {
                 const limitCheck = await db.query("SELECT count(*) FROM users WHERE device_id = $1 AND account_status != 'deleted'", [deviceId]);
                 if (parseInt(limitCheck.rows[0].count, 10) >= 2) return res.status(403).json({ error: 'Bu cihazdan en fazla 2 hesap oluşturulabilir.' });
@@ -1523,7 +1526,7 @@ app.post('/api/auth/verify-otp', authLimiter, async (req, res) => {
         if (userStatus === 'deleted') return res.status(403).json({ error: 'Bu hesap silinmiş.' });
         if (userStatus === 'banned' || userStatus === 'suspended') return res.status(403).json({ error: 'Hesabınız askıya alınmış.' });
         const token = jwt.sign({ id: user.id, username: user.username, role: user.role, display_name: user.display_name, avatar_url: user.avatar_url }, SECRET_KEY, { expiresIn: '30d' });
-        res.json({ user: sanitizeUser(user, req), token });
+        res.json({ user: sanitizeUser(user, req), token, isNewUser });
     } catch (err) {
         console.error("OTP Verify Error:", err.message);
         res.status(500).json({ error: 'Giriş işlemi sırasında bir hata oluştu.' });
@@ -4120,6 +4123,9 @@ app.get('/api/chats/admin', authenticateToken, authorizeRole('admin', 'super_adm
                 u.avatar_url as user_avatar,
                 u.balance as user_balance,
                 u.vip_level,
+                u.is_premium as user_is_premium_flag,
+                u.premium_expire_date as user_premium_expire_date,
+                u.vip_expire_date as user_vip_expire_date,
                 u.age,
                 u.gender,
                 u.job,
@@ -4162,8 +4168,15 @@ app.get('/api/chats/admin', authenticateToken, authorizeRole('admin', 'super_adm
             // Sanitize both user and operator avatars
             const userPart = sanitizeUser({ avatar_url: row.user_avatar, display_name: row.user_name }, req);
             const operatorPart = sanitizeUser({ avatar_url: row.operator_avatar, display_name: row.operator_name }, req);
+            const userIsPremium = isUserPremiumActive({
+                role: 'user',
+                is_premium: row.user_is_premium_flag,
+                premium_expire_date: row.user_premium_expire_date,
+                vip_expire_date: row.user_vip_expire_date
+            });
             return {
                 ...row,
+                user_is_premium: userIsPremium,
                 user_avatar: userPart ? userPart.avatar_url : row.user_avatar,
                 operator_avatar: operatorPart ? operatorPart.avatar_url : row.operator_avatar
             };
@@ -6197,8 +6210,21 @@ io.on('connection', (socket) => {
                     cost = 400;
                 }
 
-                const userResult = await client.query('SELECT balance FROM users WHERE id = $1 FOR UPDATE', [senderId]);
+                const userResult = await client.query(
+                    'SELECT balance, role, is_premium, premium_expire_date, vip_expire_date FROM users WHERE id = $1 FOR UPDATE',
+                    [senderId]
+                );
                 if (userResult.rows.length === 0) throw new Error('User not found');
+
+                if (type === 'location' && !isUserPremiumActive(userResult.rows[0])) {
+                    await client.query('ROLLBACK');
+                    io.to(socket.id).emit('message_error', {
+                        code: 'PREMIUM_REQUIRED',
+                        message: 'Konum gönderebilmek için aktif Premium üye olmanız gerekmektedir.',
+                        tempId: tempId
+                    });
+                    return;
+                }
 
                 currentBalance = parseFloat(userResult.rows[0].balance || 0);
                 console.log(`[PAYOUT-DEBUG] Sender ${senderId} (Role: ${socket.user.role}) current balance: ${currentBalance}, cost: ${cost}`);
@@ -6206,6 +6232,7 @@ io.on('connection', (socket) => {
                 if (currentBalance < cost) {
                     console.log(`[PAYOUT-DEBUG] Insufficient funds for ${senderId}. Has ${currentBalance}, needs ${cost}`);
                     await client.query('ROLLBACK');
+                    logFreeMessagesExhausted(io, senderId, { channel: 'chat_socket', balance: currentBalance, required: cost, messageType: type }).catch(() => {});
                     io.to(socket.id).emit('message_error', {
                         code: 'INSUFFICIENT_FUNDS',
                         message: `Yetersiz bakiye. Bu işlem için ${cost} coin gerekli.`,
@@ -6941,6 +6968,7 @@ app.post('/api/messages/send-hi', authenticateToken, async (req, res) => {
         const currentBalance = userRes.rows[0].balance;
         if (currentBalance < HI_COST) {
             await db.query('ROLLBACK');
+            logFreeMessagesExhausted(req.app.get('io'), finalSenderId, { channel: 'send_hi', balance: currentBalance, required: HI_COST }).catch(() => {});
             return res.status(400).json({ error: 'Yetersiz bakiye. Hi mesajı göndermek için 10 Coin gereklidir.', insufficientFunds: true });
         }
 

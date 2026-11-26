@@ -139,19 +139,18 @@ export default function ChatScreen({ route, navigation }) {
     const [currentUser, setCurrentUser] = useState({ ...(routeUser || {}), ...(contextUser || {}), ...(globalUser || {}) });
     const effectiveUser = { ...(routeUser || {}), ...(contextUser || {}), ...(currentUser || {}), ...(globalUser || {}) };
     const user = effectiveUser;
-    const hasActiveExpire = Boolean(
-        (effectiveUser?.premium_expire_date && new Date(effectiveUser.premium_expire_date) > new Date()) ||
-        (effectiveUser?.vip_expire_date && new Date(effectiveUser.vip_expire_date) > new Date())
-    );
-    const isPremiumMember = Boolean(
+    const expireDateStr = effectiveUser?.premium_expire_date || effectiveUser?.vip_expire_date;
+    const expireDate = expireDateStr ? new Date(expireDateStr) : null;
+    const hasValidExpireDate = Boolean(expireDate && !isNaN(expireDate.getTime()));
+    const hasActiveExpire = Boolean(hasValidExpireDate && expireDate > new Date());
+    const isPremiumFlag = Boolean(
         effectiveUser?.is_premium === true ||
         effectiveUser?.is_premium === 'true' ||
-        effectiveUser?.is_premium === 1 ||
+        effectiveUser?.is_premium === 1
+    );
+    const isPremiumMember = Boolean(
         hasActiveExpire ||
-        effectiveUser?.is_vip === true ||
-        effectiveUser?.is_vip === 'true' ||
-        effectiveUser?.is_vip === 1 ||
-        parseInt(effectiveUser?.vip_level || 0, 10) > 0 ||
+        (isPremiumFlag && !hasValidExpireDate) ||
         isOperator
     );
     const isVipMember = Boolean(
@@ -282,8 +281,11 @@ export default function ChatScreen({ route, navigation }) {
                         latestStoreUser?.is_premium && (!localExpire || new Date(localExpire) > new Date())
                     );
                     const serverExpire = res.data.premium_expire_date || res.data.vip_expire_date;
+                    const serverExpireDate = serverExpire ? new Date(serverExpire) : null;
+                    const hasValidServerExpire = Boolean(serverExpireDate && !isNaN(serverExpireDate.getTime()));
                     const hasServerActivePremium = Boolean(
-                        res.data.is_premium || (serverExpire && new Date(serverExpire) > new Date())
+                        (hasValidServerExpire && serverExpireDate > new Date()) ||
+                        (res.data.is_premium && !hasValidServerExpire)
                     );
 
                     const mergedUser = (!hasServerActivePremium && hasLocalActivePremium)
@@ -705,12 +707,14 @@ export default function ChatScreen({ route, navigation }) {
             return;
         }
 
-        const CALL_COST = 200;
+        const isVideoCall = type === 'video';
+        const CALL_COST = isVideoCall ? 300 : 200;
+        const callLabel = isVideoCall ? 'Görüntülü arama' : 'Sesli arama';
         if (!isOperator) {
             if (currentBalance < CALL_COST) {
                 showAlert({
                     title: 'Coin Yetersiz 🪙',
-                    message: 'Sesli ve görüntülü arama yapmak için coin bakiyeniz yetersizdir.',
+                    message: `${callLabel} yapmak için en az ${CALL_COST} coin gereklidir.`,
                     type: 'warning',
                     showCancel: true,
                     cancelText: 'Vazgeç',
@@ -720,12 +724,13 @@ export default function ChatScreen({ route, navigation }) {
                 return;
             }
 
-            // Bastığı an 200 coin düşülüyor
+            // Bastığı an coin düşülüyor (Görüntülü: 300, Sesli: 200)
             try {
                 const token = await AsyncStorage.getItem('token');
                 const res = await axios.post(`${API_URL}/users/deduct-coins`, {
                     amount: CALL_COST,
-                    reason: `${type === 'video' ? 'Görüntülü' : 'Sesli'} arama`
+                    reason: callLabel,
+                    feature: isVideoCall ? 'video_call' : 'voice_call'
                 }, {
                     headers: { Authorization: `Bearer ${token}` }
                 });
@@ -742,21 +747,39 @@ export default function ChatScreen({ route, navigation }) {
                     setCurrentBalance(prev => Math.max(0, prev - CALL_COST));
                 }
             } catch (err) {
-                const errMsg = typeof err?.response?.data === 'string' ? (err.response?.status === 404 ? 'Servis güncelleniyor' : err.message) : (err?.response?.data?.error || err.message);
-                console.warn('[ChatScreen] Call coin deduction notice:', errMsg);
-                if (err?.response?.data?.error === 'Yetersiz bakiye') {
+                const errData = err?.response?.data;
+                const errMsg = typeof errData === 'string' ? (err.response?.status === 404 ? 'Servis güncelleniyor' : err.message) : (errData?.error || err.message);
+                console.warn('[ChatScreen] Call coin deduction error:', errMsg);
+                if (errData?.requiresPremium) {
+                    showAlert({
+                        title: 'Premium Gerekli 👑',
+                        message: `${callLabel} yapmak için Premium üye olmanız gerekmektedir.`,
+                        type: 'info',
+                        showCancel: true,
+                        cancelText: 'Vazgeç',
+                        confirmText: 'Premium Al',
+                        onConfirm: () => navigation.navigate('Store')
+                    });
+                    return;
+                }
+                if (errData?.insufficientFunds || errData?.error === 'Yetersiz bakiye') {
                     showAlert({
                         title: 'Coin Yetersiz 🪙',
-                        message: 'Sesli ve görüntülü arama yapmak için coin bakiyeniz yetersizdir.',
+                        message: `${callLabel} yapmak için en az ${CALL_COST} coin gereklidir.`,
                         type: 'warning',
                         showCancel: true,
                         cancelText: 'Vazgeç',
                         confirmText: 'Coin Yükle',
-                    onConfirm: () => navigation.navigate('Shop')
+                        onConfirm: () => navigation.navigate('Shop')
                     });
                     return;
                 }
-                setCurrentBalance(prev => Math.max(0, prev - CALL_COST));
+                showAlert({
+                    title: 'Arama Başlatılamadı',
+                    message: 'İşlem doğrulanamadı. Lütfen bağlantınızı kontrol edip tekrar deneyin.',
+                    type: 'error'
+                });
+                return;
             }
         }
 

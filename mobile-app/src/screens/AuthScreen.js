@@ -146,9 +146,14 @@ export default function AuthScreen({ navigation, route }) {
             const res = await axios.post(`${API_URL}${endpoint}`, payload);
 
             if (res.data.user) {
-                const { user, token } = res.data;
+                const { user, token, isNewUser } = res.data;
                 await AsyncStorage.setItem('token', token);
                 await AsyncStorage.setItem('user', JSON.stringify(user));
+
+                if (isRegisterMode || isNewUser) {
+                    const { trackRegistration } = require('../utils/analytics');
+                    trackRegistration('email');
+                }
 
                 // Initialize global ChatProvider context immediately
                 await refreshUser();
@@ -227,9 +232,14 @@ export default function AuthScreen({ navigation, route }) {
             const res = await axios.post(`${API_URL}/auth/verify-otp`, payload);
 
             if (res.data.user) {
-                const { user, token } = res.data;
+                const { user, token, isNewUser } = res.data;
                 await AsyncStorage.setItem('token', token);
                 await AsyncStorage.setItem('user', JSON.stringify(user));
+
+                if (isNewUser) {
+                    const { trackRegistration } = require('../utils/analytics');
+                    trackRegistration(authMethod === 'phone' ? 'otp_phone' : 'otp_email');
+                }
 
                 // Initialize global ChatProvider context immediately
                 await refreshUser();
@@ -265,9 +275,14 @@ export default function AuthScreen({ navigation, route }) {
             const res = await axios.post(`${API_URL}/auth/google`, { idToken, deviceId });
 
             if (res.data.user) {
-                const { user, token } = res.data;
+                const { user, token, isNewUser } = res.data;
                 await AsyncStorage.setItem('token', token);
                 await AsyncStorage.setItem('user', JSON.stringify(user));
+
+                if (isNewUser || res.status === 201) {
+                    const { trackRegistration } = require('../utils/analytics');
+                    trackRegistration('google');
+                }
 
                 // Initialize global ChatProvider context immediately
                 await refreshUser();

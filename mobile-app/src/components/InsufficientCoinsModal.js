@@ -168,7 +168,8 @@ export default function InsufficientCoinsModal({ visible, onClose, onBuyCoins, o
                 const backendRes = await axios.post(`${API_URL}/starter-pack/purchase`, {
                     transactionId: result.transactionId || null
                 }, {
-                    headers: { Authorization: `Bearer ${token}` }
+                    headers: { Authorization: `Bearer ${token}` },
+                    timeout: 12000
                 });
 
                 if (backendRes.data.success) {

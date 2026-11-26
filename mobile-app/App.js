@@ -2,7 +2,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import React, { useEffect } from 'react';
 import { View, StyleSheet, Dimensions, Platform, LogBox, BackHandler } from 'react-native';
 
-import { NavigationContainer } from '@react-navigation/native';
+import { NavigationContainer, CommonActions } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -153,37 +153,76 @@ function AppContent() {
     const { theme } = useTheme();
     const sessionStatus = useAppStore(state => state.sessionStatus);
     const handledInitialNotificationRef = React.useRef(false);
+    const pendingNotificationDataRef = React.useRef(null);
+
+    const resolveNotificationTarget = React.useCallback((data) => {
+        if (!data) return null;
+        const currentUser = useAppStore.getState().user;
+        if (data.chatId) {
+            return {
+                name: 'Chat',
+                params: {
+                    chatId: data.chatId.toString(),
+                    operatorId: data.senderId || data.callerId,
+                    name: data.senderName || 'Sohbet',
+                    avatar_url: data.senderAvatar,
+                    user: currentUser,
+                },
+            };
+        }
+        if (data.type === 'profile_view') {
+            return { name: 'ProfileVisitors' };
+        }
+        if (data.type === 'new_follower') {
+            return { name: 'Favorites' };
+        }
+        return null;
+    }, []);
+
+    const flushNotificationTarget = React.useCallback(() => {
+        const data = pendingNotificationDataRef.current;
+        if (!data) return;
+        if (useAppStore.getState().sessionStatus !== 'verified' || !navigationRef.isReady()) return;
+
+        const rootRoutes = navigationRef.getRootState()?.routes || [];
+        const hasMain = rootRoutes.some((r) => r.name === 'Main');
+        const activeRouteName = rootRoutes[rootRoutes.length - 1]?.name;
+        if (!hasMain || activeRouteName === 'Splash') return;
+
+        const target = resolveNotificationTarget(data);
+        pendingNotificationDataRef.current = null;
+        if (!target) return;
+
+        const currentUser = useAppStore.getState().user;
+        navigationRef.dispatch(
+            CommonActions.reset({
+                index: 1,
+                routes: [
+                    { name: 'Main', params: currentUser ? { user: currentUser } : undefined },
+                    { name: target.name, params: target.params },
+                ],
+            })
+        );
+    }, [resolveNotificationTarget]);
 
     const handleNotificationResponse = React.useCallback((response) => {
         try {
             const data = response?.notification?.request?.content?.data;
             if (!data) return;
             console.log('[PUSH TAP 📲] System notification tapped with payload:', JSON.stringify(data));
-            if (data.chatId) {
-                const currentUser = useAppStore.getState().user;
-                RootNavigation.navigate('Chat', {
-                    chatId: data.chatId.toString(),
-                    operatorId: data.senderId || data.callerId,
-                    name: data.senderName || 'Sohbet',
-                    avatar_url: data.senderAvatar,
-                    user: currentUser
-                });
-            } else if (data.type === 'profile_view') {
-                RootNavigation.navigate('ProfileVisitors');
-            } else if (data.type === 'new_follower') {
-                RootNavigation.navigate('Favorites');
-            }
+            pendingNotificationDataRef.current = data;
+            flushNotificationTarget();
         } catch (err) {
             console.error('[PUSH TAP ❌] Notification tap error:', err.message);
         }
-    }, []);
+    }, [flushNotificationTarget]);
 
     useEffect(() => {
         const subscription = Notifications.addNotificationResponseReceivedListener(handleNotificationResponse);
         return () => subscription.remove();
     }, [handleNotificationResponse]);
 
-    // Handle cold-start notification tap (when app was completely closed) once session is verified
+    // Handle cold-start notification tap only once Splash has transitioned to Main
     useEffect(() => {
         if (sessionStatus !== 'verified' || handledInitialNotificationRef.current) return;
         handledInitialNotificationRef.current = true;
@@ -197,7 +236,7 @@ function AppContent() {
             } catch (err) {
                 console.warn('[PUSH TAP] Initial notification check error:', err.message);
             }
-        }, 350);
+        }, 100);
 
         return () => clearTimeout(timer);
     }, [sessionStatus, handleNotificationResponse]);
@@ -207,7 +246,26 @@ function AppContent() {
             if (needsGenderConfirmation(useAppStore.getState().user)) {
                 return true;
             }
-            if (navigationRef.isReady() && navigationRef.canGoBack()) {
+            if (!navigationRef.isReady()) return false;
+            const rootRoutes = navigationRef.getRootState()?.routes || [];
+            const currentRoute = rootRoutes[rootRoutes.length - 1]?.name;
+            const prevRoute = rootRoutes.length > 1 ? rootRoutes[rootRoutes.length - 2]?.name : null;
+
+            if (currentRoute === 'Splash') {
+                return true;
+            }
+
+            if (
+                currentRoute &&
+                !['Main', 'Auth', 'Welcome', 'Onboarding', 'Splash'].includes(currentRoute) &&
+                (['Splash', 'Auth', 'Welcome'].includes(prevRoute) || !navigationRef.canGoBack())
+            ) {
+                const currentUser = useAppStore.getState().user;
+                RootNavigation.resetTo('Main', currentUser ? { user: currentUser } : undefined);
+                return true;
+            }
+
+            if (navigationRef.canGoBack()) {
                 navigationRef.goBack();
                 return true;
             }
@@ -218,7 +276,14 @@ function AppContent() {
     }, []);
 
     return (
-        <NavigationContainer ref={navigationRef} onReady={flushPendingNavigation}>
+        <NavigationContainer
+            ref={navigationRef}
+            onReady={() => {
+                flushPendingNavigation();
+                flushNotificationTarget();
+            }}
+            onStateChange={flushNotificationTarget}
+        >
             <StarterPackProvider>
                 <StatusBar style="light" translucent backgroundColor="transparent" />
                 <Stack.Navigator

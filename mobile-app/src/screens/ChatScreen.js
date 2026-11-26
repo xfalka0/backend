@@ -207,18 +207,24 @@ export default function ChatScreen({ route, navigation }) {
         };
     }, [scrollToBottom]);
 
+    const handleSafeGoBack = useCallback(() => {
+        const routes = navigation.getState()?.routes || [];
+        const prevRoute = routes.length > 1 ? routes[routes.length - 2]?.name : null;
+        if (navigation.canGoBack() && !['Splash', 'Auth', 'Welcome'].includes(prevRoute)) {
+            navigation.goBack();
+        } else {
+            navigation.reset({
+                index: 0,
+                routes: [{ name: 'Main', params: user ? { user } : undefined }],
+            });
+        }
+        return true;
+    }, [navigation, user]);
+
     useEffect(() => {
-        const onBackPress = () => {
-            if (navigation.canGoBack()) {
-                navigation.goBack();
-            } else {
-                navigation.navigate('Main');
-            }
-            return true;
-        };
-        const backSub = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+        const backSub = BackHandler.addEventListener('hardwareBackPress', handleSafeGoBack);
         return () => backSub.remove();
-    }, [navigation]);
+    }, [handleSafeGoBack]);
 
     // Zustand Role & Locked Image Configuration States
     const [selectedImageUri, setSelectedImageUri] = useState(null);
@@ -938,7 +944,7 @@ export default function ChatScreen({ route, navigation }) {
                 </TouchableOpacity>
             ),
             headerLeft: () => (
-                <TouchableOpacity onPress={() => navigation.goBack()} style={{ marginLeft: 10, padding: 5 }}>
+                <TouchableOpacity onPress={handleSafeGoBack} style={{ marginLeft: 10, padding: 5 }}>
                     <Ionicons name="chevron-back" size={28} color={theme.colors.text} />
                 </TouchableOpacity>
             ),
@@ -2070,7 +2076,7 @@ export default function ChatScreen({ route, navigation }) {
                 headers: { Authorization: `Bearer ${token}` }
             });
             setShowOptions(false);
-            navigation.goBack();
+            handleSafeGoBack();
             showAlert({ title: 'Engellendi', message: 'Kullanıcı engellendi.', type: 'info' });
         } catch (error) {
             console.error(error);
@@ -2963,7 +2969,7 @@ export default function ChatScreen({ route, navigation }) {
                 reportedId={operatorId}
                 onReportSubmitted={() => {
                     setShowReportModal(false);
-                    navigation.goBack();
+                    handleSafeGoBack();
                 }}
             />
 

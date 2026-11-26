@@ -74,9 +74,33 @@ const ProtectedRoute = ({ allowedRoles }) => {
     return <Outlet />;
 };
 
+const useIsMobile = () => {
+    const [isMobile, setIsMobile] = React.useState(() =>
+        typeof window !== 'undefined' ? window.matchMedia('(max-width: 767px)').matches : false
+    );
+
+    React.useEffect(() => {
+        if (typeof window === 'undefined') return undefined;
+        const mq = window.matchMedia('(max-width: 767px)');
+        const onChange = (e) => setIsMobile(e.matches);
+        setIsMobile(mq.matches);
+        mq.addEventListener('change', onChange);
+        return () => mq.removeEventListener('change', onChange);
+    }, []);
+
+    return isMobile;
+};
+
 const Layout = () => {
     const location = useLocation();
+    const { user } = useAuth();
+    const isMobile = useIsMobile();
     const isChatsPage = location.pathname === '/chats' || location.pathname === '/formatted-chats';
+    const canViewChats = ['admin', 'super_admin', 'moderator', 'operator', 'staff'].includes(user?.role);
+
+    if (isMobile && !isChatsPage && canViewChats) {
+        return <Navigate to="/chats" replace />;
+    }
 
     return (
         <div className="bg-[#020617] min-h-screen text-white flex relative overflow-hidden">
@@ -87,13 +111,13 @@ const Layout = () => {
             </div>
 
             <Sidebar />
-            <main className="flex-1 ml-64 min-h-screen flex flex-col relative z-10">
+            <main className="flex-1 ml-0 md:ml-64 min-h-screen flex flex-col relative z-10 w-full min-w-0">
                 {!isChatsPage && <Navbar />}
                 <div className="flex-1 overflow-x-hidden flex flex-col">
                     <Outlet />
                 </div>
                 {!isChatsPage && (
-                    <footer className="p-10 text-center text-[11px] font-black uppercase tracking-[0.3em] text-slate-800 border-t border-white/5">
+                    <footer className="hidden md:block p-10 text-center text-[11px] font-black uppercase tracking-[0.3em] text-slate-800 border-t border-white/5">
                         &copy; 2024 Falka Software Admin Dashboard • Premium Management Console
                     </footer>
                 )}

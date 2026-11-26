@@ -465,7 +465,8 @@ export default function ShopScreen({ navigation, route }) {
                         productId: productId,
                         transactionId: transactionId
                     }, {
-                        headers: { 'Authorization': `Bearer ${token}` }
+                        headers: { 'Authorization': `Bearer ${token}` },
+                        timeout: 12000
                     });
 
                     if (syncRes.data && syncRes.data.balance !== undefined) {
@@ -484,7 +485,8 @@ export default function ShopScreen({ navigation, route }) {
                         await new Promise((r) => setTimeout(r, 1200));
                         try {
                             const balRes = await axios.get(`${API_URL}/users/balance`, {
-                                headers: { 'Authorization': `Bearer ${token}` }
+                                headers: { 'Authorization': `Bearer ${token}` },
+                                timeout: 8000
                             });
                             if (balRes.data && balRes.data.balance !== undefined) {
                                 liveBalance = balRes.data.balance;

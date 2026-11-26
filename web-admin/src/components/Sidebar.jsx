@@ -94,7 +94,7 @@ export default function Sidebar() {
     ];
 
     return (
-        <div className="w-64 bg-slate-950 border-r border-white/5 h-screen fixed top-0 left-0 flex flex-col z-50">
+        <div className="hidden md:flex w-64 bg-slate-950 border-r border-white/5 h-screen fixed top-0 left-0 flex-col z-50">
             {/* Logo */}
             <div className="px-8 py-8 mb-2">
                 <div className="flex items-center gap-3">

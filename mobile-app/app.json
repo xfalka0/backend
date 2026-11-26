@@ -35,7 +35,7 @@
       },
       "package": "com.fivachat.app",
       "googleServicesFile": "./google-services.json",
-      "versionCode": 110,
+      "versionCode": 112,
       "permissions": [
         "android.permission.INTERNET",
         "android.permission.POST_NOTIFICATIONS"

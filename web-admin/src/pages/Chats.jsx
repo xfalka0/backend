@@ -110,9 +110,10 @@ const getSmartHints = (chat) => {
 };
 
 const Chats = () => {
-    const { token, user } = useAuth();
+    const { token, user, logout } = useAuth();
     const [chats, setChats] = useState([]);
     const [selectedChat, setSelectedChat] = useState(null);
+    const [showMobileDetails, setShowMobileDetails] = useState(false);
     const [messages, setMessages] = useState([]);
     const [isTyping, setIsTyping] = useState(false);
     const [input, setInput] = useState('');
@@ -369,9 +370,10 @@ const Chats = () => {
                 });
             } else {
                 setChats(res.data);
-                // Auto-restore last selected chat on page reload
+                // Auto-restore last selected chat on desktop reload only; on phones start on the Sohbetler list
+                const isDesktop = typeof window === 'undefined' || window.innerWidth >= 768;
                 const lastChatId = localStorage.getItem('fiva_admin_last_chat_id');
-                if (lastChatId && !selectedChatIdRef.current) {
+                if (isDesktop && lastChatId && !selectedChatIdRef.current) {
                     const matched = res.data.find(c => c.id.toString() === lastChatId.toString());
                     if (matched) {
                         fetchMessages(matched);
@@ -398,6 +400,7 @@ const Chats = () => {
         if (!isLoadMore) {
             console.log('[Admin] Switching to chat:', chat.id);
             setSelectedChat(chat);
+            setShowMobileDetails(false);
             selectedChatIdRef.current = chat.id;
             localStorage.setItem('fiva_admin_last_chat_id', chat.id);
 
@@ -781,10 +784,10 @@ const Chats = () => {
             <button
                 key={chat.id}
                 onClick={() => fetchMessages(chat)}
-                className={`w-full p-5 flex items-center gap-4 hover:bg-white/5 transition-all text-left border-b border-white/5 relative group ${selectedChat?.id === chat.id ? 'bg-fuchsia-600/10 border-r-4 border-r-fuchsia-600' : ''} ${chat.unread_count > 0 ? 'bg-fuchsia-500/20 shadow-[inset_0_0_30px_rgba(217,70,239,0.4)] border-l-4 border-l-fuchsia-500' : ''}`}
+                className={`w-full px-4 py-4 md:p-5 flex items-center gap-4 hover:bg-white/5 active:bg-white/10 transition-all text-left border-b border-white/5 relative group ${selectedChat?.id === chat.id ? 'bg-fuchsia-600/10 border-r-4 border-r-fuchsia-600' : ''} ${chat.unread_count > 0 ? 'bg-fuchsia-500/20 shadow-[inset_0_0_30px_rgba(217,70,239,0.4)] border-l-4 border-l-fuchsia-500' : ''}`}
             >
-                <div className="relative">
-                    <div className={`w-16 h-16 rounded-2xl overflow-hidden border-2 shadow-2xl transition-all ${chat.unread_count > 0 ? 'border-fuchsia-500 shadow-fuchsia-500/20' : 'border-white/5'}`}>
+                <div className="relative shrink-0">
+                    <div className={`w-[68px] h-[68px] md:w-16 md:h-16 rounded-2xl overflow-hidden border-2 shadow-2xl transition-all ${chat.unread_count > 0 ? 'border-fuchsia-500 shadow-fuchsia-500/20' : 'border-white/5'}`}>
                         {chat.user_avatar ? (
                             <img
                                 src={chat.user_avatar}
@@ -853,7 +856,7 @@ const Chats = () => {
                 key={idx}
                 className={`flex ${msg.sender_id == selectedChat.operator_id || msg.sender_id == user?.id ? 'justify-end' : 'justify-start'}`}
             >
-                <div className={`max-w-[82%] space-y-1`}>
+                <div className={`max-w-[88%] md:max-w-[82%] space-y-1`}>
                     {/* Gift Message Styling */}
                     {(msg.content_type === 'gift' || msg.type === 'gift' || msg.gift_id) ? (
                         <div className="bg-gradient-to-r from-amber-200 via-yellow-300 to-amber-200 text-amber-900 p-0.5 rounded-2xl shadow-lg shadow-amber-500/20 transform hover:scale-[1.02] transition-transform duration-300">
@@ -880,7 +883,7 @@ const Chats = () => {
                         </div>
                     ) : (
                         <div
-                            className={`p-5 rounded-2xl text-[15px] font-medium shadow-sm ${msg.sender_id == selectedChat.operator_id || msg.sender_id == user?.id
+                            className={`p-3.5 md:p-5 rounded-2xl text-[15px] font-medium shadow-sm ${msg.sender_id == selectedChat.operator_id || msg.sender_id == user?.id
                                 ? 'bg-purple-600 text-white rounded-br-none'
                                 : 'bg-slate-800 text-slate-200 rounded-bl-none border border-slate-700'
                                 }`}
@@ -981,16 +984,35 @@ const Chats = () => {
         ));
     }, [messages, selectedChat, user?.id]);
 
+    const totalUnreadChats = React.useMemo(
+        () => chats.reduce((acc, c) => acc + (Number(c.unread_count) > 0 ? 1 : 0), 0),
+        [chats]
+    );
+
     return (
-        <div className="flex h-screen bg-slate-950/50 overflow-hidden">
-            <div className="w-96 border-r border-white/5 flex flex-col bg-slate-900/50">
-                <div className="p-7 border-b border-white/5">
-                    <h2 className="text-2xl font-black text-white">Sohbetler</h2>
+        <div className="flex flex-col md:flex-row h-[100dvh] md:h-screen w-full bg-slate-950/50 overflow-hidden">
+            <div className={`${selectedChat ? 'hidden md:flex' : 'flex'} w-full md:w-96 h-full border-r border-white/5 flex-col bg-slate-900/50`}>
+                <div className="px-5 py-5 md:p-7 border-b border-white/10 md:border-white/5 bg-slate-950/80 md:bg-transparent backdrop-blur-xl flex items-center justify-between gap-3 shrink-0">
+                    <div className="flex items-center gap-3 min-w-0">
+                        <h2 className="text-3xl md:text-2xl font-black tracking-tight text-white">Sohbetler</h2>
+                        {totalUnreadChats > 0 && (
+                            <span className="md:hidden bg-fuchsia-600/25 border border-fuchsia-500/40 text-fuchsia-300 text-xs font-black px-2.5 py-1 rounded-full shrink-0">
+                                {totalUnreadChats} yeni
+                            </span>
+                        )}
+                    </div>
+                    <button
+                        type="button"
+                        onClick={logout}
+                        className="md:hidden px-3 py-2 rounded-xl bg-white/5 hover:bg-rose-500/15 border border-white/10 text-slate-300 hover:text-rose-300 text-xs font-bold transition"
+                    >
+                        Çıkış
+                    </button>
                 </div>
                 <div
                     ref={chatListRef}
                     onScroll={handleChatListScroll}
-                    className="flex-1 overflow-y-auto"
+                    className="flex-1 overflow-y-auto pb-4 md:pb-0"
                     style={{ overflowAnchor: 'none' }}
                 >
                     {memoizedChatList}
@@ -1002,12 +1024,49 @@ const Chats = () => {
                 </div>
             </div>
 
-            <div className="flex-1 flex flex-col bg-slate-950/20">
+            <div className={`${selectedChat && !showMobileDetails ? 'flex' : 'hidden md:flex'} flex-1 min-w-0 w-full h-full flex-col bg-slate-950/20`}>
                 {selectedChat ? (
                     <>
+                        {/* Mobile Chat Header */}
+                        <div className="flex md:hidden items-center justify-between gap-3 px-3.5 py-3 bg-slate-900/95 backdrop-blur-xl border-b border-white/10 shrink-0">
+                            <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                                <button
+                                    type="button"
+                                    onClick={() => { setSelectedChat(null); setShowMobileDetails(false); }}
+                                    className="w-10 h-10 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center text-white active:scale-95 shrink-0"
+                                    aria-label="Sohbetlere Dön"
+                                >
+                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M15 19l-7-7 7-7" />
+                                    </svg>
+                                </button>
+                                <div className="w-11 h-11 rounded-xl overflow-hidden border border-purple-500/40 bg-slate-800 shrink-0 flex items-center justify-center">
+                                    {selectedChat.user_avatar ? (
+                                        <img src={selectedChat.user_avatar} alt={selectedChat.user_name} className="w-full h-full object-cover" />
+                                    ) : (
+                                        <span className="text-white font-black text-base">{selectedChat.user_name?.charAt(0)?.toUpperCase() || '?'}</span>
+                                    )}
+                                </div>
+                                <div className="min-w-0 flex-1">
+                                    <h3 className="text-base font-black text-white truncate uppercase tracking-tight">{selectedChat.user_name}</h3>
+                                    <div className="flex items-center gap-2 text-[11px] font-bold">
+                                        <span className="text-amber-400">🪙 {Number(selectedChat.user_balance || 0).toLocaleString()}</span>
+                                        {selectedChat.operator_name && (
+                                            <span className="text-fuchsia-300/80 truncate">• 🎭 {selectedChat.operator_name}</span>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => setShowMobileDetails(true)}
+                                className="px-3 py-2 rounded-xl bg-purple-600/25 border border-purple-500/40 text-purple-200 text-xs font-black shrink-0 active:scale-95"
+                            >
+                                Profil & Notlar
+                            </button>
+                        </div>
 
-
-                        <div className="flex-1 overflow-y-auto p-6 space-y-5 relative scrollbar-thin scrollbar-thumb-slate-700 scrollbar-track-transparent">
+                        <div className="flex-1 overflow-y-auto p-3.5 md:p-6 space-y-4 md:space-y-5 relative scrollbar-thin scrollbar-thumb-slate-700 scrollbar-track-transparent">
                             {/* Load More Button */}
                             <div className="flex justify-center mb-4">
                                 <button
@@ -1036,7 +1095,7 @@ const Chats = () => {
 
 
 
-                        <form ref={popupsContainerRef} onSubmit={(e) => { e.preventDefault(); }} className="p-6 bg-slate-900/80 border-t border-white/10 flex flex-col gap-2.5 relative">
+                        <form ref={popupsContainerRef} onSubmit={(e) => { e.preventDefault(); }} className="p-3 md:p-6 bg-slate-900/90 md:bg-slate-900/80 border-t border-white/10 flex flex-col gap-2 md:gap-2.5 relative shrink-0">
                             {isLockedImage && (
                                 <div className="flex items-center justify-between px-4 py-2 bg-gradient-to-r from-amber-500/20 via-amber-500/10 to-transparent border border-amber-500/40 rounded-2xl text-xs text-amber-300 font-bold shadow-lg shadow-amber-500/10">
                                     <div className="flex items-center gap-2">
@@ -1061,7 +1120,7 @@ const Chats = () => {
                                     </div>
                                 </div>
                             )}
-                            <div className="flex items-center gap-4 relative">
+                            <div className="flex flex-wrap md:flex-nowrap items-center gap-2 md:gap-4 relative">
                                 {/* Quick Messages */}
                                 <div className="relative shrink-0">
                                     <button
@@ -1069,12 +1128,12 @@ const Chats = () => {
                                         onClick={() => setShowQuickMessages((open) => !open)}
                                         disabled={uploading}
                                         title="Hazır Mesajlar"
-                                        className="p-4 rounded-2xl border border-fuchsia-400/40 bg-fuchsia-500/15 text-fuchsia-300 hover:bg-fuchsia-500/30 active:scale-95 transition disabled:opacity-50 flex items-center justify-center shadow-lg shadow-fuchsia-500/10"
+                                        className="p-3 md:p-4 rounded-xl md:rounded-2xl border border-fuchsia-400/40 bg-fuchsia-500/15 text-fuchsia-300 hover:bg-fuchsia-500/30 active:scale-95 transition disabled:opacity-50 flex items-center justify-center shadow-lg shadow-fuchsia-500/10"
                                     >
-                                        <span className="text-xl font-bold">⚡</span>
+                                        <span className="text-lg md:text-xl font-bold">⚡</span>
                                     </button>
                                     {showQuickMessages && (
-                                        <div className="absolute bottom-[calc(100%+14px)] left-0 z-30 w-84 rounded-2xl border border-fuchsia-400/30 bg-slate-900 p-3 shadow-2xl shadow-fuchsia-950/50">
+                                        <div className="absolute bottom-[calc(100%+12px)] left-0 z-30 w-[calc(100vw-24px)] max-w-[336px] md:w-80 rounded-2xl border border-fuchsia-400/30 bg-slate-900 p-3 shadow-2xl shadow-fuchsia-950/50">
                                             <p className="px-3 py-2 text-xs font-black uppercase tracking-widest text-fuchsia-300 border-b border-white/5 mb-1">Hazır mesajlar</p>
                                             {quickReplies.length > 0 ? quickReplies.map((qr) => (
                                                 <button key={qr.id} type="button" onClick={() => { setShowQuickMessages(false); sendQuickMessage(qr.content); }} className="block w-full rounded-xl px-4 py-3 text-left text-sm font-medium text-slate-200 transition hover:bg-fuchsia-500/20 hover:text-white">
@@ -1107,14 +1166,14 @@ const Chats = () => {
                                         }}
                                         disabled={uploading}
                                         title="Sesli Mesajlar"
-                                        className="p-4 rounded-2xl border border-indigo-400/40 bg-indigo-500/15 text-indigo-300 hover:bg-indigo-500/30 active:scale-95 transition disabled:opacity-50 flex items-center justify-center shadow-lg shadow-indigo-500/10"
+                                        className="p-3 md:p-4 rounded-xl md:rounded-2xl border border-indigo-400/40 bg-indigo-500/15 text-indigo-300 hover:bg-indigo-500/30 active:scale-95 transition disabled:opacity-50 flex items-center justify-center shadow-lg shadow-indigo-500/10"
                                     >
-                                        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <svg className="w-5 h-5 md:w-6 md:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
                                         </svg>
                                     </button>
                                     {showVoiceMessages && (
-                                        <div className="absolute bottom-[calc(100%+14px)] left-0 z-30 w-84 rounded-2xl border border-indigo-400/30 bg-slate-900 p-3 shadow-2xl shadow-indigo-950/50">
+                                        <div className="absolute bottom-[calc(100%+12px)] -left-10 md:left-0 z-30 w-[calc(100vw-24px)] max-w-[336px] md:w-80 rounded-2xl border border-indigo-400/30 bg-slate-900 p-3 shadow-2xl shadow-indigo-950/50">
                                             <p className="px-3 py-2 text-xs font-black uppercase tracking-widest text-indigo-300 border-b border-white/5 mb-1">Sesli mesajlar</p>
                                             {voiceMessages.length > 0 ? voiceMessages.map((vm) => (
                                                 <div key={vm.id} className="flex flex-col gap-2 rounded-xl p-3 border border-white/5 mb-2 hover:bg-indigo-500/10 transition">
@@ -1155,9 +1214,9 @@ const Chats = () => {
                                         onClick={() => setShowAttachmentMenu((open) => !open)}
                                         disabled={uploading}
                                         title="Eklentiler"
-                                        className={`p-4 rounded-2xl border transition-all active:scale-95 flex items-center justify-center shadow-md ${showAttachmentMenu ? 'bg-slate-700 text-white border-slate-600' : 'bg-slate-800/50 border-white/10 text-slate-300 hover:text-white hover:bg-white/10'} ${uploading ? 'animate-pulse opacity-50' : ''}`}
+                                        className={`p-3 md:p-4 rounded-xl md:rounded-2xl border transition-all active:scale-95 flex items-center justify-center shadow-md ${showAttachmentMenu ? 'bg-slate-700 text-white border-slate-600' : 'bg-slate-800/50 border-white/10 text-slate-300 hover:text-white hover:bg-white/10'} ${uploading ? 'animate-pulse opacity-50' : ''}`}
                                     >
-                                        <svg className={`w-6 h-6 transition-transform ${showAttachmentMenu ? 'rotate-45' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <svg className={`w-5 h-5 md:w-6 md:h-6 transition-transform ${showAttachmentMenu ? 'rotate-45' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />
                                         </svg>
                                     </button>
@@ -1172,7 +1231,7 @@ const Chats = () => {
                                     />
 
                                     {showAttachmentMenu && (
-                                        <div className="absolute bottom-[calc(100%+14px)] left-0 z-30 w-72 rounded-2xl border border-white/10 bg-slate-900 p-2 shadow-2xl flex flex-col gap-1">
+                                        <div className="absolute bottom-[calc(100%+12px)] -left-20 md:left-0 z-30 w-[calc(100vw-32px)] max-w-[300px] md:w-72 rounded-2xl border border-white/10 bg-slate-900 p-2 shadow-2xl flex flex-col gap-1">
                                             <button
                                                 type="button"
                                                 onClick={() => { setShowAttachmentMenu(false); sendLocationMessage(); }}
@@ -1274,16 +1333,16 @@ const Chats = () => {
                                     onKeyDown={handleKeyDown}
                                     placeholder={uploading ? "Resim yükleniyor..." : "Mesajınızı yazın..."}
                                     disabled={uploading}
-                                    className="flex-1 bg-slate-800/70 border border-white/15 rounded-2xl px-6 py-4 text-base text-white placeholder:text-slate-400 focus:outline-none focus:border-fuchsia-500 focus:ring-2 focus:ring-fuchsia-500/20 transition-all font-medium disabled:opacity-50 shadow-inner"
+                                    className="min-w-0 flex-1 bg-slate-800/70 border border-white/15 rounded-xl md:rounded-2xl px-4 py-3 md:px-6 md:py-4 text-sm md:text-base text-white placeholder:text-slate-400 focus:outline-none focus:border-fuchsia-500 focus:ring-2 focus:ring-fuchsia-500/20 transition-all font-medium disabled:opacity-50 shadow-inner"
                                 />
 
                                 {/* Buttons */}
-                                <div className="flex items-center gap-2 shrink-0">
+                                <div className="w-full md:w-auto flex items-center gap-2 shrink-0">
                                     <button
                                         type="button"
                                         onClick={() => sendTextMessage(input, false)}
                                         disabled={uploading || input.trim().length < 10}
-                                        className="bg-slate-800 hover:bg-slate-700 text-slate-300 px-5 py-4 rounded-2xl font-bold text-xs uppercase tracking-wider transition-all border border-white/10 active:scale-95 disabled:opacity-50 cursor-pointer"
+                                        className="flex-1 md:flex-none bg-slate-800 hover:bg-slate-700 text-slate-300 px-4 md:px-5 py-3 md:py-4 rounded-xl md:rounded-2xl font-bold text-xs uppercase tracking-wider transition-all border border-white/10 active:scale-95 disabled:opacity-50 cursor-pointer"
                                         title="Sadece Gönder (Enter)"
                                     >
                                         Gönder
@@ -1293,7 +1352,7 @@ const Chats = () => {
                                         type="button"
                                         onClick={() => sendTextMessage(input, true)}
                                         disabled={uploading || input.trim().length < 10}
-                                        className="bg-gradient-to-r from-fuchsia-600 to-purple-600 hover:from-fuchsia-500 hover:to-purple-500 text-white px-6 py-4 rounded-2xl font-black text-xs uppercase tracking-wider transition-all shadow-xl shadow-fuchsia-600/30 active:scale-95 disabled:opacity-50 flex items-center gap-2 shrink-0 cursor-pointer"
+                                        className="flex-[1.5] md:flex-none justify-center bg-gradient-to-r from-fuchsia-600 to-purple-600 hover:from-fuchsia-500 hover:to-purple-500 text-white px-4 md:px-6 py-3 md:py-4 rounded-xl md:rounded-2xl font-black text-xs uppercase tracking-wider transition-all shadow-xl shadow-fuchsia-600/30 active:scale-95 disabled:opacity-50 flex items-center gap-2 shrink-0 cursor-pointer"
                                         title="Gönder & Sonraki Mesaja Geç (Shift + Enter)"
                                     >
                                         <span>Gönder & Sonraki</span>
@@ -1303,8 +1362,8 @@ const Chats = () => {
                             </div>
 
                             {/* Informative Note Below Input */}
-                            <div className="flex items-center justify-between text-[11px] text-slate-400 font-medium px-2 pt-0.5 opacity-80">
-                                <div className="flex items-center gap-3">
+                            <div className="flex items-center justify-end md:justify-between text-[11px] text-slate-400 font-medium px-1 md:px-2 pt-0.5 opacity-80">
+                                <div className="hidden md:flex items-center gap-3">
                                     <span className="flex items-center gap-1.5 bg-slate-800/80 px-2.5 py-1 rounded-lg border border-white/5 text-slate-300">
                                         <span className="text-fuchsia-400 font-bold">⚡ Shift + Enter:</span> Gönder & Sonraki Mesaja Geç
                                     </span>
@@ -1332,7 +1391,23 @@ const Chats = () => {
 
             {/* Right Sidebar - User & Operator Details */}
             {selectedChat && (
-                <div className="w-[410px] border-l border-white/10 bg-slate-900/90 backdrop-blur-xl flex flex-col shrink-0 h-full overflow-hidden shadow-2xl">
+                <div className={`${showMobileDetails ? 'flex fixed inset-0 z-40 w-full' : 'hidden'} md:static md:z-auto md:flex md:w-[410px] border-l border-white/10 bg-slate-950/95 md:bg-slate-900/90 backdrop-blur-xl flex-col shrink-0 h-full overflow-hidden shadow-2xl`}>
+                    {/* Mobile Details Back Bar */}
+                    <div className="flex md:hidden items-center justify-between px-4 py-3 border-b border-white/10 bg-slate-950 shrink-0">
+                        <button
+                            type="button"
+                            onClick={() => setShowMobileDetails(false)}
+                            className="flex items-center gap-2 px-3 py-2 rounded-xl bg-white/5 border border-white/10 text-white text-xs font-black active:scale-95"
+                        >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M15 19l-7-7 7-7" />
+                            </svg>
+                            <span>Sohbete Dön</span>
+                        </button>
+                        <span className="text-xs font-black uppercase tracking-wider text-purple-300 truncate max-w-[180px]">
+                            {selectedChat.user_name}
+                        </span>
+                    </div>
 
                     {/* Scrollable Content Container (Both User and Operator visible directly) */}
                     <div className="flex-1 overflow-y-auto p-4 space-y-6 scrollbar-thin scrollbar-thumb-slate-700 scrollbar-track-transparent">

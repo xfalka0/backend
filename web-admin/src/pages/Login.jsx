@@ -69,8 +69,8 @@ export default function Login() {
             <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-blue-600/5 blur-[150px] rounded-full animate-glow-pulse" />
 
             <div className="relative z-10 w-full max-w-md px-6 animate-in fade-in zoom-in duration-1000">
-                <div className="text-center mb-10">
-                    <h1 className="text-4xl font-sans font-black tracking-[0.2em] text-transparent bg-clip-text bg-gradient-to-r from-white via-slate-500 to-white bg-[length:200%_auto] animate-gradient-text mb-2">
+                <div className="text-center mb-8 sm:mb-10">
+                    <h1 className="text-3xl sm:text-4xl font-sans font-black tracking-[0.2em] text-transparent bg-clip-text bg-gradient-to-r from-white via-slate-500 to-white bg-[length:200%_auto] animate-gradient-text mb-2">
                         Falka Software
                     </h1>
                     <div className="h-[2px] w-12 bg-blue-600 mx-auto rounded-full mb-4" />
@@ -79,7 +79,7 @@ export default function Login() {
                     </p>
                 </div>
 
-                <div className="premium-card p-10 border-blue-500/10 shadow-2xl">
+                <div className="premium-card p-6 sm:p-10 border-blue-500/10 shadow-2xl">
                     <h2 className="text-xl font-bold mb-8 text-center text-white/90">Yönetim Merkezine Bağlan</h2>
 
                     {error && (

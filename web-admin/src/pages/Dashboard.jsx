@@ -139,21 +139,72 @@ export default function Dashboard() {
     const handleCopyWhatsappSummary = () => {
         if (!stats) return;
         const revB = stats.revenueBreakdown || {};
-        const np = stats.newUsers?.periods?.today || {};
+        const usrG = stats.userGrowth || {};
+        const npToday = stats.newUsers?.periods?.today || {};
+        const npWeek = stats.newUsers?.periods?.week || {};
+        const npMonth = stats.newUsers?.periods?.month || {};
         const mon = stats.monetization || {};
         const pulse = stats.livePulse || {};
-        const topPkg = revB.byPackage?.[0]?.name || '-';
-        const todayDateStr = new Date().toLocaleDateString('tr-TR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+        const adQ = stats.adQuality || {};
+        const ts = stats.todaySummary || {};
 
-        const text = [
-            `📊 *Fiora Günlük Özet (${todayDateStr})*`,
-            `💰 Bugünkü Ciro: *₺${(revB.today || 0).toLocaleString('tr-TR')}* (${revB.todayOrders || 0} sipariş | Düne göre ${revB.todayDeltaPct >= 0 ? '+' : ''}${revB.todayDeltaPct || 0}%)`,
-            `👥 Bugünkü Kayıt: *${np.count || 0}* (Düne göre ${np.deltaPct >= 0 ? '+' : ''}${np.deltaPct || 0}%)`,
-            `🎯 Bugünkü Dönüşüm: *%${np.payingRatePct || 0}* (${np.payingCount || 0} ödeyen) | Genel ARPPU: ₺${(mon.arppu || 0).toLocaleString('tr-TR')}`,
-            `🔥 Anlık Aktif Üye: ${pulse.liveOnlineCount || 0} | İlk 30dk Ödeme: %${stats.adQuality?.within30mPctToday || 0}`,
-            `🏆 En Çok Satan Paket: ${topPkg}`
-        ].join('\n');
+        const fmtTl = (v) => `₺${Number(v || 0).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+        const fmtDelta = (v) => `${Number(v || 0) >= 0 ? '+' : ''}${Number(v || 0)}%`;
+        const todayDateStr = new Date().toLocaleDateString('tr-TR', { timeZone: 'Europe/Istanbul', day: '2-digit', month: '2-digit', year: 'numeric' });
+        const onboardPct = (npToday.count || 0) > 0 ? Math.round(((ts.onboarded || 0) / npToday.count) * 100) : 0;
 
+        const todayPkgsStr = Array.isArray(ts.byPackage) && ts.byPackage.length > 0
+            ? ts.byPackage.slice(0, 3).map((p, idx) => `${idx + 1}) ${p.name} (${p.orders} ad / ${fmtTl(p.revenue)})`).join(' • ')
+            : (revB.byPackage?.[0]?.name || '-');
+        const topCitiesStr = Array.isArray(usrG.topCities) && usrG.topCities.length > 0
+            ? usrG.topCities.slice(0, 3).map((c) => `${c.city} (${c.count})`).join(', ')
+            : '-';
+
+        const lines = [
+            `📊 *Fiora Detaylı Gün Sonu Özeti (${todayDateStr})*`,
+            `━━━━━━━━━━━━━━━━━━━━`,
+            ``,
+            `💰 *GELİR & SİPARİŞ*`,
+            `• Bugün Ciro: *${fmtTl(revB.today)} Net* (Brüt: ${fmtTl(revB.grossToday)})`,
+            `• Bugün Sipariş: *${revB.todayOrders || 0} sipariş* / *${ts.buyers || 0} ödeyen kişi* (Tekrar sipariş: ${ts.repeatOrders || 0} | Düne göre: ${fmtDelta(revB.todayDeltaPct)})`,
+            `• Dün Ciro: ${fmtTl(revB.yesterday)} (${revB.yesterdayOrders || 0} sip.) | Bu Hafta: ${fmtTl(revB.week)} | Bu Ay: ${fmtTl(revB.month)}`,
+            `• Toplam Ciro: *${fmtTl(revB.total)} Net* (Brüt: ${fmtTl(revB.grossTotal)} | ${revB.totalOrders || 0} sipariş)`,
+            ``,
+            `📐 *ARPU / ARPPU & BİRİM EKONOMİ*`,
+            `• Bugün ARPU (Kayıt Başı): *${fmtTl(ts.arpuReg)}* | Bugün ARPU (DAU): *${fmtTl(ts.arpuDau)}*`,
+            `• Bugün ARPPU (Ödeyen Başı): *${fmtTl(ts.arppu)}* | Bugün Ort. Sepet (AOV): *${fmtTl(ts.aov)}*`,
+            `• Genel ARPU: *${fmtTl(mon.arpu)}* | Genel ARPPU: *${fmtTl(mon.arppu)}* | Genel AOV: *${fmtTl(mon.avgOrderValue)}*`,
+            `• İlk 30dk Ödeme: *%${adQ.within30mPctToday || 0}* (7g: %${adQ.within30mPct7d || 0}) | Ort. İlk Ödeme: *${adQ.avgMinutesToPay || 0} dk*`,
+            ``,
+            `👥 *KAYIT & DÖNÜŞÜM HUNİSİ*`,
+            `• Bugün Kayıt: *${npToday.count || 0}* (Erkek: ${ts.male || 0} | Kadın: ${ts.female || 0} | Düne göre: ${fmtDelta(npToday.deltaPct)})`,
+            `• Profil Tamamlama (Bugün): *${ts.onboarded || 0}* (%${onboardPct}) | Mesaj Atan: *${ts.messagedUsers || 0}*`,
+            `• Bugün Kayıtlardan Ödeyen: *${npToday.payingCount || 0} kişi* (%${npToday.payingRatePct || 0} dönüşüm | Kohort: ${fmtTl(npToday.revenue)})`,
+            `• Dün Kayıt: ${usrG.yesterday || 0} | Bu Hafta: ${npWeek.count || 0} (%${npWeek.payingRatePct || 0}) | Bu Ay: ${npMonth.count || 0} (%${npMonth.payingRatePct || 0}) | Toplam Üye: *${usrG.total || 0}*`,
+            `• Genel Dönüşüm: *%${mon.conversionRatePct || 0}* (${mon.payingUsers || 0} ödeyen) | Tekrar Alım: *%${mon.repeatRatePct || 0}* (${mon.repeatBuyers || 0} kişi)`,
+            ``,
+            `🔥 *AKTİVİTE & OPERASYON*`,
+            `• Anlık Online: *${pulse.liveOnlineCount || 0}* | Bugün Aktif Üye (DAU): *${ts.dau || 0}*`,
+            `• Bugün Kullanıcı Mesajı: *${ts.messagesCount || 0}* (${ts.messagedUsers || 0} farklı üye)`,
+            `• Coin'i Biten Üye: *${usrG.zeroCoinUsers || 0}* | Aktif Premium: *${usrG.activePremiumUsers || 0}*`,
+            ...(ts.lockedPhotos?.sent > 0
+                ? [`• Kilitli Foto Oto (Bugün): *${ts.lockedPhotos.sent}* gönderim • *${ts.lockedPhotos.unlocked}* açılma • *${ts.lockedPhotos.conversions}* satış`]
+                : []),
+            ...(ts.adSpend > 0
+                ? [`• Reklam Harcaması (Bugün): *${fmtTl(ts.adSpend)}* | ROAS: *${ts.roas || 0}x*`]
+                : []),
+            `• Numara Hook Dönüşümü: *%${pulse.aiHookConversionPct || 0}* (${pulse.aiHooksPaid || 0}/${pulse.aiHooksTotal || 0})`,
+            ``,
+            `🏆 *PAKETLER, ŞEHİR & HEDEF*`,
+            `• Bugün En Çok Satanlar: ${todayPkgsStr}`,
+            `• Genel Lider Paket: ${revB.byPackage?.[0]?.name || '-'} (%${revB.byPackage?.[0]?.sharePct || 0} pay)`,
+            ...(targetsInfo?.target?.revenue_target > 0
+                ? [`• Aylık Ciro Hedefi: *%${Math.round(((revB.month || 0) / targetsInfo.target.revenue_target) * 100)}* (${fmtTl(revB.month)} / ${fmtTl(targetsInfo.target.revenue_target)})`]
+                : []),
+            `• En Yoğun Şehirler: ${topCitiesStr}`,
+        ];
+
+        const text = lines.join('\n');
         navigator.clipboard?.writeText(text);
         setCopiedSummary(true);
         setTimeout(() => setCopiedSummary(false), 2500);

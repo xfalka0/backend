@@ -77,12 +77,11 @@ export default function MissionBoardScreen() {
     const balance = useAppStore(state => state.balance);
     const syncBalanceWithServer = useAppStore(state => state.syncBalanceWithServer);
 
-    // Redirect standard male users/non-operators away from this screen immediately
+    // Redirect standard customers (male & female) away from operator missions screen
     useEffect(() => {
         if (user) {
-            const isFemale = (user.gender || '').toLowerCase() === 'kadin';
             const isOperatorRole = ['operator', 'moderator', 'admin', 'super_admin', 'staff'].includes(user.role);
-            if (!isFemale && !isOperatorRole) {
+            if (!isOperatorRole) {
                 console.log('[MissionBoard] Unauthorized user, redirecting back.');
                 navigation.goBack();
             }

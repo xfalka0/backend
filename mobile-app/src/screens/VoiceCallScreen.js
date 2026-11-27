@@ -91,8 +91,7 @@ export default function VoiceCallScreen({ route, navigation }) {
     const { socket } = useChat();
     const role = useAppStore(state => state.role);
     const currentUser = useAppStore(state => state.user);
-    const myGender = (currentUser?.gender || '').toLowerCase();
-    const isFemale = myGender === 'kadin' || role === 'operator';
+    const isFemale = role === 'operator';
     const isOperator = role === 'operator';
     const activeCallChatId = useAppStore(state => state.activeCallChatId);
 

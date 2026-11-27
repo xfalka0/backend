@@ -36,12 +36,11 @@ const WalletScreen = () => {
     const { showAlert } = useAlert();
     const user = useAppStore(state => state.user);
 
-    // Redirect standard male users/non-operators away from this screen immediately
+    // Redirect standard customers (male & female) away from operator wallet screen
     useEffect(() => {
         if (user) {
-            const isFemale = (user.gender || '').toLowerCase() === 'kadin';
             const isOperatorRole = ['operator', 'moderator', 'admin', 'super_admin', 'staff'].includes(user.role);
-            if (!isFemale && !isOperatorRole) {
+            if (!isOperatorRole) {
                 console.log('[Wallet] Unauthorized user, redirecting back.');
                 navigation.goBack();
             }

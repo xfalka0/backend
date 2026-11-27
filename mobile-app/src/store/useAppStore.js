@@ -96,12 +96,8 @@ export const useAppStore = create((set, get) => ({
             return;
         }
         
-        // Derive role: If gender === 'kadin' or role is operator/staff, they are an operator, unless they are male
-        const isMale = (user.gender || '').toLowerCase() === 'erkek';
-        const isOperator = !isMale && (
-            (user.gender || '').toLowerCase() === 'kadin' || 
-            ['operator', 'staff', 'moderator', 'admin', 'super_admin'].includes(user.role)
-        );
+        // Derive role strictly from user.role so all regular users (male & female) are customers with coin balances
+        const isOperator = ['operator', 'staff', 'moderator', 'admin', 'super_admin'].includes((user.role || '').toLowerCase());
         const role = isOperator ? 'operator' : 'customer';
         
         // Balance: operators use pending_balance/diamonds, customers use coins/balance

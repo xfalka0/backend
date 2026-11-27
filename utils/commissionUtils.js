@@ -36,6 +36,9 @@ async function recordOperatorCommission(client, chatId, senderId, cost, type, ca
         return;
     }
 
+    const MANAGEMENT_ROLES = ['operator', 'staff', 'moderator', 'admin', 'super_admin'];
+    const isOpRole = (u) => MANAGEMENT_ROLES.includes((u?.role || '').toLowerCase());
+
     const femaleUser = chatUsers.find(u => (u.gender || '').toLowerCase() === 'kadin');
     const maleUser = chatUsers.find(u => (u.gender || '').toLowerCase() === 'erkek');
 
@@ -43,12 +46,12 @@ async function recordOperatorCommission(client, chatId, senderId, cost, type, ca
     let customerId;
     let payeeData = null;
 
-    if (femaleUser && maleUser) {
-        // If there is one male and one female, the female is ALWAYS the payee/operator and the male is the customer
+    if (femaleUser && maleUser && isOpRole(femaleUser) && !isOpRole(maleUser)) {
+        // Only treat the female participant as payee/operator if her account actually has an operator/staff role
         actualPayeeId = femaleUser.id;
         customerId = maleUser.id;
         payeeData = femaleUser;
-        console.log(`[COMMISSION-ROLES] Resolved by gender: Payee (Female) = ${actualPayeeId}, Customer (Male) = ${customerId}`);
+        console.log(`[COMMISSION-ROLES] Resolved by operator role+gender: Payee = ${actualPayeeId}, Customer = ${customerId}`);
     } else {
         // Fallback to standard chat roles
         const operatorId = chatOperatorId;
@@ -59,7 +62,7 @@ async function recordOperatorCommission(client, chatId, senderId, cost, type, ca
         if (senderId && senderId !== '00000000-0000-0000-0000-000000000000') {
             const senderRes = await client.query('SELECT role FROM users WHERE id::text = $1::text', [senderId]);
             const senderRole = senderRes.rows.length > 0 ? senderRes.rows[0].role : 'user';
-            isSenderStaff = ['staff', 'moderator', 'admin', 'super_admin', 'operator'].includes(senderRole);
+            isSenderStaff = MANAGEMENT_ROLES.includes((senderRole || '').toLowerCase());
         }
 
         actualPayeeId = operatorId;
@@ -69,13 +72,13 @@ async function recordOperatorCommission(client, chatId, senderId, cost, type, ca
             actualPayeeId = avatarData.managed_by;
         }
 
-        const payeeRes = await client.query('SELECT agency_id, gender, id FROM users WHERE id = $1', [actualPayeeId]);
+        const payeeRes = await client.query('SELECT agency_id, gender, role, id FROM users WHERE id = $1', [actualPayeeId]);
         payeeData = payeeRes.rows.length > 0 ? payeeRes.rows[0] : null;
         customerId = chatUserId;
         console.log(`[COMMISSION-ROLES] Resolved by fallback: Payee = ${actualPayeeId}, Customer = ${customerId}`);
     }
 
-    if (!payeeData) return;
+    if (!payeeData || !isOpRole(payeeData)) return;
     const agencyId = payeeData.agency_id;
     const payeeGender = payeeData.gender;
 
@@ -92,7 +95,7 @@ async function recordOperatorCommission(client, chatId, senderId, cost, type, ca
         }
     }
 
-    // RULE: Bypassed if not female
+    // RULE: Bypassed if not female operator
     if (payeeGender !== 'kadin') {
         console.log(`[COMMISSION-BYPASS] Operator/Payee ${actualPayeeId} bypassed. Gender: ${payeeGender}`);
         return;

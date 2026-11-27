@@ -364,8 +364,8 @@ const ProfileScreen = ({ route }) => {
                         const profileBalance = updatedUser.balance ?? updatedUser.coins ?? updatedUser.hearts;
                         if (profileBalance !== undefined) setBalance(profileBalance);
 
-                        // Fetch operator balance stats if they are operator staff or female
-                        if (['operator', 'moderator', 'admin', 'super_admin', 'staff'].includes(profileData.role) || profileData.gender === 'kadin') {
+                        // Fetch operator balance stats only for operator/staff roles
+                        if (['operator', 'moderator', 'admin', 'super_admin', 'staff'].includes(profileData.role)) {
                             try {
                                 const opRes = await axios.get(`${API_URL}/operators/my/stats`, {
                                     headers: { Authorization: `Bearer ${token}` }
@@ -836,9 +836,8 @@ const ProfileScreen = ({ route }) => {
         }
     ];
 
-    const isMale = (user?.gender || '').toLowerCase() === 'erkek';
-    const isShowWallet = !isMale && (['operator', 'moderator', 'admin', 'super_admin', 'staff'].includes(user?.role) || (user?.gender || '').toLowerCase() === 'kadin');
-    const isFemaleOrOperator = !isMale && (isOperator || (user?.gender || '').toLowerCase() === 'kadin' || ['operator', 'moderator', 'admin', 'super_admin', 'staff'].includes(user?.role));
+    const isShowWallet = ['operator', 'moderator', 'admin', 'super_admin', 'staff'].includes(user?.role);
+    const isFemaleOrOperator = isOperator || ['operator', 'moderator', 'admin', 'super_admin', 'staff'].includes(user?.role);
     const todayCoins = operatorStats ? parseFloat(operatorStats.earned_today || operatorStats.coins_earned || 0) : 0;
 
     return (

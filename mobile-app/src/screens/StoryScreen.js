@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, Image, TouchableOpacity, Dimensions, TextInput, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, Text, StyleSheet, Image, TouchableOpacity, Dimensions, TextInput, KeyboardAvoidingView, Platform, Alert } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import axios from 'axios';
@@ -95,6 +95,14 @@ export default function StoryScreen({ route, navigation }) {
             }
         } catch (error) {
             console.error('[Story] Message error:', error);
+            if (error.response?.data?.insufficientFunds || (error.response?.status === 400 && error.response?.data?.error?.includes('Yetersiz bakiye'))) {
+                Alert.alert('Yetersiz Bakiye', error.response?.data?.error || 'Mesaj göndermek için coin bakiyeniz yetersiz.', [
+                    { text: 'Tamam', style: 'cancel' },
+                    { text: 'Coin Yükle', onPress: () => navigation.navigate('Shop') }
+                ]);
+            } else {
+                Alert.alert('Hata', error.response?.data?.error || 'Mesaj gönderilemedi.');
+            }
         } finally {
             setSending(false);
         }

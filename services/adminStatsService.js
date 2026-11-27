@@ -50,7 +50,10 @@ async function getDashboardOverviewStats(req) {
         newUsersYesterdayListRes,
         newUsersWeekListRes,
         newUsersMonthListRes,
-        dailyReportRes
+        dailyReportRes,
+        todayActivityRes,
+        todayPackagesRes,
+        optionalTodayRes
     ] = await Promise.all([
         // 1. Real payments revenue & conversion summary (Europe/Istanbul day boundaries)
         db.query(`
@@ -400,7 +403,84 @@ async function getDashboardOverviewStats(req) {
             LEFT JOIN u_day_agg ua ON ua.day = d.day
             LEFT JOIN p_day_agg pa ON pa.day = d.day
             ORDER BY d.day DESC
-        `)
+        `),
+
+        // 18. Detailed today activity, DAU, messages, gender & cohort breakdown
+        db.query(`
+            WITH bounds AS (
+                SELECT (date_trunc('day', NOW() AT TIME ZONE '${TR_TZ}') AT TIME ZONE '${TR_TZ}') AS today_start
+            ),
+            user_pay_totals AS (
+                SELECT user_id::text AS uid, COUNT(*)::int AS total_orders
+                FROM payments
+                WHERE COALESCE(status, 'completed') = 'completed'
+                GROUP BY user_id::text
+            )
+            SELECT
+                (SELECT COUNT(DISTINCT p.user_id)::int FROM payments p CROSS JOIN bounds b WHERE COALESCE(p.status, 'completed') = 'completed' AND p.created_at >= b.today_start) AS today_buyers,
+                (SELECT COUNT(*)::int FROM payments p CROSS JOIN bounds b JOIN user_pay_totals upt ON upt.uid = p.user_id::text WHERE COALESCE(p.status, 'completed') = 'completed' AND p.created_at >= b.today_start AND upt.total_orders >= 2) AS today_repeat_orders,
+                (SELECT COUNT(*)::int FROM users u CROSS JOIN bounds b WHERE u.role = 'user' AND COALESCE(u.account_status, 'active') != 'deleted' AND COALESCE(u.last_login_at, u.created_at) >= b.today_start) AS today_dau,
+                (SELECT COUNT(*)::int FROM users u CROSS JOIN bounds b WHERE u.role = 'user' AND COALESCE(u.account_status, 'active') != 'deleted' AND u.created_at >= b.today_start AND u.onboarding_completed = true) AS today_onboarded,
+                (SELECT COUNT(*)::int FROM users u CROSS JOIN bounds b WHERE u.role = 'user' AND COALESCE(u.account_status, 'active') != 'deleted' AND u.created_at >= b.today_start AND LOWER(COALESCE(u.gender, '')) IN ('erkek', 'male')) AS today_male,
+                (SELECT COUNT(*)::int FROM users u CROSS JOIN bounds b WHERE u.role = 'user' AND COALESCE(u.account_status, 'active') != 'deleted' AND u.created_at >= b.today_start AND LOWER(COALESCE(u.gender, '')) IN ('kadin', 'kadın', 'female')) AS today_female,
+                (SELECT COUNT(DISTINCT m.sender_id)::int FROM messages m JOIN users u ON m.sender_id = u.id CROSS JOIN bounds b WHERE u.role = 'user' AND m.created_at >= b.today_start) AS today_messaged_users,
+                (SELECT COUNT(*)::int FROM messages m JOIN users u ON m.sender_id = u.id CROSS JOIN bounds b WHERE u.role = 'user' AND m.created_at >= b.today_start) AS today_messages_count
+        `),
+
+        // 19. Top packages sold today
+        db.query(`
+            WITH bounds AS (
+                SELECT (date_trunc('day', NOW() AT TIME ZONE '${TR_TZ}') AT TIME ZONE '${TR_TZ}') AS today_start
+            )
+            SELECT
+                COALESCE(NULLIF(TRIM(p.package_name_snapshot), ''), cp.name, 'Diğer Paket') AS name,
+                COUNT(*)::int AS orders,
+                COALESCE(SUM(p.amount), 0)::numeric(12,2) AS revenue
+            FROM payments p
+            LEFT JOIN coin_packages cp ON p.package_id = cp.id
+            CROSS JOIN bounds b
+            WHERE COALESCE(p.status, 'completed') = 'completed'
+              AND p.created_at >= b.today_start
+            GROUP BY 1
+            ORDER BY orders DESC, revenue DESC
+            LIMIT 5
+        `),
+
+        // 20. Optional today ad_spends, user_sessions DAU, and locked_photo_deliveries
+        (async () => {
+            const regRes = await db.query(`
+                SELECT
+                    to_regclass('public.ad_spends') IS NOT NULL AS has_ad_spends,
+                    to_regclass('public.user_sessions') IS NOT NULL AS has_sessions,
+                    to_regclass('public.locked_photo_deliveries') IS NOT NULL AS has_locked,
+                    ((NOW() AT TIME ZONE '${TR_TZ}')::date) AS today_tr_date
+            `);
+            const flags = regRes.rows[0] || {};
+            const [adRes, sessRes, lockedRes] = await Promise.all([
+                flags.has_ad_spends
+                    ? db.query('SELECT COALESCE(SUM(amount), 0)::numeric(12,2) AS spend FROM ad_spends WHERE spend_date = $1', [flags.today_tr_date])
+                    : Promise.resolve({ rows: [{ spend: 0 }] }),
+                flags.has_sessions
+                    ? db.query('SELECT COUNT(DISTINCT user_id)::int AS dau FROM user_sessions WHERE session_date = $1', [flags.today_tr_date])
+                    : Promise.resolve({ rows: [{ dau: 0 }] }),
+                flags.has_locked
+                    ? db.query(`
+                        SELECT
+                            COUNT(*) FILTER (WHERE trigger_type != 'manual_test')::int AS sent,
+                            COUNT(*) FILTER (WHERE is_unlocked = true AND trigger_type != 'manual_test')::int AS unlocked,
+                            COUNT(*) FILTER (WHERE converted_to_purchase = true AND trigger_type != 'manual_test')::int AS conversions,
+                            COALESCE(SUM(converted_amount) FILTER (WHERE converted_to_purchase = true AND trigger_type != 'manual_test'), 0)::numeric(12,2) AS revenue
+                        FROM locked_photo_deliveries
+                        WHERE (created_at AT TIME ZONE '${TR_TZ}')::date = $1
+                    `, [flags.today_tr_date])
+                    : Promise.resolve({ rows: [{ sent: 0, unlocked: 0, conversions: 0, revenue: 0 }] }),
+            ]);
+            return {
+                todayAdSpend: Number(parseFloat(adRes.rows[0]?.spend || 0).toFixed(2)),
+                sessionsDau: parseInt(sessRes.rows[0]?.dau || 0, 10),
+                lockedToday: lockedRes.rows[0] || { sent: 0, unlocked: 0, conversions: 0, revenue: 0 },
+            };
+        })()
     ]);
 
     const rev = revSummaryRes.rows[0];
@@ -409,6 +489,15 @@ async function getDashboardOverviewStats(req) {
     const sp = speedRes.rows[0];
     const sig = signalCountsRes.rows[0];
     const np = newUsersPeriodsRes.rows[0];
+    const ta = todayActivityRes.rows[0] || {};
+    const optToday = optionalTodayRes || {};
+
+    const todayNetRevNum = toNet(rev.today_revenue);
+    const todayOrdersNum = parseInt(rev.today_orders || 0, 10);
+    const todayBuyersNum = parseInt(ta.today_buyers || 0, 10);
+    const todayRegNum = parseInt(usr.today_users || 0, 10);
+    const todayDauNum = Math.max(parseInt(ta.today_dau || 0, 10), parseInt(optToday.sessionsDau || 0, 10), activeIds.length);
+    const todayAdSpendNum = Number(optToday.todayAdSpend || 0);
 
     const totalRevNum = parseFloat(rev.total_revenue || 0);
     const netTotalRevNum = toNet(totalRevNum);
@@ -590,6 +679,34 @@ async function getDashboardOverviewStats(req) {
                 week: sanitizeAvatars(newUsersWeekListRes.rows),
                 month: sanitizeAvatars(newUsersMonthListRes.rows)
             }
+        },
+        todaySummary: {
+            buyers: todayBuyersNum,
+            repeatOrders: parseInt(ta.today_repeat_orders || 0, 10),
+            dau: todayDauNum,
+            onboarded: parseInt(ta.today_onboarded || 0, 10),
+            male: parseInt(ta.today_male || 0, 10),
+            female: parseInt(ta.today_female || 0, 10),
+            messagedUsers: parseInt(ta.today_messaged_users || 0, 10),
+            messagesCount: parseInt(ta.today_messages_count || 0, 10),
+            arpuReg: todayRegNum > 0 ? Number((todayNetRevNum / todayRegNum).toFixed(2)) : 0,
+            arpuDau: todayDauNum > 0 ? Number((todayNetRevNum / todayDauNum).toFixed(2)) : 0,
+            arppu: todayBuyersNum > 0 ? Number((todayNetRevNum / todayBuyersNum).toFixed(2)) : 0,
+            aov: todayOrdersNum > 0 ? Number((todayNetRevNum / todayOrdersNum).toFixed(2)) : 0,
+            adSpend: todayAdSpendNum,
+            roas: todayAdSpendNum > 0 ? Number((todayNetRevNum / todayAdSpendNum).toFixed(2)) : null,
+            byPackage: todayPackagesRes.rows.map((r) => ({
+                name: r.name,
+                orders: r.orders,
+                revenue: toNet(r.revenue),
+                grossRevenue: toGross(r.revenue),
+            })),
+            lockedPhotos: {
+                sent: parseInt(optToday.lockedToday?.sent || 0, 10),
+                unlocked: parseInt(optToday.lockedToday?.unlocked || 0, 10),
+                conversions: parseInt(optToday.lockedToday?.conversions || 0, 10),
+                revenue: Number(parseFloat(optToday.lockedToday?.revenue || 0).toFixed(2)),
+            },
         }
     };
 }

@@ -1,8 +1,12 @@
 const db = require('../db');
 const { recordOperatorCommission } = require('../utils/commissionUtils');
 const { sendPushNotification } = require('../utils/notificationUtils');
-const { processAiAutoReply } = require('../services/aiChatService');
+const { processAiAutoReply, scheduleAiNumaraHook } = require('../services/aiChatService');
 const { isUserPremiumActive } = require('../utils/vipUtils');
+const { logFreeMessagesExhausted } = require('../utils/helpers');
+
+const MANAGEMENT_ROLES = ['admin', 'super_admin', 'moderator', 'staff', 'operator'];
+const isManagementRole = (role) => MANAGEMENT_ROLES.includes((role || '').toString().trim().toLowerCase());
 
 function pushPayoutLog(entry) {
     if (!global.payoutLogs) global.payoutLogs = [];
@@ -55,46 +59,42 @@ async function chargeCallMinute(io, chatId, callerId, receiverId) {
         const caller = callerRes.rows[0];
         const receiver = receiverRes.rows[0];
 
-        const callerGender = (caller.gender || '').toLowerCase();
-        const receiverGender = (receiver.gender || '').toLowerCase();
-
-        const callerIsMale = callerGender === 'erkek';
-        const receiverIsMale = receiverGender === 'erkek';
-
-        const isCallerManagement = ['admin', 'super_admin', 'moderator', 'staff', 'operator'].includes(caller.role);
-        const isReceiverManagement = ['admin', 'super_admin', 'moderator', 'staff', 'operator'].includes(receiver.role);
+        const isCallerManagement = isManagementRole(caller.role);
+        const isReceiverManagement = isManagementRole(receiver.role);
 
         const session = activeCallSessions.get(chatId);
         const callType = session ? (session.callType || 'audio') : 'audio';
         const costPerMinute = callType === 'video' ? 120 : 50;
 
         // Rules:
-        // 1. Kadın users NEVER pay coins.
-        // 2. Male calling Female: Only Male caller pays.
-        // 3. Female calling Male: Only Male receiver pays.
-        // 4. Male calling Male: BOTH Male participants pay.
-        const shouldChargeCaller = callerIsMale && !isCallerManagement;
-        const shouldChargeReceiver = receiverIsMale && !isReceiverManagement;
+        // 1. All regular users (male & female) pay coins equally.
+        // 2. Management/operator roles do not pay coins.
+        const shouldChargeCaller = !isCallerManagement;
+        const shouldChargeReceiver = !isReceiverManagement;
 
         let callerBalance = parseFloat(caller.balance || 0);
         let receiverBalance = parseFloat(receiver.balance || 0);
 
         // Pre-check balances
         if (shouldChargeCaller && callerBalance < costPerMinute) {
-            console.log(`[CALL BILLING] Insufficient balance for male caller ${callerId} (${callerBalance} < ${costPerMinute}).`);
+            console.log(`[CALL BILLING] Insufficient balance for caller ${callerId} (${callerBalance} < ${costPerMinute}).`);
             await client.query('ROLLBACK');
             return { success: false, reason: 'insufficient_funds' };
         }
 
         if (shouldChargeReceiver && receiverBalance < costPerMinute) {
-            console.log(`[CALL BILLING] Insufficient balance for male receiver ${receiverId} (${receiverBalance} < ${costPerMinute}).`);
+            console.log(`[CALL BILLING] Insufficient balance for receiver ${receiverId} (${receiverBalance} < ${costPerMinute}).`);
             await client.query('ROLLBACK');
             return { success: false, reason: 'insufficient_funds' };
         }
 
         // Deduct from caller if applicable
         if (shouldChargeCaller) {
-            const updRes = await client.query('UPDATE users SET balance = balance - $2 WHERE id = $1 RETURNING balance', [callerId, costPerMinute]);
+            const updRes = await client.query('UPDATE users SET balance = balance - $2 WHERE id = $1 AND balance >= $2 RETURNING balance', [callerId, costPerMinute]);
+            if (updRes.rows.length === 0) {
+                await client.query('ROLLBACK');
+                return { success: false, reason: 'insufficient_funds' };
+            }
             callerBalance = parseFloat(updRes.rows[0].balance);
             await client.query(
                 'INSERT INTO transactions (user_id, amount, type, description) VALUES ($1, $2, $3, $4)',
@@ -102,12 +102,16 @@ async function chargeCallMinute(io, chatId, callerId, receiverId) {
             );
             io.emit('admin_balance_update', { userId: callerId, newBalance: callerBalance });
             io.to(callerId.toString()).emit('balance_update', { userId: callerId, newBalance: callerBalance });
-            console.log(`[CALL BILLING 💰] Deducted ${costPerMinute} coins from male caller ${callerId}. New balance: ${callerBalance}`);
+            console.log(`[CALL BILLING 💰] Deducted ${costPerMinute} coins from caller ${callerId}. New balance: ${callerBalance}`);
         }
 
         // Deduct from receiver if applicable
         if (shouldChargeReceiver) {
-            const updRes = await client.query('UPDATE users SET balance = balance - $2 WHERE id = $1 RETURNING balance', [receiverId, costPerMinute]);
+            const updRes = await client.query('UPDATE users SET balance = balance - $2 WHERE id = $1 AND balance >= $2 RETURNING balance', [receiverId, costPerMinute]);
+            if (updRes.rows.length === 0) {
+                await client.query('ROLLBACK');
+                return { success: false, reason: 'insufficient_funds' };
+            }
             receiverBalance = parseFloat(updRes.rows[0].balance);
             await client.query(
                 'INSERT INTO transactions (user_id, amount, type, description) VALUES ($1, $2, $3, $4)',
@@ -115,20 +119,20 @@ async function chargeCallMinute(io, chatId, callerId, receiverId) {
             );
             io.emit('admin_balance_update', { userId: receiverId, newBalance: receiverBalance });
             io.to(receiverId.toString()).emit('balance_update', { userId: receiverId, newBalance: receiverBalance });
-            console.log(`[CALL BILLING 💰] Deducted ${costPerMinute} coins from male receiver ${receiverId}. New balance: ${receiverBalance}`);
+            console.log(`[CALL BILLING 💰] Deducted ${costPerMinute} coins from receiver ${receiverId}. New balance: ${receiverBalance}`);
         }
 
         await client.query('COMMIT');
 
-        // Record operator commission if female is an operator
-        if (!callerIsMale || !receiverIsMale) {
+        // Record operator commission only when a customer paid and the other participant is an operator/management
+        if ((shouldChargeCaller || shouldChargeReceiver) && (isCallerManagement || isReceiverManagement)) {
             let commClient;
             try {
                 commClient = await db.pool.connect();
                 await commClient.query('BEGIN');
                 const callId = session ? session.callId : null;
-                const femaleId = !callerIsMale ? callerId : receiverId;
-                const commissionInfo = await recordOperatorCommission(commClient, chatId, femaleId, costPerMinute, callType === 'video' ? 'video' : 'audio', callId);
+                const operatorParticipantId = isReceiverManagement ? receiverId : callerId;
+                const commissionInfo = await recordOperatorCommission(commClient, chatId, operatorParticipantId, costPerMinute, callType === 'video' ? 'video' : 'audio', callId);
                 await commClient.query('COMMIT');
                 if (commissionInfo) {
                     io.to(chatId.toString()).emit('message_updated', commissionInfo);
@@ -202,11 +206,8 @@ async function refundFirstMinute(io, callerId, receiverId, chatId, callId, callT
         const costPerMinute = callType === 'video' ? 120 : 50;
 
         // Verify if caller is free caller (no need to refund if no coin was deducted)
-        const userRes = await client.query('SELECT role, gender FROM users WHERE id = $1', [callerId]);
-        const userRole = userRes.rows[0]?.role;
-        const callerGender = (userRes.rows[0]?.gender || '').toLowerCase();
-        const isManagement = ['admin', 'super_admin', 'moderator', 'staff', 'operator'].includes(userRole);
-        const isFreeCaller = isManagement || callerGender === 'kadin';
+        const userRes = await client.query('SELECT role FROM users WHERE id = $1', [callerId]);
+        const isFreeCaller = isManagementRole(userRes.rows[0]?.role);
 
         if (!isFreeCaller) {
             // Unique Check: verify if refund has already been recorded for this callId
@@ -618,13 +619,14 @@ function initializeSockets(io) {
                 `, [chatId]);
 
                 let isFemaleToFemale = false;
+                let isFemaleSender = false;
                 let chatReceiverId = null;
                 let operatorManagedBy = null;
                 let isSenderUser = false;
 
                 if (chatRes.rows.length > 0) {
                     const chat = chatRes.rows[0];
-                    isSenderUser = senderId.toString() === chat.user_id.toString();
+                    isSenderUser = chat.user_id && senderId.toString() === chat.user_id.toString();
                     const receiverId = isSenderUser ? chat.operator_id : chat.user_id;
                     chatReceiverId = receiverId;
                     operatorManagedBy = chat.operator_managed_by;
@@ -637,7 +639,7 @@ function initializeSockets(io) {
 
                     if (isFemaleSender && isFemaleReceiver) {
                         isFemaleToFemale = true;
-                        console.log(`[SOCKET] Female-to-Female messaging detected in chat ${chatId} (Sender: ${senderId}, Receiver: ${receiverId}). Coins will be charged.`);
+                        console.log(`[SOCKET] Female-to-Female messaging detected in chat ${chatId} (Sender: ${senderId}, Receiver: ${receiverId}).`);
                     }
                 }
 
@@ -647,13 +649,15 @@ function initializeSockets(io) {
                 let giftDetails = null;
 
                 // --- 1. COIN DEDUCTION LOGIC ---
-                const userRole = (socket.user.role || '').toLowerCase();
-                
-                // Strictly role-based management check (staff/operators), disabled if female-to-female conversation
-                const isManagement = !isFemaleToFemale && ['admin', 'super_admin', 'moderator', 'staff', 'operator'].includes(userRole);
-                
-                // Free sender: Management OR any female messaging a male (not female-to-female)
-                const isFreeSender = isManagement || (isFemaleSender && !isFemaleToFemale);
+                const effectiveRole = (
+                    chatRes.rows.length > 0 && isSenderUser
+                        ? (chatRes.rows[0].user_role || socket.user.role || '')
+                        : (socket.user.role || '')
+                ).toLowerCase();
+
+                // Management/operator roles send for free; ALL regular users (male & female) pay coins equally
+                const isManagement = isManagementRole(effectiveRole);
+                const isFreeSender = isManagement;
                 
                 let commissionDataToRunLater = null;
                 
@@ -669,8 +673,10 @@ function initializeSockets(io) {
                         } else {
                             throw new Error('Invalid Gift ID');
                         }
-                    } else if (type === 'image') {
+                    } else if (type === 'image' || type === 'locked_image') {
                         cost = 50;
+                    } else if (type === 'video' || type === 'locked_video') {
+                        cost = 100;
                     } else if (type === 'audio') {
                         cost = 30;
                     } else if (type === 'location') {
@@ -678,29 +684,32 @@ function initializeSockets(io) {
                     }
 
                     const userResult = await client.query(
-                        'SELECT balance, is_vip, is_premium, premium_expire_date, vip_expire_date, vip_level FROM users WHERE id = $1 FOR UPDATE',
+                        'SELECT balance, role, is_vip, is_premium, premium_expire_date, vip_expire_date, vip_level FROM users WHERE id = $1 FOR UPDATE',
                         [senderId]
                     );
                     if (userResult.rows.length === 0) throw new Error('User not found');
                     
                     const uRow = userResult.rows[0];
-                    const hasActiveSub = Boolean(
-                        (uRow.premium_expire_date && new Date(uRow.premium_expire_date) > new Date()) ||
-                        (uRow.vip_expire_date && new Date(uRow.vip_expire_date) > new Date())
-                    );
-                    const hasPremiumOrVip = Boolean(
-                        uRow.is_premium || uRow.is_vip || hasActiveSub || parseInt(uRow.vip_level || 0, 10) > 0
-                    );
-                    if (type === 'location' && !hasPremiumOrVip && !isManagement) {
-                        throw new Error('PREMIUM_REQUIRED');
+                    if (type === 'location' && !isUserPremiumActive(uRow)) {
+                        await client.query('ROLLBACK');
+                        io.to(socket.id).emit('message_error', {
+                            code: 'PREMIUM_REQUIRED',
+                            message: 'Konum gönderebilmek için aktif Premium üye olmanız gerekmektedir.',
+                            tempId: tempId
+                        });
+                        return;
                     }
 
-                    currentBalance = parseFloat(userResult.rows[0].balance || 0);
-                    console.log(`[PAYOUT-DEBUG] Sender ${senderId} (Role: ${socket.user.role}) current balance: ${currentBalance}, cost: ${cost}`);
+                    currentBalance = parseFloat(uRow.balance || 0);
+                    console.log(`[PAYOUT-DEBUG] Sender ${senderId} (Role: ${uRow.role || effectiveRole}) current balance: ${currentBalance}, cost: ${cost}`);
 
                     if (currentBalance < cost) {
                         console.log(`[PAYOUT-DEBUG] Insufficient funds for ${senderId}. Has ${currentBalance}, needs ${cost}`);
                         await client.query('ROLLBACK');
+                        logFreeMessagesExhausted(io, senderId, { channel: 'chat_socket', balance: currentBalance, required: cost, messageType: type })?.catch(() => {});
+                        if (currentBalance <= 0 && chatReceiverId) {
+                            scheduleAiNumaraHook({ io, userId: senderId, chatId, operatorId: chatReceiverId })?.catch(() => {});
+                        }
                         io.to(socket.id).emit('message_error', {
                             code: 'INSUFFICIENT_FUNDS',
                             message: `Yetersiz bakiye. Bu işlem için ${cost} coin gerekli.`,
@@ -710,11 +719,34 @@ function initializeSockets(io) {
                         return;
                     }
 
-                    const updateRes = await client.query('UPDATE users SET balance = balance - $2 WHERE id = $1 RETURNING balance', [senderId, cost]);
+                    const updateRes = await client.query(
+                        'UPDATE users SET balance = balance - $2 WHERE id = $1 AND balance >= $2 RETURNING balance',
+                        [senderId, cost]
+                    );
+                    if (updateRes.rows.length === 0) {
+                        await client.query('ROLLBACK');
+                        io.to(socket.id).emit('message_error', {
+                            code: 'INSUFFICIENT_FUNDS',
+                            message: `Yetersiz bakiye. Bu işlem için ${cost} coin gerekli.`,
+                            required: cost,
+                            tempId: tempId
+                        });
+                        return;
+                    }
                     userBalance = parseFloat(updateRes.rows[0].balance);
                     if (cost > 0) {
-                        const spendType = type === 'gift' ? 'spend_gift' : (type === 'image' ? 'spend_image' : (type === 'audio' ? 'spend_audio' : 'spend_text'));
-                        const spendDesc = type === 'gift' ? `Hediye gönderildi (${giftDetails?.name || 'Hediye'})` : (type === 'image' ? 'Fotoğraf gönderimi' : (type === 'audio' ? 'Sesli mesaj' : 'Sohbet mesajı'));
+                        const spendType = type === 'gift' ? 'spend_gift'
+                            : (type === 'image' || type === 'locked_image') ? 'spend_image'
+                            : (type === 'video' || type === 'locked_video') ? 'spend_video'
+                            : type === 'audio' ? 'spend_audio'
+                            : type === 'location' ? 'spend_location'
+                            : 'spend_text';
+                        const spendDesc = type === 'gift' ? `Hediye gönderildi (${giftDetails?.name || 'Hediye'})`
+                            : (type === 'image' || type === 'locked_image') ? 'Fotoğraf gönderimi'
+                            : (type === 'video' || type === 'locked_video') ? 'Video gönderimi'
+                            : type === 'audio' ? 'Sesli mesaj'
+                            : type === 'location' ? 'Konum gönderimi'
+                            : 'Sohbet mesajı';
                         await client.query(
                             'INSERT INTO transactions (user_id, amount, type, description) VALUES ($1, $2, $3, $4)',
                             [senderId, -Math.round(cost), spendType, spendDesc]
@@ -730,10 +762,8 @@ function initializeSockets(io) {
                         }
                     }
                 } else {
-                    // Free sender (Female to Male or Operator/Staff)
-                    // If it is a female operator/staff responding to a male, she earns commission on response
-                    // BUT only if she is NOT the "user" (customer/male) side of the chat, AND if the last message in chat was from the other user.
-                    if (isFemaleSender && !isFemaleToFemale) {
+                    // Management / Operator sender responding to a customer
+                    if (isFemaleSender && !isFemaleToFemale && !isSenderUser) {
                         let shouldGiveCommission = true;
                         if (chatReceiverId) {
                             const lastMsgRes = await client.query('SELECT sender_id FROM messages WHERE chat_id = $1 ORDER BY created_at DESC LIMIT 1', [chatId]);
@@ -797,6 +827,7 @@ function initializeSockets(io) {
                     }
                 } else if (type === 'gift') lastMsgPreview = '🎁 Hediye Gönderildi';
                 else if (type === 'image') lastMsgPreview = '📷 Resim';
+                else if (type === 'video') lastMsgPreview = '📹 Video';
                 else if (type === 'locked_image') lastMsgPreview = '🔒 Kilitli Resim';
                 else if (type === 'locked_video') lastMsgPreview = '🔒 Kilitli Video';
                 else if (type === 'audio') lastMsgPreview = '🎤 Ses Kaydı';
@@ -871,6 +902,7 @@ function initializeSockets(io) {
                     chat_id: savedMsg.chat_id.toString(), 
                     type: savedMsg.content_type, // Alias for mobile app compatibility
                     tempId,
+                    duration: savedMsg.duration || duration || null,
                     sender_id: finalSenderId.toString(),
                     sender_name: senderName,
                     sender_avatar: senderAvatar,
@@ -928,7 +960,7 @@ function initializeSockets(io) {
                         userId: finalSenderId,
                         operatorId: chatReceiverId,
                         userMessage: content
-                    }).catch(aiErr => console.error('[SOCKET] AI Auto Reply error:', aiErr.message));
+                    })?.catch(aiErr => console.error('[SOCKET] AI Auto Reply error:', aiErr.message));
                 }
 
             } catch (err) {
@@ -1063,9 +1095,8 @@ function initializeSockets(io) {
                 const balance = parseFloat(callerRow.balance || 0);
                 const userRole = callerRow.role;
                 const dbCallerName = callerRow.display_name || callerName || 'Bir kullanıcı';
-                const isManagement = ['admin', 'super_admin', 'moderator', 'staff', 'operator'].includes(userRole);
-                const callerGender = (callerRow.gender || '').toLowerCase();
-                const isFreeCaller = isManagement || callerGender === 'kadin';
+                const isManagement = isManagementRole(userRole);
+                const isFreeCaller = isManagement;
 
                 if (!isFreeCaller && !isUserPremiumActive(callerRow)) {
                     console.log(`[CALL LOG 👑] Premium required for caller ${callerId}.`);

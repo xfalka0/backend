@@ -463,9 +463,10 @@ function handlePartyRoomSockets(io, socket) {
             const recRes = await client.query('SELECT id, gender, role, agency_id FROM users WHERE id::text = $1::text', [targetUserId]);
             if (recRes.rows.length > 0) {
                 const recipient = recRes.rows[0];
+                const isOperatorRecipient = ['operator', 'staff', 'moderator', 'admin', 'super_admin'].includes((recipient.role || '').toLowerCase());
                 const isFemale = (recipient.gender || '').toLowerCase() === 'kadin';
                 
-                if (AGENCY_SYSTEM_ENABLED && isFemale) {
+                if (AGENCY_SYSTEM_ENABLED && isOperatorRecipient && isFemale) {
                     const baseRate = 4.35; // Standard paying conversion rate
                     const earned = Math.round(gift.cost * baseRate * 100) / 100;
 

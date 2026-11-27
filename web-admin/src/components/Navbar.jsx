@@ -1,13 +1,27 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Search, Bell, ChevronDown, Plus, LogOut, User } from 'lucide-react';
+import { Search, Bell, ChevronDown, Plus, LogOut, User, Volume2, VolumeX } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
+import { isPaymentSoundEnabled, setPaymentSoundEnabled, playTrinkkSound } from '../utils/paymentSound';
+import { normalizeRole } from '../utils/mobile';
 
 export default function Navbar() {
     const { user, logout } = useAuth();
     const navigate = useNavigate();
     const [isMenuOpen, setIsMenuOpen] = useState(false);
+    const [soundEnabled, setSoundEnabled] = useState(() => isPaymentSoundEnabled());
     const menuRef = useRef(null);
+    const role = normalizeRole(user?.role);
+    const isAdmin = role === 'admin' || role === 'super_admin';
+
+    const togglePaymentSound = () => {
+        const next = !soundEnabled;
+        setSoundEnabled(next);
+        setPaymentSoundEnabled(next);
+        if (next) {
+            playTrinkkSound();
+        }
+    };
 
     // Close menu when clicking outside
     useEffect(() => {
@@ -61,6 +75,16 @@ export default function Navbar() {
                 </button>
 
                 <div className="flex items-center gap-2 border-r border-white/10 pr-6">
+                    {isAdmin && (
+                        <button
+                            type="button"
+                            onClick={togglePaymentSound}
+                            title={soundEnabled ? 'Ödeme sesi açık (kapatmak için tıklayın)' : 'Ödeme sesi kapalı (açmak için tıklayın)'}
+                            className={`p-3 hover:bg-white/5 rounded-2xl transition-all ${soundEnabled ? 'text-emerald-400 hover:text-emerald-300' : 'text-slate-600 hover:text-slate-400'}`}
+                        >
+                            {soundEnabled ? <Volume2 size={20} /> : <VolumeX size={20} />}
+                        </button>
+                    )}
                     <button className="p-3 hover:bg-white/5 rounded-2xl text-slate-500 hover:text-white transition-all relative">
                         <Bell size={20} />
                         <span className="absolute top-2.5 right-2.5 w-2 h-2 bg-blue-500 border-2 border-[#020617] rounded-full shadow-[0_0_8px_rgba(59,130,246,0.6)]" />

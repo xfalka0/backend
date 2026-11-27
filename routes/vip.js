@@ -256,9 +256,11 @@ router.post('/upgrade-direct', authenticateToken, async (req, res) => {
                 [startDate, baseDate, user.id]
             );
 
+            let insertedPaymentId = null;
+            let auditTxId = null;
             if (!isSync) {
-                const auditTxId = realTxId || `vip_client_${user.id}_${Date.now()}`;
-                await insertPaymentIfAbsent(client, {
+                auditTxId = realTxId || `vip_client_${user.id}_${Date.now()}`;
+                insertedPaymentId = await insertPaymentIfAbsent(client, {
                     userId: user.id,
                     transactionId: auditTxId,
                     amount: parsedMonths,
@@ -271,6 +273,8 @@ router.post('/upgrade-direct', authenticateToken, async (req, res) => {
             return {
                 status: 200,
                 alreadyActive: false,
+                insertedPaymentId,
+                auditTxId,
                 body: {
                     success: true,
                     is_premium: true,
@@ -287,6 +291,17 @@ router.post('/upgrade-direct', authenticateToken, async (req, res) => {
 
         if (!outcome.alreadyActive) {
             logActivity(userId, 'premium_upgrade', `${parsedMonths} aylık premium ${isSync ? 'senkronize edildi' : 'satın aldı'}. (Tx: ${realTxId || transactionId || 'none'})`);
+            const io = req.app.get('io');
+            if (io && outcome.insertedPaymentId) {
+                io.emit('new_payment', {
+                    user_id: userId,
+                    amount: parsedMonths,
+                    transaction_id: outcome.auditTxId,
+                    status: 'completed_vip',
+                    created_at: new Date().toISOString()
+                });
+                io.emit('admin_payment_update', { type: 'vip', user_id: userId });
+            }
         }
 
         res.json(outcome.body);

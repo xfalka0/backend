@@ -34,6 +34,7 @@ import StaffActivity from './pages/StaffActivity';
 import ReferralsPage from './pages/Referrals';
 import AffiliateDashboard from './pages/AffiliateDashboard';
 import SplashIntro from './components/SplashIntro';
+import PaymentSoundListener from './components/PaymentSoundListener';
 import WithdrawalsPage from './pages/Withdrawals';
 import { canAccessChatsRole, normalizeRole, useIsPhone } from './utils/mobile';
 
@@ -103,6 +104,7 @@ const Layout = () => {
             </div>
 
             <Sidebar />
+            <PaymentSoundListener />
             <main className={`flex-1 ${isPhone ? 'ml-0' : 'ml-0 md:ml-64'} min-h-screen flex flex-col relative z-10 w-full min-w-0`}>
                 {!isChatsPage && !isPhone && <Navbar />}
                 <div className="flex-1 overflow-x-hidden flex flex-col">

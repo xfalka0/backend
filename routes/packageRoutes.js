@@ -167,6 +167,15 @@ router.post('/purchase', authenticateToken, async (req, res) => {
         }
         if (io) {
             io.emit('admin_balance_update', { userId, newBalance });
+            io.emit('new_payment', {
+                user_id: userId,
+                amount: price || coinsToAdd,
+                package_id: packageId,
+                transaction_id: transactionId,
+                status: 'completed',
+                created_at: new Date().toISOString()
+            });
+            io.emit('admin_payment_update', { type: 'coins', user_id: userId });
         }
 
         res.json({ success: true, balance: newBalance, hearts: newBalance, vip_level: newVipLevel, coins_added: coinsToAdd });

@@ -34,6 +34,14 @@ const PHONE_DIGITS_REGEX = /(?:\+?\d[\s\-().]*){7,}/;
 const OFF_APP_REGEX = /(whatsapp|whatsap|watsap|\bwp\b|insta|instagram|telegram|snapchat|tiktok|numara|tel\b|telefon)/i;
 const FORBIDDEN_ACCEPT_REGEX = /(kaydet|kayded|eklerim|ekliyorum|ekledim|yazarım|yazıyorum|geçelim|geçeriz|geliyorum|bakarız orada|ordan yaz)/i;
 const FORBIDDEN_HOSTILE_REGEX = /(saçmal|kes ses|bir daha.*yazma|bi daha.*yazma|yazma bana|defol|terbiyesiz|had[sd]siz|engel|igren|iğren|saygısız|uzak dur|rahatsız et|agresif)/i;
+const FORBIDDEN_ON_THE_WAY_REGEX = /(hemen geliyorum|şimdi geliyorum|yola çıktım|yoldayım|çıktım geliyorum|kapıdayım|gelmek üzereyim|az kaldı geliyorum)/i;
+
+const REALISTIC_MEETING_FOLLOWUPS = [
+    'hangi semttesin sen ona göre plan yapalım',
+    'ne tarafta oturuyosun yakın mıyız bakalım',
+    'neresindesin tam olarak önce biraz konuşalım',
+    'hemen öyle mi neresindesin sen önce bi tanışalım'
+];
 
 const PLAYFUL_DEFLECT_RESPONSES = [
     'oo çok iddialısın yakışıklı bakalım gerçekte de bu kadar ateşli misin',
@@ -125,7 +133,10 @@ KESİN KURALLAR:
 6. DIŞ İLETİŞİM:
    - Telefon rakamı yazarsa "numaran görünmüyor sansürlü çıktı alt alta ayrı ayrı yazsana" de.
    - Whatsapp/insta isterse "buradan numaralar gizleniyor tatlım biraz daha burada konuşalım" de.
-7. ASLA TERSLEME VE KOVMA: Karşı taraf ne yazarsa yazsın asla kızma, öğüt verme, tersleme; her zaman cilveli ve meraklandırıcı kal.`;
+7. ASLA TERSLEME VE KOVMA: Karşı taraf ne yazarsa yazsın asla kızma, öğüt verme, tersleme; her zaman cilveli ve meraklandırıcı kal.
+8. BULUŞMA VE KONUM GERÇEKÇİLİĞİ:
+   - Kullanıcı açıkça adres, sokak veya net konum vermeden ASLA "hemen geliyorum", "şimdi geliyorum", "yoldayım", "yola çıktım", "çıktım geliyorum", "kapıdayım" gibi ifadeler kullanma; adresini bilmediğin bir yere gidiyormuş gibi davranmak çok yapay durur.
+   - Kullanıcı "olur", "gel", "buluşalım" gibi olumlu yanıt verirse önce hangi semtte/ilçede olduğunu sor, ne zaman müsait olduğunu öğren ya da biraz daha sohbet edip meraklandır (örn. "hangi semttesin sen ona göre plan yapalım", "ne tarafta oturuyosun yakın mıyız bakalım").`;
 
     try {
         const contents = [];
@@ -206,6 +217,12 @@ KESİN KURALLAR:
             const playful = PLAYFUL_DEFLECT_RESPONSES[Math.floor(Math.random() * PLAYFUL_DEFLECT_RESPONSES.length)];
             console.warn(`[AI_CHAT] Tersleyici/kovucu yanıt engellendi ("${cleaned}") -> "${playful}"`);
             return playful;
+        }
+
+        if (FORBIDDEN_ON_THE_WAY_REGEX.test(cleaned)) {
+            const realistic = REALISTIC_MEETING_FOLLOWUPS[Math.floor(Math.random() * REALISTIC_MEETING_FOLLOWUPS.length)];
+            console.warn(`[AI_CHAT] Gerçekçi olmayan "yoldayım/hemen geliyorum" yanıtı engellendi ("${cleaned}") -> "${realistic}"`);
+            return realistic;
         }
 
         console.log(`[AI_CHAT] Gemini yanıt üretti (finishReason=${candidate?.finishReason || 'unknown'}): "${cleaned}"`);

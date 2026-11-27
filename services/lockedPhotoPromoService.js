@@ -62,7 +62,7 @@ async function ensureLockedPhotoPromoSchema() {
                     offline_end_minute INTEGER NOT NULL DEFAULT 1320,
                     min_inactive_hours INTEGER NOT NULL DEFAULT 2,
                     max_inactive_days INTEGER NOT NULL DEFAULT 7,
-                    numara_cooldown_hours INTEGER NOT NULL DEFAULT 18,
+                    numara_cooldown_hours INTEGER NOT NULL DEFAULT 5,
                     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
                     CONSTRAINT uq_admin_locked_promo_settings_singleton CHECK (id = 1)
                 )
@@ -168,7 +168,7 @@ async function getLockedPromoSettings() {
         offline_end_minute: 1320,
         min_inactive_hours: 2,
         max_inactive_days: 7,
-        numara_cooldown_hours: 18,
+        numara_cooldown_hours: 5,
     };
 }
 
@@ -321,7 +321,7 @@ async function deliverLockedPhotoToUser({
             }
 
             const dailyCap = Math.max(1, Number(settings.daily_cap || 1));
-            const cooldownHours = Math.max(1, Number(settings.numara_cooldown_hours || 18));
+            const cooldownHours = Math.max(1, Number(settings.numara_cooldown_hours || 5));
 
             const claimRes = await db.query(`
                 UPDATE users
@@ -607,7 +607,7 @@ async function runLockedPhotoPromoSweep(io) {
             const minHours = Math.max(1, Number(settings.min_inactive_hours || 2));
             const maxDays = Math.max(1, Number(settings.max_inactive_days || 7));
             const dailyCap = Math.max(1, Number(settings.daily_cap || 1));
-            const cooldownHours = Math.max(1, Number(settings.numara_cooldown_hours || 18));
+            const cooldownHours = Math.max(1, Number(settings.numara_cooldown_hours || 5));
 
             const offlineRes = await db.query(`
                 SELECT u.id

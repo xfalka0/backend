@@ -41,6 +41,7 @@ const { authenticateToken, authorizeRole, SECRET_KEY } = require('./middleware/a
 const { getVipLevel, getVipProgress } = require('./utils/vipUtils');
 const { withTransaction } = require('./utils/dbUtils');
 const { isSyntheticTransactionId, ensurePaymentSchema, verifyRevenueCatPurchase, creditCoinPurchaseAtomic, autoClaimPendingWebhookPurchase } = require('./utils/revenuecatUtils');
+const { saveOptionalRegistrationMeta, touchUserSession } = require('./utils/registrationMeta');
 const { recordOperatorCommission } = require('./utils/commissionUtils');
 const { AGENCY_SYSTEM_ENABLED } = require('./utils/featureFlags');
 const jwt = require('jsonwebtoken');
@@ -1525,10 +1526,14 @@ app.post('/api/auth/verify-otp', authLimiter, async (req, res) => {
             const username = (email ? email.split('@')[0] : `user`) + '_' + Math.floor(1000 + Math.random() * 9000);
             const insertResult = await db.query("INSERT INTO users (username, email, role, balance, avatar_url, display_name, device_id, account_status) VALUES ($1, $2, 'user', 50, 'https://via.placeholder.com/150', $3, $4, 'active') RETURNING *", [username, email ? email.trim().toLowerCase() : null, email ? email.split('@')[0] : username, deviceId || null]);
             user = insertResult.rows[0];
+            await saveOptionalRegistrationMeta(db, user.id, req.body);
+            await touchUserSession(db, user.id, req.body);
             await logActivity(io, user.id, 'register', 'Yeni kullanıcı OTP ile kayıt oldu.');
             io.emit('new_user', sanitizeUser(user, req));
         } else {
             user = result.rows[0];
+            await saveOptionalRegistrationMeta(db, user.id, req.body);
+            await touchUserSession(db, user.id, req.body);
             logActivity(io, user.id, 'login', 'Kullanıcı OTP ile giriş yaptı.');
         }
         const userStatus = user.status || user.account_status || 'active';

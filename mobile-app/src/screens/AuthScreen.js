@@ -16,6 +16,7 @@ import {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Application from 'expo-application';
 import { LinearGradient } from 'expo-linear-gradient';
+import { getRegistrationMeta } from '../utils/attribution';
 import Animated, {
     FadeIn,
     FadeInUp,
@@ -142,7 +143,8 @@ export default function AuthScreen({ navigation, route }) {
             const endpoint = isRegisterMode ? '/auth/register-email' : '/auth/login-email';
             const deviceId = await getDeviceId();
             const normalizedEmail = email.trim().toLowerCase();
-            const payload = { email: normalizedEmail, password, deviceId };
+            const meta = await getRegistrationMeta();
+            const payload = { email: normalizedEmail, password, deviceId, ...meta };
             const res = await axios.post(`${API_URL}${endpoint}`, payload);
 
             if (res.data.user) {
@@ -228,7 +230,8 @@ export default function AuthScreen({ navigation, route }) {
         try {
             const deviceId = await getDeviceId();
             const normalizedEmail = email ? email.trim().toLowerCase() : '';
-            const payload = authMethod === 'email' ? { email: normalizedEmail, otp: verifyCode, deviceId } : { phone, otp: verifyCode, deviceId };
+            const meta = await getRegistrationMeta();
+            const payload = authMethod === 'email' ? { email: normalizedEmail, otp: verifyCode, deviceId, ...meta } : { phone, otp: verifyCode, deviceId, ...meta };
             const res = await axios.post(`${API_URL}/auth/verify-otp`, payload);
 
             if (res.data.user) {
@@ -272,7 +275,8 @@ export default function AuthScreen({ navigation, route }) {
             const deviceId = await getDeviceId();
 
             // Verify with backend
-            const res = await axios.post(`${API_URL}/auth/google`, { idToken, deviceId });
+            const meta = await getRegistrationMeta();
+            const res = await axios.post(`${API_URL}/auth/google`, { idToken, deviceId, ...meta });
 
             if (res.data.user) {
                 const { user, token, isNewUser } = res.data;

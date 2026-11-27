@@ -10,6 +10,7 @@ import {
     Image,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { getRegistrationMeta } from '../utils/attribution';
 import Animated, {
     FadeIn,
     FadeInUp,
@@ -136,9 +137,10 @@ export default function WelcomeScreen({ navigation }) {
             await GoogleSignin.hasPlayServices();
             const userInfo = await GoogleSignin.signIn();
             const idToken = userInfo.idToken;
+            const meta = await getRegistrationMeta();
 
             // Verify with backend
-            const res = await axios.post(`${API_URL}/auth/google`, { idToken });
+            const res = await axios.post(`${API_URL}/auth/google`, { idToken, ...meta });
 
             if (res.data.user) {
                 const { user, token, isNewUser } = res.data;

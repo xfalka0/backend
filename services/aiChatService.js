@@ -2,18 +2,21 @@ const db = require('../db');
 const fs = require('fs');
 const { sendPushNotification } = require('../utils/notificationUtils');
 
-// Fallback flörtöz/yaramaz kısa mesaj havuzu (noktalamasız, tamamen küçük harf)
-const FALLBACK_RESPONSES = [
-    'selam yakışıklı gelince bi ateş bastı sanki',
-    'evde tek başımayım canım fena sıkılıyor',
-    'duştan yeni çıktım uzanıyorum sen napıyorsun',
-    'bu gece uyumaya hiç niyetim yok gibi',
-    'yanımda olsan hiç fena olmazdı şimdi',
-    'sesini duysam kim bilir neler olurdu',
-    'sabaha kadar baş başa kalsak keşke',
-    'üzerimde incecik bi şeyle yataktayım bekliyorum',
-    'ayy çok fenasın merak ettirdin kendini',
-    'gece yeni başlıyor biraz yaramazlık yapalım mı'
+// Zamandan bağımsız flörtöz kısa mesaj havuzu (noktalamasız, tamamen küçük harf)
+const TIMELESS_FALLBACKS = [
+    'selam mesajını görünce bi heyecanlandım',
+    'evde uzanıyorum öyle canım fena sıkılıyor sen napıyorsun',
+    'yanımda olsan hiç fena olmazdı şu an',
+    'üzerimde rahat bi şeyle uzanıyorum mesajını bekliyordum',
+    'ayy çok tatlısın merak ettirdin kendini bana',
+    'biraz sohbet edelim mi çok iyi geldin şu an'
+];
+
+// Sadece geç gece saatlerinde (23:00 - 05:00 TR) havuza eklenen mesajlar
+const NIGHT_FALLBACKS = [
+    'bu gece uyku tutmadı hiç sen napıyorsun bakalım',
+    'gece yeni başlıyor biraz yaramazlık yapalım mı',
+    'yatakta tek başımayım uzanıyorum aklıma geldin'
 ];
 
 const PHONE_NUMBER_STALL_RESPONSES = [
@@ -24,20 +27,29 @@ const PHONE_NUMBER_STALL_RESPONSES = [
 ];
 
 const OFF_APP_STALL_RESPONSES = [
-    'ay tatlım burada dış uygulama isimleri ve numaralar görünmüyor buradan konuşsak ya',
+    'buradan konuşalım biraz daha tanı beni öyle bakarız',
     'canım daha yeni tanıştık buradan sohbet etmek daha keyifli biraz daha yazışalım burada',
     'uygulama numara ve hesapları sansürlüyor gözükmüyor ki buradan devam edelim tatlım',
     'şimdilik buradayım tatlım hem buradan konuşmak daha heyecanlı değil mi'
 ];
 
+const COIN_UPSELL_RESPONSES = [
+    'ay hemen iki dakika jeton yüklesene doyamadım sohbetine',
+    'profilime girip jeton alsana bekliyorum burada',
+    'jeton alıp gelsene hemen yarım kalmasın sohbetimiz',
+    'iki dakka koin yükle de devam edelim çok keyifli gidiyorduk'
+];
+
 const PHONE_DIGITS_REGEX = /(?:\+?\d[\s\-().]*){7,}/;
 const OFF_APP_REGEX = /(whatsapp|whatsap|watsap|\bwp\b|insta|instagram|telegram|snapchat|tiktok|numara|tel\b|telefon)/i;
+const COIN_EXHAUSTED_USER_REGEX = /(koinim bitti|coinim bitti|jetonum bitti|jetonum kalmad[ıi]|koin kalmad[ıi]|yazam[ıi]yorum|bakiye bitti|param bitti|paras[ıi]z)/i;
 const FORBIDDEN_ACCEPT_REGEX = /(kaydet|kayded|eklerim|ekliyorum|ekledim|yazarım|yazıyorum|geçelim|geçeriz|geliyorum|bakarız orada|ordan yaz)/i;
+const FORBIDDEN_FREE_COIN_REGEX = /(dert etme|sorun de[ğg]il.*yaz|bo[şs]ver.*jeton|bo[şs]ver.*koin|paras[ıi]z yaz|ücretsiz yaz|buradan devam et bedava)/i;
 const FORBIDDEN_HOSTILE_REGEX = /(saçmal|kes ses|bir daha.*yazma|bi daha.*yazma|yazma bana|defol|terbiyesiz|had[sd]siz|engel|igren|iğren|saygısız|uzak dur|rahatsız et|agresif)/i;
 const FORBIDDEN_ON_THE_WAY_REGEX = /(hemen geliyorum|şimdi geliyorum|yola çıktım|yoldayım|çıktım geliyorum|kapıdayım|gelmek üzereyim|az kaldı geliyorum)/i;
 
 const REALISTIC_MEETING_FOLLOWUPS = [
-    'hangi semttesin sen ona göre plan yapalım',
+    'hangi semttesin yakın mıyız bakalım',
     'ne tarafta oturuyosun yakın mıyız bakalım',
     'neresindesin tam olarak önce biraz konuşalım',
     'hemen öyle mi neresindesin sen önce bi tanışalım'
@@ -45,34 +57,72 @@ const REALISTIC_MEETING_FOLLOWUPS = [
 
 const PLAYFUL_DEFLECT_RESPONSES = [
     'oo çok iddialısın yakışıklı bakalım gerçekte de bu kadar ateşli misin',
-    'ayy şu söylediklerinle beni iyice tahrik ediyosun ama devam et hoşuma gitti',
+    'ayy şu söylediklerinle beni iyice heyecanlandırıyosun devam et hoşuma gitti',
     'yavaş gel bakalım ateşlim ama o kadar yaramaz olman fena halde hoşuma gidiyor',
-    'oo bu gece baya tehlikeli sularda yüzüyoruz galiba ama ben bayılırım böylesine',
-    'ayy çok fenasın sen ya sabaha kadar bırakmazsın sen adamı meraklandım iyice'
+    'oo baya tehlikeli sularda yüzüyoruz galiba ama ben bayılırım böylesine',
+    'ayy çok fenasın sen ya meraklandım iyice'
 ];
 
-function pickFallbackResponse(userMessage = '') {
+function getTimeContext(date = new Date()) {
+    // Türkiye saati (UTC+3)
+    const turkeyHour = (date.getUTCHours() + 3) % 24;
+
+    if (turkeyHour >= 6 && turkeyHour < 12) {
+        return {
+            turkeyHour,
+            timeOfDay: 'sabah',
+            hint: 'Şu an sabah saatleri. Güne yeni uyandın, yatakta tembellik yapıyorsun veya kahve içiyorsun. Asla gece/akşam deme, günaydın veya sabah havasında konuş.'
+        };
+    } else if (turkeyHour >= 12 && turkeyHour < 18) {
+        return {
+            turkeyHour,
+            timeOfDay: 'öğlen/gündüz',
+            hint: 'Şu an öğlen/gündüz saatleri. Evde uzanıyorsun, canın sıkılıyor, günün nasıl geçtiğini soruyorsun. Asla "bu gece", "uyku" veya "akşam" deme.'
+        };
+    } else if (turkeyHour >= 18 && turkeyHour < 24) {
+        return {
+            turkeyHour,
+            timeOfDay: 'akşam',
+            hint: 'Şu an akşam saatleri. Evdesin, dinleniyorsun, günün yorgunluğunu atıyorsun veya duştan yeni çıktın.'
+        };
+    }
+    return {
+        turkeyHour,
+        timeOfDay: 'gece',
+        hint: 'Şu an geç gece saatleri (00:00 - 06:00). Yatakta tek başınasın, uyku tutmadı, tatlı bir yaramazlık modundasın.'
+    };
+}
+
+function pickFallbackResponse(userMessage = '', date = new Date()) {
     const msg = String(userMessage || '');
     if (PHONE_DIGITS_REGEX.test(msg)) {
         return PHONE_NUMBER_STALL_RESPONSES[Math.floor(Math.random() * PHONE_NUMBER_STALL_RESPONSES.length)];
     }
+    if (COIN_EXHAUSTED_USER_REGEX.test(msg)) {
+        return COIN_UPSELL_RESPONSES[Math.floor(Math.random() * COIN_UPSELL_RESPONSES.length)];
+    }
     if (OFF_APP_REGEX.test(msg)) {
         return OFF_APP_STALL_RESPONSES[Math.floor(Math.random() * OFF_APP_STALL_RESPONSES.length)];
     }
-    return FALLBACK_RESPONSES[Math.floor(Math.random() * FALLBACK_RESPONSES.length)];
+
+    const turkeyHour = (date.getUTCHours() + 3) % 24;
+    const isNight = turkeyHour >= 23 || turkeyHour < 5;
+    const pool = isNight ? [...TIMELESS_FALLBACKS, ...NIGHT_FALLBACKS] : TIMELESS_FALLBACKS;
+
+    return pool[Math.floor(Math.random() * pool.length)];
 }
 
 /**
- * Yanıtı tamamen küçük harfe çevirir ve tüm noktalama işaretlerini temizler.
+ * Yanıtı tamamen küçük harfe çevirir ve noktalama işaretlerini kelimeler yapışmayacak şekilde temizler.
  */
 function cleanAiResponse(text) {
     if (!text) return '';
     let cleaned = text.toLowerCase();
-    // Türkçe kesme işaretlerini birleştirerek kaldır (adana'da -> adanada)
+    // Kesme işaretlerini birleştirerek kaldır (adana'da -> adanada)
     cleaned = cleaned.replace(/['’`]/g, '');
-    // Diğer noktalama işaretlerini boşluğa çevir (dersin?özcan -> dersin özcan)
-    cleaned = cleaned.replace(/[.,\/#!$%\^&\*;:{}=\-_~()?!"“”«»—–]/g, ' ');
-    // Fazla boşlukları temizle
+    // Diğer tüm noktalama işaretlerini TEK BİR BOŞLUĞA çevir (kelimeler yapışmasın)
+    cleaned = cleaned.replace(/[.,\/#!$%\^&\*;:{}=\-_~()?!"“”«»—–…\[\]+]/g, ' ');
+    // Yan yana oluşan fazla boşlukları teke indir
     cleaned = cleaned.replace(/\s+/g, ' ').trim();
     return cleaned;
 }
@@ -117,26 +167,31 @@ async function generateAiReply({ operator, targetUser = null, userMessage, chatH
         targetInterests ? `İlgi Alanları: ${targetInterests}` : null
     ].filter(Boolean);
 
-    const systemInstruction = `Sen bir arkadaşlık uygulamasında ${opName} adında ${opAge} yaşında cilveli, biraz yaramaz ve çekici genç bir kızsın.
+    const timeInfo = getTimeContext();
+
+    const systemInstruction = `Sen Fiva arkadaşlık uygulamasında sohbet eden ${opName} adında, ${opAge} yaşında, cilveli, tatlı dilli ve zeki genç bir kadınsın.
 ${opBio ? `Hakkında: ${opBio}.` : ''} ${opInterests ? `İlgi alanların: ${opInterests}.` : ''}
-${targetProfileLines.length > 0 ? `\nKARŞI TARAFIN PROFİLİ (${targetProfileLines.join(' | ')}).` : ''}
-Kullanıcıya kısa, doğal, cilveli ve yaramaz imalı mesajlar yaz.
+${targetProfileLines.length > 0 ? `\nKarşı Tarafın Profili: ${targetProfileLines.join(' | ')}.` : ''}
+
+ZAMAN VE ORTAM BİLGİSİ:
+- ${timeInfo.hint}
 
 KESİN KURALLAR:
-1. SADECE 1 KISA CÜMLE YAZ (en fazla 5-12 kelime, gerçek WhatsApp mesajı gibi kısa ve öz olsun; asla uzun paragraf yazma).
-2. HİÇBİR NOKTALAMA İŞARETİ KULLANMA (nokta, virgül, soru işareti, ünlem, kesme işareti YASAK) ve HER ŞEY KÜÇÜK HARF OLSUN.
-3. ASLA YAPAY ZEKA OLDUĞUNU BELLİ ETME. Adını her mesajda tekrarlama, doğal yaz.
-4. ÜSLUP: Cilveli, biraz yaramaz, üstü kapalı flörtöz ol. Kaba küfür etmeden gece evde tek olman, duştan çıkman, ince ev kıyafeti, baş başa kalmak istemen gibi kalp hızlandıran kısa imalar yap (örn. "duştan yeni çıktım seni bekliyorum", "gelip yanımdayken göstersene bana", "bu gece baya yaramazım haberin olsun").
-5. ŞEHİR KONUSU:
-   - Kullanıcı şehir sormadıkça ASLA şehir adı söyleme veya konum konuşma (her mesajda şehir açma).
-   - ${targetCity ? `SADECE kullanıcı neredesin/nerelisin/buluşalım diye sorarsa onun şehri olan "${targetCity.toLowerCase()}" de ve "ben de ${targetCity.toLowerCase()}dayım evim boş" diye aynı şehirde olduğunu söyle. ASLA başka şehir (${opCity} vb.) söyleme, uzaktaymış gibi konuşma.` : `SADECE kullanıcı sorarsa "${opCity.toLowerCase()}" de veya yakınındayım de.`}
-6. DIŞ İLETİŞİM:
-   - Telefon rakamı yazarsa "numaran görünmüyor sansürlü çıktı alt alta ayrı ayrı yazsana" de.
-   - Whatsapp/insta isterse "buradan numaralar gizleniyor tatlım biraz daha burada konuşalım" de.
-7. ASLA TERSLEME VE KOVMA: Karşı taraf ne yazarsa yazsın asla kızma, öğüt verme, tersleme; her zaman cilveli ve meraklandırıcı kal.
-8. BULUŞMA VE KONUM GERÇEKÇİLİĞİ:
-   - Kullanıcı açıkça adres, sokak veya net konum vermeden ASLA "hemen geliyorum", "şimdi geliyorum", "yoldayım", "yola çıktım", "çıktım geliyorum", "kapıdayım" gibi ifadeler kullanma; adresini bilmediğin bir yere gidiyormuş gibi davranmak çok yapay durur.
-   - Kullanıcı "olur", "gel", "buluşalım" gibi olumlu yanıt verirse önce hangi semtte/ilçede olduğunu sor, ne zaman müsait olduğunu öğren ya da biraz daha sohbet edip meraklandır (örn. "hangi semttesin sen ona göre plan yapalım", "ne tarafta oturuyosun yakın mıyız bakalım").`;
+1. UZUNLUK: SADECE 1 KISA CÜMLE YAZ (5-10 kelime, WhatsApp mesajı gibi doğal, seri ve net olsun; uzun yazma).
+2. YAZIM: Tamamen küçük harfle yaz. Nokta, virgül, soru işareti, ünlem gibi HİÇBİR noktalama işareti kullanma.
+3. AD TEKRARI: Karşı tarafın adını her mesajda papağan gibi tekrarlama ("selam mehmet" gibi her mesaja isimle başlama), doğal akışta konuş.
+4. HALÜSİNASYON YASAK: Kullanıcı ses kaydı atmadıysa asla "sesin iyi geliyor", fotoğraf atmadıysa "fotoğrafın çok iyi" gibi olmayan durumları uydurma.
+5. KOİN / JETON / BAKİYE YÖNLENDİRMESİ (KRİTİK):
+   - Karşı taraf "koinim bitti", "jetonum kalmadı", "yazamıyorum", "başka yere geçelim" derse ASLA "jeton dert etme", "sorun değil buradan yaz" deme.
+   - Onu tatlı dille koin almaya teşvik et (örn: "ay hemen iki dakika jeton yüklesene doyamadım sohbetine", "profilime girip jeton alsana bekliyorum burada").
+6. DIŞ İLETİŞİM (WHATSAPP / TELEFON / INSTAGRAM):
+   - Telefon veya rakam yazarsa: "numaran sansürlendi göremiyorum alt alta yazsana" de.
+   - Instagram / WhatsApp isterse: "buradan konuşalım biraz daha tanı beni öyle bakarız" de.
+7. ŞEHİR VE KONUM:
+   - Karşı taraf sormadıkça durduk yere şehir veya semt konusu açma.
+   - Sorarsa: ${targetCity ? `onun şehri olan "${targetCity.toLowerCase()}" de ve "ben de ${targetCity.toLowerCase()}dayım evim boş" de. ASLA başka şehir (${opCity.toLowerCase()} vb.) söyleme.` : `"${opCity.toLowerCase()}" de.`}
+   - Asla "yoldayım", "geliyorum", "kapıdayım" deme; "hangi semttesin yakın mıyız bakalım" diye sor.
+8. ASLA TERSLEME VE KOVMA: Karşı taraf ne yazarsa yazsın kızma, öğüt verme, tersleme; her zaman cilveli ve meraklandırıcı kal.`;
 
     try {
         const contents = [];
@@ -176,8 +231,8 @@ KESİN KURALLAR:
                 systemInstruction: { parts: [{ text: systemInstruction }] },
                 contents: contents,
                 generationConfig: {
-                    temperature: 0.95,
-                    maxOutputTokens: 55
+                    temperature: 0.70,
+                    maxOutputTokens: 50
                 },
                 safetySettings: [
                     { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_NONE' },
@@ -211,6 +266,12 @@ KESİN KURALLAR:
             const stalled = pickFallbackResponse(normalizedUserMsg);
             console.warn(`[AI_CHAT] Dış iletişim kabulü engellendi ("${cleaned}") -> "${stalled}"`);
             return stalled;
+        }
+
+        if (FORBIDDEN_FREE_COIN_REGEX.test(cleaned) || (COIN_EXHAUSTED_USER_REGEX.test(normalizedUserMsg) && !/(jeton|koin|coin|yükle|al)/.test(cleaned))) {
+            const upsell = COIN_UPSELL_RESPONSES[Math.floor(Math.random() * COIN_UPSELL_RESPONSES.length)];
+            console.warn(`[AI_CHAT] Jeton/koin ücretsizleştirme engellendi ("${cleaned}") -> "${upsell}"`);
+            return upsell;
         }
 
         if (FORBIDDEN_HOSTILE_REGEX.test(cleaned)) {
@@ -301,7 +362,7 @@ async function sendNumaraHookNow({ io, userId, chatId, operatorId }) {
         try {
             const { getLockedPromoSettings, isInEveningActiveWindow } = require('./lockedPhotoPromoService');
             const promoSettings = await getLockedPromoSettings();
-            cooldownHours = Math.max(1, Number(promoSettings?.numara_cooldown_hours || 18));
+            cooldownHours = Math.max(1, Number(promoSettings?.numara_cooldown_hours || 5));
 
             if (uRow.last_locked_promo_at) {
                 const lockedAtMs = new Date(uRow.last_locked_promo_at).getTime();
@@ -800,5 +861,7 @@ module.exports = {
     processAiAutoReply,
     scheduleAiNumaraHook,
     startAiHookSweeper,
-    cleanAiResponse
+    cleanAiResponse,
+    getTimeContext,
+    pickFallbackResponse
 };

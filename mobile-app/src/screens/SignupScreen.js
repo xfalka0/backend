@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, TextInput, StyleSheet, Image, KeyboardAvoidingView, Platform, TouchableOpacity, ActivityIndicator } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { getRegistrationMeta } from '../utils/attribution';
 import { LinearGradient } from 'expo-linear-gradient';
 import axios from 'axios';
 import { API_URL } from '../config';
@@ -26,10 +27,12 @@ export default function SignupScreen({ navigation }) {
         setLoading(true);
         try {
             const autoReferralCode = await AsyncStorage.getItem('referralCode');
+            const meta = await getRegistrationMeta();
             const res = await axios.post(`${API_URL}/register`, { 
                 email, 
                 password,
-                referralCode: autoReferralCode 
+                referralCode: autoReferralCode,
+                ...meta
             });
             if (res.data.user) {
                 const { user, token } = res.data;

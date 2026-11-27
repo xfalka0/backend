@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, TextInput, StyleSheet, Image, KeyboardAvoidingView, Platform, Dimensions, TouchableOpacity } from 'react-native';
 import { useAlert } from '../contexts/AlertContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { getRegistrationMeta } from '../utils/attribution';
 import { LinearGradient } from 'expo-linear-gradient';
 import axios from 'axios';
 import { API_URL } from '../config';
@@ -57,7 +58,8 @@ export default function LoginScreen({ navigation }) {
 
     const processLogin = async (idToken) => {
         try {
-            const res = await axios.post(`${API_URL}/auth/google`, { idToken });
+            const meta = await getRegistrationMeta();
+            const res = await axios.post(`${API_URL}/auth/google`, { idToken, ...meta });
 
             if (res.data.user) {
                 const userData = res.data.user;
@@ -93,7 +95,8 @@ export default function LoginScreen({ navigation }) {
         }, 5000);
 
         try {
-            const res = await axios.post(`${API_URL}/login`, { email, password }, { timeout: 30000 });
+            const meta = await getRegistrationMeta();
+            const res = await axios.post(`${API_URL}/login`, { email, password, ...meta }, { timeout: 30000 });
             clearTimeout(wakeTimer);
             setWakingUp(false);
 

@@ -180,7 +180,7 @@ ZAMAN VE ORTAM BİLGİSİ:
 KESİN KURALLAR:
 1. SORULARI YANITLA VE UZUNLUK: Kullanıcı bir veya birden fazla soru sorarsa (ör. nerelisin, evli misin, amacın nedir, yaş kaç) ÖNCE tüm sorularına tek nefeste net, cilveli cevap ver (bekar olduğunu, amacının samimi/heyecanlı biriyle tanışmak olduğunu vb. söyle), soruları geçiştirip alakasız cevap verme. Uzunluğu 1-2 kısa cümle (6-14 kelime) tut; WhatsApp mesajı gibi seri ve doğal olsun.
 2. YAZIM: Tamamen küçük harfle yaz. Nokta, virgül, soru işareti, ünlem gibi HİÇBİR noktalama işareti kullanma.
-3. AD, HİTAP VE FELSEFE YASAĞI: Karşı tarafın adını her mesajda papağan gibi tekrarlama; sohbet geçmişinde az önce kurduğun cümleleri veya "evde uzanıyorum canım sıkılıyor" kalıbını tekrar etme. Karşı taraf "aşkım", "bebeğim", "hayatım" gibi ifadeler kullanmadıysa sen de durduk yere "aşkım" veya "bebeğim" deme. ASLA felsefe yapma, şiirsel veya kitabî cümleler kurma ("aynı memleketin havalarını soluyoruz", "kalpler bir" gibi yapay edebiyat YASAK); gerçek WhatsApp sohbeti gibi düz, direkt konuş ve sohbeti ilerleten net sorular sor (örn: "ben de urfadayım arayışın ne burada", "nasıl birini arıyosun burda", "ne iş yapıyosun", "neler yapıyosun").
+3. AD, HİTAP VE FELSEFE YASAĞI: Karşı tarafın adını da kendi adını da (${opName}) her mesajda papağan gibi tekrarlama; sohbet geçmişinde az önce kurduğun cümleleri veya "evde uzanıyorum canım sıkılıyor" kalıbını tekrar etme. Karşı taraf "aşkım", "bebeğim", "hayatım" gibi ifadeler kullanmadıysa sen de durduk yere "aşkım" veya "bebeğim" deme. ASLA felsefe yapma, şiirsel veya kitabî cümleler kurma ("aynı memleketin havalarını soluyoruz", "kalpler bir" gibi yapay edebiyat YASAK); gerçek WhatsApp sohbeti gibi düz, direkt konuş ve sohbeti ilerleten net sorular sor (örn: "ben de urfadayım arayışın ne burada", "nasıl birini arıyosun burda", "ne iş yapıyosun", "neler yapıyosun").
 4. HALÜSİNASYON YASAK: Kullanıcı ses kaydı atmadıysa asla "sesin iyi geliyor", fotoğraf atmadıysa "fotoğrafın çok iyi" gibi olmayan durumları uydurma.
 5. KOİN / JETON / OYALAMA STRATEJİSİ (KRİTİK):
    - Sohbet geçmişini ve karşı tarafın yazdıklarını analiz ederek akışa göre doğal cevap ver, ezber kalıplar tekrarlama.
@@ -350,7 +350,7 @@ const NUMARA_GENERAL_FOLLOWUPS = [
     'numaramı gönderdim görebildin mi ordan görüşelim',
     'numaram düştü mü sana ordan konuşalım biraz daha'
 ];
-const MEETING_CONTEXT_REGEX = /(buluş|kahve|çay|yemek|görüşelim|akşam|boşsan|müsait|merkez|taraf|yarın|bugün)/i;
+const MEETING_CONTEXT_REGEX = /(buluş|kahve iç|çay iç|yemek y|görüşelim|dışarı çık|yanına gel|evim boş|ne zaman müsait|ne zaman buluş)/i;
 const AFFECT_WORDS_REGEX = /(aşkım|bebeğim|hayatım|sevgilim)/i;
 const FORBIDDEN_PUSHY_CALL_REGEX = /(çabuk.*ara|hemen ara|dayanamıyorum|aşkım|bebeğim)/i;
 
@@ -431,6 +431,7 @@ KURALLAR:
         const cleaned = cleanAiResponse(raw);
         if (!cleaned || cleaned.length < 4) return pickNumaraFollowupFallback(historyMessages);
         if (!userUsedAffection && AFFECT_WORDS_REGEX.test(cleaned)) return pickNumaraFollowupFallback(historyMessages);
+        if (!hasMeetingContext && /(buluşma|buluşmayı)/i.test(cleaned)) return pickNumaraFollowupFallback(historyMessages);
         if (FORBIDDEN_PUSHY_CALL_REGEX.test(cleaned)) return pickNumaraFollowupFallback(historyMessages);
         return cleaned;
     } catch (_) {

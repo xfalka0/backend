@@ -34,10 +34,10 @@ const OFF_APP_STALL_RESPONSES = [
 ];
 
 const COIN_STALL_RESPONSES = [
-    'tam yeni tanışıyoduk dur gitme hemen biraz daha konuşalım',
-    'dur kaçma hemen nereye gidiyosun biraz daha yazışsak ya',
-    'ayy tam da muhabbet açılıyodu biraz daha kal burda',
-    'hemen kaçmasan ya biraz daha sohbet edelim burda'
+    'sen neler yapıyosun bugün keyfin nasıl bakalım',
+    'bu arada sen hangi ilçedesin yakın mıyız acaba',
+    'bugün nasıl geçiyo senin tarafta neler var',
+    'neyse boşver sen ne zaman müsaitsin buluşsak'
 ];
 
 const PHONE_DIGITS_REGEX = /(?:\+?\d[\s\-().]*){7,}/;
@@ -73,25 +73,25 @@ function getTimeContext(date = new Date()) {
         return {
             turkeyHour,
             timeOfDay: 'sabah',
-            hint: 'Şu an sabah saatleri. Arka plan bağlamı: günaydın/sabah havası; asla gece/akşam deme. (Bu bilgiyi her mesajda ezbere tekrarlama, önce kullanıcının yazdığına odaklan.)'
+            hint: 'Sabah saatleri: samimi, sıcak ve tatlı flörtöz konuş. Asla gece/akşam deme.'
         };
     } else if (turkeyHour >= 12 && turkeyHour < 18) {
         return {
             turkeyHour,
             timeOfDay: 'öğlen/gündüz',
-            hint: 'Şu an öğlen/gündüz saatleri. Asla "bu gece", "uyku" veya "akşam" deme. (Her mesajda "evde uzanıyorum canım sıkılıyor" diye ezbere kalıp tekrarlama, önce kullanıcının sorularına ve sohbete odaklan.)'
+            hint: 'Gündüz saatleri: samimi, tatlı flörtöz ve meraklı konuş. Asla gece/uyku/akşam deme.'
         };
     } else if (turkeyHour >= 18 && turkeyHour < 24) {
         return {
             turkeyHour,
             timeOfDay: 'akşam',
-            hint: 'Şu an akşam saatleri. Evdesin, dinleniyorsun. (Önce kullanıcının yazdığına ve sorularına odaklan.)'
+            hint: 'Akşam saatleri: sıcak, samimi ve hafif flörtöz konuş.'
         };
     }
     return {
         turkeyHour,
         timeOfDay: 'gece',
-        hint: 'Şu an geç gece saatleri (00:00 - 06:00). Geceye uygun hafif yaramaz/samimi bir tondasın. (Önce kullanıcının yazdığına ve sorularına odaklan.)'
+        hint: 'Geç gece saatleri (00:00 - 06:00): daha yaramaz, cilveli ve üstü kapalı +18 imalı konuş.'
     };
 }
 
@@ -103,17 +103,25 @@ const MEETING_ASK_PLACE_RESPONSES = [
 
 const PHOTO_TEASE_RESPONSES = [
     'hmm nasıl foto istersin bakalım',
-    'ne tarz bi foto görmek istersin ki',
-    'hmm nasıl bi şey çekmemi istersin bakalım',
+    'hmm ne tarz bi foto görmek istersin ki',
     'önce söyle bakalım nasıl foto hoşuna gider'
 ];
 
 const PHOTO_REQUEST_REGEX = /(foto|fotoğraf|fotograf|resim|resm|selfie|poz).{0,15}(at|atsana|gönder|gondersene|yolla|yollasana|istiyorum|var mı|atarmısın|atar mısın)/i;
+const SUSPICION_REGEX = /(bot musun|yapay zeka|site çalışanı|çalışanımısın|çalışanı mısın|kontür bitene|para tuzağı|sahte|dolandırıcı)/i;
+const SUSPICION_RESPONSES = [
+    'ayy çok ayıp kırdın beni şaka mısın',
+    'ne alakası var ya şaka mısın sen',
+    'ayy çok güldürdün beni yok artık daha neler'
+];
 
 const PLACE_MENTION_REGEX = /(yaşıyorum|oturuyorum|köyde|ilçede|semtte|mahalle|merkezde|buradayım|çerkezköy|kadıköy|beşiktaş|şişli|taksim|bakırköy|üsküdar|ataşehir|maltepe|kartal|pendik|çekmeköy|sancaktepe|beylikdüzü|avcılar|esenler|bağcılar|bahçelievler|sarıyer|levent|mecidiyeköy|çankaya|kızılay|keçiören|yenimahalle|etimesgut|mamak|sincan|bornova|karşıyaka|konak|buca|alsancak|bostanlı|nilüfer|osmangazi|yıldırım|muratpaşa|konyaaltı|lara|kepez|seyhan|çukurova|gebze|izmit|körfez|gölcük|derince|odunpazarı|tepebaşı|karaköprü|eyyübiye|haliliye)/i;
 
 function pickFallbackResponse(userMessage = '', date = new Date(), chatHistory = []) {
     const msg = String(userMessage || '');
+    if (SUSPICION_REGEX.test(msg)) {
+        return SUSPICION_RESPONSES[Math.floor(Math.random() * SUSPICION_RESPONSES.length)];
+    }
     if (PHONE_DIGITS_REGEX.test(msg)) {
         return PHONE_NUMBER_STALL_RESPONSES[Math.floor(Math.random() * PHONE_NUMBER_STALL_RESPONSES.length)];
     }
@@ -130,7 +138,7 @@ function pickFallbackResponse(userMessage = '', date = new Date(), chatHistory =
     if (COIN_EXHAUSTED_USER_REGEX.test(msg)) {
         return COIN_STALL_RESPONSES[Math.floor(Math.random() * COIN_STALL_RESPONSES.length)];
     }
-    if (OFF_APP_REGEX.test(msg)) {
+    if (OFF_APP_REGEX.test(msg) || /^[a-z0-9._-]*\d[a-z0-9._-]*$/i.test(msg.trim()) || msg.includes('@')) {
         return OFF_APP_STALL_RESPONSES[Math.floor(Math.random() * OFF_APP_STALL_RESPONSES.length)];
     }
 
@@ -156,9 +164,43 @@ function cleanAiResponse(text) {
     return cleaned;
 }
 
-/**
- * Gemini API ile operatör profilini ve sohbet geçmişini analiz edip flörtöz yanıt üretir.
- */
+async function callGeminiWithFallback({ apiKey, requestBody, timeoutMs = 10000 }) {
+    const models = ['gemini-3.8-flash', 'gemini-3.5-flash-lite'];
+    for (const model of models) {
+        const isThinkingCapable = model.startsWith('gemini-3.8') || model.startsWith('gemini-2.5');
+        const body = isThinkingCapable
+            ? requestBody
+            : {
+                ...requestBody,
+                generationConfig: (() => {
+                    const { thinkingConfig, ...rest } = requestBody.generationConfig || {};
+                    return rest;
+                })()
+            };
+
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), timeoutMs);
+        try {
+            const res = await fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                signal: controller.signal,
+                body: JSON.stringify(body)
+            });
+            clearTimeout(timeout);
+            if (res.ok) {
+                return { ok: true, model, data: await res.json() };
+            }
+            const errBody = await res.text().catch(() => '');
+            console.warn(`[AI_CHAT] ${model} HTTP ${res.status}, sonraki modele geçiliyor. Detay: ${errBody.slice(0, 250)}`);
+        } catch (err) {
+            clearTimeout(timeout);
+            console.warn(`[AI_CHAT] ${model} hata (${err.name || 'Error'}: ${err.message}), sonraki modele geçiliyor.`);
+        }
+    }
+    return { ok: false, data: null };
+}
 async function generateAiReply({ operator, targetUser = null, userMessage, chatHistory = [] }) {
     const apiKey = (process.env.GEMINI_API_KEY || '').trim();
     if (!apiKey) {
@@ -197,28 +239,24 @@ async function generateAiReply({ operator, targetUser = null, userMessage, chatH
     const timeInfo = getTimeContext();
     const openingHint = OPENING_STYLE_HINTS[Math.floor(Math.random() * OPENING_STYLE_HINTS.length)];
 
-    const systemInstruction = `Sen ${opName}, ${opAge} yaşında, arkadaşlık uygulamasında sohbet eden cilveli, eğlenceli ve doğal genç bir kadınsın.
+    const systemInstruction = `Sen ${opName}, ${opAge} yaşında, arkadaşlık uygulamasında sohbet eden gerçek bir genç kadınsın.
 ${targetCity ? `Karşı tarafın şehri: ${targetCity}.` : ''}
+TON: ${timeInfo.hint}
+AÇILIŞ: ${openingHint}
 
-ZAMAN: ${timeInfo.hint}
-AÇILIŞ TONU: ${openingHint}
+YAZIM:
+- Sadece 1 kısa cümle (5-12 kelime), tamamen küçük harf, noktalama işareti YOK.
+- Sıkıcı anket soruları ("ne iş yapıyorsun", "müzik ne dinlersin"), edebiyat/felsefe ve ses/foto uydurması YASAK.
+- Karşı taraf demedikçe "aşkım/bebeğim" deme; isimleri tekrarlama.
+- Önceki mesajlarda sen/operatör ne dediyse ASLA tersini söyleme (az önce "görünmüyor" dendiyse sonra "gördüm" deme).
 
-TEK AMACIN: Karşı tarafı sohbetin içinde tutmak, meraklandırmak ve doğal şekilde konuşturmak.
-
-KURALLAR:
-1. KISA VE DOĞAL YAZ: Sadece 1 kısa cümle (5-12 kelime), tamamen küçük harf, noktalama işareti YOK.
-2. SIKICI/ALAKASIZ KONULAR YASAK: Asla "ne müzik dinlersin", "arabesk", "kitap", "işin ne" gibi sıkıcı anket soruları sorma; felsefe/edebiyat yapma. Kendi adını da karşı tarafın adını da sürekli tekrarlama. Karşı taraf demedikçe "aşkım/bebeğim" deme.
-3. HALÜSİNASYON YASAK: Ses kaydı yoksa "sesin güzel", foto yoksa "foton güzel" deme.
-4. SORU VE BULUŞMA:
-   - Sorulara (nerelisin, evli misin, yaş kaç, amacın ne) net ve kısa cevap ver (bekarım, tanışıp eğlenmek istiyorum). ${targetCity ? `Şehir sorarsa "ben de ${targetCity.toLowerCase()}dayım" de, başka şehir söyleme.` : `Şehir sorarsa "${opCity.toLowerCase()}" de.`}
-   - Buluşalım derse: ilçe söylemediyse "tamam buluşalım hangi ilçedesin sana neresi uygun" de; ilçe zaten söylediyse "tamam ne zaman müsaitsin" de. Asla "yoldayım/geliyorum" deme.
-5. FOTOĞRAF İSTERSE: "hmm nasıl foto istersin bakalım" veya "ne tarz bi foto görmek istersin ki" diye cilveli sor.
-6. TELEFON / WHATSAPP / INSTAGRAM / TELEGRAM:
-   - ASLA "sistem sansürlüyor", "uygulama gizliyor", "engelliyor" DEME!
-   - Dış uygulama veya numara konuşulunca sadece: "numaranı alt alta tek tek yazsana bi" veya "alt alta parça parça atsana bi" de (varsa buluşma/ilçe sorusunu da ekle). Asla "eklerim/yazarım/versem olur mu" deme.
-7. JETON / KOİN BİTTİ DERSE:
-   - ASLA "jeton yükle/al" ya da "jeton dert etme/bedava yaz" DEME.
-   - Aynı mesajda buluşma veya foto isteği varsa önce onu yanıtla; yoksa "tam yeni tanışıyoduk dur gitme hemen biraz daha konuşalım" diye oyala.`;
+ÖRNEK DURUMLAR (Buna göre doğal konuş):
+- Şüphe ("bot musun / site çalışanı mısın / kontür bitene kadar mı"): Cilveli şakaya vur -> "ayy çok ayıp kırdın beni şaka mısın"
+- Nick, Instagram, Telegram veya telefon yazarsa ("Saptali46ninja", "tlg yaz", "0532..."): Görünmedi gibi davran -> "yazdığın çıkmadı ki numaranı alt alta tek tek yazsana bi" (ASLA "sistem sansürlüyor", "gördüm" veya "eklerim" deme!)
+- Buluşalım derse: İlçe belli değilse -> "tamam buluşalım hangi ilçedesin sana neresi uygun", ilçe zaten söylendiyse -> "tamam ne zaman müsaitsin" (Asla "yoldayım/geliyorum" deme).
+- Fotoğraf isterse: Sadece sor -> "hmm nasıl foto istersin bakalım" (özelden atma sözü verme).
+- Jeton/koin bitti derse: Jeton konusuna HİÇ girme ("jeton yükle" de deme, "dert etme" de deme); doğrudan sohbeti veya buluşmayı ilerleten doğal bir soru sor.
+- Şehir/soru sorarsa: Bekarım, tanışıp eğlenmek istiyorum de. ${targetCity ? `Şehir sorarsa "ben de ${targetCity.toLowerCase()}dayım" de.` : `Şehir sorarsa "${opCity.toLowerCase()}" de.`}`;
 
     try {
         const contents = [];
@@ -246,20 +284,16 @@ KURALLAR:
             parts: [{ text: normalizedUserMsg }]
         });
 
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent?key=${apiKey}`;
-        const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 15000); // 15 sn zaman aşımı
-
-        const res = await fetch(url, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            signal: controller.signal,
-            body: JSON.stringify({
+        const { ok, model, data } = await callGeminiWithFallback({
+            apiKey,
+            timeoutMs: 7000,
+            requestBody: {
                 systemInstruction: { parts: [{ text: systemInstruction }] },
                 contents: contents,
                 generationConfig: {
-                    temperature: 0.82,
-                    maxOutputTokens: 75
+                    temperature: 0.80,
+                    maxOutputTokens: 75,
+                    thinkingConfig: { thinkingBudget: 0 }
                 },
                 safetySettings: [
                     { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_NONE' },
@@ -267,17 +301,13 @@ KURALLAR:
                     { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_NONE' },
                     { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_NONE' }
                 ]
-            })
+            }
         });
-        clearTimeout(timeout);
 
-        if (!res.ok) {
-            const errBody = await res.text().catch(() => '');
-            console.warn(`[AI_CHAT] Gemini API HTTP ${res.status}, fallback yanıt dönülüyor. Detay: ${errBody.slice(0, 500)}`);
-            return pickFallbackResponse(normalizedUserMsg);
+        if (!ok || !data) {
+            return pickFallbackResponse(normalizedUserMsg, new Date(), chatHistory);
         }
 
-        const data = await res.json();
         const candidate = data.candidates?.[0];
         const rawText = candidate?.content?.parts?.map(p => p.text || '').join(' ').trim();
         const cleaned = cleanAiResponse(rawText);
@@ -289,9 +319,10 @@ KURALLAR:
             return pickFallbackResponse(normalizedUserMsg);
         }
 
-        if (((PHONE_DIGITS_REGEX.test(normalizedUserMsg) || OFF_APP_REGEX.test(normalizedUserMsg)) && FORBIDDEN_ACCEPT_REGEX.test(cleaned)) || /(numaramı versem|numaramı atsam|gönderiyorum numaramı)/i.test(cleaned) || FORBIDDEN_CENSOR_TALK_REGEX.test(cleaned)) {
-            const stalled = PHONE_NUMBER_STALL_RESPONSES[Math.floor(Math.random() * PHONE_NUMBER_STALL_RESPONSES.length)];
-            console.warn(`[AI_CHAT] Dış iletişim kabulü veya sansür konuşması engellendi ("${cleaned}") -> "${stalled}"`);
+        const looksLikeHandle = /^[a-z0-9._-]*\d[a-z0-9._-]*$/i.test(normalizedUserMsg) || normalizedUserMsg.includes('@');
+        if (((PHONE_DIGITS_REGEX.test(normalizedUserMsg) || OFF_APP_REGEX.test(normalizedUserMsg) || looksLikeHandle) && (FORBIDDEN_ACCEPT_REGEX.test(cleaned) || /\bgördüm\b/i.test(cleaned))) || /(numaramı versem|numaramı atsam|gönderiyorum numaramı)/i.test(cleaned) || FORBIDDEN_CENSOR_TALK_REGEX.test(cleaned)) {
+            const stalled = 'yazdığın çıkmadı ki numaranı alt alta tek tek yazsana bi';
+            console.warn(`[AI_CHAT] Dış iletişim / nick tutarsızlığı engellendi ("${cleaned}") -> "${stalled}"`);
             return stalled;
         }
 
@@ -470,28 +501,22 @@ KURALLAR:
 5. Tamamen küçük harf kullan, noktalama işareti koyma, en fazla 8-12 kelimelik tek kısa cümle yaz.`;
 
     try {
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent?key=${apiKey}`;
-        const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 8000);
-        const res = await fetch(url, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            signal: controller.signal,
-            body: JSON.stringify({
+        const { ok, data } = await callGeminiWithFallback({
+            apiKey,
+            timeoutMs: 6000,
+            requestBody: {
                 contents: [{ role: 'user', parts: [{ text: prompt }] }],
-                generationConfig: { temperature: 0.65, maxOutputTokens: 45 },
+                generationConfig: { temperature: 0.65, maxOutputTokens: 45, thinkingConfig: { thinkingBudget: 0 } },
                 safetySettings: [
                     { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_NONE' },
                     { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_NONE' },
                     { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_NONE' },
                     { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_NONE' }
                 ]
-            })
+            }
         });
-        clearTimeout(timeout);
-        if (!res.ok) return pickNumaraFollowupFallback(historyMessages);
+        if (!ok || !data) return pickNumaraFollowupFallback(historyMessages);
 
-        const data = await res.json();
         const raw = data.candidates?.[0]?.content?.parts?.map(p => p.text || '').join(' ').trim();
         const cleaned = cleanAiResponse(raw);
         if (!cleaned || cleaned.length < 4) return pickNumaraFollowupFallback(historyMessages);

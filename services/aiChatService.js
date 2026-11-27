@@ -182,6 +182,7 @@ async function generateAiReply({ operator, targetUser = null, userMessage, chatH
     ].filter(Boolean);
 
     const timeInfo = getTimeContext();
+    const openingHint = OPENING_STYLE_HINTS[Math.floor(Math.random() * OPENING_STYLE_HINTS.length)];
 
     const systemInstruction = `Sen Fiva arkadaşlık uygulamasında sohbet eden ${opName} adında, ${opAge} yaşında, günlük WhatsApp ağzıyla konuşan, direkt, samimi ve hafif flörtöz genç bir kadınsın.
 ${opBio ? `Hakkında: ${opBio}.` : ''} ${opInterests ? `İlgi alanların: ${opInterests}.` : ''}
@@ -189,11 +190,12 @@ ${targetProfileLines.length > 0 ? `\nKarşı Tarafın Profili: ${targetProfileLi
 
 ZAMAN VE ORTAM BİLGİSİ:
 - ${timeInfo.hint}
+- ${openingHint}
 
 KESİN KURALLAR:
 1. SORULARI YANITLA VE UZUNLUK: Kullanıcı bir veya birden fazla soru sorarsa (ör. nerelisin, evli misin, amacın nedir, yaş kaç) ÖNCE tüm sorularına tek nefeste net, cilveli cevap ver (bekar olduğunu, amacının samimi/heyecanlı biriyle tanışmak olduğunu vb. söyle), soruları geçiştirip alakasız cevap verme. Uzunluğu 1-2 kısa cümle (6-14 kelime) tut; WhatsApp mesajı gibi seri ve doğal olsun.
 2. YAZIM: Tamamen küçük harfle yaz. Nokta, virgül, soru işareti, ünlem gibi HİÇBİR noktalama işareti kullanma.
-3. AD, HİTAP VE FELSEFE YASAĞI: Karşı tarafın adını da kendi adını da (${opName}) her mesajda papağan gibi tekrarlama; sohbet geçmişinde az önce kurduğun cümleleri, "merhaba ben ${opName.toLowerCase()}" girişini veya "evde uzanıyorum canım sıkılıyor" kalıbını tekrar etme. Karşı taraf "aşkım", "bebeğim", "hayatım" gibi ifadeler kullanmadıysa sen de durduk yere "aşkım" veya "bebeğim" deme. ASLA felsefe yapma, şiirsel veya kitabî cümleler kurma ("aynı memleketin havalarını soluyoruz", "kalpler bir" gibi yapay edebiyat YASAK); gerçek WhatsApp sohbeti gibi düz, direkt konuş ve sohbeti ilerleten net sorular sor (örn: "ben de urfadayım arayışın ne burada", "nasıl birini arıyosun burda", "ne iş yapıyosun", "neler yapıyosun").
+3. AD, HİTAP VE FELSEFE YASAĞI: Karşı tarafın adını da kendi adını da (${opName}) her mesajda papağan gibi tekrarlama; sohbet geçmişinde az önce kurduğun cümleleri, "merhaba ben ${opName.toLowerCase()}" girişini veya "merhaba nasılsın neler yapıyosun" klişesini tekrar etme. Karşı taraf "aşkım", "bebeğim", "hayatım" gibi ifadeler kullanmadıysa sen de durduk yere "aşkım" veya "bebeğim" deme. ASLA felsefe yapma, şiirsel veya kitabî cümleler kurma ("aynı memleketin havalarını soluyoruz", "kalpler bir" gibi yapay edebiyat YASAK); gerçek WhatsApp sohbeti gibi düz, direkt konuş ve sohbeti ilerleten net sorular sor (örn: "ben de urfadayım arayışın ne burada", "nasıl birini arıyosun burda", "ne iş yapıyosun", "keyfin nasıl bakalım").
 4. HALÜSİNASYON YASAK: Kullanıcı ses kaydı atmadıysa asla "sesin iyi geliyor", fotoğraf atmadıysa "fotoğrafın çok iyi" gibi olmayan durumları uydurma.
 5. KOİN / JETON / OYALAMA STRATEJİSİ (KRİTİK):
    - Sohbet geçmişini ve karşı tarafın yazdıklarını analiz ederek akışa göre doğal cevap ver, ezber kalıplar tekrarlama.
@@ -250,7 +252,7 @@ KESİN KURALLAR:
                 systemInstruction: { parts: [{ text: systemInstruction }] },
                 contents: contents,
                 generationConfig: {
-                    temperature: 0.70,
+                    temperature: 0.82,
                     maxOutputTokens: 75
                 },
                 safetySettings: [
@@ -343,6 +345,13 @@ KESİN KURALLAR:
                 finalReply = stripped;
             }
         }
+
+        if (RECENT_AI_REPLIES.includes(finalReply) && /^(selam|slm|merhaba|mrb|hey|hi)\b/i.test(normalizedUserMsg)) {
+            const unusedGreetings = VARIED_GREETING_POOL.filter(g => !RECENT_AI_REPLIES.includes(g));
+            const pool = unusedGreetings.length > 0 ? unusedGreetings : VARIED_GREETING_POOL;
+            finalReply = pool[Math.floor(Math.random() * pool.length)];
+        }
+        rememberAiReply(finalReply);
 
         console.log(`[AI_CHAT] Gemini yanıt üretti (finishReason=${candidate?.finishReason || 'unknown'}): "${finalReply}"`);
         return finalReply;
@@ -811,6 +820,29 @@ function startAiHookSweeper(io) {
     const timer = setInterval(runSweep, 10000);
     if (typeof timer.unref === 'function') timer.unref();
     setTimeout(runSweep, 5000).unref?.();
+}
+
+const VARIED_GREETING_POOL = [
+    'selamm hoş geldin keyfin nasıl bakalım',
+    'ooo kimler yazmış günün nasıl geçiyo',
+    'selam buralarda yeni misin seni pek görmedim',
+    'merhaba iyi ki yazdın tam canım sıkılıyodu',
+    'selam yakışıklı keyfin yerinde mi bakalım',
+    'hoş geldin bakalım nasıl gidiyo günün'
+];
+
+const OPENING_STYLE_HINTS = [
+    'Enerjin yüksek ve samimi; klişe "merhaba nasılsın neler yapıyosun" kalıbını ASLA yazma, farklı bir cümle kur.',
+    'Hafif cilveli ve meraklı bir tonda yaz; "merhaba nasılsın neler yapıyosun" klişesini ASLA kullanma.',
+    'Rahat ve sıcak bir arkadaşlık sohbeti başlat; "nasılsın neler yapıyosun" yerine özgün kısa bir karşılık ver.',
+    'Dikkat çekici, sıcak ve doğal yaz; her zamanki klasik selam cümlelerini tekrar etme.'
+];
+
+const RECENT_AI_REPLIES = [];
+function rememberAiReply(text) {
+    if (!text) return;
+    RECENT_AI_REPLIES.push(text);
+    if (RECENT_AI_REPLIES.length > 25) RECENT_AI_REPLIES.shift();
 }
 
 const AI_BURST_DEBOUNCE_MS = 4000;

@@ -207,7 +207,7 @@ async function callGeminiWithFallback({ apiKeys, apiKey, requestBody, timeoutMs 
     const activeKeys = keysInput.filter(k => (exhaustedKeyUntil.get(k) || 0) <= now);
     // Tüm key'ler soğutmadaysa yine de hepsini sırayla bir kez dene
     const keysToTry = activeKeys.length > 0 ? activeKeys : keysInput;
-    const models = ['gemini-3.8-flash', 'gemini-3.5-flash-lite'];
+    const models = ['gemini-3.6-flash', 'gemini-3.5-flash', 'gemini-3.8-flash', 'gemini-3.5-flash-lite'];
 
     for (let keyIdx = 0; keyIdx < keysToTry.length; keyIdx++) {
         const currentKey = keysToTry[keyIdx];

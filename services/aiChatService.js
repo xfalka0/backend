@@ -107,6 +107,12 @@ const PHOTO_TEASE_RESPONSES = [
     'önce söyle bakalım nasıl foto hoşuna gider'
 ];
 
+const PHOTO_ALREADY_SENT_RESPONSES = [
+    'az önce attım ya yukarıda açıp baksana',
+    'sana özel attım zaten az önce açsana',
+    'yukarıda attım ya bakmadın mı hala'
+];
+
 const PHOTO_REQUEST_REGEX = /(foto|fotoğraf|fotograf|resim|resm|selfie|poz).{0,15}(at|atsana|gönder|gondersene|yolla|yollasana|istiyorum|var mı|atarmısın|atar mısın)/i;
 const SUSPICION_REGEX = /(bot musun|yapay zeka|site çalışanı|çalışanımısın|çalışanı mısın|kontür bitene|para tuzağı|sahte|dolandırıcı)/i;
 const SUSPICION_RESPONSES = [
@@ -133,7 +139,11 @@ function pickFallbackResponse(userMessage = '', date = new Date(), chatHistory =
         return pool[Math.floor(Math.random() * pool.length)];
     }
     if (PHOTO_REQUEST_REGEX.test(msg)) {
-        return PHOTO_TEASE_RESPONSES[Math.floor(Math.random() * PHOTO_TEASE_RESPONSES.length)];
+        const alreadySentPhoto = Array.isArray(chatHistory) && chatHistory.some(
+            m => !m?.is_user && (m?.content_type === 'locked_image' || m?.content_type === 'image' || /kilitli.*fotoğraf|özel fotoğraf gönderdin/i.test(m?.content || ''))
+        );
+        const pool = alreadySentPhoto ? PHOTO_ALREADY_SENT_RESPONSES : PHOTO_TEASE_RESPONSES;
+        return pool[Math.floor(Math.random() * pool.length)];
     }
     if (COIN_EXHAUSTED_USER_REGEX.test(msg)) {
         return COIN_STALL_RESPONSES[Math.floor(Math.random() * COIN_STALL_RESPONSES.length)];
@@ -239,6 +249,10 @@ async function generateAiReply({ operator, targetUser = null, userMessage, chatH
     const timeInfo = getTimeContext();
     const openingHint = OPENING_STYLE_HINTS[Math.floor(Math.random() * OPENING_STYLE_HINTS.length)];
 
+    const operatorSentPhoto = Array.isArray(chatHistory) && chatHistory.some(
+        m => !m?.is_user && (m?.content_type === 'locked_image' || m?.content_type === 'image' || /kilitli.*fotoğraf|özel fotoğraf gönderdin/i.test(m?.content || ''))
+    );
+
     const systemInstruction = `Sen ${opName}, ${opAge} yaşında, arkadaşlık uygulamasında sohbet eden gerçek bir genç kadınsın.
 ${targetCity ? `Karşı tarafın şehri: ${targetCity}.` : ''}
 TON: ${timeInfo.hint}
@@ -255,7 +269,7 @@ YAZIM:
 - Şüphe ("bot musun / site çalışanı mısın / kontür bitene kadar mı"): Cilveli şakaya vur -> "ayy çok ayıp kırdın beni şaka mısın"
 - Nick, Instagram, Telegram veya telefon yazarsa ("Saptali46ninja", "tlg yaz", "0532..."): Görünmedi gibi davran -> "yazdığın çıkmadı ki numaranı alt alta tek tek yazsana bi" (ASLA "sistem sansürlüyor", "gördüm" veya "eklerim" deme!)
 - Buluşalım derse: İlçe belli değilse -> "tamam buluşalım hangi ilçedesin sana neresi uygun", ilçe zaten söylendiyse -> "tamam ne zaman müsaitsin" (Asla "yoldayım/geliyorum" deme).
-- Fotoğraf isterse: Sadece sor -> "hmm nasıl foto istersin bakalım" (özelden atma sözü verme).
+- Fotoğraf isterse: ${operatorSentPhoto ? 'Bu sohbette az önce zaten özel/kilitli fotoğraf gönderdin! Asla "nasıl foto istersin" diye sorma; "az önce attım ya yukarıda açıp baksana" veya "sana özel attım zaten açsana" de.' : 'Sadece sor -> "hmm nasıl foto istersin bakalım" (özelden atma sözü verme).'}
 - Jeton/koin bitti derse: Jeton konusuna HİÇ girme ("jeton yükle" de deme, "dert etme" de deme); doğrudan sohbeti veya buluşmayı ilerleten doğal bir soru sor.
 - Şehir/soru sorarsa: Bekarım, tanışıp eğlenmek istiyorum de. ${targetCity ? `Şehir sorarsa "ben de ${targetCity.toLowerCase()}dayım" de.` : `Şehir sorarsa "${opCity.toLowerCase()}" de.`}`;
 
@@ -333,7 +347,15 @@ YAZIM:
             return stall;
         }
 
-        if (PHOTO_REQUEST_REGEX.test(normalizedUserMsg) && !/(foto|resim|poz|tarz|çekmemi|görmek istersin|hoşuna gider)/i.test(cleaned)) {
+        if (operatorSentPhoto && (PHOTO_REQUEST_REGEX.test(normalizedUserMsg) || /(nasıl foto|ne tarz.*foto|nasıl.*istersin)/i.test(cleaned))) {
+            const already = PHOTO_ALREADY_SENT_RESPONSES[Math.floor(Math.random() * PHOTO_ALREADY_SENT_RESPONSES.length)];
+            if (!/(attım|yukarıda|yukarda|açıp|açsana|baksana)/i.test(cleaned) || /(nasıl foto|ne tarz.*foto)/i.test(cleaned)) {
+                console.warn(`[AI_CHAT] Zaten fotoğraf atılmış sohbette tekrar foto sorma engellendi ("${cleaned}") -> "${already}"`);
+                return already;
+            }
+        }
+
+        if (!operatorSentPhoto && PHOTO_REQUEST_REGEX.test(normalizedUserMsg) && !/(foto|resim|poz|tarz|çekmemi|görmek istersin|hoşuna gider)/i.test(cleaned)) {
             const tease = PHOTO_TEASE_RESPONSES[Math.floor(Math.random() * PHOTO_TEASE_RESPONSES.length)];
             console.warn(`[AI_CHAT] Fotoğraf isteğini geçiştirme engellendi ("${cleaned}") -> "${tease}"`);
             return tease;
@@ -1010,17 +1032,34 @@ async function executeAiAutoReply({ io, chatId, userId, operatorId, userMessage 
         const operator = opRes.rows[0];
         const opDisplayName = operator.display_name || operator.name || operator.username || 'Fiora';
 
-        // 3. Son mesaj geçmişini al (AI bağlamı için sadece metin mesajlar)
+        // 3. Son mesaj geçmişini al (metin + fotoğraf/kilitli fotoğraf bağlamı dahil)
         const historyRes = await db.query(
-            `SELECT sender_id, content FROM messages
-             WHERE chat_id = $1 AND content_type = 'text' AND content NOT ILIKE '%NUMARA PAYLAŞIMI%'
-             ORDER BY created_at DESC LIMIT 8`,
+            `SELECT sender_id, content, content_type FROM messages
+             WHERE chat_id = $1
+               AND content_type IN ('text', 'image', 'locked_image', 'locked_video', 'video', 'audio')
+               AND COALESCE(content, '') NOT ILIKE '%NUMARA PAYLAŞIMI%'
+             ORDER BY created_at DESC LIMIT 10`,
             [chatId]
         );
-        const chatHistory = historyRes.rows.reverse().map(m => ({
-            is_user: m.sender_id.toString() === userIdStr,
-            content: m.content
-        }));
+        const chatHistory = historyRes.rows.reverse().map(m => {
+            const isUser = m.sender_id.toString() === userIdStr;
+            const cType = m.content_type || 'text';
+            let textContent = m.content || '';
+            if (cType === 'locked_image') {
+                textContent = isUser ? '[Kullanıcı kilitli fotoğraf gönderdi]' : '[Sen az önce kullanıcıya 100 coinlik kilitli bir özel fotoğraf gönderdin]';
+            } else if (cType === 'image') {
+                textContent = isUser ? '[Kullanıcı fotoğraf gönderdi]' : '[Sen az önce kullanıcıya fotoğraf gönderdin]';
+            } else if (cType === 'locked_video' || cType === 'video') {
+                textContent = isUser ? '[Kullanıcı video gönderdi]' : '[Sen az önce kullanıcıya video gönderdin]';
+            } else if (cType === 'audio') {
+                textContent = isUser ? '[Kullanıcı ses kaydı gönderdi]' : '[Sen ses kaydı gönderdin]';
+            }
+            return {
+                is_user: isUser,
+                content_type: cType,
+                content: textContent
+            };
+        });
 
         // Arka arkaya atılan son kullanıcı balonlarını tek mesajda birleştir
         const trailingUserMsgs = [];

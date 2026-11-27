@@ -5,24 +5,24 @@ const { getActiveCustomerIds } = require('../utils/autoMessageSystem');
 const TR_TZ = 'Europe/Istanbul';
 
 const PRE_MESSAGE_POOL = [
-    'az önce çektim ama burdan açık atmaya utandım',
-    'sadece sen gör diye kilitledim bak',
+    'az önce çektim sana da atayım dedim',
+    'sadece sen gör diye attım bak',
     'bunu sadece sana özel çektim bakalım beğenecek misin',
-    'şimdi çektim atayım dedim ama açık atamadım',
-    'sana özel bi şey çektim açıp baksana',
+    'şimdi çektim taze taze bak bakalım',
+    'sana özel bi şey çektim baksana',
     'duştan yeni çıktım sana özel fotoğraf çektim',
     'kimseye atmadım bunu ilk sen gör istedim',
     'gece gece aklıma düştün sana özel bi şey atıyorum'
 ];
 
 const OFFLINE_PUSH_PRE_MESSAGES = [
-    'Sana özel kilitli bir fotoğraf bıraktım, bakar mısın? 🔥',
+    'Sana özel bir fotoğraf bıraktım, bakar mısın? 🔥',
     'Mesajına cevap verdim ama neredesin? 😊',
     'Sadece senin görmeni istediğim bir şey attım 👀',
-    'Az önce sana özel bir fotoğraf çektim, açıp baksana 🤫',
+    'Az önce sana özel bir fotoğraf çektim, baksana 🤫',
     'Gündüz aklımda kaldın, sana özel bir sürpriz bıraktım 💋',
     'Uyumadıysan girip baksana, bunu ilk sen gör istedim 🔥',
-    'Aklıma düştün, sana özel kilitli bir şey atmadan duramadım 😉'
+    'Aklıma düştün, sana özel bir fotoğraf atmadan duramadım 😉'
 ];
 
 const inFlightUsers = new Set();
@@ -451,22 +451,22 @@ async function deliverLockedPhotoToUser({
 
                 const lockedMsgRes = await db.query(
                     `INSERT INTO messages (chat_id, sender_id, content, content_type, unlock_cost, is_unlocked, is_read, created_at)
-                     VALUES ($1, $2, $3, 'locked_image', $4, false, false, NOW())
+                     VALUES ($1, $2, $3, 'image', 0, true, false, NOW())
                      RETURNING *`,
-                    [chatId, operator.id, photo.image_url, unlockCost]
+                    [chatId, operator.id, photo.image_url]
                 );
                 const savedLockedMsg = lockedMsgRes.rows[0];
 
                 await db.query(
-                    "UPDATE chats SET last_message = '🔒 Kilitli Resim', last_message_at = NOW() WHERE id = $1",
+                    "UPDATE chats SET last_message = '📷 Fotoğraf', last_message_at = NOW() WHERE id = $1",
                     [chatId]
                 );
 
                 await db.query(
                     `INSERT INTO locked_photo_deliveries
                         (photo_id, user_id, operator_id, chat_id, pre_message_id, message_id, trigger_type, pre_message_text, unlock_cost)
-                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-                    [photo.id, userId, operator.id, chatId, savedPreMsg.id, savedLockedMsg.id, triggerType, preMessageText, unlockCost]
+                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 0)`,
+                    [photo.id, userId, operator.id, chatId, savedPreMsg.id, savedLockedMsg.id, triggerType, preMessageText]
                 );
 
                 await db.query(
@@ -477,7 +477,7 @@ async function deliverLockedPhotoToUser({
                 const lockedMsgToEmit = {
                     ...savedLockedMsg,
                     chat_id: chatIdStr,
-                    type: 'locked_image',
+                    type: 'image',
                     sender_id: opIdStr,
                     sender_name: opDisplayName,
                     sender_username: operator.username,
@@ -490,7 +490,7 @@ async function deliverLockedPhotoToUser({
                     io.to(userIdStr).emit('new_message', lockedMsgToEmit);
                     io.to(userIdStr).emit('chat_updated', {
                         chatId: chatIdStr,
-                        last_message: '🔒 Kilitli Resim',
+                        last_message: '📷 Fotoğraf',
                         last_message_at: new Date(),
                     });
                     io.emit('admin_notification', lockedMsgToEmit);

@@ -26,6 +26,7 @@ import NotificationsPage from './pages/Notifications';
 import CampaignsPage from './pages/Campaigns';
 import RetentionPage from './pages/Retention';
 import FakeSchedulerPage from './pages/FakeScheduler';
+import LockedPhotosPage from './pages/LockedPhotos';
 import AdminManagement from './pages/AdminManagement';
 import MaintenancePage from './pages/Maintenance';
 import AgencyPayoutsPage from './pages/AgencyPayouts';
@@ -180,6 +181,7 @@ function App() {
                                 <Route path="/campaigns" element={<CampaignsPage />} />
                                 <Route path="/retention" element={<RetentionPage />} />
                                 <Route path="/fake-scheduler" element={<FakeSchedulerPage />} />
+                                <Route path="/locked-photos" element={<LockedPhotosPage />} />
                                 <Route path="/settings" element={<SettingsPage />} />
                             </Route>
 

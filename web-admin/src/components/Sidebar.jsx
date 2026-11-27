@@ -27,7 +27,8 @@ import {
     TrendingUp,
     Building2,
     PlusCircle,
-    Mic
+    Mic,
+    Lock
 } from 'lucide-react';
 
 export default function Sidebar() {
@@ -91,6 +92,7 @@ export default function Sidebar() {
                 { path: '/notifications', icon: <BellRing size={18} />, label: 'Bildirimler', roles: ['admin', 'super_admin'] },
                 { path: '/campaigns', icon: <Tag size={18} />, label: 'Kampanyalar', roles: ['admin', 'super_admin'] },
                 { path: '/fake-scheduler', icon: <Clock size={18} />, label: 'Otomatik Mesaj', roles: ['admin', 'super_admin'] },
+                { path: '/locked-photos', icon: <Lock size={18} />, label: 'Kilitli Foto Havuzu', roles: ['admin', 'super_admin'] },
                 { path: '/maintenance', icon: <Database size={18} />, label: 'Sistem Bakımı', roles: ['admin', 'super_admin'] },
                 { path: '/settings', icon: <Settings size={18} />, label: 'Ayarlar', roles: ['admin', 'super_admin'] },
             ]

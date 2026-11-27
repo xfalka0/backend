@@ -5,7 +5,21 @@ const { authenticateToken, authorizeRole } = require('../middleware/auth');
 const { sanitizeUser, logFreeMessagesExhausted } = require('../utils/helpers');
 const { sendPushNotification } = require('../utils/notificationUtils');
 const { recordOperatorCommission } = require('../utils/commissionUtils');
+const { isUserPremiumActive } = require('../utils/vipUtils');
 const { processAiAutoReply, scheduleAiNumaraHook } = require('../services/aiChatService');
+
+const MANAGEMENT_ROLES = ['admin', 'super_admin', 'moderator', 'staff', 'operator'];
+const isManagementRole = (role) => MANAGEMENT_ROLES.includes((role || '').toString().trim().toLowerCase());
+
+const getRestMessageCost = (type) => {
+    if (type === 'call_stub' || type === 'call_audio' || type === 'call_video') return 0;
+    if (type === 'image' || type === 'locked_image') return 50;
+    if (type === 'video' || type === 'locked_video') return 100;
+    if (type === 'audio') return 30;
+    if (type === 'location') return 400;
+    return 10;
+};
+const { recordLockedPhotoInsufficientHit, recordLockedPhotoUnlock } = require('../services/lockedPhotoPromoService');
 
 // GET MESSAGES FOR A CHAT
 router.get('/:chatId', async (req, res) => {
@@ -29,61 +43,135 @@ router.get('/:chatId', async (req, res) => {
     }
 });
 
-// POST A MESSAGE (REST fallback - primarily socket.io used)
-router.post('/', async (req, res) => {
-    const finalSenderId = req.body.senderId || req.body.userId;
+// POST A MESSAGE (REST fallback - enforces same coin rules as socket)
+router.post('/', authenticateToken, async (req, res) => {
+    const finalSenderId = req.user.id;
     const { chatId, content, type } = req.body;
-    if (!chatId || !finalSenderId || !content) return res.status(400).json({ error: 'Missing parameters' });
+    if (!chatId || !content) return res.status(400).json({ error: 'Missing parameters' });
+
+    const client = await db.pool.connect();
     try {
-        const result = await db.query(
+        await client.query('BEGIN');
+
+        const userRes = await client.query(
+            'SELECT balance, role, is_premium, premium_expire_date, vip_expire_date FROM users WHERE id = $1 FOR UPDATE',
+            [finalSenderId]
+        );
+        if (userRes.rows.length === 0) {
+            await client.query('ROLLBACK');
+            return res.status(404).json({ error: 'User not found' });
+        }
+
+        const sender = userRes.rows[0];
+        const isManagement = isManagementRole(sender.role);
+        const cost = isManagement ? 0 : getRestMessageCost(type || 'text');
+
+        if (!isManagement && type === 'location' && !isUserPremiumActive(sender)) {
+            await client.query('ROLLBACK');
+            return res.status(403).json({ error: 'Konum gönderebilmek için aktif Premium üye olmanız gerekmektedir.', requiresPremium: true });
+        }
+
+        let newBalance = parseFloat(sender.balance || 0);
+        if (cost > 0) {
+            if (newBalance < cost) {
+                await client.query('ROLLBACK');
+                logFreeMessagesExhausted(req.app.get('io'), finalSenderId, { channel: 'messages_rest', balance: newBalance, required: cost, messageType: type || 'text' }).catch(() => {});
+                return res.status(400).json({ error: `Yetersiz bakiye. Bu işlem için ${cost} coin gerekli.`, insufficientFunds: true, required: cost });
+            }
+
+            const updRes = await client.query(
+                'UPDATE users SET balance = balance - $1 WHERE id = $2 AND balance >= $1 RETURNING balance',
+                [cost, finalSenderId]
+            );
+            if (updRes.rows.length === 0) {
+                await client.query('ROLLBACK');
+                return res.status(400).json({ error: `Yetersiz bakiye. Bu işlem için ${cost} coin gerekli.`, insufficientFunds: true, required: cost });
+            }
+            newBalance = parseFloat(updRes.rows[0].balance);
+
+            await client.query(
+                'INSERT INTO transactions (user_id, amount, type, description) VALUES ($1, $2, $3, $4)',
+                [finalSenderId, -Math.round(cost), type === 'image' ? 'spend_image' : (type === 'audio' ? 'spend_audio' : 'spend_text'), 'Sohbet mesajı']
+            );
+        }
+
+        const result = await client.query(
             'INSERT INTO messages (chat_id, sender_id, content, content_type) VALUES ($1, $2, $3, $4) RETURNING *',
             [chatId, finalSenderId, content, type || 'text']
         );
-        await db.query('UPDATE chats SET last_message_at = NOW(), last_message = $2 WHERE id = $1', [chatId, content]);
+        await client.query('UPDATE chats SET last_message_at = NOW(), last_message = $2 WHERE id = $1', [chatId, content]);
+        await client.query('COMMIT');
+
+        const io = req.app.get('io');
+        if (io && cost > 0) {
+            io.emit('admin_balance_update', { userId: finalSenderId, newBalance });
+            io.to(finalSenderId.toString()).emit('balance_update', { userId: finalSenderId, newBalance });
+        }
+
         res.json(result.rows[0]);
     } catch (err) {
+        await client.query('ROLLBACK').catch(() => {});
         res.status(500).json({ error: err.message });
+    } finally {
+        client.release();
     }
 });
 
 // SEND HI MESSAGE
-router.post('/send-hi', async (req, res) => {
-    const { userId, senderId, operatorId, receiverId, content, message } = req.body;
-    const finalSenderId = userId || senderId;
+router.post('/send-hi', authenticateToken, async (req, res) => {
+    const { operatorId, receiverId, content, message } = req.body;
+    const finalSenderId = req.user.id;
     const finalReceiverId = operatorId || receiverId;
     const finalContent = content || message || 'Merhaba 👋';
     const HI_COST = 10;
 
-    if (!finalSenderId || !finalReceiverId) return res.status(400).json({ error: 'Missing sender or receiver ID' });
+    if (!finalReceiverId) return res.status(400).json({ error: 'Missing sender or receiver ID' });
 
+    const client = await db.pool.connect();
     try {
-        await db.query('BEGIN');
-        const userRes = await db.query('SELECT balance FROM users WHERE id = $1', [finalSenderId]);
-        if (userRes.rows.length === 0) { await db.query('ROLLBACK'); return res.status(404).json({ error: 'User not found' }); }
+        await client.query('BEGIN');
+        const userRes = await client.query('SELECT balance, role FROM users WHERE id = $1 FOR UPDATE', [finalSenderId]);
+        if (userRes.rows.length === 0) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'User not found' }); }
 
-        const currentBalance = userRes.rows[0].balance;
-        if (currentBalance < HI_COST) {
-            await db.query('ROLLBACK');
-            logFreeMessagesExhausted(req.app.get('io'), finalSenderId, { channel: 'send_hi_route', balance: currentBalance, required: HI_COST }).catch(() => {});
+        const isManagement = isManagementRole(userRes.rows[0].role);
+        const currentBalance = parseFloat(userRes.rows[0].balance || 0);
+        const cost = isManagement ? 0 : HI_COST;
+
+        if (cost > 0 && currentBalance < cost) {
+            await client.query('ROLLBACK');
+            logFreeMessagesExhausted(req.app.get('io'), finalSenderId, { channel: 'send_hi_route', balance: currentBalance, required: cost }).catch(() => {});
             return res.status(400).json({ error: 'Yetersiz bakiye.', insufficientFunds: true });
         }
 
-        let chatRes = await db.query(
+        let chatRes = await client.query(
             'SELECT id FROM chats WHERE (user_id = $1 AND operator_id = $2) OR (user_id = $2 AND operator_id = $1)',
             [finalSenderId, finalReceiverId]
         );
         let chatId;
         if (chatRes.rows.length === 0) {
-            const newChat = await db.query('INSERT INTO chats (user_id, operator_id, last_message_at) VALUES ($1, $2, NOW()) RETURNING id', [finalSenderId, finalReceiverId]);
+            const newChat = await client.query('INSERT INTO chats (user_id, operator_id, last_message_at) VALUES ($1, $2, NOW()) RETURNING id', [finalSenderId, finalReceiverId]);
             chatId = newChat.rows[0].id;
         } else {
             chatId = chatRes.rows[0].id;
         }
 
-        await db.query('UPDATE users SET balance = balance - $1 WHERE id = $2', [HI_COST, finalSenderId]);
-        const msgResult = await db.query('INSERT INTO messages (chat_id, sender_id, content, content_type) VALUES ($1, $2, $3, $4) RETURNING *', [chatId, finalSenderId, finalContent, 'text']);
-        await db.query('UPDATE chats SET last_message_at = NOW(), last_message = $2 WHERE id = $1', [chatId, finalContent]);
-        await db.query('COMMIT');
+        let newBalance = currentBalance;
+        if (cost > 0) {
+            const updRes = await client.query('UPDATE users SET balance = balance - $1 WHERE id = $2 AND balance >= $1 RETURNING balance', [cost, finalSenderId]);
+            if (updRes.rows.length === 0) {
+                await client.query('ROLLBACK');
+                return res.status(400).json({ error: 'Yetersiz bakiye.', insufficientFunds: true });
+            }
+            newBalance = parseFloat(updRes.rows[0].balance);
+            await client.query(
+                'INSERT INTO transactions (user_id, amount, type, description) VALUES ($1, $2, $3, $4)',
+                [finalSenderId, -Math.round(cost), 'spend_text', 'Merhaba mesajı']
+            );
+        }
+
+        const msgResult = await client.query('INSERT INTO messages (chat_id, sender_id, content, content_type) VALUES ($1, $2, $3, $4) RETURNING *', [chatId, finalSenderId, finalContent, 'text']);
+        await client.query('UPDATE chats SET last_message_at = NOW(), last_message = $2 WHERE id = $1', [chatId, finalContent]);
+        await client.query('COMMIT');
 
         try {
             const senderRes = await db.query('SELECT display_name FROM users WHERE id = $1', [finalSenderId]);
@@ -93,6 +181,10 @@ router.post('/send-hi', async (req, res) => {
 
         // Trigger AI auto-reply for eligible new users on "Merhaba" / REST send
         const io = req.app.get('io');
+        if (io && cost > 0) {
+            io.emit('admin_balance_update', { userId: finalSenderId, newBalance });
+            io.to(finalSenderId.toString()).emit('balance_update', { userId: finalSenderId, newBalance });
+        }
         processAiAutoReply({
             io,
             chatId,
@@ -101,10 +193,12 @@ router.post('/send-hi', async (req, res) => {
             userMessage: finalContent
         }).catch(() => {});
 
-        res.json({ success: true, chatId, newBalance: currentBalance - HI_COST, sentMessage: msgResult.rows[0] });
+        res.json({ success: true, chatId, newBalance, sentMessage: msgResult.rows[0] });
     } catch (err) {
-        await db.query('ROLLBACK');
+        await client.query('ROLLBACK').catch(() => {});
         res.status(500).json({ error: err.message });
+    } finally {
+        client.release();
     }
 });
 
@@ -156,6 +250,7 @@ router.post('/:messageId/unlock', authenticateToken, async (req, res) => {
         const userRes = await client.query('SELECT balance FROM users WHERE id = $1', [userId]);
         if (userRes.rows[0].balance < unlockCost) {
             await client.query('ROLLBACK');
+            recordLockedPhotoInsufficientHit(messageId).catch(() => {});
             logFreeMessagesExhausted(req.app.get('io'), userId, { channel: 'unlock_media', balance: userRes.rows[0]?.balance || 0, required: unlockCost }).catch(() => {});
             if ((userRes.rows[0]?.balance || 0) <= 0) {
                 const unlockOpId = msg.sender_id?.toString() !== userId.toString() ? msg.sender_id : null;
@@ -178,6 +273,7 @@ router.post('/:messageId/unlock', authenticateToken, async (req, res) => {
         await recordOperatorCommission(client, msg.chat_id, userId, unlockCost, 'locked_image');
 
         await client.query('COMMIT');
+        recordLockedPhotoUnlock(messageId).catch(() => {});
 
         const updatedMsg = updated.rows[0];
 

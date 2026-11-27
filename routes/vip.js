@@ -6,6 +6,7 @@ const { getVipLevel, getVipProgress } = require('../utils/vipUtils');
 const { logActivity } = require('../utils/helpers');
 const { insertPaymentIfAbsent, ensurePaymentSchema } = require('../utils/revenuecatUtils');
 const { withTransaction } = require('../utils/dbUtils');
+const { recordLockedPhotoPurchaseConversion } = require('../services/lockedPhotoPromoService');
 
 // VIP XP PURCHASE ENDPOINT
 // User spends coins to gain VIP XP (1 coin = 1 XP)
@@ -301,6 +302,9 @@ router.post('/upgrade-direct', authenticateToken, async (req, res) => {
                     created_at: new Date().toISOString()
                 });
                 io.emit('admin_payment_update', { type: 'vip', user_id: userId });
+            }
+            if (outcome.insertedPaymentId) {
+                recordLockedPhotoPurchaseConversion({ userId, paymentId: outcome.insertedPaymentId, amount: parsedMonths }).catch(() => {});
             }
         }
 

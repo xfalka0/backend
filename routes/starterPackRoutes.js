@@ -14,6 +14,7 @@ const {
     verifyRevenueCatPurchase,
     creditCoinPurchaseAtomic,
 } = require('../utils/revenuecatUtils');
+const { recordLockedPhotoPurchaseConversion } = require('../services/lockedPhotoPromoService');
 
 // Ensure starter_pack_purchases table exists
 ensureStarterPackTable(db).catch(console.error);
@@ -229,7 +230,16 @@ router.post('/purchase', authenticateToken, async (req, res) => {
                     newBalance: outcome.newBalance,
                     hearts: outcome.newBalance
                 });
+                io.emit('new_payment', {
+                    user_id: userId,
+                    amount: STARTER_PACK.discounted_price,
+                    transaction_id: canonicalTxId,
+                    status: 'completed',
+                    created_at: new Date().toISOString()
+                });
+                io.emit('admin_payment_update', { type: 'coins', user_id: userId });
             }
+            recordLockedPhotoPurchaseConversion({ userId, paymentId: canonicalTxId, amount: STARTER_PACK.discounted_price }).catch(() => {});
             console.log(`[STARTER PACK] User ${userId} purchased starter pack (+${STARTER_PACK.coins}). New balance: ${outcome.newBalance}`);
         } else {
             console.log(`[STARTER PACK] User ${userId} starter pack already credited by webhook. Returning balance: ${outcome.body.new_balance}`);

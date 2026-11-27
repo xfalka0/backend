@@ -10,6 +10,7 @@ const {
 } = require('../utils/starterPackUtils');
 const { withTransaction } = require('../utils/dbUtils');
 const { creditCoinPurchaseAtomic, ensurePaymentSchema, insertPaymentIfAbsent } = require('../utils/revenuecatUtils');
+const { recordLockedPhotoPurchaseConversion } = require('../services/lockedPhotoPromoService');
 
 // Server-side product catalogs (fixed truth source)
 const COIN_PRODUCT_MAPPING = {
@@ -335,6 +336,7 @@ async function handleSuccessfulPayment(userId, event, io) {
             }
 
             console.log(`[WEBHOOK SUCCESS] Added ${coinAmount} coins to user ${txResult.resolvedUserId} for tx ${transactionId}`);
+            recordLockedPhotoPurchaseConversion({ userId: txResult.resolvedUserId, paymentId: transactionId, amount: price || coinAmount }).catch(() => {});
 
             if (io) {
                 io.to(`user_${txResult.resolvedUserId}`).emit('balance_update', {
@@ -484,6 +486,7 @@ async function handleSuccessfulPayment(userId, event, io) {
             }
 
             console.log(`[WEBHOOK VIP SUCCESS] Activated ${months} months VIP for user ${vipResult.resolvedUserId} until ${vipResult.baseDate.toISOString()}`);
+            recordLockedPhotoPurchaseConversion({ userId: vipResult.resolvedUserId, paymentId: transactionId, amount: price || months }).catch(() => {});
 
             if (io) {
                 io.to(`user_${vipResult.resolvedUserId}`).emit('vip_level_up', {

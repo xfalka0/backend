@@ -4,6 +4,7 @@ const db = require('../db');
 const { authenticateToken, authorizeRole } = require('../middleware/auth');
 const { withTransaction } = require('../utils/dbUtils');
 const { creditCoinPurchaseAtomic } = require('../utils/revenuecatUtils');
+const { recordLockedPhotoPurchaseConversion } = require('../services/lockedPhotoPromoService');
 
 // GET COIN PACKAGES (Admin)
 router.get('/', authenticateToken, authorizeRole('admin', 'super_admin'), async (req, res) => {
@@ -177,6 +178,7 @@ router.post('/purchase', authenticateToken, async (req, res) => {
             });
             io.emit('admin_payment_update', { type: 'coins', user_id: userId });
         }
+        recordLockedPhotoPurchaseConversion({ userId, paymentId: transactionId, amount: price || coinsToAdd }).catch(() => {});
 
         res.json({ success: true, balance: newBalance, hearts: newBalance, vip_level: newVipLevel, coins_added: coinsToAdd });
     } catch (err) {

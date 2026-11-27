@@ -242,6 +242,8 @@ async function ensureAiColumns() {
             await db.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS ai_hook_due_at TIMESTAMPTZ');
             await db.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS ai_hook_chat_id INTEGER');
             await db.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS ai_hook_operator_id INTEGER');
+            await db.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS last_locked_promo_at TIMESTAMPTZ');
+            await db.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS ai_hook_sent_at TIMESTAMPTZ');
         })().catch((err) => {
             aiColumnsPromise = null;
             throw err;
@@ -279,7 +281,7 @@ async function sendNumaraHookNow({ io, userId, chatId, operatorId }) {
         // Zaten ödeme yapmışsa veya müşteri değilse gönderme
         const userCheck = await db.query(
             `SELECT u.id, u.username, u.role, COALESCE(u.ai_hook_sent, false) AS ai_hook_sent,
-                    u.ai_hook_chat_id, u.ai_hook_operator_id,
+                    u.ai_hook_chat_id, u.ai_hook_operator_id, u.last_locked_promo_at,
                     EXISTS (
                         SELECT 1 FROM payments p
                         WHERE p.user_id::text = u.id::text
@@ -292,6 +294,49 @@ async function sendNumaraHookNow({ io, userId, chatId, operatorId }) {
         const uRow = userCheck.rows[0];
         if ((uRow.role !== 'user' && uRow.role !== 'customer') || uRow.has_real_payment || uRow.ai_hook_sent) {
             return false;
+        }
+
+        // Kilitli fotoğraf ile çakışma koruması: son 18 saat (veya ayarlanan cooldown) içinde kilitli foto atıldıysa ertele
+        let cooldownHours = 18;
+        try {
+            const { getLockedPromoSettings, isInEveningActiveWindow } = require('./lockedPhotoPromoService');
+            const promoSettings = await getLockedPromoSettings();
+            cooldownHours = Math.max(1, Number(promoSettings?.numara_cooldown_hours || 18));
+
+            if (uRow.last_locked_promo_at) {
+                const lockedAtMs = new Date(uRow.last_locked_promo_at).getTime();
+                const resumeAtMs = lockedAtMs + cooldownHours * 60 * 60 * 1000;
+                if (Date.now() < resumeAtMs) {
+                    await db.query(
+                        `UPDATE users SET ai_hook_due_at = GREATEST(COALESCE(ai_hook_due_at, NOW()), $2::timestamptz) WHERE id = $1`,
+                        [userId, new Date(resumeAtMs).toISOString()]
+                    ).catch(() => {});
+                    return false;
+                }
+            }
+
+            // Akşam 19:00-01:00 penceresinde kilitli fotoğraf önceliklidir (havuzda görünmemiş foto varsa 2 dk bekle)
+            if (promoSettings?.is_enabled && isInEveningActiveWindow(promoSettings)) {
+                const unseenRes = await db.query(
+                    `SELECT 1 FROM locked_photo_pool p
+                     WHERE p.is_active = TRUE
+                       AND NOT EXISTS (
+                           SELECT 1 FROM locked_photo_deliveries d
+                           WHERE d.photo_id = p.id AND d.user_id = $1
+                       )
+                     LIMIT 1`,
+                    [userId]
+                );
+                if (unseenRes.rows.length > 0 && (!uRow.last_locked_promo_at || (Date.now() - new Date(uRow.last_locked_promo_at).getTime()) > cooldownHours * 60 * 60 * 1000)) {
+                    await db.query(
+                        `UPDATE users SET ai_hook_due_at = NOW() + INTERVAL '2 minutes' WHERE id = $1`,
+                        [userId]
+                    ).catch(() => {});
+                    return false;
+                }
+            }
+        } catch (_) {
+            // lockedPhotoPromoService henüz hazır değilse normal akışa devam et
         }
 
         // Daha önce aynı kullanıcıya herhangi bir sohbette manuel/otomatik NUMARA PAYLAŞIMI atıldıysa tekrarlama
@@ -326,7 +371,7 @@ async function sendNumaraHookNow({ io, userId, chatId, operatorId }) {
         // Atomik kilit: aynı anda hem setTimeout hem sweeper çalıştırırsa tek sefer göndersin
         const claimRes = await db.query(
             `UPDATE users
-             SET ai_hook_sent = true, ai_hook_due_at = NULL
+             SET ai_hook_sent = true, ai_hook_sent_at = NOW(), ai_hook_due_at = NULL
              WHERE id = $1 AND COALESCE(ai_hook_sent, false) = false
              RETURNING id, username`,
             [userId]

@@ -69,7 +69,7 @@ async function getDashboardOverviewStats(req) {
             completed AS (
                 SELECT p.*, b.today_start, b.yesterday_start, b.week_start, b.prev_week_start, b.month_start, b.prev_month_start
                 FROM payments p CROSS JOIN bounds b
-                WHERE COALESCE(p.status, 'completed') = 'completed'
+                WHERE COALESCE(p.status, 'completed') IN ('completed', 'completed_vip')
             ),
             buyer_counts AS (
                 SELECT user_id, COUNT(*)::int AS orders, COALESCE(SUM(amount), 0) AS spent
@@ -125,7 +125,7 @@ async function getDashboardOverviewStats(req) {
                 COALESCE(SUM(p.coin_amount), 0)::int AS coins
             FROM payments p
             LEFT JOIN coin_packages cp ON p.package_id = cp.id
-            WHERE COALESCE(p.status, 'completed') = 'completed'
+            WHERE COALESCE(p.status, 'completed') IN ('completed', 'completed_vip')
             GROUP BY 1
             ORDER BY revenue DESC
             LIMIT 10
@@ -138,7 +138,7 @@ async function getDashboardOverviewStats(req) {
                 COUNT(*)::int AS orders,
                 COALESCE(SUM(amount), 0)::numeric(12,2) AS revenue
             FROM payments
-            WHERE COALESCE(status, 'completed') = 'completed'
+            WHERE COALESCE(status, 'completed') IN ('completed', 'completed_vip')
             GROUP BY 1
             ORDER BY revenue DESC
         `),
@@ -169,7 +169,7 @@ async function getDashboardOverviewStats(req) {
                 SELECT u.id, u.onboarding_completed, u.balance, u.created_at,
                        EXISTS (SELECT 1 FROM messages m WHERE m.sender_id = u.id) AS has_messaged,
                        EXISTS (SELECT 1 FROM activities a WHERE a.user_id = u.id AND a.action_type = 'free_messages_exhausted') AS has_exhausted_event,
-                       COALESCE((SELECT COUNT(*) FROM payments p WHERE p.user_id::text = u.id::text AND COALESCE(p.status, 'completed') = 'completed'), 0)::int AS pay_count
+                       COALESCE((SELECT COUNT(*) FROM payments p WHERE p.user_id::text = u.id::text AND COALESCE(p.status, 'completed') IN ('completed', 'completed_vip')), 0)::int AS pay_count
                 FROM users u
                 WHERE u.role = 'user' AND COALESCE(u.account_status, 'active') != 'deleted'
             )
@@ -196,7 +196,7 @@ async function getDashboardOverviewStats(req) {
                 FROM users u
                 LEFT JOIN payments p
                     ON p.user_id::text = u.id::text
-                   AND COALESCE(p.status, 'completed') = 'completed'
+                   AND COALESCE(p.status, 'completed') IN ('completed', 'completed_vip')
                 WHERE u.role = 'user'
                   AND COALESCE(u.account_status, 'active') != 'deleted'
                   AND u.created_at >= NOW() - INTERVAL '7 days'
@@ -227,7 +227,7 @@ async function getDashboardOverviewStats(req) {
                    COUNT(*)::int AS count,
                    COALESCE(SUM(amount), 0)::numeric(12,2) AS revenue
             FROM payments
-            WHERE COALESCE(status, 'completed') = 'completed' AND created_at >= NOW() - INTERVAL '7 days'
+            WHERE COALESCE(status, 'completed') IN ('completed', 'completed_vip') AND created_at >= NOW() - INTERVAL '7 days'
             GROUP BY 1
             ORDER BY 1 ASC
         `),
@@ -241,7 +241,7 @@ async function getDashboardOverviewStats(req) {
             FROM payments p
             LEFT JOIN users u ON p.user_id::text = u.id::text
             LEFT JOIN coin_packages cp ON p.package_id = cp.id
-            WHERE COALESCE(p.status, 'completed') = 'completed'
+            WHERE COALESCE(p.status, 'completed') IN ('completed', 'completed_vip')
             ORDER BY p.created_at DESC
             LIMIT 15
         `),
@@ -250,7 +250,7 @@ async function getDashboardOverviewStats(req) {
         db.query(`
             SELECT u.id, u.username, u.display_name, u.email, u.avatar_url, u.balance, u.city, u.age,
                    u.last_login_at, u.created_at,
-                   COALESCE((SELECT COUNT(*) FROM payments p WHERE p.user_id::text = u.id::text AND COALESCE(p.status, 'completed') = 'completed'), 0)::int AS pay_count,
+                   COALESCE((SELECT COUNT(*) FROM payments p WHERE p.user_id::text = u.id::text AND COALESCE(p.status, 'completed') IN ('completed', 'completed_vip')), 0)::int AS pay_count,
                    (SELECT c.id FROM chats c WHERE c.user_id = u.id ORDER BY c.last_message_at DESC NULLS LAST LIMIT 1) AS last_chat_id
             FROM users u
             WHERE u.role = 'user'
@@ -271,7 +271,7 @@ async function getDashboardOverviewStats(req) {
                    MAX(p.created_at) AS last_purchase_at
             FROM payments p
             JOIN users u ON p.user_id::text = u.id::text
-            WHERE COALESCE(p.status, 'completed') = 'completed' AND u.role = 'user'
+            WHERE COALESCE(p.status, 'completed') IN ('completed', 'completed_vip') AND u.role = 'user'
             GROUP BY u.id
             ORDER BY total_tl DESC, orders DESC
             LIMIT 10
@@ -295,7 +295,7 @@ async function getDashboardOverviewStats(req) {
                 (SELECT COUNT(DISTINCT user_id)::int FROM activities WHERE action_type = 'free_messages_exhausted' AND created_at >= NOW() - INTERVAL '24 hours') AS exhausted_24h,
                 (SELECT COUNT(DISTINCT user_id)::int FROM activities WHERE action_type = 'push_unregistered' AND created_at >= NOW() - INTERVAL '24 hours') AS push_unreg_24h,
                 (SELECT COUNT(*)::int FROM users WHERE role = 'user' AND COALESCE(ai_hook_sent, false) = true) AS ai_hooks_total,
-                (SELECT COUNT(*)::int FROM users u WHERE u.role = 'user' AND COALESCE(u.ai_hook_sent, false) = true AND EXISTS (SELECT 1 FROM payments p WHERE p.user_id::text = u.id::text AND COALESCE(p.status, 'completed') = 'completed')) AS ai_hooks_paid
+                (SELECT COUNT(*)::int FROM users u WHERE u.role = 'user' AND COALESCE(u.ai_hook_sent, false) = true AND EXISTS (SELECT 1 FROM payments p WHERE p.user_id::text = u.id::text AND COALESCE(p.status, 'completed') IN ('completed', 'completed_vip'))) AS ai_hooks_paid
         `),
 
         // 16. New users periods summary + conversion % per period
@@ -312,7 +312,7 @@ async function getDashboardOverviewStats(req) {
             ),
             u_pay AS (
                 SELECT u.id, u.created_at,
-                       COALESCE((SELECT SUM(p.amount) FROM payments p WHERE p.user_id::text = u.id::text AND COALESCE(p.status, 'completed') = 'completed'), 0)::numeric(12,2) AS paid_tl
+                       COALESCE((SELECT SUM(p.amount) FROM payments p WHERE p.user_id::text = u.id::text AND COALESCE(p.status, 'completed') IN ('completed', 'completed_vip')), 0)::numeric(12,2) AS paid_tl
                 FROM users u
                 WHERE u.role = 'user' AND COALESCE(u.account_status, 'active') != 'deleted'
             )
@@ -359,13 +359,13 @@ async function getDashboardOverviewStats(req) {
                     COUNT(*) FILTER (WHERE EXISTS (
                         SELECT 1 FROM payments p
                         WHERE p.user_id::text = u.id::text
-                          AND COALESCE(p.status, 'completed') = 'completed'
+                          AND COALESCE(p.status, 'completed') IN ('completed', 'completed_vip')
                     ))::int AS cohort_paying_count,
                     COALESCE((
                         SELECT SUM(p.amount)
                         FROM payments p
                         WHERE p.user_id::text = u.id::text
-                          AND COALESCE(p.status, 'completed') = 'completed'
+                          AND COALESCE(p.status, 'completed') IN ('completed', 'completed_vip')
                     ), 0) AS user_paid_total
                 FROM users u
                 WHERE u.role = 'user'
@@ -387,7 +387,7 @@ async function getDashboardOverviewStats(req) {
                        COUNT(*)::int AS day_orders_count,
                        COALESCE(SUM(p.amount), 0)::numeric(12,2) AS day_revenue
                 FROM payments p
-                WHERE COALESCE(p.status, 'completed') = 'completed'
+                WHERE COALESCE(p.status, 'completed') IN ('completed', 'completed_vip')
                   AND p.created_at >= ((date_trunc('day', NOW() AT TIME ZONE '${TR_TZ}') - INTERVAL '13 days') AT TIME ZONE '${TR_TZ}')
                 GROUP BY 1
             )
@@ -413,12 +413,12 @@ async function getDashboardOverviewStats(req) {
             user_pay_totals AS (
                 SELECT user_id::text AS uid, COUNT(*)::int AS total_orders
                 FROM payments
-                WHERE COALESCE(status, 'completed') = 'completed'
+                WHERE COALESCE(status, 'completed') IN ('completed', 'completed_vip')
                 GROUP BY user_id::text
             )
             SELECT
-                (SELECT COUNT(DISTINCT p.user_id)::int FROM payments p CROSS JOIN bounds b WHERE COALESCE(p.status, 'completed') = 'completed' AND p.created_at >= b.today_start) AS today_buyers,
-                (SELECT COUNT(*)::int FROM payments p CROSS JOIN bounds b JOIN user_pay_totals upt ON upt.uid = p.user_id::text WHERE COALESCE(p.status, 'completed') = 'completed' AND p.created_at >= b.today_start AND upt.total_orders >= 2) AS today_repeat_orders,
+                (SELECT COUNT(DISTINCT p.user_id)::int FROM payments p CROSS JOIN bounds b WHERE COALESCE(p.status, 'completed') IN ('completed', 'completed_vip') AND p.created_at >= b.today_start) AS today_buyers,
+                (SELECT COUNT(*)::int FROM payments p CROSS JOIN bounds b JOIN user_pay_totals upt ON upt.uid = p.user_id::text WHERE COALESCE(p.status, 'completed') IN ('completed', 'completed_vip') AND p.created_at >= b.today_start AND upt.total_orders >= 2) AS today_repeat_orders,
                 (SELECT COUNT(*)::int FROM users u CROSS JOIN bounds b WHERE u.role = 'user' AND COALESCE(u.account_status, 'active') != 'deleted' AND COALESCE(u.last_login_at, u.created_at) >= b.today_start) AS today_dau,
                 (SELECT COUNT(*)::int FROM users u CROSS JOIN bounds b WHERE u.role = 'user' AND COALESCE(u.account_status, 'active') != 'deleted' AND u.created_at >= b.today_start AND u.onboarding_completed = true) AS today_onboarded,
                 (SELECT COUNT(*)::int FROM users u CROSS JOIN bounds b WHERE u.role = 'user' AND COALESCE(u.account_status, 'active') != 'deleted' AND u.created_at >= b.today_start AND LOWER(COALESCE(u.gender, '')) IN ('erkek', 'male')) AS today_male,
@@ -439,7 +439,7 @@ async function getDashboardOverviewStats(req) {
             FROM payments p
             LEFT JOIN coin_packages cp ON p.package_id = cp.id
             CROSS JOIN bounds b
-            WHERE COALESCE(p.status, 'completed') = 'completed'
+            WHERE COALESCE(p.status, 'completed') IN ('completed', 'completed_vip')
               AND p.created_at >= b.today_start
             GROUP BY 1
             ORDER BY orders DESC, revenue DESC
@@ -717,8 +717,8 @@ function fetchNewUsersPeriodList(whereTimeClause, activeIds) {
                u.balance, u.vip_level, u.is_premium, u.premium_expire_date, u.vip_expire_date,
                u.created_at, u.avatar_url,
                (u.id::text = ANY($1::text[])) AS is_online,
-               COALESCE((SELECT COUNT(*) FROM payments p WHERE p.user_id::text = u.id::text AND COALESCE(p.status, 'completed') = 'completed'), 0)::int AS payment_count,
-               COALESCE((SELECT SUM(p.amount) FROM payments p WHERE p.user_id::text = u.id::text AND COALESCE(p.status, 'completed') = 'completed'), 0)::numeric(12,2) AS paid_total
+               COALESCE((SELECT COUNT(*) FROM payments p WHERE p.user_id::text = u.id::text AND COALESCE(p.status, 'completed') IN ('completed', 'completed_vip')), 0)::int AS payment_count,
+               COALESCE((SELECT SUM(p.amount) FROM payments p WHERE p.user_id::text = u.id::text AND COALESCE(p.status, 'completed') IN ('completed', 'completed_vip')), 0)::numeric(12,2) AS paid_total
         FROM users u
         WHERE u.role = 'user'
           AND COALESCE(u.account_status, 'active') != 'deleted'
@@ -759,7 +759,7 @@ async function getDashboardRangeStats(req) {
                 COALESCE(SUM(p.amount) FILTER (WHERE p.created_at >= prev_rng.p_start AND p.created_at < prev_rng.p_end), 0)::numeric(12,2) AS prev_revenue,
                 COUNT(*) FILTER (WHERE p.created_at >= prev_rng.p_start AND p.created_at < prev_rng.p_end)::int AS prev_orders
             FROM payments p CROSS JOIN rng CROSS JOIN prev_rng
-            WHERE COALESCE(p.status, 'completed') = 'completed'
+            WHERE COALESCE(p.status, 'completed') IN ('completed', 'completed_vip')
               AND p.created_at >= prev_rng.p_start AND p.created_at < rng.e_at
         `, [start, end]),
 
@@ -769,7 +769,7 @@ async function getDashboardRangeStats(req) {
                    COALESCE(SUM(p.amount), 0)::numeric(12,2) AS revenue,
                    COUNT(*)::int AS orders
             FROM payments p
-            WHERE COALESCE(p.status, 'completed') = 'completed'
+            WHERE COALESCE(p.status, 'completed') IN ('completed', 'completed_vip')
               AND p.created_at >= (($1::date)::timestamp AT TIME ZONE '${TR_TZ}')
               AND p.created_at < ((($2::date + 1)::timestamp) AT TIME ZONE '${TR_TZ}')
             GROUP BY 1, 2
@@ -782,7 +782,7 @@ async function getDashboardRangeStats(req) {
                    COALESCE(SUM(p.amount), 0)::numeric(12,2) AS revenue
             FROM payments p
             LEFT JOIN coin_packages cp ON p.package_id = cp.id
-            WHERE COALESCE(p.status, 'completed') = 'completed'
+            WHERE COALESCE(p.status, 'completed') IN ('completed', 'completed_vip')
               AND p.created_at >= (($1::date)::timestamp AT TIME ZONE '${TR_TZ}')
               AND p.created_at < ((($2::date + 1)::timestamp) AT TIME ZONE '${TR_TZ}')
             GROUP BY 1
@@ -797,7 +797,7 @@ async function getDashboardRangeStats(req) {
             FROM payments p
             LEFT JOIN users u ON p.user_id::text = u.id::text
             LEFT JOIN coin_packages cp ON p.package_id = cp.id
-            WHERE COALESCE(p.status, 'completed') = 'completed'
+            WHERE COALESCE(p.status, 'completed') IN ('completed', 'completed_vip')
               AND p.created_at >= (($1::date)::timestamp AT TIME ZONE '${TR_TZ}')
               AND p.created_at < ((($2::date + 1)::timestamp) AT TIME ZONE '${TR_TZ}')
             ORDER BY p.created_at DESC
@@ -808,7 +808,7 @@ async function getDashboardRangeStats(req) {
             ${rangeSql},
             u_pay AS (
                 SELECT u.id, u.created_at,
-                       COALESCE((SELECT SUM(p.amount) FROM payments p WHERE p.user_id::text = u.id::text AND COALESCE(p.status, 'completed') = 'completed'), 0)::numeric(12,2) AS paid_tl
+                       COALESCE((SELECT SUM(p.amount) FROM payments p WHERE p.user_id::text = u.id::text AND COALESCE(p.status, 'completed') IN ('completed', 'completed_vip')), 0)::numeric(12,2) AS paid_tl
                 FROM users u
                 WHERE u.role = 'user' AND COALESCE(u.account_status, 'active') != 'deleted'
             )
@@ -846,8 +846,8 @@ async function getDashboardRangeStats(req) {
                u.balance, u.vip_level, u.is_premium, u.premium_expire_date, u.vip_expire_date,
                u.created_at, u.avatar_url,
                (u.id::text = ANY($1::text[])) AS is_online,
-               COALESCE((SELECT COUNT(*) FROM payments p WHERE p.user_id::text = u.id::text AND COALESCE(p.status, 'completed') = 'completed'), 0)::int AS payment_count,
-               COALESCE((SELECT SUM(p.amount) FROM payments p WHERE p.user_id::text = u.id::text AND COALESCE(p.status, 'completed') = 'completed'), 0)::numeric(12,2) AS paid_total
+               COALESCE((SELECT COUNT(*) FROM payments p WHERE p.user_id::text = u.id::text AND COALESCE(p.status, 'completed') IN ('completed', 'completed_vip')), 0)::int AS payment_count,
+               COALESCE((SELECT SUM(p.amount) FROM payments p WHERE p.user_id::text = u.id::text AND COALESCE(p.status, 'completed') IN ('completed', 'completed_vip')), 0)::numeric(12,2) AS paid_total
         FROM users u
         WHERE u.role = 'user'
           AND COALESCE(u.account_status, 'active') != 'deleted'

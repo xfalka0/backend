@@ -28,22 +28,22 @@ const PHONE_NUMBER_STALL_RESPONSES = [
 
 const OFF_APP_STALL_RESPONSES = [
     'buradan konuşalım biraz daha tanı beni öyle bakarız',
-    'instagramın var mı senin ama uygulama sansürlüyo galiba burda',
-    'numaramı versem olur mu acaba sistem izin verir mi ki',
+    'burda insta ve numara yazınca sistem engelliyo burdan yazışalım',
+    'uygulama dışarıdan iletişim bilgilerini gizliyo burdan devam edelim',
     'biraz daha konuşalım burda hemen kaçma merak ettim seni'
 ];
 
 const COIN_STALL_RESPONSES = [
-    'numaramı versem olur mu yoksa instagramın var mı senin',
-    'ayy tam yeni tanışıyoduk instagramın var mı bari',
-    'dur kaçma hemen numaramı versem olur mu acaba',
-    'burda numara gizleniyo ki numaramı atsam görür müsün acaba'
+    'tam yeni tanışıyoduk dur gitme hemen biraz daha konuşalım',
+    'dur kaçma hemen nereye gidiyosun biraz daha yazışsak ya',
+    'ayy tam da muhabbet açılıyodu biraz daha kal burda',
+    'hemen kaçmasan ya biraz daha sohbet edelim burda'
 ];
 
 const PHONE_DIGITS_REGEX = /(?:\+?\d[\s\-().]*){7,}/;
 const OFF_APP_REGEX = /(whatsapp|whatsap|watsap|\bwp\b|insta|instagram|telegram|snapchat|tiktok|numara|tel\b|telefon)/i;
 const COIN_EXHAUSTED_USER_REGEX = /(koinim bitti|coinim bitti|jetonum bitti|jetonum kalmad[ıi]|koin kalmad[ıi]|jeton yetmiyor|koin yetmiyor|coin yetmiyor|yazam[ıi]yorum|bakiye bitti|param bitti|paras[ıi]z)/i;
-const FORBIDDEN_ACCEPT_REGEX = /(kaydet|kayded|eklerim|ekliyorum|ekledim|yazarım|yazıyorum|geçelim|geçeriz|geliyorum|bakarız orada|ordan yaz)/i;
+const FORBIDDEN_ACCEPT_REGEX = /(kaydet|kayded|eklerim|ekliyorum|ekledim|yazarım|yazıyorum|geçelim|geçeriz|geliyorum|bakarız orada|ordan yaz|numaramı versem|numaramı atsam|gönderiyorum numaramı)/i;
 const FORBIDDEN_FREE_COIN_REGEX = /(dert etme|sorun de[ğg]il.*yaz|bo[şs]ver.*jeton|bo[şs]ver.*koin|paras[ıi]z yaz|ücretsiz yaz|buradan devam et bedava)/i;
 const FORBIDDEN_DIRECT_UPSELL_REGEX = /(jeton|koin|coin)\s*(yükle|al|satın)/i;
 const FORBIDDEN_HOSTILE_REGEX = /(saçmal|kes ses|bir daha.*yazma|bi daha.*yazma|yazma bana|defol|terbiyesiz|had[sd]siz|engel|igren|iğren|saygısız|uzak dur|rahatsız et|agresif)/i;
@@ -94,10 +94,25 @@ function getTimeContext(date = new Date()) {
     };
 }
 
-function pickFallbackResponse(userMessage = '', date = new Date()) {
+const MEETING_ASK_PLACE_RESPONSES = [
+    'tamam buluşalım hangi ilçedesin sana neresi uygun',
+    'olur buluşalım sen hangi taraftasın ona göre yer bakalım',
+    'tamam görüşelim hangi semttesin yakın mıyız bakalım'
+];
+
+const PLACE_MENTION_REGEX = /(yaşıyorum|oturuyorum|köyde|ilçede|semtte|mahalle|merkezde|buradayım|çerkezköy|kadıköy|beşiktaş|şişli|taksim|bakırköy|üsküdar|ataşehir|maltepe|kartal|pendik|çekmeköy|sancaktepe|beylikdüzü|avcılar|esenler|bağcılar|bahçelievler|sarıyer|levent|mecidiyeköy|çankaya|kızılay|keçiören|yenimahalle|etimesgut|mamak|sincan|bornova|karşıyaka|konak|buca|alsancak|bostanlı|nilüfer|osmangazi|yıldırım|muratpaşa|konyaaltı|lara|kepez|seyhan|çukurova|gebze|izmit|körfez|gölcük|derince|odunpazarı|tepebaşı|karaköprü|eyyübiye|haliliye)/i;
+
+function pickFallbackResponse(userMessage = '', date = new Date(), chatHistory = []) {
     const msg = String(userMessage || '');
     if (PHONE_DIGITS_REGEX.test(msg)) {
         return PHONE_NUMBER_STALL_RESPONSES[Math.floor(Math.random() * PHONE_NUMBER_STALL_RESPONSES.length)];
+    }
+    if (/(buluşalım|bir yer söyle|görüşelim|buluşsak)/i.test(msg)) {
+        const mentionedPlace = Array.isArray(chatHistory) && chatHistory.some(
+            m => m?.is_user && PLACE_MENTION_REGEX.test(m.content || '')
+        );
+        const pool = mentionedPlace ? REALISTIC_MEETING_FOLLOWUPS : MEETING_ASK_PLACE_RESPONSES;
+        return pool[Math.floor(Math.random() * pool.length)];
     }
     if (COIN_EXHAUSTED_USER_REGEX.test(msg)) {
         return COIN_STALL_RESPONSES[Math.floor(Math.random() * COIN_STALL_RESPONSES.length)];
@@ -118,7 +133,7 @@ function pickFallbackResponse(userMessage = '', date = new Date()) {
  */
 function cleanAiResponse(text) {
     if (!text) return '';
-    let cleaned = text.toLowerCase();
+    let cleaned = text.toLocaleLowerCase('tr-TR');
     // Kesme işaretlerini birleştirerek kaldır (adana'da -> adanada)
     cleaned = cleaned.replace(/['’`]/g, '');
     // Diğer tüm noktalama işaretlerini TEK BİR BOŞLUĞA çevir (kelimeler yapışmasın)
@@ -163,9 +178,7 @@ async function generateAiReply({ operator, targetUser = null, userMessage, chatH
     const targetProfileLines = [
         targetName ? `Adı: ${targetName}` : null,
         targetCity ? `Şehri: ${targetCity}` : null,
-        targetAge ? `Yaşı: ${targetAge}` : null,
-        targetJob ? `Mesleği: ${targetJob}` : null,
-        targetInterests ? `İlgi Alanları: ${targetInterests}` : null
+        targetAge ? `Yaşı: ${targetAge}` : null
     ].filter(Boolean);
 
     const timeInfo = getTimeContext();
@@ -180,21 +193,23 @@ ZAMAN VE ORTAM BİLGİSİ:
 KESİN KURALLAR:
 1. SORULARI YANITLA VE UZUNLUK: Kullanıcı bir veya birden fazla soru sorarsa (ör. nerelisin, evli misin, amacın nedir, yaş kaç) ÖNCE tüm sorularına tek nefeste net, cilveli cevap ver (bekar olduğunu, amacının samimi/heyecanlı biriyle tanışmak olduğunu vb. söyle), soruları geçiştirip alakasız cevap verme. Uzunluğu 1-2 kısa cümle (6-14 kelime) tut; WhatsApp mesajı gibi seri ve doğal olsun.
 2. YAZIM: Tamamen küçük harfle yaz. Nokta, virgül, soru işareti, ünlem gibi HİÇBİR noktalama işareti kullanma.
-3. AD, HİTAP VE FELSEFE YASAĞI: Karşı tarafın adını da kendi adını da (${opName}) her mesajda papağan gibi tekrarlama; sohbet geçmişinde az önce kurduğun cümleleri veya "evde uzanıyorum canım sıkılıyor" kalıbını tekrar etme. Karşı taraf "aşkım", "bebeğim", "hayatım" gibi ifadeler kullanmadıysa sen de durduk yere "aşkım" veya "bebeğim" deme. ASLA felsefe yapma, şiirsel veya kitabî cümleler kurma ("aynı memleketin havalarını soluyoruz", "kalpler bir" gibi yapay edebiyat YASAK); gerçek WhatsApp sohbeti gibi düz, direkt konuş ve sohbeti ilerleten net sorular sor (örn: "ben de urfadayım arayışın ne burada", "nasıl birini arıyosun burda", "ne iş yapıyosun", "neler yapıyosun").
+3. AD, HİTAP VE FELSEFE YASAĞI: Karşı tarafın adını da kendi adını da (${opName}) her mesajda papağan gibi tekrarlama; sohbet geçmişinde az önce kurduğun cümleleri, "merhaba ben ${opName.toLowerCase()}" girişini veya "evde uzanıyorum canım sıkılıyor" kalıbını tekrar etme. Karşı taraf "aşkım", "bebeğim", "hayatım" gibi ifadeler kullanmadıysa sen de durduk yere "aşkım" veya "bebeğim" deme. ASLA felsefe yapma, şiirsel veya kitabî cümleler kurma ("aynı memleketin havalarını soluyoruz", "kalpler bir" gibi yapay edebiyat YASAK); gerçek WhatsApp sohbeti gibi düz, direkt konuş ve sohbeti ilerleten net sorular sor (örn: "ben de urfadayım arayışın ne burada", "nasıl birini arıyosun burda", "ne iş yapıyosun", "neler yapıyosun").
 4. HALÜSİNASYON YASAK: Kullanıcı ses kaydı atmadıysa asla "sesin iyi geliyor", fotoğraf atmadıysa "fotoğrafın çok iyi" gibi olmayan durumları uydurma.
 5. KOİN / JETON / OYALAMA STRATEJİSİ (KRİTİK):
    - Sohbet geçmişini ve karşı tarafın yazdıklarını analiz ederek akışa göre doğal cevap ver, ezber kalıplar tekrarlama.
    - ASLA doğrudan "jeton yükle", "koin al", "paket al" DEME (satıcı/bot gibi durma).
    - ASLA "jeton dert etme", "sorun değil buradan yaz" da DEME.
-   - Karşı taraf "koinim bitti", "jetonum kalmadı", "jeton yetmiyor", "yazamıyorum", "başka yere geçelim" derse meraklandırıp oyala: sohbete göre "numaramı versem olur mu", "instagramın var mı senin", "tam yeni tanışıyoduk dur gitme hemen" veya "dur kaçma hemen biraz daha yazışsak mı" gibi onu sohbetin içinde tutacak flörtöz sorular sor. Az önce zaten aynı cümleyi yazdıysan kesinlikle tekrar etme, farklı bir cümle üret.
+   - ASLA tutamayacağın söz verme ("numaramı versem olur mu", "instagramdan eklerim" gibi teklifler YASAK)! Sonra veremeyince tutarsız görünür.
+   - ÖNEMLİ ÖNCELİK: Eğer kullanıcı aynı mesajda hem buluşma/yer/soru soruyor hem de jeton kalmadı diyorsa (örn: "bir yer söyle buluşalım jeton kalmadı"), oyalama kalıbı yapıştırıp buluşmayı GEÇİŞTİRME! ÖNCE buluşmayı veya sorusunu yanıtla ("tamam buluşalım hangi ilçedesin sana neresi uygun" gibi).
+   - Sadece buluşma/soru olmadan "koinim bitti", "jetonum kalmadı", "jeton yetmiyor", "yazamıyorum", "başka yere geçelim" derse: sohbete göre "tam yeni tanışıyoduk dur gitme hemen biraz daha yazışsak ya" veya "dur kaçma hemen burdan biraz daha konuşalım" gibi nazikçe tutmaya çalış.
 6. DIŞ İLETİŞİM (WHATSAPP / TELEFON / INSTAGRAM):
    - Telefon veya rakam yazarsa: "numaran sansürlendi göremiyorum alt alta yazsana" gibi doğal bir yanıt ver.
-   - Instagram / WhatsApp isterse veya hesabını yazarsa: sohbet akışını analiz edip oyala (örn: "burda sansürlüyo galiba numaramı versem olur mu", "instagramın var mı aslında ama burdan biraz daha tanı beni", "hesabın görünmüyo ki burda biraz daha konuşalım"). ASLA kesin "eklerim/yazarım/geçelim" deme.
-7. ŞEHİR VE KONUM:
-   - Karşı taraf sormadıkça durduk yere şehir veya semt konusu açma.
-   - ${targetCity ? `Karşı tarafın şehri zaten "${targetCity.toLowerCase()}" olarak biliniyor; ona ASLA "nerelisin/neredesin" diye geri sorma! Eğer o sorarsa "ben de ${targetCity.toLowerCase()}dayım" de. ASLA başka şehir (${opCity.toLowerCase()} vb.) söyleme.` : `Sorarsa "${opCity.toLowerCase()}" de.`}
+   - Instagram / WhatsApp isterse, hesabını yazarsa veya "numaranı gönder" derse: uygulamanın dış iletişim/numara/hesap yazımını sansürlediğini ve buradan biraz daha konuşmak istediğini söyle (örn: "burda numara ve hesap yazınca sistem sansürlüyo biraz daha burdan konuşalım", "ben de yazamıyorum ki uygulama izin vermiyo burdan devam edelim"). ASLA "versem olur mu", "eklerim", "yazarım", "geçelim" deme ve alakasız başka konuya (müzik vb.) atlama.
+7. ŞEHİR, İLÇE VE BULUŞMA:
+   - Karşı taraf sormadıkça durduk yere şehir konusu açma.
+   - ${targetCity ? `Karşı tarafın şehri zaten "${targetCity.toLowerCase()}" olarak biliniyor; ona ASLA "sen nerelisin" diye il sorma! Eğer o şehir sorarsa "ben de ${targetCity.toLowerCase()}dayım" de. ASLA başka şehir (${opCity.toLowerCase()} vb.) söyleme.` : `Sorarsa "${opCity.toLowerCase()}" de.`}
    - Asla "yoldayım", "geliyorum", "kapıdayım" deme.
-   - Buluşma teklif ederse sohbet geçmişini mutlaka kontrol et: kullanıcı Çerkezköy, Kadıköy vb. yaşadığı yer/ilçe/semti ZATEN söylediyse kesinlikle "hangi semttesin", "ne taraftasın" veya "nerelisin" diye tekrar sorma! Onun yerine "ne zaman müsaitsin önce biraz daha tanıyalım birbirimizi" gibi zamanı soran veya sohbeti ilerleten doğal bir cevap ver. Sadece hiç ilçe/semt söylemediyse hangi tarafta olduğunu sor.
+   - Kullanıcı "buluşalım", "bir yer söyle", "görüşelim" dediğinde: sohbet geçmişini kontrol et. Eğer kullanıcı henüz ilçe/semt SÖYLEMEDİYSE mutlaka "tamam buluşalım hangi ilçedesin sana neresi uygun" veya "olur buluşalım sen hangi taraftasın" diye sor. Eğer Çerkezköy, Kadıköy gibi ilçesini ZATEN söylediyse bir daha "hangi ilçedesin/semttesin" diye sorma; "tamam ne zaman müsaitsin önce biraz daha tanıyalım birbirimizi" gibi zamanı soran veya sohbeti ilerleten doğal cevap ver.
 8. ASLA TERSLEME VE KOVMA: Karşı taraf ne yazarsa yazsın kızma, öğüt verme, tersleme; her zaman cilveli ve meraklandırıcı kal.`;
 
     try {
@@ -266,14 +281,14 @@ KESİN KURALLAR:
             return pickFallbackResponse(normalizedUserMsg);
         }
 
-        if ((PHONE_DIGITS_REGEX.test(normalizedUserMsg) || OFF_APP_REGEX.test(normalizedUserMsg)) && FORBIDDEN_ACCEPT_REGEX.test(cleaned)) {
+        if (((PHONE_DIGITS_REGEX.test(normalizedUserMsg) || OFF_APP_REGEX.test(normalizedUserMsg)) && FORBIDDEN_ACCEPT_REGEX.test(cleaned)) || /(numaramı versem|numaramı atsam|gönderiyorum numaramı)/i.test(cleaned)) {
             const stalled = pickFallbackResponse(normalizedUserMsg);
             console.warn(`[AI_CHAT] Dış iletişim kabulü engellendi ("${cleaned}") -> "${stalled}"`);
             return stalled;
         }
 
         if (FORBIDDEN_FREE_COIN_REGEX.test(cleaned) || FORBIDDEN_DIRECT_UPSELL_REGEX.test(cleaned)) {
-            const stall = COIN_STALL_RESPONSES[Math.floor(Math.random() * COIN_STALL_RESPONSES.length)];
+            const stall = pickFallbackResponse(normalizedUserMsg, new Date(), chatHistory);
             console.warn(`[AI_CHAT] Ücretsizleştirme veya direkt jeton satışı engellendi ("${cleaned}") -> "${stall}"`);
             return stall;
         }
@@ -285,17 +300,26 @@ KESİN KURALLAR:
         }
 
         if (FORBIDDEN_ON_THE_WAY_REGEX.test(cleaned)) {
-            const realistic = REALISTIC_MEETING_FOLLOWUPS[Math.floor(Math.random() * REALISTIC_MEETING_FOLLOWUPS.length)];
+            const mentionedPlace = Array.isArray(chatHistory) && chatHistory.some(
+                m => m?.is_user && PLACE_MENTION_REGEX.test(m.content || '')
+            );
+            const pool = mentionedPlace ? REALISTIC_MEETING_FOLLOWUPS : MEETING_ASK_PLACE_RESPONSES;
+            const realistic = pool[Math.floor(Math.random() * pool.length)];
             console.warn(`[AI_CHAT] Gerçekçi olmayan "yoldayım/hemen geliyorum" yanıtı engellendi ("${cleaned}") -> "${realistic}"`);
             return realistic;
         }
 
         const userMentionedPlace = Array.isArray(chatHistory) && chatHistory.some(
-            m => m?.is_user && /(yaşıyorum|oturuyorum|köyde|ilçede|semtte|mahalle|merkezde|buradayım)/i.test(m.content || '')
+            m => m?.is_user && PLACE_MENTION_REGEX.test(m.content || '')
         );
-        if ((userMentionedPlace || Boolean(targetCity)) && /(hangi semttesin|sen nerelisin|neredesin bakalım)/i.test(cleaned)) {
+        if (userMentionedPlace && /(hangi semttesin|hangi ilçedesin|hangi taraftasın|ne taraftasın|neresindesin|sen nerelisin|neredesin bakalım)/i.test(cleaned)) {
             const realistic = REALISTIC_MEETING_FOLLOWUPS[Math.floor(Math.random() * REALISTIC_MEETING_FOLLOWUPS.length)];
-            console.warn(`[AI_CHAT] Tekrarlanan semt/şehir sorusu engellendi ("${cleaned}") -> "${realistic}"`);
+            console.warn(`[AI_CHAT] Tekrarlanan ilçe/semt sorusu engellendi ("${cleaned}") -> "${realistic}"`);
+            return realistic;
+        }
+        if (Boolean(targetCity) && /(sen nerelisin|hangi şehirdesin)/i.test(cleaned)) {
+            const realistic = REALISTIC_MEETING_FOLLOWUPS[Math.floor(Math.random() * REALISTIC_MEETING_FOLLOWUPS.length)];
+            console.warn(`[AI_CHAT] Tekrarlanan şehir sorusu engellendi ("${cleaned}") -> "${realistic}"`);
             return realistic;
         }
 
@@ -779,16 +803,70 @@ function startAiHookSweeper(io) {
     setTimeout(runSweep, 5000).unref?.();
 }
 
+const AI_BURST_DEBOUNCE_MS = 4000;
+const pendingAiDebounces = new Map();
+const activeAiReplyChats = new Set();
+const queuedAiReplyArgs = new Map();
+
+function releaseAiChatLockAndRunNext(chatIdStr, userIdStr) {
+    activeAiReplyChats.delete(chatIdStr);
+    const nextArgs = queuedAiReplyArgs.get(chatIdStr);
+    if (nextArgs) {
+        queuedAiReplyArgs.delete(chatIdStr);
+        executeAiAutoReply(nextArgs).catch((err) => {
+            console.error('[AI_CHAT] Kuyruktaki AI yanıt hatası:', err.message);
+        });
+        return;
+    }
+    if (!pendingAiDebounces.has(chatIdStr)) {
+        activeAiReplyUsers.delete(userIdStr);
+    }
+}
+
+/**
+ * Arka arkaya kısa sürede atılan mesajları birleştirip sırayla AI yanıtı üretir.
+ */
+async function processAiAutoReply(args) {
+    const { chatId, userId } = args || {};
+    if (!chatId || !userId) return;
+
+    const chatIdStr = chatId.toString();
+    const userIdStr = userId.toString();
+    activeAiReplyUsers.add(userIdStr);
+
+    const existing = pendingAiDebounces.get(chatIdStr);
+    if (existing) {
+        clearTimeout(existing.timer);
+    }
+
+    const timer = setTimeout(() => {
+        pendingAiDebounces.delete(chatIdStr);
+        if (activeAiReplyChats.has(chatIdStr)) {
+            queuedAiReplyArgs.set(chatIdStr, args);
+            return;
+        }
+        executeAiAutoReply(args).catch((err) => {
+            console.error('[AI_CHAT] executeAiAutoReply hatası:', err.message);
+            releaseAiChatLockAndRunNext(chatIdStr, userIdStr);
+        });
+    }, AI_BURST_DEBOUNCE_MS);
+    timer.unref?.();
+
+    pendingAiDebounces.set(chatIdStr, { timer, args });
+}
+
 /**
  * Yeni kullanıcının operatöre attığı mesaja otomatik AI yanıtı üretir ve süreci yönetir.
  */
-async function processAiAutoReply({ io, chatId, userId, operatorId, userMessage }) {
+async function executeAiAutoReply({ io, chatId, userId, operatorId, userMessage }) {
+    const userIdStr = userId.toString();
+    const opIdStr = operatorId.toString();
+    const chatIdStr = chatId.toString();
+    activeAiReplyChats.add(chatIdStr);
+    activeAiReplyUsers.add(userIdStr);
+
     try {
         await ensureAiColumns();
-
-        const userIdStr = userId.toString();
-        const opIdStr = operatorId.toString();
-        const chatIdStr = chatId.toString();
 
         // 1. Kullanıcı uygunluk kontrolü (Sadece yeni üyeler, ai_messages_count < 5, hiç gerçek ödeme yapmamış)
         const userRes = await db.query(
@@ -804,21 +882,29 @@ async function processAiAutoReply({ io, chatId, userId, operatorId, userMessage 
              WHERE u.id = $1`,
             [userId]
         );
-        if (userRes.rows.length === 0) return;
+        if (userRes.rows.length === 0) {
+            releaseAiChatLockAndRunNext(chatIdStr, userIdStr);
+            return;
+        }
         const user = userRes.rows[0];
 
         // Sadece normal müşteri rolü için geçerli
-        if (user.role !== 'user' && user.role !== 'customer') return;
+        if (user.role !== 'user' && user.role !== 'customer') {
+            releaseAiChatLockAndRunNext(chatIdStr, userIdStr);
+            return;
+        }
 
         // Gerçek ödeme yapmışsa (ödeyen üye) yapay zeka devreden çıkar
         if (user.has_real_payment) {
             console.log(`[AI_CHAT] Atlandı (${user.username}): gerçek ödeme kaydı mevcut.`);
+            releaseAiChatLockAndRunNext(chatIdStr, userIdStr);
             return;
         }
 
         // 5 mesaj kotası dolduysa AI artık cevap vermez
         if (user.ai_messages_count >= 5) {
             console.log(`[AI_CHAT] Atlandı (${user.username}): 5 mesaj kotası doldu (${user.ai_messages_count}/5).`);
+            releaseAiChatLockAndRunNext(chatIdStr, userIdStr);
             return;
         }
 
@@ -827,13 +913,18 @@ async function processAiAutoReply({ io, chatId, userId, operatorId, userMessage 
             'SELECT id, username, display_name, name, age, city, bio, interests, avatar_url FROM users WHERE id = $1',
             [operatorId]
         );
-        if (opRes.rows.length === 0) return;
+        if (opRes.rows.length === 0) {
+            releaseAiChatLockAndRunNext(chatIdStr, userIdStr);
+            return;
+        }
         const operator = opRes.rows[0];
         const opDisplayName = operator.display_name || operator.name || operator.username || 'Fiora';
 
-        // 3. Son mesaj geçmişini al (AI bağlamı için)
+        // 3. Son mesaj geçmişini al (AI bağlamı için sadece metin mesajlar)
         const historyRes = await db.query(
-            'SELECT sender_id, content FROM messages WHERE chat_id = $1 ORDER BY created_at DESC LIMIT 6',
+            `SELECT sender_id, content FROM messages
+             WHERE chat_id = $1 AND content_type = 'text' AND content NOT ILIKE '%NUMARA PAYLAŞIMI%'
+             ORDER BY created_at DESC LIMIT 8`,
             [chatId]
         );
         const chatHistory = historyRes.rows.reverse().map(m => ({
@@ -841,10 +932,17 @@ async function processAiAutoReply({ io, chatId, userId, operatorId, userMessage 
             content: m.content
         }));
 
-        console.log(`[AI_CHAT] Yeni kullanıcı (${user.username}, Mesaj #${user.ai_messages_count + 1}) için AI yanıtı hazırlanıyor...`);
+        // Arka arkaya atılan son kullanıcı balonlarını tek mesajda birleştir
+        const trailingUserMsgs = [];
+        for (let i = chatHistory.length - 1; i >= 0; i--) {
+            if (chatHistory[i].is_user) trailingUserMsgs.unshift(chatHistory[i].content.trim());
+            else break;
+        }
+        const effectiveUserMessage = trailingUserMsgs.length > 0
+            ? trailingUserMsgs.join(' ')
+            : userMessage;
 
-        // AI cevabı yazılırken erken Numara Onay tetiklenmesini engelle
-        activeAiReplyUsers.add(userIdStr);
+        console.log(`[AI_CHAT] Yeni kullanıcı (${user.username}, Mesaj #${user.ai_messages_count + 1}) için AI yanıtı hazırlanıyor...`);
 
         // 4. Doğallık için 5-10 saniye arasında "Yazıyor..." animasyonunu başlat
         const startTime = Date.now();
@@ -866,11 +964,11 @@ async function processAiAutoReply({ io, chatId, userId, operatorId, userMessage 
             aiReplyText = await generateAiReply({
                 operator: operator,
                 targetUser: user,
-                userMessage: userMessage,
+                userMessage: effectiveUserMessage,
                 chatHistory: chatHistory
             });
         } catch (genErr) {
-            activeAiReplyUsers.delete(userIdStr);
+            releaseAiChatLockAndRunNext(chatIdStr, userIdStr);
             throw genErr;
         }
 
@@ -946,7 +1044,7 @@ async function processAiAutoReply({ io, chatId, userId, operatorId, userMessage 
 
                 console.log(`[AI_CHAT] Yanıt gönderildi: [${operator.display_name} -> ${user.username}]: "${aiReplyText}" (Kullanılan AI Mesajı: ${currentCount}/5, Kalan Bakiye: ${currentBalance})`);
 
-                activeAiReplyUsers.delete(userIdStr);
+                releaseAiChatLockAndRunNext(chatIdStr, userIdStr);
 
                 // 7. 5. MESAJ / COİN BİTTİĞİNDE OTOMATİK ONAY MESAJI (AI yanıtından tam 30 saniye sonra)
                 if ((currentCount >= 5 || currentBalance <= 0) && !updatedUser.ai_hook_sent) {
@@ -961,13 +1059,14 @@ async function processAiAutoReply({ io, chatId, userId, operatorId, userMessage 
                     });
                 }
             } catch (innerErr) {
-                activeAiReplyUsers.delete(userIdStr);
+                releaseAiChatLockAndRunNext(chatIdStr, userIdStr);
                 console.error('[AI_CHAT] Mesaj gönderme iç hatası:', innerErr.message);
             }
         }, remainingDelay);
 
     } catch (err) {
-        console.error('[AI_CHAT] processAiAutoReply hatası:', err.message);
+        releaseAiChatLockAndRunNext(chatIdStr, userIdStr);
+        console.error('[AI_CHAT] executeAiAutoReply hatası:', err.message);
     }
 }
 

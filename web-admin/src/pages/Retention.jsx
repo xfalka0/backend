@@ -150,6 +150,59 @@ export default function Retention() {
                         </div>
                     </div>
 
+                    {/* Uygulama Silme (Uninstall / FCM Unregistered) Analizi */}
+                    <div className="bg-slate-900 border border-rose-500/20 rounded-2xl p-6 space-y-5">
+                        <div className="flex items-start justify-between flex-wrap gap-3">
+                            <div>
+                                <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                                    <UserX size={18} className="text-rose-400" /> Uygulama Silme İstatistikleri (Tahmini Uninstall)
+                                </h2>
+                                <p className="text-xs text-slate-400 mt-1">
+                                    FCM push gönderiminde <code className="text-rose-300">UNREGISTERED / NOT_FOUND</code> dönen benzersiz kullanıcılar üzerinden ölçülür (bildirim iznini tamamen kapatanlar dahildir).
+                                </p>
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                            <div className="bg-slate-950/60 border border-white/5 rounded-xl p-4">
+                                <span className="text-[11px] font-bold uppercase text-slate-400">Dönem İçi Silme</span>
+                                <p className="text-3xl font-black text-rose-400 mt-1">{data?.uninstalls?.periodCount ?? 0}</p>
+                                <p className="text-xs text-slate-500 mt-1">Bugün: <span className="text-rose-300 font-bold">{data?.uninstalls?.todayCount ?? 0}</span> (Son {range} gün)</p>
+                            </div>
+                            <div className="bg-slate-950/60 border border-white/5 rounded-xl p-4">
+                                <span className="text-[11px] font-bold uppercase text-slate-400">Kayıta Göre Silme Oranı</span>
+                                <p className="text-3xl font-black text-amber-300 mt-1">%{data?.uninstalls?.periodVsSignupsPct ?? 0}</p>
+                                <p className="text-xs text-slate-500 mt-1">
+                                    {data?.uninstalls?.periodCount ?? 0} silme / {data?.uninstalls?.periodSignups ?? 0} yeni kayıt
+                                </p>
+                            </div>
+                            <div className="bg-slate-950/60 border border-white/5 rounded-xl p-4">
+                                <span className="text-[11px] font-bold uppercase text-slate-400">Toplam Uygulama Silme</span>
+                                <p className="text-3xl font-black text-white mt-1">{data?.uninstalls?.totalCount ?? 0}</p>
+                                <p className="text-xs text-slate-500 mt-1">Tüm üyelerin %{data?.uninstalls?.totalVsUsersPct ?? 0}&apos;i</p>
+                            </div>
+                            <div className="bg-slate-950/60 border border-white/5 rounded-xl p-4">
+                                <span className="text-[11px] font-bold uppercase text-slate-400">Kalıcı Hesap Silen</span>
+                                <p className="text-3xl font-black text-slate-200 mt-1">{data?.uninstalls?.deletedAccounts ?? 0}</p>
+                                <p className="text-xs text-slate-500 mt-1">Push token&apos;lı aktif: {data?.uninstalls?.pushEnabledUsers ?? 0}</p>
+                            </div>
+                        </div>
+
+                        {Array.isArray(data?.uninstalls?.daily) && data.uninstalls.daily.length > 0 && (
+                            <div className="pt-2">
+                                <p className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">Günlük Silme Dağılımı</p>
+                                <div className="flex flex-wrap gap-2">
+                                    {data.uninstalls.daily.map((d) => (
+                                        <div key={d.day} className="px-3 py-1.5 rounded-xl bg-slate-950/70 border border-white/5 text-xs flex items-center gap-2">
+                                            <span className="text-slate-400">{d.day}</span>
+                                            <span className="font-black text-rose-400">{d.count}</span>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+                    </div>
+
                     {/* 8-Week D1 / D7 / D30 Cohort Table */}
                     <div className="bg-slate-900 border border-white/5 rounded-2xl p-6 overflow-x-auto">
                         <div className="flex items-center justify-between flex-wrap gap-3 mb-4">

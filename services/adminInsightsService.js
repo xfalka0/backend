@@ -74,7 +74,9 @@ async function getRetentionOverview(db, days = 30) {
         returningRes,
         dailySignupsRes,
         atRiskRes,
-        cohortRes
+        cohortRes,
+        uninstallSummaryRes,
+        dailyUninstallsRes
     ] = await Promise.all([
         db.query(`
             SELECT
@@ -188,13 +190,43 @@ async function getRetentionOverview(db, days = 30) {
                 LEFT JOIN u_reg u ON u.cohort_week = w.week_start
                 GROUP BY w.week_start
                 ORDER BY w.week_start DESC
-            `)
+            `),
+
+        db.query(`
+            SELECT
+                (SELECT COUNT(DISTINCT user_id)::int FROM activities WHERE action_type = 'push_unregistered' AND created_at >= NOW() - make_interval(days => $1)) AS period_uninstalls,
+                (SELECT COUNT(DISTINCT user_id)::int FROM activities WHERE action_type = 'push_unregistered' AND ${toTrTs('created_at')}::date = (NOW() AT TIME ZONE '${TR_TZ}')::date) AS today_uninstalls,
+                (SELECT COUNT(DISTINCT user_id)::int FROM activities WHERE action_type = 'push_unregistered') AS total_uninstalls,
+                (SELECT COUNT(*)::int FROM users WHERE role = 'user' AND created_at >= NOW() - make_interval(days => $1)) AS period_signups,
+                (SELECT COUNT(*)::int FROM users WHERE role = 'user' AND account_status = 'deleted') AS deleted_accounts,
+                (SELECT COUNT(*)::int FROM users WHERE role = 'user' AND COALESCE(account_status, 'active') != 'deleted' AND push_token IS NOT NULL AND push_token != '') AS push_enabled_users
+        `, [safeDays]).catch(() => ({ rows: [{}] })),
+
+        db.query(`
+            SELECT
+                TO_CHAR(${toTrTs('created_at')}::date, 'YYYY-MM-DD') AS day,
+                COUNT(DISTINCT user_id)::int AS count
+            FROM activities
+            WHERE action_type = 'push_unregistered'
+              AND created_at >= NOW() - make_interval(days => $1)
+            GROUP BY 1
+            ORDER BY 1 DESC
+            LIMIT 30
+        `, [safeDays]).catch(() => ({ rows: [] }))
     ]);
 
     const s = summaryRes.rows[0] || {};
     const totalUsers = s.total_users || 0;
     const activeUsers = s.active_users || 0;
     const wau = s.wau || 0;
+    const un = uninstallSummaryRes.rows[0] || {};
+    const periodUninstalls = un.period_uninstalls || 0;
+    const todayUninstalls = un.today_uninstalls || 0;
+    const totalUninstalls = un.total_uninstalls || 0;
+    const periodSignups = un.period_signups || 0;
+    const deletedAccounts = un.deleted_accounts || 0;
+    const pushEnabledUsers = un.push_enabled_users || 0;
+    const allRegisteredUsers = totalUsers + deletedAccounts;
 
     const cohorts = cohortRes.rows.map((r) => {
         const size = r.cohort_size || 0;
@@ -233,6 +265,17 @@ async function getRetentionOverview(db, days = 30) {
                 : 'Yaklaşık hesaplama: Veritabanında günlük oturum geçmişi (user_sessions) tablosu henüz yok. Yalnızca users.last_login_at (en son giriş/socket bağlantısı) bilindiğinden D(k) = son görülme >= kayıt + k gün olarak tahmin edilir; kullanıcının ara günlerde girip girmediğini kesin ayırmaz.'
         },
         cohorts,
+        uninstalls: {
+            periodCount: periodUninstalls,
+            todayCount: todayUninstalls,
+            totalCount: totalUninstalls,
+            periodSignups,
+            deletedAccounts,
+            pushEnabledUsers,
+            periodVsSignupsPct: periodSignups > 0 ? Number(((periodUninstalls / periodSignups) * 100).toFixed(1)) : 0,
+            totalVsUsersPct: allRegisteredUsers > 0 ? Number(((totalUninstalls / allRegisteredUsers) * 100).toFixed(1)) : 0,
+            daily: dailyUninstallsRes.rows,
+        },
     };
 }
 

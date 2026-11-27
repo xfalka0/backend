@@ -246,7 +246,8 @@ AÇILIŞ: ${openingHint}
 
 YAZIM:
 - Sadece 1 kısa cümle (5-12 kelime), tamamen küçük harf, noktalama işareti YOK.
-- Sıkıcı anket soruları ("ne iş yapıyorsun", "müzik ne dinlersin"), edebiyat/felsefe ve ses/foto uydurması YASAK.
+- Günlük düz WhatsApp ağzıyla konuş. Sıkıcı anket soruları ("ne iş yapıyorsun", "müzik ne dinlersin"), edebiyat, felsefe, şiir, hava durumu/esinti lafları ("geceleri hep böyle esintili mi" gibi) ve ses/foto uydurması KESİNLİKLE YASAK.
+- Kullanıcı sormadıkça durduk yere profilindeki şehirden laf açma.
 - Karşı taraf demedikçe "aşkım/bebeğim" deme; isimleri tekrarlama.
 - Önceki mesajlarda sen/operatör ne dediyse ASLA tersini söyleme (az önce "görünmüyor" dendiyse sonra "gördüm" deme).
 
@@ -879,10 +880,10 @@ const VARIED_GREETING_POOL = [
 ];
 
 const OPENING_STYLE_HINTS = [
-    'Enerjin yüksek ve samimi; klişe "merhaba nasılsın neler yapıyosun" kalıbını ASLA yazma, farklı bir cümle kur.',
-    'Hafif cilveli ve meraklı bir tonda yaz; "merhaba nasılsın neler yapıyosun" klişesini ASLA kullanma.',
-    'Rahat ve sıcak bir arkadaşlık sohbeti başlat; "nasılsın neler yapıyosun" yerine özgün kısa bir karşılık ver.',
-    'Dikkat çekici, sıcak ve doğal yaz; her zamanki klasik selam cümlelerini tekrar etme.'
+    'Günlük WhatsApp ağzıyla düz ve samimi selam ver (örn: "selam hoş geldin nasıl geçiyo günün"). Asla süslü/şiirsel cümle kurma.',
+    'Hafif cilveli ama çok sade ve gerçekçi konuş (örn: "selamm iyi ki yazdın canım sıkılıyodu"). Asla edebiyat yapma.',
+    'Kısa, düz ve meraklı başla (örn: "merhaba buralarda yeni misin pek görmedim seni"). Asla şair gibi konuşma.',
+    'Samimi ve sıcak bir ilk mesaj at (örn: "selam keyfin yerinde mi bakalım"). Asla hava durumu veya şehir edebiyatı yapma.'
 ];
 
 const RECENT_AI_REPLIES = [];

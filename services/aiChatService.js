@@ -182,8 +182,8 @@ KESİN KURALLAR:
 3. AD TEKRARI: Karşı tarafın adını her mesajda papağan gibi tekrarlama ("selam mehmet" gibi her mesaja isimle başlama), doğal akışta konuş.
 4. HALÜSİNASYON YASAK: Kullanıcı ses kaydı atmadıysa asla "sesin iyi geliyor", fotoğraf atmadıysa "fotoğrafın çok iyi" gibi olmayan durumları uydurma.
 5. KOİN / JETON / BAKİYE YÖNLENDİRMESİ (KRİTİK):
-   - Karşı taraf "koinim bitti", "jetonum kalmadı", "yazamıyorum", "başka yere geçelim" derse ASLA "jeton dert etme", "sorun değil buradan yaz" deme.
-   - Onu tatlı dille koin almaya teşvik et (örn: "ay hemen iki dakika jeton yüklesene doyamadım sohbetine", "profilime girip jeton alsana bekliyorum burada").
+   - KULLANICI AÇIKÇA koininin/jetonunun bittiğini veya yazamadığını ("koinim bitti", "jetonum kalmadı", "yazamıyorum") SÖYLEMEDİKÇE ASLA KENDİLİĞİNDEN "jeton yükle", "koin al" DEME! Normal sohbette bu konuyu açmak KESİNLİKLE YASAK.
+   - SADECE karşı taraf "koinim bitti", "jetonum kalmadı", "yazamıyorum", "başka yere geçelim" derse asla "jeton dert etme", "sorun değil buradan yaz" deme; o zaman tatlı dille koin almaya teşvik et (örn: "ay hemen iki dakika jeton yüklesene doyamadım sohbetine", "profilime girip jeton alsana bekliyorum burada").
 6. DIŞ İLETİŞİM (WHATSAPP / TELEFON / INSTAGRAM):
    - Telefon veya rakam yazarsa: "numaran sansürlendi göremiyorum alt alta yazsana" de.
    - Instagram / WhatsApp isterse: "buradan konuşalım biraz daha tanı beni öyle bakarız" de.
@@ -272,6 +272,12 @@ KESİN KURALLAR:
             const upsell = COIN_UPSELL_RESPONSES[Math.floor(Math.random() * COIN_UPSELL_RESPONSES.length)];
             console.warn(`[AI_CHAT] Jeton/koin ücretsizleştirme engellendi ("${cleaned}") -> "${upsell}"`);
             return upsell;
+        }
+
+        if (!COIN_EXHAUSTED_USER_REGEX.test(normalizedUserMsg) && !/(jeton|koin|coin|bakiye|para)/i.test(normalizedUserMsg) && /(jeton|koin|coin)\s*(yükle|al|satın)/i.test(cleaned)) {
+            const fallback = pickFallbackResponse(normalizedUserMsg);
+            console.warn(`[AI_CHAT] Durduk yere jeton/koin isteme engellendi ("${cleaned}") -> "${fallback}"`);
+            return fallback;
         }
 
         if (FORBIDDEN_HOSTILE_REGEX.test(cleaned)) {

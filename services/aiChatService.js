@@ -174,48 +174,96 @@ function cleanAiResponse(text) {
     return cleaned;
 }
 
-async function callGeminiWithFallback({ apiKey, requestBody, timeoutMs = 10000 }) {
-    const models = ['gemini-3.8-flash', 'gemini-3.5-flash-lite'];
-    for (const model of models) {
-        const isThinkingCapable = model.startsWith('gemini-3.8') || model.startsWith('gemini-2.5');
-        const body = isThinkingCapable
-            ? requestBody
-            : {
-                ...requestBody,
-                generationConfig: (() => {
-                    const { thinkingConfig, ...rest } = requestBody.generationConfig || {};
-                    return rest;
-                })()
-            };
+const EXHAUSTED_KEY_COOLDOWN_MS = 5 * 60 * 1000; // 429/402/403 alan key'i 5 dk dinlendir
+const exhaustedKeyUntil = new Map();
 
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
-        const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), timeoutMs);
-        try {
-            const res = await fetch(url, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                signal: controller.signal,
-                body: JSON.stringify(body)
-            });
-            clearTimeout(timeout);
-            if (res.ok) {
-                return { ok: true, model, data: await res.json() };
+function getGeminiApiKeys() {
+    const rawList = [
+        ...(String(process.env.GEMINI_API_KEYS || '').split(',')),
+        process.env.GEMINI_API_KEY,
+        process.env.GEMINI_API_KEY_2,
+        process.env.GEMINI_API_KEY_3,
+        process.env.GEMINI_API_KEY_4,
+    ];
+    const unique = [];
+    const seen = new Set();
+    for (const item of rawList) {
+        const k = String(item || '').trim();
+        if (k && !seen.has(k)) {
+            seen.add(k);
+            unique.push(k);
+        }
+    }
+    return unique;
+}
+
+async function callGeminiWithFallback({ apiKeys, apiKey, requestBody, timeoutMs = 10000 }) {
+    const keysInput = Array.isArray(apiKeys) && apiKeys.length > 0
+        ? apiKeys
+        : (apiKey ? [apiKey] : getGeminiApiKeys());
+    if (keysInput.length === 0) return { ok: false, data: null };
+
+    const now = Date.now();
+    const activeKeys = keysInput.filter(k => (exhaustedKeyUntil.get(k) || 0) <= now);
+    // Tüm key'ler soğutmadaysa yine de hepsini sırayla bir kez dene
+    const keysToTry = activeKeys.length > 0 ? activeKeys : keysInput;
+    const models = ['gemini-3.8-flash', 'gemini-3.5-flash-lite'];
+
+    for (let keyIdx = 0; keyIdx < keysToTry.length; keyIdx++) {
+        const currentKey = keysToTry[keyIdx];
+        const keyLabel = `key#${keyIdx + 1}(...${currentKey.slice(-4)})`;
+        let keyExhausted = false;
+
+        for (const model of models) {
+            const isThinkingCapable = model.startsWith('gemini-3.8') || model.startsWith('gemini-2.5');
+            const body = isThinkingCapable
+                ? requestBody
+                : {
+                    ...requestBody,
+                    generationConfig: (() => {
+                        const { thinkingConfig, ...rest } = requestBody.generationConfig || {};
+                        return rest;
+                    })()
+                };
+
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(currentKey)}`;
+            const controller = new AbortController();
+            const timeout = setTimeout(() => controller.abort(), timeoutMs);
+            try {
+                const res = await fetch(url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    signal: controller.signal,
+                    body: JSON.stringify(body)
+                });
+                clearTimeout(timeout);
+                if (res.ok) {
+                    exhaustedKeyUntil.delete(currentKey);
+                    return { ok: true, model, keyLabel, data: await res.json() };
+                }
+                const errBody = await res.text().catch(() => '');
+                console.warn(`[AI_CHAT] ${keyLabel} ${model} HTTP ${res.status}. Detay: ${errBody.slice(0, 200)}`);
+                if ([401, 402, 403, 429].includes(res.status)) {
+                    exhaustedKeyUntil.set(currentKey, Date.now() + EXHAUSTED_KEY_COOLDOWN_MS);
+                    keyExhausted = true;
+                    break; // Aynı projedeki diğer modele geçmek yerine doğrudan sıradaki yedek API key'e geç
+                }
+            } catch (err) {
+                clearTimeout(timeout);
+                console.warn(`[AI_CHAT] ${keyLabel} ${model} hata (${err.name || 'Error'}: ${err.message})`);
             }
-            const errBody = await res.text().catch(() => '');
-            console.warn(`[AI_CHAT] ${model} HTTP ${res.status}, sonraki modele geçiliyor. Detay: ${errBody.slice(0, 250)}`);
-        } catch (err) {
-            clearTimeout(timeout);
-            console.warn(`[AI_CHAT] ${model} hata (${err.name || 'Error'}: ${err.message}), sonraki modele geçiliyor.`);
+        }
+        if (keyExhausted && keyIdx + 1 < keysToTry.length) {
+            console.warn(`[AI_CHAT] ${keyLabel} kota/kredi hatası verdi, sıradaki yedek API anahtarına geçiliyor...`);
         }
     }
     return { ok: false, data: null };
 }
 async function generateAiReply({ operator, targetUser = null, userMessage, chatHistory = [] }) {
-    const apiKey = (process.env.GEMINI_API_KEY || '').trim();
-    if (!apiKey) {
-        console.warn('[AI_CHAT] GEMINI_API_KEY eksik, fallback yanıt kullanılıyor.');
-        return pickFallbackResponse(userMessage);
+    const apiKeys = getGeminiApiKeys();
+    if (apiKeys.length === 0) {
+        console.warn('[AI_CHAT] GEMINI_API_KEY / GEMINI_API_KEYS eksik, fallback yanıt kullanılıyor.');
+        return pickFallbackResponse(userMessage, new Date(), chatHistory);
     }
 
     const opName = operator?.display_name || operator?.name || 'kız';
@@ -300,7 +348,7 @@ YAZIM:
         });
 
         const { ok, model, data } = await callGeminiWithFallback({
-            apiKey,
+            apiKeys,
             timeoutMs: 7000,
             requestBody: {
                 systemInstruction: { parts: [{ text: systemInstruction }] },
@@ -501,8 +549,8 @@ async function generateNumaraFollowup({ chatId, userId }) {
     const userUsedAffection = historyMessages.some(m => m.is_user && AFFECT_WORDS_REGEX.test(m.content));
     const hasMeetingContext = MEETING_CONTEXT_REGEX.test(historyText);
 
-    const apiKey = (process.env.GEMINI_API_KEY || '').trim();
-    if (!apiKey || historyMessages.length === 0) {
+    const apiKeys = getGeminiApiKeys();
+    if (apiKeys.length === 0 || historyMessages.length === 0) {
         return pickNumaraFollowupFallback(historyMessages);
     }
 
@@ -525,7 +573,7 @@ KURALLAR:
 
     try {
         const { ok, data } = await callGeminiWithFallback({
-            apiKey,
+            apiKeys,
             timeoutMs: 6000,
             requestBody: {
                 contents: [{ role: 'user', parts: [{ text: prompt }] }],
@@ -939,8 +987,7 @@ function releaseAiChatLockAndRunNext(chatIdStr, userIdStr) {
  * Arka arkaya kısa sürede atılan mesajları birleştirip sırayla AI yanıtı üretir.
  */
 async function processAiAutoReply(args) {
-    // Geçici olarak devre dışı bırakıldı (Gemini API 429 kota limiti nedeniyle)
-    if (process.env.AI_AUTO_REPLY_ENABLED !== 'true') {
+    if (process.env.AI_AUTO_REPLY_ENABLED === 'false') {
         return;
     }
     const { chatId, userId } = args || {};

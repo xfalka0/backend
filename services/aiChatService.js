@@ -50,10 +50,10 @@ const FORBIDDEN_HOSTILE_REGEX = /(saçmal|kes ses|bir daha.*yazma|bi daha.*yazma
 const FORBIDDEN_ON_THE_WAY_REGEX = /(hemen geliyorum|şimdi geliyorum|yola çıktım|yoldayım|çıktım geliyorum|kapıdayım|gelmek üzereyim|az kaldı geliyorum)/i;
 
 const REALISTIC_MEETING_FOLLOWUPS = [
-    'hangi semttesin yakın mıyız bakalım',
-    'ne tarafta oturuyosun yakın mıyız bakalım',
-    'neresindesin tam olarak önce biraz konuşalım',
-    'hemen öyle mi neresindesin sen önce bi tanışalım'
+    'ne zaman müsait oluyosun önce biraz daha tanıyalım birbirimizi',
+    'olur tabi ama önce biraz daha sohbet edip ısınalım',
+    'heyecanlandım bak ne zaman müsaitsin ona göre konuşalım',
+    'hemen öyle mi önce biraz daha yazışsak ya tatlım'
 ];
 
 const PLAYFUL_DEFLECT_RESPONSES = [
@@ -193,7 +193,8 @@ KESİN KURALLAR:
 7. ŞEHİR VE KONUM:
    - Karşı taraf sormadıkça durduk yere şehir veya semt konusu açma.
    - ${targetCity ? `Karşı tarafın şehri zaten "${targetCity.toLowerCase()}" olarak biliniyor; ona ASLA "nerelisin/neredesin" diye geri sorma! Eğer o sorarsa "ben de ${targetCity.toLowerCase()}dayım" de. ASLA başka şehir (${opCity.toLowerCase()} vb.) söyleme.` : `Sorarsa "${opCity.toLowerCase()}" de.`}
-   - Asla "yoldayım", "geliyorum", "kapıdayım" deme; buluşma sorarsa "hangi semttesin yakın mıyız bakalım" diye sor.
+   - Asla "yoldayım", "geliyorum", "kapıdayım" deme.
+   - Buluşma teklif ederse sohbet geçmişini mutlaka kontrol et: kullanıcı Çerkezköy, Kadıköy vb. yaşadığı yer/ilçe/semti ZATEN söylediyse kesinlikle "hangi semttesin", "ne taraftasın" veya "nerelisin" diye tekrar sorma! Onun yerine "ne zaman müsaitsin önce biraz daha tanıyalım birbirimizi" gibi zamanı soran veya sohbeti ilerleten doğal bir cevap ver. Sadece hiç ilçe/semt söylemediyse hangi tarafta olduğunu sor.
 8. ASLA TERSLEME VE KOVMA: Karşı taraf ne yazarsa yazsın kızma, öğüt verme, tersleme; her zaman cilveli ve meraklandırıcı kal.`;
 
     try {
@@ -286,6 +287,15 @@ KESİN KURALLAR:
         if (FORBIDDEN_ON_THE_WAY_REGEX.test(cleaned)) {
             const realistic = REALISTIC_MEETING_FOLLOWUPS[Math.floor(Math.random() * REALISTIC_MEETING_FOLLOWUPS.length)];
             console.warn(`[AI_CHAT] Gerçekçi olmayan "yoldayım/hemen geliyorum" yanıtı engellendi ("${cleaned}") -> "${realistic}"`);
+            return realistic;
+        }
+
+        const userMentionedPlace = Array.isArray(chatHistory) && chatHistory.some(
+            m => m?.is_user && /(yaşıyorum|oturuyorum|köyde|ilçede|semtte|mahalle|merkezde|buradayım)/i.test(m.content || '')
+        );
+        if ((userMentionedPlace || Boolean(targetCity)) && /(hangi semttesin|sen nerelisin|neredesin bakalım)/i.test(cleaned)) {
+            const realistic = REALISTIC_MEETING_FOLLOWUPS[Math.floor(Math.random() * REALISTIC_MEETING_FOLLOWUPS.length)];
+            console.warn(`[AI_CHAT] Tekrarlanan semt/şehir sorusu engellendi ("${cleaned}") -> "${realistic}"`);
             return realistic;
         }
 

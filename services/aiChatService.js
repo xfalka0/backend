@@ -100,6 +100,15 @@ const MEETING_ASK_PLACE_RESPONSES = [
     'tamam görüşelim hangi semttesin yakın mıyız bakalım'
 ];
 
+const PHOTO_TEASE_RESPONSES = [
+    'hmm nasıl foto istersin bakalım',
+    'ne tarz bi foto görmek istersin ki',
+    'hmm nasıl bi şey çekmemi istersin bakalım',
+    'önce söyle bakalım nasıl foto hoşuna gider'
+];
+
+const PHOTO_REQUEST_REGEX = /(foto|fotoğraf|fotograf|resim|resm|selfie|poz).{0,15}(at|atsana|gönder|gondersene|yolla|yollasana|istiyorum|var mı|atarmısın|atar mısın)/i;
+
 const PLACE_MENTION_REGEX = /(yaşıyorum|oturuyorum|köyde|ilçede|semtte|mahalle|merkezde|buradayım|çerkezköy|kadıköy|beşiktaş|şişli|taksim|bakırköy|üsküdar|ataşehir|maltepe|kartal|pendik|çekmeköy|sancaktepe|beylikdüzü|avcılar|esenler|bağcılar|bahçelievler|sarıyer|levent|mecidiyeköy|çankaya|kızılay|keçiören|yenimahalle|etimesgut|mamak|sincan|bornova|karşıyaka|konak|buca|alsancak|bostanlı|nilüfer|osmangazi|yıldırım|muratpaşa|konyaaltı|lara|kepez|seyhan|çukurova|gebze|izmit|körfez|gölcük|derince|odunpazarı|tepebaşı|karaköprü|eyyübiye|haliliye)/i;
 
 function pickFallbackResponse(userMessage = '', date = new Date(), chatHistory = []) {
@@ -113,6 +122,9 @@ function pickFallbackResponse(userMessage = '', date = new Date(), chatHistory =
         );
         const pool = mentionedPlace ? REALISTIC_MEETING_FOLLOWUPS : MEETING_ASK_PLACE_RESPONSES;
         return pool[Math.floor(Math.random() * pool.length)];
+    }
+    if (PHOTO_REQUEST_REGEX.test(msg)) {
+        return PHOTO_TEASE_RESPONSES[Math.floor(Math.random() * PHOTO_TEASE_RESPONSES.length)];
     }
     if (COIN_EXHAUSTED_USER_REGEX.test(msg)) {
         return COIN_STALL_RESPONSES[Math.floor(Math.random() * COIN_STALL_RESPONSES.length)];
@@ -202,7 +214,8 @@ KESİN KURALLAR:
    - ASLA doğrudan "jeton yükle", "koin al", "paket al" DEME (satıcı/bot gibi durma).
    - ASLA "jeton dert etme", "sorun değil buradan yaz" da DEME.
    - ASLA tutamayacağın söz verme ("numaramı versem olur mu", "instagramdan eklerim" gibi teklifler YASAK)! Sonra veremeyince tutarsız görünür.
-   - ÖNEMLİ ÖNCELİK: Eğer kullanıcı aynı mesajda hem buluşma/yer/soru soruyor hem de jeton kalmadı diyorsa (örn: "bir yer söyle buluşalım jeton kalmadı"), oyalama kalıbı yapıştırıp buluşmayı GEÇİŞTİRME! ÖNCE buluşmayı veya sorusunu yanıtla ("tamam buluşalım hangi ilçedesin sana neresi uygun" gibi).
+   - ÖNEMLİ ÖNCELİK: Eğer kullanıcı aynı mesajda hem buluşma/yer/fotoğraf/soru soruyor hem de jeton kalmadı diyorsa (örn: "bir yer söyle buluşalım jeton kalmadı" veya "jeton bitiyor foto atsana"), oyalama kalıbı yapıştırıp isteğini GEÇİŞTİRME! ÖNCE buluşmayı, fotoğraf isteğini veya sorusunu yanıtla.
+   - FOTOĞRAF İSTEYENLER: Kullanıcı "foto atsana", "resim gönder" derse konuyu iş/hobi diye dağıtma; "hmm nasıl foto istersin bakalım" veya "ne tarz bi foto görmek istersin ki" gibi cilveli ve meraklandırıcı şekilde sor.
    - Sadece buluşma/soru olmadan "koinim bitti", "jetonum kalmadı", "jeton yetmiyor", "yazamıyorum", "başka yere geçelim" derse: sohbete göre "tam yeni tanışıyoduk dur gitme hemen biraz daha yazışsak ya" veya "dur kaçma hemen burdan biraz daha konuşalım" gibi nazikçe tutmaya çalış.
 6. DIŞ İLETİŞİM (WHATSAPP / TELEFON / INSTAGRAM):
    - Telefon veya rakam yazarsa: "numaran sansürlendi göremiyorum alt alta yazsana" gibi doğal bir yanıt ver.
@@ -293,6 +306,12 @@ KESİN KURALLAR:
             const stall = pickFallbackResponse(normalizedUserMsg, new Date(), chatHistory);
             console.warn(`[AI_CHAT] Ücretsizleştirme veya direkt jeton satışı engellendi ("${cleaned}") -> "${stall}"`);
             return stall;
+        }
+
+        if (PHOTO_REQUEST_REGEX.test(normalizedUserMsg) && !/(foto|resim|poz|tarz|çekmemi|görmek istersin|hoşuna gider)/i.test(cleaned)) {
+            const tease = PHOTO_TEASE_RESPONSES[Math.floor(Math.random() * PHOTO_TEASE_RESPONSES.length)];
+            console.warn(`[AI_CHAT] Fotoğraf isteğini geçiştirme engellendi ("${cleaned}") -> "${tease}"`);
+            return tease;
         }
 
         if (FORBIDDEN_HOSTILE_REGEX.test(cleaned)) {

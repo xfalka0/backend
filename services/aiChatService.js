@@ -34,15 +34,15 @@ const OFF_APP_STALL_RESPONSES = [
 ];
 
 const COIN_UPSELL_RESPONSES = [
-    'ay hemen iki dakika jeton yüklesene doyamadım sohbetine',
-    'profilime girip jeton alsana bekliyorum burada',
-    'jeton alıp gelsene hemen yarım kalmasın sohbetimiz',
-    'iki dakka koin yükle de devam edelim çok keyifli gidiyorduk'
+    'iki dakka jeton yüklesene biraz daha konuşalım merak ettim seni',
+    'profilime girip jeton alsana yeni tanıştık nereye kaçıyosun',
+    'hemen bi paket jeton yükle de yarım kalmasın konuşmamız',
+    'iki dakka koin al da devam edelim burada bekliyorum seni'
 ];
 
 const PHONE_DIGITS_REGEX = /(?:\+?\d[\s\-().]*){7,}/;
 const OFF_APP_REGEX = /(whatsapp|whatsap|watsap|\bwp\b|insta|instagram|telegram|snapchat|tiktok|numara|tel\b|telefon)/i;
-const COIN_EXHAUSTED_USER_REGEX = /(koinim bitti|coinim bitti|jetonum bitti|jetonum kalmad[ıi]|koin kalmad[ıi]|yazam[ıi]yorum|bakiye bitti|param bitti|paras[ıi]z)/i;
+const COIN_EXHAUSTED_USER_REGEX = /(koinim bitti|coinim bitti|jetonum bitti|jetonum kalmad[ıi]|koin kalmad[ıi]|jeton yetmiyor|koin yetmiyor|coin yetmiyor|yazam[ıi]yorum|bakiye bitti|param bitti|paras[ıi]z)/i;
 const FORBIDDEN_ACCEPT_REGEX = /(kaydet|kayded|eklerim|ekliyorum|ekledim|yazarım|yazıyorum|geçelim|geçeriz|geliyorum|bakarız orada|ordan yaz)/i;
 const FORBIDDEN_FREE_COIN_REGEX = /(dert etme|sorun de[ğg]il.*yaz|bo[şs]ver.*jeton|bo[şs]ver.*koin|paras[ıi]z yaz|ücretsiz yaz|buradan devam et bedava)/i;
 const FORBIDDEN_HOSTILE_REGEX = /(saçmal|kes ses|bir daha.*yazma|bi daha.*yazma|yazma bana|defol|terbiyesiz|had[sd]siz|engel|igren|iğren|saygısız|uzak dur|rahatsız et|agresif)/i;
@@ -183,7 +183,7 @@ KESİN KURALLAR:
 4. HALÜSİNASYON YASAK: Kullanıcı ses kaydı atmadıysa asla "sesin iyi geliyor", fotoğraf atmadıysa "fotoğrafın çok iyi" gibi olmayan durumları uydurma.
 5. KOİN / JETON / BAKİYE YÖNLENDİRMESİ (KRİTİK):
    - KULLANICI AÇIKÇA koininin/jetonunun bittiğini veya yazamadığını ("koinim bitti", "jetonum kalmadı", "yazamıyorum") SÖYLEMEDİKÇE ASLA KENDİLİĞİNDEN "jeton yükle", "koin al" DEME! Normal sohbette bu konuyu açmak KESİNLİKLE YASAK.
-   - SADECE karşı taraf "koinim bitti", "jetonum kalmadı", "yazamıyorum", "başka yere geçelim" derse asla "jeton dert etme", "sorun değil buradan yaz" deme; o zaman tatlı dille koin almaya teşvik et (örn: "ay hemen iki dakika jeton yüklesene doyamadım sohbetine", "profilime girip jeton alsana bekliyorum burada").
+   - SADECE karşı taraf "koinim bitti", "jetonum kalmadı", "jeton yetmiyor", "yazamıyorum", "başka yere geçelim" derse asla "jeton dert etme", "sorun değil buradan yaz" deme; o zaman yeni tanışmaya yakışır şekilde tatlı dille koin almaya teşvik et (örn: "iki dakka jeton yüklesene yeni tanıştık daha", "profilime girip jeton alsana bekliyorum burada"). Asla abartılı "doyamadım sohbetine" gibi yapay laflar etme.
 6. DIŞ İLETİŞİM (WHATSAPP / TELEFON / INSTAGRAM):
    - Telefon veya rakam yazarsa: "numaran sansürlendi göremiyorum alt alta yazsana" de.
    - Instagram / WhatsApp isterse: "buradan konuşalım biraz daha tanı beni öyle bakarız" de.

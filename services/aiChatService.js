@@ -939,6 +939,10 @@ function releaseAiChatLockAndRunNext(chatIdStr, userIdStr) {
  * Arka arkaya kısa sürede atılan mesajları birleştirip sırayla AI yanıtı üretir.
  */
 async function processAiAutoReply(args) {
+    // Geçici olarak devre dışı bırakıldı (Gemini API 429 kota limiti nedeniyle)
+    if (process.env.AI_AUTO_REPLY_ENABLED !== 'true') {
+        return;
+    }
     const { chatId, userId } = args || {};
     if (!chatId || !userId) return;
 

@@ -313,11 +313,21 @@ KESİN KURALLAR:
             m => m?.is_user && PLACE_MENTION_REGEX.test(m.content || '')
         );
         if (userMentionedPlace && /(hangi semttesin|hangi ilçedesin|hangi taraftasın|ne taraftasın|neresindesin|sen nerelisin|neredesin bakalım)/i.test(cleaned)) {
+            const stripped = cleaned.replace(/\b(peki\s+)?(sen\s+)?(hangi semttesin|hangi ilçedesin|hangi taraftasın|ne taraftasın|neresindesin|sen nerelisin|neredesin bakalım)\b/gi, '').replace(/\s+/g, ' ').trim();
+            if (stripped.length >= 12) {
+                console.warn(`[AI_CHAT] Tekrarlanan ilçe/semt parçası temizlendi ("${cleaned}") -> "${stripped}"`);
+                return stripped;
+            }
             const realistic = REALISTIC_MEETING_FOLLOWUPS[Math.floor(Math.random() * REALISTIC_MEETING_FOLLOWUPS.length)];
             console.warn(`[AI_CHAT] Tekrarlanan ilçe/semt sorusu engellendi ("${cleaned}") -> "${realistic}"`);
             return realistic;
         }
         if (Boolean(targetCity) && /(sen nerelisin|hangi şehirdesin)/i.test(cleaned)) {
+            const stripped = cleaned.replace(/\b(peki\s+)?(sen nerelisin|hangi şehirdesin)\b/gi, '').replace(/\s+/g, ' ').trim();
+            if (stripped.length >= 12) {
+                console.warn(`[AI_CHAT] Tekrarlanan şehir parçası temizlendi ("${cleaned}") -> "${stripped}"`);
+                return stripped;
+            }
             const realistic = REALISTIC_MEETING_FOLLOWUPS[Math.floor(Math.random() * REALISTIC_MEETING_FOLLOWUPS.length)];
             console.warn(`[AI_CHAT] Tekrarlanan şehir sorusu engellendi ("${cleaned}") -> "${realistic}"`);
             return realistic;

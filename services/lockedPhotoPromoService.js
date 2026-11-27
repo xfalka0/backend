@@ -16,10 +16,13 @@ const PRE_MESSAGE_POOL = [
 ];
 
 const OFFLINE_PUSH_PRE_MESSAGES = [
-    'gündüz konuşmuştuk sana özel bi şey attım',
-    'selam buralarda mısın sana özel fotoğraf attım',
-    'az önce seni düşündüm sana özel bi şey çektim bak',
-    'uyumadıysan girip baksana sana özel fotoğraf attım'
+    'Sana özel kilitli bir fotoğraf bıraktım, bakar mısın? 🔥',
+    'Mesajına cevap verdim ama neredesin? 😊',
+    'Sadece senin görmeni istediğim bir şey attım 👀',
+    'Az önce sana özel bir fotoğraf çektim, açıp baksana 🤫',
+    'Gündüz aklımda kaldın, sana özel bir sürpriz bıraktım 💋',
+    'Uyumadıysan girip baksana, bunu ilk sen gör istedim 🔥',
+    'Aklıma düştün, sana özel kilitli bir şey atmadan duramadım 😉'
 ];
 
 const inFlightUsers = new Set();
@@ -652,7 +655,7 @@ async function runLockedPhotoPromoSweep(io) {
                         )
                   )
                 ORDER BY COALESCE(u.last_login_at, u.created_at) DESC
-                LIMIT 20
+                LIMIT 50
             `, [String(minHours), String(maxDays), dailyCap, String(cooldownHours)]);
 
             const onlineSet = new Set(getActiveCustomerIds().map(String));

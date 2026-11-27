@@ -124,10 +124,17 @@ router.get('/progress', authenticateToken, async (req, res) => {
     }
 });
 
+const VIP_PRICE_BY_PRODUCT = {
+    'premium_1_month': 449.99,
+    'premium_3_months': 969.99,
+    'premium_6_months': 1499.99,
+};
+const VIP_PRICE_BY_MONTHS = { 1: 449.99, 3: 969.99, 6: 1499.99 };
+
 // PREMIUM UPGRADE DIRECT
 // Mobile app calls this when purchase is successful or when syncing an active store subscription
 router.post('/upgrade-direct', authenticateToken, async (req, res) => {
-    const { months, productId, transactionId, isSync = false, expireDate: clientExpireDate } = req.body;
+    const { months, productId, transactionId, price: clientPrice, isSync = false, expireDate: clientExpireDate } = req.body;
     const userId = req.user.id;
 
     try {
@@ -261,10 +268,15 @@ router.post('/upgrade-direct', authenticateToken, async (req, res) => {
             let auditTxId = null;
             if (!isSync) {
                 auditTxId = realTxId || `vip_client_${user.id}_${Date.now()}`;
+                const parsedClientPrice = parseFloat(clientPrice);
+                const resolvedAmount =
+                    (Number.isFinite(parsedClientPrice) && parsedClientPrice > 12)
+                        ? parsedClientPrice
+                        : (VIP_PRICE_BY_PRODUCT[String(productId || '').trim()] || VIP_PRICE_BY_MONTHS[parsedMonths] || 449.99);
                 insertedPaymentId = await insertPaymentIfAbsent(client, {
                     userId: user.id,
                     transactionId: auditTxId,
-                    amount: parsedMonths,
+                    amount: resolvedAmount,
                     paymentMethod: 'revenuecat_client',
                     packageNameSnapshot: productId || `premium_${parsedMonths}_months`,
                     status: 'completed_vip',

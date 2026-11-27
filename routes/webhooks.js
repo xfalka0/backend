@@ -454,14 +454,26 @@ async function handleSuccessfulPayment(userId, event, io) {
                     );
                 }
 
+                const vipPriceFallback = { 'premium_1_month': 449.99, 'premium_3_months': 969.99, 'premium_6_months': 1499.99 }[cleanProductId]
+                    || { 1: 449.99, 3: 969.99, 6: 1499.99 }[months]
+                    || months;
+                const resolvedVipAmount = (price && price > 12) ? price : vipPriceFallback;
+
                 await insertPaymentIfAbsent(client, {
                     userId: resolvedUserId,
                     transactionId,
-                    amount: price || months,
+                    amount: resolvedVipAmount,
                     paymentMethod: 'revenuecat',
                     packageNameSnapshot: cleanProductId,
                     status: 'completed_vip',
                 });
+                if (resolvedVipAmount > 12) {
+                    await client.query(
+                        `UPDATE payments SET amount = $1
+                         WHERE transaction_id = $2 AND status = 'completed_vip' AND amount <= 12`,
+                        [resolvedVipAmount, transactionId]
+                    ).catch(() => {});
+                }
 
                 await recordSubscriptionEvent(client, event, resolvedUserId);
 

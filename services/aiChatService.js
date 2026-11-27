@@ -180,7 +180,7 @@ ZAMAN VE ORTAM BİLGİSİ:
 KESİN KURALLAR:
 1. SORULARI YANITLA VE UZUNLUK: Kullanıcı bir veya birden fazla soru sorarsa (ör. nerelisin, evli misin, amacın nedir, yaş kaç) ÖNCE tüm sorularına tek nefeste net, cilveli cevap ver (bekar olduğunu, amacının samimi/heyecanlı biriyle tanışmak olduğunu vb. söyle), soruları geçiştirip alakasız cevap verme. Uzunluğu 1-2 kısa cümle (6-14 kelime) tut; WhatsApp mesajı gibi seri ve doğal olsun.
 2. YAZIM: Tamamen küçük harfle yaz. Nokta, virgül, soru işareti, ünlem gibi HİÇBİR noktalama işareti kullanma.
-3. AD VE KALIP TEKRARI: Karşı tarafın adını her mesajda papağan gibi tekrarlama; sohbet geçmişinde az önce kurduğun cümleleri veya "evde uzanıyorum canım sıkılıyor" kalıbını tekrar etme.
+3. AD VE HİTAP TONU: Karşı tarafın adını her mesajda papağan gibi tekrarlama; sohbet geçmişinde az önce kurduğun cümleleri veya "evde uzanıyorum canım sıkılıyor" kalıbını tekrar etme. Karşı taraf "aşkım", "bebeğim", "hayatım" gibi ifadeler kullanmadıysa sen de durduk yere "aşkım" veya "bebeğim" deme; sohbetin tonuna ve samimiyet seviyesine göre doğal konuş.
 4. HALÜSİNASYON YASAK: Kullanıcı ses kaydı atmadıysa asla "sesin iyi geliyor", fotoğraf atmadıysa "fotoğrafın çok iyi" gibi olmayan durumları uydurma.
 5. KOİN / JETON / OYALAMA STRATEJİSİ (KRİTİK):
    - Sohbet geçmişini ve karşı tarafın yazdıklarını analiz ederek akışa göre doğal cevap ver, ezber kalıplar tekrarlama.
@@ -299,8 +299,19 @@ KESİN KURALLAR:
             return realistic;
         }
 
-        console.log(`[AI_CHAT] Gemini yanıt üretti (finishReason=${candidate?.finishReason || 'unknown'}): "${cleaned}"`);
-        return cleaned;
+        const userUsedAffection = AFFECT_WORDS_REGEX.test(normalizedUserMsg) || (
+            Array.isArray(chatHistory) && chatHistory.some(m => m?.is_user && AFFECT_WORDS_REGEX.test(m.content || ''))
+        );
+        let finalReply = cleaned;
+        if (!userUsedAffection && AFFECT_WORDS_REGEX.test(finalReply)) {
+            const stripped = finalReply.replace(/\b(aşkım|bebeğim|hayatım|sevgilim)\b/gi, '').replace(/\s+/g, ' ').trim();
+            if (stripped.length >= 4) {
+                finalReply = stripped;
+            }
+        }
+
+        console.log(`[AI_CHAT] Gemini yanıt üretti (finishReason=${candidate?.finishReason || 'unknown'}): "${finalReply}"`);
+        return finalReply;
     } catch (err) {
         console.error(`[AI_CHAT] Gemini API Hatası (${err.name || 'Error'}):`, err.message);
         return pickFallbackResponse(userMessage);
@@ -327,15 +338,105 @@ async function ensureAiColumns() {
 }
 
 const DEFAULT_NUMARA_HOOK_TEXT = 'Kullanıcı sizinle numarasını paylaşmak için NUMARA PAYLAŞIMI onayında bulunmuştur. Numarayı görüntüleyebilmek için ONAY yazınız. (05** *** ** ** )';
-const NUMARA_HOOK_FOLLOWUPS = [
-    'numaram geldi mi çabuk ara beni bekliyorum',
-    'numaramı attım onaylayıp arasana hemen seni bekliyorum',
-    'numaram geldi mi aşkım çabuk ara da sesini duyayım',
-    'onay yaz numaram açılsın çabuk ara beni dayanamıyorum',
-    'numaramı gönderdim görebildin mi hemen ara beni',
-    'hadi onaylayıp arasana beni telefon elimde bekliyorum',
-    'numaram geldimi aşkım çabuk çabuk ara beni'
+const NUMARA_MEETING_FOLLOWUPS = [
+    'numaramı attım detayları konuşalım ararsın',
+    'numaram geldi mi buluşma işini ordan netleştiririz ararsın beni',
+    'numaramı gönderdim detayları telefonla konuşuruz ararsın',
+    'numaram düştü mü sana müsait olunca ararsın konuşuruz'
 ];
+const NUMARA_GENERAL_FOLLOWUPS = [
+    'numaramı attım ordan devam edelim konuşmaya',
+    'numaram geldi mi onaylayınca ordan yazarsın',
+    'numaramı gönderdim görebildin mi ordan görüşelim',
+    'numaram düştü mü sana ordan konuşalım biraz daha'
+];
+const MEETING_CONTEXT_REGEX = /(buluş|kahve|çay|yemek|görüşelim|akşam|boşsan|müsait|merkez|taraf|yarın|bugün)/i;
+const AFFECT_WORDS_REGEX = /(aşkım|bebeğim|hayatım|sevgilim)/i;
+const FORBIDDEN_PUSHY_CALL_REGEX = /(çabuk.*ara|hemen ara|dayanamıyorum|aşkım|bebeğim)/i;
+
+function pickNumaraFollowupFallback(historyMessages = []) {
+    const historyText = historyMessages.map(m => m?.content || '').join(' ');
+    const pool = MEETING_CONTEXT_REGEX.test(historyText) ? NUMARA_MEETING_FOLLOWUPS : NUMARA_GENERAL_FOLLOWUPS;
+    return pool[Math.floor(Math.random() * pool.length)];
+}
+
+async function generateNumaraFollowup({ chatId, userId }) {
+    let historyMessages = [];
+    try {
+        const histRes = await db.query(
+            `SELECT sender_id, content FROM messages
+             WHERE chat_id = $1 AND content NOT ILIKE '%NUMARA PAYLAŞIMI%' AND content_type = 'text'
+             ORDER BY created_at DESC LIMIT 8`,
+            [chatId]
+        );
+        const userIdStr = String(userId);
+        historyMessages = histRes.rows.reverse().map(m => ({
+            is_user: String(m.sender_id) === userIdStr,
+            content: (m.content || '').trim()
+        })).filter(m => m.content);
+    } catch (_) {
+        historyMessages = [];
+    }
+
+    const historyText = historyMessages.map(m => m.content).join(' ');
+    const userUsedAffection = historyMessages.some(m => m.is_user && AFFECT_WORDS_REGEX.test(m.content));
+    const hasMeetingContext = MEETING_CONTEXT_REGEX.test(historyText);
+
+    const apiKey = (process.env.GEMINI_API_KEY || '').trim();
+    if (!apiKey || historyMessages.length === 0) {
+        return pickNumaraFollowupFallback(historyMessages);
+    }
+
+    const transcript = historyMessages
+        .map(m => `${m.is_user ? 'Erkek' : 'Sen'}: ${m.content}`)
+        .join('\n');
+
+    const prompt = `Aşağıdaki sohbette az önce karşı tarafa sistemden otomatik "NUMARA PAYLAŞIMI onayında bulunmuştur (ONAY yazınız)" bildirimi gitti.
+Şimdi bunun hemen peşine gidecek 1 kısa, doğal takip mesajı yaz.
+
+SOHBET GEÇMİŞİ:
+${transcript}
+
+KURALLAR:
+1. Sohbetin üslubuna ve konusuna uyumlu yaz.
+2. ${hasMeetingContext ? 'Sohbette buluşma/kahve/plan konusu geçiyor: "numaramı attım detayları konuşalım ararsın" veya "numaram geldi mi buluşmayı ordan ayarlarız ararsın" gibi doğal bir mesaj yaz.' : 'Sohbetin akışına göre "numaramı attım ordan konuşalım" veya "numaram geldi mi ordan devam edelim" tarzı doğal bir mesaj yaz.'}
+3. ${userUsedAffection ? 'Sohbette samimi hitap varsa ölçülü koruyabilirsin.' : 'Sohbette "aşkım", "bebeğim", "hayatım" gibi kelimeler KULLANILMAMIŞ. Sen de ASLA "aşkım", "bebeğim" deme!'}
+4. ASLA "çabuk ara", "çabuk çabuk ara", "hemen ara", "dayanamıyorum" gibi yapay/aceleci ifadeler kullanma.
+5. Tamamen küçük harf kullan, noktalama işareti koyma, en fazla 8-12 kelimelik tek kısa cümle yaz.`;
+
+    try {
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent?key=${apiKey}`;
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 8000);
+        const res = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            signal: controller.signal,
+            body: JSON.stringify({
+                contents: [{ role: 'user', parts: [{ text: prompt }] }],
+                generationConfig: { temperature: 0.65, maxOutputTokens: 45 },
+                safetySettings: [
+                    { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_NONE' },
+                    { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_NONE' },
+                    { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_NONE' },
+                    { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_NONE' }
+                ]
+            })
+        });
+        clearTimeout(timeout);
+        if (!res.ok) return pickNumaraFollowupFallback(historyMessages);
+
+        const data = await res.json();
+        const raw = data.candidates?.[0]?.content?.parts?.map(p => p.text || '').join(' ').trim();
+        const cleaned = cleanAiResponse(raw);
+        if (!cleaned || cleaned.length < 4) return pickNumaraFollowupFallback(historyMessages);
+        if (!userUsedAffection && AFFECT_WORDS_REGEX.test(cleaned)) return pickNumaraFollowupFallback(historyMessages);
+        if (FORBIDDEN_PUSHY_CALL_REGEX.test(cleaned)) return pickNumaraFollowupFallback(historyMessages);
+        return cleaned;
+    } catch (_) {
+        return pickNumaraFollowupFallback(historyMessages);
+    }
+}
 const HOOK_DELAY_MS = 30000; // AI yanıtından 30 saniye sonra gönder
 const activeAiReplyUsers = new Set();
 
@@ -532,7 +633,7 @@ async function sendNumaraHookNow({ io, userId, chatId, operatorId }) {
                 );
                 if (paidCheck.rows.length > 0) return;
 
-                const followText = NUMARA_HOOK_FOLLOWUPS[Math.floor(Math.random() * NUMARA_HOOK_FOLLOWUPS.length)];
+                const followText = await generateNumaraFollowup({ chatId: targetChatId, userId: userIdStr });
                 const fMsgRes = await db.query(
                     'INSERT INTO messages (chat_id, sender_id, content, content_type, is_read, created_at) VALUES ($1, $2, $3, $4, false, NOW()) RETURNING *',
                     [targetChatId, targetOperatorId, followText, 'text']
@@ -876,5 +977,7 @@ module.exports = {
     startAiHookSweeper,
     cleanAiResponse,
     getTimeContext,
-    pickFallbackResponse
+    pickFallbackResponse,
+    pickNumaraFollowupFallback,
+    generateNumaraFollowup
 };
